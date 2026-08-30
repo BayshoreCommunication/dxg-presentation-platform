@@ -71,7 +71,7 @@ Date: 2026-08-30. Reviewer: Claude (AI pair), on Travis's instruction. PHASE0_GA
 
 **G0-8: PASS WITH CONDITIONS**
 
-- **C1**: Dedicated-account decision confirmed by Travis (billing/org authority) before `Pmp-Cicd` bootstrap.
+- **C1**: ~~Dedicated-account decision confirmed by Travis~~ **RESOLVED 2026-08-30 (D-008)**: Travis decided on the shared RFPilot account (295229565954) with strict `product=pmp` tagging and isolation rules; dev phase runs the single-server bootstrap (DEV_BOOTSTRAP.md) at ≤$100/mo, and this review's target architecture is deferred to pilot preparation.
 - **C2**: This review ratified by Developer 2 when onboarded (PHASE0_GATE reviewer requirement).
 - **C3**: Sizing and per-event cost model updated after the pilot-event profile (P0-E15).
 

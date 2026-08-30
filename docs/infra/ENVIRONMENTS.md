@@ -1,6 +1,6 @@
 # ENVIRONMENTS.md — Environment Plan & Stack Layout (P0-D1)
 
-Status: Draft v0.1 (2026-08-30) for G0-8 review. Scope: environments, account layout, and CDK stack decomposition only. Excluded (later P0-D tasks): data-tier design (P0-D2), edge/app tier and deployment strategy (P0-D3), observability detail (P0-D4), infra CI (P0-D5).
+Status: Draft v0.2 (2026-08-30), G0-8 reviewed. **Timing note (D-008): this is the pilot/production target.** During the 0-user development phase, infrastructure is the single-server bootstrap in `DEV_BOOTSTRAP.md` (shared RFPilot account, ≤$100/mo); the layout below is built at pilot preparation. Scope: environments, account layout, and CDK stack decomposition only. Excluded (later P0-D tasks): data-tier design (P0-D2), edge/app tier and deployment strategy (P0-D3), observability detail (P0-D4), infra CI (P0-D5).
 
 ## 1. Environments
 
