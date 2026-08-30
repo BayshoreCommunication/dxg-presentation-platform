@@ -27,7 +27,7 @@ The milestone tasks below (M1–M7) are **planning-level units**. Before startin
 - [ ] P0-B3 Offline log queue + replay/dedup on reconnect
 
 ### P0-C: Foundation artifacts
-- [ ] P0-C1 Physical PostgreSQL schema (DDL + migration files) for all SRS §10 entities
+- [x] P0-C1 Physical PostgreSQL schema (DDL + migration files) for all SRS §10 entities — `db/migrations/001–005` verified on postgres:16 (2026-08-30); RLS + audit append-only smoke-tested
 - [ ] P0-C2 OpenAPI surface for the versioned API areas (SRS §11)
 - [ ] P0-C3 Repo scaffolding: backend (Express+TS, worker, dispatcher, contracts pipeline), control-center and speaker-portal (Next.js), agent (Electron) — mirroring RFPilot layouts
 - [x] P0-C4 Design the workflow state machine (`docs/WORKFLOW_STATES.md`) — drafted 2026-08-30, pending DXG sign-off
