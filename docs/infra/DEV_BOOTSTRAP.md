@@ -21,7 +21,7 @@ Scale-up path inside the cap: `t4g.large` (~$55/mo) if the box strains before pi
 - **Tag everything** `product=pmp` (cost separation is mandatory — RFPilot billing must stay clean; use a cost-allocation tag + budget filter).
 - **Touch nothing RFPilot**: no shared security groups, roles, buckets, or stacks; the D-006 no-cross-product rule applies inside the account too. New IAM roles/users are `pmp-*` prefixed.
 - No changes to `Rfpilot-*` stacks, ever, from this project's tooling.
-- Dev instance may be provisioned with a minimal CDK stack (`Pmp-dev-Bootstrap`) or a documented manual setup + script — CDK preferred so the pilot migration starts from code, but keep it to one stack now.
+- The dev instance is provisioned by the `Pmp-dev-Bootstrap` CDK stack (`deploy/aws/`, drafted 2026-08-30, synth-verified): own tiny VPC (1 AZ public, no NAT), t4g.medium AL2023 arm64 with encrypted 50 GiB gp3 (`deleteOnTermination: false`), no SSH ingress (SSM Session Manager only), docker + compose via user data, versioned `pmp-dev-storage-<acct>` bucket (RETAIN), EIP, and a $100 monthly budget with alerts at $80/$100 filtered on `product=pmp`. Deploy: `cd deploy/aws && npm i && npx cdk deploy --profile rfpilot` (account is pinned to 295229565954/us-east-2 in code). One-time manual steps: activate the `product` cost-allocation tag in Billing; after boot, clone the repo onto the box via SSM and `docker compose up` (no deploy key is baked into user data).
 
 ## 3. What is explicitly deferred (and its trigger)
 
