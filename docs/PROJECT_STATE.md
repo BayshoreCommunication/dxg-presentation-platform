@@ -32,4 +32,4 @@ Phase 0, documentation stage. Git repository initialized; no application code. *
 - Sign-offs: WORKFLOW_STATES.md, role × permission matrix, prototype walkthrough
 
 ## Next single task
-**P0-D5** (infra CI design: cdk synth --strict, cdk-nag, type checks, infra tests, cdk diff review, drift detection). Completed: P0-D1 (`docs/infra/ENVIRONMENTS.md`), P0-D2 (`docs/infra/DATA_TIER.md`), P0-D3 (`docs/infra/EDGE_APP_TIER.md`), P0-D4 (`docs/infra/OBSERVABILITY.md`) — all 2026-08-30, pending G0-8 review. P0-C5 (DXG input request) still needs Travis to send it.
+**P0-D block complete** (D1–D5 in `docs/infra/`: ENVIRONMENTS, DATA_TIER, EDGE_APP_TIER, OBSERVABILITY, INFRA_CI) — all drafted 2026-08-30, awaiting the G0-8 review, which can now be scheduled. Remaining unblocked work without DXG/Windows inputs: G0-8 review itself, P0-C1 (physical schema DDL), P0-C2 (OpenAPI surface). Blocked: P0-A/B PoCs (Windows environment), P0-E discovery (DXG). P0-C5 (DXG input request) still needs Travis to send it.

@@ -38,7 +38,7 @@ The milestone tasks below (M1–M7) are **planning-level units**. Before startin
 - [x] P0-D2 Data tier: Multi-AZ PostgreSQL, Redis availability strategy, versioned S3 + KMS, cross-region replication, backup/PITR design with RPO ≤15min / RTO ≤4h validation plan — `docs/infra/DATA_TIER.md` (drafted 2026-08-30, pending G0-8 review)
 - [x] P0-D3 Edge/app tier: WAF + CloudFront, worker scaling policy, deployment + rollback strategy (blue/green on request path, rolling for workers, event-freeze deploy gate), stateful-stack termination protection — `docs/infra/EDGE_APP_TIER.md` (drafted 2026-08-30, pending G0-8 review)
 - [x] P0-D4 Observability: golden signals, agent heartbeat monitoring (<5min room-offline detection), queue backlog + outbox-age alarms — `docs/infra/OBSERVABILITY.md` (drafted 2026-08-30, pending G0-8 review)
-- [ ] P0-D5 Infra CI design: `cdk synth --strict`, cdk-nag, type checking, infrastructure tests, mandatory `cdk diff` review before deploy, drift detection
+- [x] P0-D5 Infra CI design: `cdk synth --strict`, cdk-nag, type checking, infrastructure tests, mandatory `cdk diff` review before deploy, drift detection — `docs/infra/INFRA_CI.md` (drafted 2026-08-30, pending G0-8 review; P0-D block complete)
 
 ### P0-E: Discovery & validation with DXG (gate G0-4/5/6/7)
 - [ ] P0-E1 Stakeholder interviews (PM, SRR technician, room technician, client-admin)
