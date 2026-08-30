@@ -50,7 +50,7 @@ The milestone tasks below (M1–M7) are **planning-level units**. Before startin
 - [ ] P0-E7 Security threat model workshop (→ SECURITY_MODEL.md §10)
 - [ ] P0-E8 Role × permission matrix for all SRS §5 roles across M01–M15 (DXG sign-off)
 - [ ] P0-E9 Screen inventory for Control Center / Speaker Portal / SRR Console
-- [ ] P0-E10 Usability prototypes of critical flows (upload, review queue, SRR check-in, sync dashboard)
+- [~] P0-E10 Usability prototypes of critical flows (upload, review queue, SRR check-in, sync dashboard) — clickable prototype built 2026-08-30 (`prototype/index.html`, published as artifact); DXG walkthrough + feedback still pending
 - [ ] P0-E11 Draft the 19-step scripted acceptance walkthrough (SRS §22) against the prototype
 - [ ] P0-E12 Assemble representative presentation/media test corpus (≥30 decks + video codec matrix)
 - [ ] P0-E13 Collect sample agenda imports from DXG and spike the column mapping
