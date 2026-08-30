@@ -17,3 +17,6 @@ The "19-state workflow" is implemented as six independent lifecycles (processing
 
 ## D-006 (2026-08-30): No direct DB access across the RFPilot boundary — Status: ACCEPTED (permanent)
 All RFPilot integration is via versioned APIs/events only; shared OIDC IdP for staff SSO is PROPOSED. See docs/RFPILOT_INTEGRATION.md.
+
+## D-007 (2026-08-30): G0-8 infrastructure decisions — Status: ACCEPTED (C1 account choice pending Travis confirmation)
+From the G0-8 review (docs/infra/G0-8_REVIEW.md): us-east-2 primary / us-east-1 DR; Next.js SSR on Fargate (no Vercel for this product); separate Agent stack; Object Lock governance-mode 3y on audit exports; no RDS Proxy day one; PagerDuty for paging; CloudWatch Logs Insights for MVP; cdk-nag AwsSolutions pack only; per-merge staging deploys; single web service initially. G0-8 verdict: PASS WITH CONDITIONS (C1 dedicated-account confirmation, C2 D2 ratification, C3 re-cost after pilot profile).
