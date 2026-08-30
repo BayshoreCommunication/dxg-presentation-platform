@@ -1,12 +1,20 @@
 # CLAUDE.md — DXG Presentation Management Platform
 
-Guidance for Claude Code working in this project. This project lives inside the RFPilot workspace (`~/Desktop/rfp`) and deliberately reuses RFPilot's stack, conventions, and documentation discipline. It is a separate product for the same client (DXG). Not yet a git repository (git will be added later).
+Guidance for Claude Code working in this project. This project lives inside the RFPilot workspace (`~/Desktop/rfp`) and deliberately reuses RFPilot's stack, conventions, and documentation discipline. It is a **separate product** for the same client (DXG) — see `AGENTS.md`; do not follow RFPilot-specific task instructions here.
+
+## Requirements provenance
+
+`docs/SRS.md` was generated from client requirements; it is not a verbatim client-authored technical specification. Interpretation rules:
+
+- **Functional requirements and acceptance criteria are the agreed baseline.** Functional scope changes require DXG approval.
+- **Technology choices are implementation decisions**, owned by us and maintained in `docs/DECISIONS.md` (each marked accepted or proposed).
+- **Architecture sections may evolve** without rewriting functional requirements.
 
 ## Stack
 
 - **Backend**: Node.js + TypeScript + Express (RFPilot pattern: API process + BullMQ worker + outbox dispatcher)
-- **Data**: PostgreSQL (primary, with RLS for client/event isolation), Redis (queues/cache), private S3 (versioned file storage, KMS)
-- **Frontends**: Next.js 16 + React 19 + Tailwind CSS 4 (Control Center, Speaker Portal, Client Portal)
+- **Data**: PostgreSQL (authoritative, with RLS for client/event isolation), Redis (BullMQ job transport only — recoverable from the outbox, never authoritative state; see D-003), private S3 (versioned file storage, KMS)
+- **Frontends**: Next.js 16 + React 19 + Tailwind CSS 4 — Control Center (DXG staff, plus scoped client-admin/reviewer views via role gates) and Speaker Portal. No separate Client Portal app in MVP.
 - **Room Agent**: Electron (Node/TypeScript) Windows app. Drives PowerPoint via COM automation from Node (Phase 0 PoC required). SQLite + content-addressed local cache, offline-first.
 - **Contracts**: backend `src/contracts/` as source of truth, generated types for frontends (`contracts:generate` / `contracts:check`), same as RFPilot
 - **Testing**: backend `node:test`; frontends Jest (jsdom); Playwright E2E

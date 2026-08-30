@@ -20,7 +20,7 @@ Draft for DXG review
 This SRS defines the functional, non-functional, security, operational, integration, data, workflow, testing, and acceptance requirements for the DXG Presentation Management Platform. It translates the supplied SOW into an implementation-oriented requirements baseline while preserving the SOW's terminology, priorities, measurable targets, and MVP boundaries.
 3. Product Overview
 The platform manages the full lifecycle of event presentation files: event setup and agenda import, passwordless speaker collection, automated tier-1 inspection, review and approval, Speaker Ready Room operations, offline-capable Windows room synchronization/playback, reporting, and permission-aware archive/retention.
-The business problem is that speakers currently arrive with unreviewed or last-minute files, creating wrong versions, missing fonts, broken media, mis-routing, manual transfers, delays, weak auditability, and slow post-event handover. The proposed platform is intended to reduce those operational risks. fileciteturn0file0L11-L25
+The business problem is that speakers currently arrive with unreviewed or last-minute files, creating wrong versions, missing fonts, broken media, mis-routing, manual transfers, delays, weak auditability, and slow post-event handover. The proposed platform is intended to reduce those operational risks. 
 4. Goals and Measurable Objectives
 ID
 Objective
@@ -317,7 +317,7 @@ Previous room version remains available until event close under the SOW change/r
 Cross-event access attempts must be blocked, logged and alerted.
 10. Data Requirements
 Core entities shall include Event, Client, Venue, Room, Track, Day, Session, Slot, Speaker, Speaker Assignment, Communication, File, File Version, Inspection Finding, Workflow State/Transition, Comment, SRR Check-In, USB Ingestion, Sign-Off, Receipt, Room Agent, Sync Manifest, Launch Log, Report, Archive Package, Retention Policy, User/Role, Audit Record.
-Physical database schema/DDL and full OpenAPI specification are Phase 0 gate artifacts. The supplied SOW explicitly adopts the Blueprint data model and API requirements. fileciteturn0file0L359-L362
+Physical database schema/DDL and full OpenAPI specification are Phase 0 gate artifacts. The supplied SOW explicitly adopts the Blueprint data model and API requirements. 
 11. API and Integration Requirements
 The Node.js (Express + TypeScript) API shall expose versioned endpoint areas covering the platform domains.
 APIs shall support pagination, filtering, bulk operations, webhooks, real-time updates where required, idempotency and retry semantics.
@@ -326,7 +326,7 @@ Storage shall use versioned object storage with KMS.
 Room Agent communication shall support delta manifests, sync state, acknowledgments and offline reconciliation.
 OpenAPI shall be complete for the implemented API surface.
 12. Technical Architecture Baseline
-The platform adopts a cloud architecture consisting of Next.js front ends, a Node.js (Express + TypeScript) API, PostgreSQL, Redis/queue, S3 versioned storage with KMS, containerized inspection/malware/preview/PDF workers, OIDC authentication, email/webhooks, logging/metrics, Sentry, AWS US hosting, CloudFront, AWS CDK IaC and blue/green deployment. The Windows Room Agent is an Electron (Node/TypeScript) application with PowerPoint COM automation, SQLite, content-addressed cache, MSI and signed auto-update. An onsite edge server is deferred to Phase 2. fileciteturn0file0L240-L246
+The platform adopts a cloud architecture consisting of Next.js front ends, a Node.js (Express + TypeScript) API, PostgreSQL, Redis/queue, S3 versioned storage with KMS, containerized inspection/malware/preview/PDF workers, OIDC authentication, email/webhooks, logging/metrics, Sentry, AWS US hosting, CloudFront, AWS CDK IaC and blue/green deployment. The Windows Room Agent is an Electron (Node/TypeScript) application with PowerPoint COM automation, SQLite, content-addressed cache, MSI and signed auto-update. An onsite edge server is deferred to Phase 2. 
 13. Security and Privacy Requirements
 ID
 Requirement
@@ -412,7 +412,7 @@ Post-event: archive delivery confirmation, retention scheduling and retrospectiv
 Phase 0 Discovery & Technical Validation: 4–6 weeks. Includes stakeholder interviews, workflow documentation, fleet profiling, PowerPoint COM PoC, offline sync PoC, security review, usability prototypes, physical schema and OpenAPI. Gate G0 requires PoCs to pass defined checklists.
 Phase 1 MVP: 22–30 weeks (5–7 months). M1 core platform/import/speakers; M2 portal/upload/inspection; M3 review/approval/comms; M4 SRR; M5 Room Agent/sync; M6 archive/reports/admin; M7 hardening/UAT/live simulation/pilot.
 Phase 2: operational enhancements. Phase 3: intelligence and automation.
-These are SOW ranges, not guarantees; gates G0–G5 are the mechanism for re-baselining. fileciteturn0file0L363-L388
+These are SOW ranges, not guarantees; gates G0–G5 are the mechanism for re-baselining. 
 21. Out of Scope — Initial Release
 Public self-service subscriptions
 Third-party AV-company tenancy
@@ -429,13 +429,13 @@ Onsite edge server (Phase 2)
 AI features (Phase 3)
 Non-Windows room agents
 Automated slide auto-advance/show control
-These exclusions are explicitly identified in the supplied SOW. fileciteturn0file0L82-L86
+These exclusions are explicitly identified in the supplied SOW. 
 22. Acceptance and Completion Criteria
 Prototype: DXG stakeholders complete the 19-step scripted walkthrough and approve the design/screen inventory with no more than minor revisions.
 MVP pilot-ready: all P1 stories accepted; permission and state-machine suites green; live simulation passes with zero SEV-1/2 defects; high pentest findings remediated; runbooks rehearsed.
 Pilot success: 0 platform-caused session delays; ≥95% talks flow through platform; 100% rooms certified ready 60 minutes pre-doors; 0 wrong-version incidents; archive delivered ≤4h after close; technician SUS ≥75.
 Production-ready: pilot criteria met, post-pilot P1 fixes deployed/reverified, DR restore rehearsed and support/on-call staffed.
-Pre-launch defect policy: zero open SEV-1/2; SEV-3 ≤10 with documented workarounds; SEV-4 triaged to backlog. fileciteturn0file0L421-L436
+Pre-launch defect policy: zero open SEV-1/2; SEV-3 ≤10 with documented workarounds; SEV-4 triaged to backlog. 
 23. Key Risks and Mitigations
 Risk
 Impact

@@ -1,6 +1,6 @@
 # SPEC.md — Working Specification
 
-Status: Draft v0.1 (2026-08-30). Baseline: `SRS.md` (client-supplied, authoritative for requirements). This document records our implementation-level interpretation, stack adaptations, and open questions. Requirements themselves are not restated here — reference SRS IDs (FR-*, NFR-*, M01–M15).
+Status: Draft v0.2 (2026-08-30). Baseline: `SRS.md` — generated from client requirements, not client-authored verbatim. Its **functional requirements and acceptance criteria are the agreed baseline** (scope changes need DXG approval); its architecture/technology content is superseded by our decisions in `DECISIONS.md` and may evolve without touching requirements. This document records implementation-level interpretation and open questions. Requirements are not restated — reference SRS IDs (FR-*, NFR-*, M01–M15).
 
 ## 1. Technology stack
 
@@ -12,14 +12,14 @@ The RFPilot stack (team's proven production pattern for the same client), decide
 - **Data**: PostgreSQL (RLS isolation), Redis (queues), versioned S3 + KMS
 - **Workers**: containerized inspection/malware/preview/PDF conversion
 - **Auth**: OIDC for staff; magic links for speakers
-- **Infra**: AWS (CDK IaC), CloudFront, blue/green deploys; RFPilot observability approach
+- **Infra**: AWS (CDK IaC), CloudFront; deployment strategy (blue/green or rolling with event-freeze guarantees) is a Phase 0 infrastructure-design deliverable (P0-D), not yet designed; observability follows the RFPilot approach
 
 ### Room Agent risk note
 PowerPoint COM automation from Electron/Node is the least-proven part of the stack. Phase 0 PoC must prove: launch deck in slideshow mode, presenter view handling, monitor targeting, animation/video fidelity, crash recovery, and process supervision over 72h offline operation. Fallback if COM-from-Node proves unstable: a thin local helper (PowerShell script or small compiled sidecar) invoked by the Electron agent — decision recorded in DECISIONS.md after PoC.
 
 ## 2. Applications
 
-1. **Control Center** (Next.js) — DXG staff: events, import, schedule, speakers, comms, files, review queue, SRR console, sync dashboard, reports, archive, admin. (Mirrors RFPilot dashboard/admin split only if needed; start as one app with role gates.)
+1. **Control Center** (Next.js) — DXG staff: events, import, schedule, speakers, comms, files, review queue, SRR console, sync dashboard, reports, archive, admin. Client event administrators and scoped reviewers use the same app through role-gated views (client-visible comment lane, approvals visibility, archive access) — no separate Client Portal app in MVP.
 2. **Speaker Portal** (Next.js) — magic-link access, mobile-friendly, resumable ≤10 GB uploads.
 3. **Backend** (Express) — versioned REST API + WebSocket/SSE, BullMQ workers (inspection, malware scan, preview/PDF conversion, email, archive build), outbox dispatcher.
 4. **Room Agent** (Electron, Windows 10 21H2+/11) — registration, delta sync, offline library, playback, holding screen, log reconciliation, signed auto-update.
