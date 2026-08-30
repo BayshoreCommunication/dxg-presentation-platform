@@ -23,3 +23,6 @@ From the G0-8 review (docs/infra/G0-8_REVIEW.md): us-east-2 primary / us-east-1 
 
 ## D-008 (2026-08-30): Development-phase infrastructure — one server, shared RFPilot account, ≤$100/mo — Status: ACCEPTED
 While in development with 0 users: a single EC2 instance (docker compose: api/worker/dispatcher/cron/postgres/redis/clamav) + one versioned S3 bucket in the RFPilot AWS account (295229565954, us-east-2), everything tagged product=pmp with an $80/$100 billing alarm. See docs/infra/DEV_BOOTSTRAP.md. This OVERRIDES the G0-8 C1 dedicated-account recommendation (C1 resolved: shared account by Travis's decision) and DEFERS the five-doc target infrastructure to pilot preparation — the target designs stand unchanged as the pilot/production plan; SRS NFRs bind at pilot, not during development. Owner: Travis.
+
+## D-009 (2026-08-30): No AWS deployment yet — local Docker is the development environment — Status: ACCEPTED
+Development runs entirely in local Docker (docker-compose.yml at repo root: postgres:16 with db/migrations auto-applied, redis, clamav; app services join as they are scaffolded). The Pmp-dev-Bootstrap CDK stack (deploy/aws/) stays drafted and synth-verified but is NOT deployed until Travis decides a shared dev server is needed; the $100/mo cap from D-008 then applies. Cost until then: $0.

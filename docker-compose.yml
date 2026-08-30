@@ -1,0 +1,52 @@
+# Local development stack (D-008 amended: no AWS deploy yet — everything runs in Docker).
+# Postgres applies db/migrations/*.sql automatically on first start (lexical order).
+# App services (api/worker/dispatcher/cron) are added here when the backend is scaffolded.
+# Reset database: docker compose down -v && docker compose up -d
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: pmp-postgres
+    environment:
+      POSTGRES_USER: pmp
+      POSTGRES_PASSWORD: pmp_dev          # dev only — never a real secret
+      POSTGRES_DB: pmp_dev
+    ports:
+      - "5434:5432"                        # non-default port to avoid clashing with RFPilot's local postgres
+    volumes:
+      - pmp_pgdata:/var/lib/postgresql/data
+      - ./db/migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pmp -d pmp_dev"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: pmp-redis
+    command: ["redis-server", "--appendonly", "no"]   # transport only (D-003): availability, not durability
+    ports:
+      - "6380:6379"                        # 6380 to avoid clashing with other local redis
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  clamav:
+    image: clamav/clamav:stable
+    container_name: pmp-clamav
+    ports:
+      - "3310:3310"                        # clamd TCP
+    volumes:
+      - pmp_clamdb:/var/lib/clamav         # persist signature DB (first pull is ~300MB)
+    healthcheck:
+      test: ["CMD-SHELL", "clamdscan --ping 1 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 20
+      start_period: 180s                   # freshclam initial download takes a while
+
+volumes:
+  pmp_pgdata:
+  pmp_clamdb:

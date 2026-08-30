@@ -1,6 +1,6 @@
 # DEV_BOOTSTRAP.md — Development-Phase Infrastructure (≤$100/month)
 
-Status: Decided 2026-08-30 (D-008). While the platform has 0 users and is in development, we run **one server in the existing RFPilot AWS account** (295229565954, us-east-2) with a hard budget cap of **$100/month**. The five infra design docs (ENVIRONMENTS, DATA_TIER, EDGE_APP_TIER, OBSERVABILITY, INFRA_CI) remain the **pilot/production target** — nothing in them is built until the project approaches pilot; they are not deleted or weakened, just deferred.
+Status: Decided 2026-08-30 (D-008); **amended by D-009: not deployed yet.** Development currently runs entirely in local Docker (`docker-compose.yml` at repo root — postgres with auto-applied migrations on port 5434, redis on 6380, clamav on 3310). This document's single-server plan activates only when a shared dev server becomes necessary; until then AWS cost is $0. While the platform has 0 users and is in development, we run **one server in the existing RFPilot AWS account** (295229565954, us-east-2) with a hard budget cap of **$100/month**. The five infra design docs (ENVIRONMENTS, DATA_TIER, EDGE_APP_TIER, OBSERVABILITY, INFRA_CI) remain the **pilot/production target** — nothing in them is built until the project approaches pilot; they are not deleted or weakened, just deferred.
 
 ## 1. What we run now
 
