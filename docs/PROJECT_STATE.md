@@ -3,17 +3,33 @@
 Last updated: 2026-08-30
 
 ## Status
-Project initiated. Spec-first workflow in place (SRS reviewed, SPEC.md drafted, PLAN.md written). No code yet. Not yet a git repository (to be added later).
+Phase 0, documentation stage. Git repository initialized; no application code. **G0 status: DEFINED, NOT STARTED** — no gate item has been executed; Phase 0 is not complete and production scaffolding is blocked until PHASE0_GATE.md items pass.
 
-## Current position
-- Next task: PLAN.md Phase 0 — P0-C3 (repo scaffolding) and workflow-state design (WORKFLOW_STATES.md); P0-A PoC when a Windows machine is available.
-- No blocking client inputs (D-004: SRS was Claude-generated; Blueprint/19-state references are ours to define). Still wanted from DXG: sample agenda files, branding assets, pilot event profile.
+## Completed documentation work (2026-08-30)
+- Repo baseline: README, AGENTS (separate-product notice), CLAUDE.md, .gitignore, commit/branch conventions
+- SRS provenance corrected (FRs/acceptance = agreed baseline; tech = DECISIONS.md; architecture may evolve; functional scope changes need DXG approval)
+- WORKFLOW_STATES.md — six decomposed lifecycles (drafted, pending DXG sign-off)
+- PHASE0_GATE.md — measurable G0 criteria incl. full Room Agent PoC matrix
+- SECURITY_MODEL.md — incl. certified deletion vs S3 versioning/replication, legal holds
+- RFPILOT_INTEGRATION.md — boundary rules (no direct DB access; shared IdP proposed)
+- TRACEABILITY.md — full FR/NFR/OBJ/module/scenario/acceptance matrix (all rows `planned`)
+- PLAN.md — task contract, P0-D infrastructure design, P0-E discovery tasks, G0 review task
 
-## Commitments
-- SRS acceptance criteria (SRS §22) define done for MVP/pilot.
-- Stack decisions D-001..D-003 in DECISIONS.md.
+## Architecture decisions
+- **Accepted**: D-001 (RFPilot stack), D-003 (Postgres-only, Redis transport-only), D-004 (we own states/schema), D-005 (decomposed lifecycles — design), D-006 (no cross-product DB access)
+- **Proposed / provisional**: D-002 (Electron Room Agent — until G0-1 PoC passes), shared IdP with RFPilot, deployment strategy (P0-D3)
 
-## Gaps / risks
-- PowerPoint COM fidelity from Node — unproven; Phase 0 gate.
-- Offline 72h operation + reconciliation — Phase 0 PoC.
-- Blueprint documents referenced by the SOW are not in hand.
+## Current blockers
+1. **Windows/Office test environment unavailable** — G0-1 and G0-2 PoCs need a physical Windows 11 machine + Win10 21H2 VM with Microsoft 365 PowerPoint and multi-monitor hardware. Blocks the Room Agent viability decision.
+2. **DXG inputs pending** — see below; blocks G0-4..7.
+
+## Required DXG inputs
+- Stakeholder access for interviews and SRR/room workflow observation (P0-E1..E4)
+- Windows device + Office fleet profile; multi-monitor configurations (P0-E5/E6)
+- Sample agenda XLSX/CSV files; representative deck/media corpus sources (P0-E12/E13)
+- Retention, legal-hold, deletion policy confirmation (P0-E14)
+- Pilot-event profile (P0-E15)
+- Sign-offs: WORKFLOW_STATES.md, role × permission matrix, prototype walkthrough
+
+## Next single task
+**P0-C5**: send the DXG input-request list above (unblocks discovery), then **P0-D1** (environment/stack design — needs nothing external) while awaiting the Windows test environment for P0-A.

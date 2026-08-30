@@ -1,6 +1,17 @@
 # PLAN.md — Task Breakdown
 
-Working order follows SRS §24 (traceability priority) with Phase 0 risk-retirement first. One task at a time; each task ends with passing tests. Mark tasks `[x]` when done and update PROJECT_STATE.md at milestone boundaries.
+Working order follows SRS §24 (traceability priority) with Phase 0 risk-retirement first. Mark tasks `[x]` when done and update PROJECT_STATE.md at milestone boundaries. Gate criteria for Phase 0: `PHASE0_GATE.md`.
+
+## Task contract (Addy workflow)
+
+Every implementation task must:
+1. Address **one bounded behavior**, completable in one focused agent session.
+2. Reference its requirement IDs (FR/NFR/OBJ) — cross-check `TRACEABILITY.md`.
+3. Name the files/components in scope and explicit exclusions.
+4. Include acceptance tests (written with or before the code).
+5. End with a passing verification command (`npm test` / suite name) and **one commit**.
+
+The milestone tasks below (M1–M7) are **planning-level units**. Before starting a milestone, its tasks are decomposed just-in-time into contract-sized sub-tasks in a `docs/tasks/M<x>.md` checklist (e.g. M1-5 "schedule domain" becomes separate tasks for rooms CRUD, sessions/slots, moves, cancellations, replacements — each with its own tests and commit). No milestone task is worked on directly at the size written here.
 
 ## Phase 0 — Discovery & technical validation (gate G0)
 
@@ -19,8 +30,35 @@ Working order follows SRS §24 (traceability priority) with Phase 0 risk-retirem
 - [ ] P0-C1 Physical PostgreSQL schema (DDL + migration files) for all SRS §10 entities
 - [ ] P0-C2 OpenAPI surface for the versioned API areas (SRS §11)
 - [ ] P0-C3 Repo scaffolding: backend (Express+TS, worker, dispatcher, contracts pipeline), control-center and speaker-portal (Next.js), agent (Electron) — mirroring RFPilot layouts
-- [ ] P0-C4 Design the workflow state machine (`docs/WORKFLOW_STATES.md`): states, legal transitions, role gates — present to DXG for sign-off
+- [x] P0-C4 Design the workflow state machine (`docs/WORKFLOW_STATES.md`) — drafted 2026-08-30, pending DXG sign-off
 - [ ] P0-C5 Request from DXG: sample agenda XLSX/CSV files, branding assets, pilot event profile
+
+### P0-D: Infrastructure design (gate G0-8)
+- [ ] P0-D1 Environment plan: development, production-parity staging (anonymized fixtures), production; account/stack layout with separate network, data, application, and observability stacks
+- [ ] P0-D2 Data tier: Multi-AZ PostgreSQL, Redis availability strategy, versioned S3 + KMS, cross-region replication, backup/PITR design with RPO ≤15min / RTO ≤4h validation plan. Do NOT copy RFPilot's temporary reduced-redundancy production configuration.
+- [ ] P0-D3 Edge/app tier: WAF + CloudFront, worker scaling policy, deployment + rollback strategy (blue/green or equivalent with event-freeze guarantees), stateful-stack termination protection
+- [ ] P0-D4 Observability: golden signals, agent heartbeat monitoring (<5min room-offline detection), queue backlog + outbox-age alarms
+- [ ] P0-D5 Infra CI design: `cdk synth --strict`, cdk-nag, type checking, infrastructure tests, mandatory `cdk diff` review before deploy, drift detection
+
+### P0-E: Discovery & validation with DXG (gate G0-4/5/6/7)
+- [ ] P0-E1 Stakeholder interviews (PM, SRR technician, room technician, client-admin)
+- [ ] P0-E2 Document current DXG presentation workflow end-to-end
+- [ ] P0-E3 Observe/document Speaker Ready Room workflow
+- [ ] P0-E4 Document room-technician workflow (setup, doors, during-session, teardown)
+- [ ] P0-E5 Windows device + Microsoft Office fleet profiling (versions, admin rights, AV, hardware)
+- [ ] P0-E6 Catalogue multi-monitor and presenter-view configurations in use
+- [ ] P0-E7 Security threat model workshop (→ SECURITY_MODEL.md §10)
+- [ ] P0-E8 Role × permission matrix for all SRS §5 roles across M01–M15 (DXG sign-off)
+- [ ] P0-E9 Screen inventory for Control Center / Speaker Portal / SRR Console
+- [ ] P0-E10 Usability prototypes of critical flows (upload, review queue, SRR check-in, sync dashboard)
+- [ ] P0-E11 Draft the 19-step scripted acceptance walkthrough (SRS §22) against the prototype
+- [ ] P0-E12 Assemble representative presentation/media test corpus (≥30 decks + video codec matrix)
+- [ ] P0-E13 Collect sample agenda imports from DXG and spike the column mapping
+- [ ] P0-E14 Confirm retention, legal-hold, and deletion policy with DXG
+- [ ] P0-E15 Agree pilot-event profile (rooms, speakers, file mix)
+
+### G0 gate review
+- [ ] G0 Review all PHASE0_GATE.md items; record PROCEED / PROCEED-WITH-CONDITIONS / DO-NOT-PROCEED in DECISIONS.md
 
 ## Phase 1 — MVP milestones
 
@@ -40,6 +78,7 @@ Working order follows SRS §24 (traceability priority) with Phase 0 risk-retirem
 - [ ] M2-3 Allowlist/preflight + duplicate detection (FR-FILE-001/004)
 - [ ] M2-4 Inspection orchestration worker + tier-1 checks + severity classification (FR-INSP-001/002)
 - [ ] M2-5 Malware scanning + quarantine path (NFR-SEC-04); waivers (FR-INSP-003)
+- [ ] M2-6 File search/filter (role-scoped) + bulk download (FR-FILE-005)
 
 ### M3 Review, workflow, communications
 - [ ] M3-1 Configurable state machine (19-state superset), legal transitions, role gates, illegal-transition rejection (FR-REV-002)
@@ -72,3 +111,4 @@ Working order follows SRS §24 (traceability priority) with Phase 0 risk-retirem
 - [ ] M7-2 Performance: 50×1GB concurrent uploads, sync throughput, SRR search load
 - [ ] M7-3 Security: SAST/DAST, pentest prep, permission regression ≥95%
 - [ ] M7-4 DR rehearsal, runbooks, live-event simulation, UAT
+- [ ] M7-5 Training & support package: technician certification course, client-admin quickstart, speaker guide + video, on-call/support setup (SRS §19)
