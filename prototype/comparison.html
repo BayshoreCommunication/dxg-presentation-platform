@@ -250,14 +250,15 @@ const S={
   screen:&#x27;portfolio&#x27;, selTalk:&#x27;raman&#x27;,
   talks:{
     raman:{name:&#x27;Dr. Priya Raman&#x27;,short:&#x27;P. Raman&#x27;,talk:&#x27;Robotic Surgery Outcomes: Five-Year Data&#x27;,track:&#x27;Surgical Innovation&#x27;,room:&#x27;Ballroom A&#x27;,slot:&#x27;Day 2 · 10:30&#x27;,
-      versions:[{v:1,size:&#x27;481 MB&#x27;,state:&#x27;superseded&#x27;},{v:2,size:&#x27;486 MB&#x27;,state:&#x27;approved&#x27;}],
+      org:&#x27;Bayview Medical&#x27;,
+      versions:[{v:1,size:&#x27;481 MB&#x27;,state:&#x27;superseded&#x27;},{v:2,size:&#x27;481 MB&#x27;,state:&#x27;approved&#x27;}],
       insp:{chip:&#x27;c-warn&#x27;,text:&#x27;⚠ Warning · Unsupported video codec (HEVC) — Slide 14&#x27;},
       review:&#x27;approved&#x27;, sync:&#x27;active&#x27;, ack:true, upPct:100},
-    osei:{name:&#x27;K. Osei&#x27;,short:&#x27;K. Osei&#x27;,talk:&#x27;Sensor Talk — linked video&#x27;,track:&#x27;Digital Health&#x27;,room:&#x27;Room 210&#x27;,slot:&#x27;Day 2 · 13:00&#x27;,
+    osei:{name:&#x27;Kwame Osei&#x27;,short:&#x27;K. Osei&#x27;,org:&#x27;Nordic Devices&#x27;,talk:&#x27;Sensor Talk — linked video&#x27;,track:&#x27;Digital Health&#x27;,room:&#x27;Room 210&#x27;,slot:&#x27;Day 2 · 13:00&#x27;,
       versions:[{v:1,size:&#x27;96 MB&#x27;,state:&#x27;awaiting_review&#x27;}],
       insp:{chip:&#x27;c-warn&#x27;,text:&#x27;⚠ Warning · linked (not embedded) video — slides 6, 9&#x27;},
       review:&#x27;awaiting_review&#x27;, sync:&#x27;none&#x27;, ack:true, upPct:100},
-    fontaine:{name:&#x27;A. Fontaine&#x27;,short:&#x27;A. Fontaine&#x27;,talk:&#x27;CardioNext Trial Results&#x27;,track:&#x27;Cardiology&#x27;,room:&#x27;Room 212&#x27;,slot:&#x27;Day 2 · 11:15&#x27;,
+    fontaine:{name:&#x27;Alicia Fontaine&#x27;,short:&#x27;A. Fontaine&#x27;,org:&#x27;CardioNext&#x27;,talk:&#x27;CardioNext Trial Results&#x27;,track:&#x27;Cardiology&#x27;,room:&#x27;Room 212&#x27;,slot:&#x27;Day 2 · 11:15&#x27;,
       versions:[{v:1,size:&#x27;148 MB&#x27;,state:&#x27;awaiting_review&#x27;}],
       insp:{chip:&#x27;c-ok&#x27;,text:&#x27;Checks passed · fonts embedded, media OK&#x27;},
       review:&#x27;awaiting_review&#x27;, sync:&#x27;none&#x27;, ack:true, upPct:100},
@@ -303,41 +304,73 @@ V.portfolio=()=&gt;`&lt;div style=&quot;display:flex;justify-content:space-betwe
   &lt;div class=&quot;note&quot;&gt;JW Marriott Water Street · Jan 21–22, 2026&lt;/div&gt;
   &lt;div class=&quot;bar&quot; style=&quot;margin:10px 0 4px&quot;&gt;&lt;i style=&quot;width:100%&quot;&gt;&lt;/i&gt;&lt;/div&gt;
   &lt;div style=&quot;display:flex;justify-content:space-between&quot;&gt;&lt;span class=&quot;note&quot;&gt;No unresolved warnings&lt;/span&gt;&lt;span class=&quot;mono num&quot;&gt;100%&lt;/span&gt;&lt;/div&gt;
+&lt;/div&gt;&lt;/div&gt;
+&lt;div class=&quot;card&quot;&gt;&lt;div class=&quot;cbd&quot;&gt;
+  &lt;div style=&quot;display:flex;justify-content:space-between;align-items:baseline&quot;&gt;&lt;h3 style=&quot;font-size:17px&quot;&gt;National Logistics Expo&lt;/h3&gt;&lt;span class=&quot;chip c-mut&quot;&gt;Planning&lt;/span&gt;&lt;/div&gt;
+  &lt;div class=&quot;note&quot;&gt;Orange County CC · May 4–7, 2026&lt;/div&gt;
+  &lt;div class=&quot;bar warn&quot; style=&quot;margin:10px 0 4px&quot;&gt;&lt;i style=&quot;width:12%&quot;&gt;&lt;/i&gt;&lt;/div&gt;
+  &lt;div style=&quot;display:flex;justify-content:space-between&quot;&gt;&lt;span class=&quot;chip c-warn&quot;&gt;1 unresolved warnings&lt;/span&gt;&lt;span class=&quot;mono num&quot;&gt;12%&lt;/span&gt;&lt;/div&gt;
 &lt;/div&gt;&lt;/div&gt;`;
 
-V.wizard=()=&gt;`&lt;h1 class=&quot;htitle&quot;&gt;Create event&lt;/h1&gt;
-&lt;div class=&quot;card&quot;&gt;&lt;div class=&quot;chd&quot;&gt;&lt;h3&gt;Event details&lt;/h3&gt;&lt;span class=&quot;m&quot;&gt;step 1 of 3&lt;/span&gt;&lt;/div&gt;&lt;div class=&quot;cbd&quot;&gt;
-  &lt;div class=&quot;grid2&quot;&gt;
+V.wizard=()=&gt;{const st=S._wizStep||1;
+ const steps=[&#x27;Basics&#x27;,&#x27;Rooms &amp; tracks&#x27;,&#x27;Deadlines &amp; workflow&#x27;,&#x27;Branding &amp; template&#x27;];
+ const bodies={
+  1:`&lt;div class=&quot;grid2&quot;&gt;
     &lt;div class=&quot;field&quot;&gt;&lt;label&gt;Event name&lt;/label&gt;&lt;input style=&quot;width:100%&quot; value=&quot;MedTech Forward 2026&quot;&gt;&lt;/div&gt;
-    &lt;div class=&quot;field&quot;&gt;&lt;label&gt;Organization&lt;/label&gt;&lt;select style=&quot;width:100%&quot;&gt;&lt;option&gt;MedTech Industry Association&lt;/option&gt;&lt;/select&gt;&lt;/div&gt;
+    &lt;div class=&quot;field&quot;&gt;&lt;label&gt;Client&lt;/label&gt;&lt;select style=&quot;width:100%&quot;&gt;&lt;option&gt;MedTech Industry Association&lt;/option&gt;&lt;/select&gt;&lt;/div&gt;
     &lt;div class=&quot;field&quot;&gt;&lt;label&gt;Venue&lt;/label&gt;&lt;input style=&quot;width:100%&quot; value=&quot;Tampa Convention Center&quot;&gt;&lt;/div&gt;
     &lt;div class=&quot;field&quot;&gt;&lt;label&gt;Time zone&lt;/label&gt;&lt;select style=&quot;width:100%&quot;&gt;&lt;option&gt;America/New_York&lt;/option&gt;&lt;/select&gt;&lt;/div&gt;
-    &lt;div class=&quot;field&quot;&gt;&lt;label&gt;Dates&lt;/label&gt;&lt;input style=&quot;width:100%&quot; value=&quot;Mar 10 – Mar 12, 2026&quot;&gt;&lt;/div&gt;
+    &lt;div class=&quot;field&quot;&gt;&lt;label&gt;Start date&lt;/label&gt;&lt;input style=&quot;width:100%&quot; value=&quot;Mar 10, 2026&quot;&gt;&lt;/div&gt;
+    &lt;div class=&quot;field&quot;&gt;&lt;label&gt;End date&lt;/label&gt;&lt;input style=&quot;width:100%&quot; value=&quot;Mar 12, 2026&quot;&gt;&lt;/div&gt;
+  &lt;/div&gt;`,
+  2:`&lt;div class=&quot;grid2&quot;&gt;
+    &lt;div class=&quot;field&quot;&gt;&lt;label&gt;Rooms&lt;/label&gt;&lt;input style=&quot;width:100%&quot; value=&quot;Ballroom A, Ballroom B, Rooms 210–214 … (14)&quot;&gt;&lt;/div&gt;
+    &lt;div class=&quot;field&quot;&gt;&lt;label&gt;Tracks&lt;/label&gt;&lt;input style=&quot;width:100%&quot; value=&quot;Cardiology, Surgical Innovation, Digital Health, Regulatory&quot;&gt;&lt;/div&gt;
+  &lt;/div&gt;&lt;div class=&quot;note&quot;&gt;⚠ Invitations can’t be sent until the event has at least one day and one room.&lt;/div&gt;`,
+  3:`&lt;div class=&quot;grid2&quot;&gt;
     &lt;div class=&quot;field&quot;&gt;&lt;label&gt;Speaker upload deadline&lt;/label&gt;&lt;input style=&quot;width:100%&quot; value=&quot;Feb 27, 2026 · 23:59 ET&quot;&gt;&lt;/div&gt;
+    &lt;div class=&quot;field&quot;&gt;&lt;label&gt;Reminders&lt;/label&gt;&lt;input style=&quot;width:100%&quot; value=&quot;T-14 · T-7 · T-2 · missing-file only&quot;&gt;&lt;/div&gt;
+    &lt;div class=&quot;field&quot;&gt;&lt;label&gt;Review workflow&lt;/label&gt;&lt;select style=&quot;width:100%&quot;&gt;&lt;option&gt;Standard · technician + client review lanes&lt;/option&gt;&lt;/select&gt;&lt;/div&gt;
+  &lt;/div&gt;`,
+  4:`&lt;div class=&quot;grid2&quot;&gt;
     &lt;div class=&quot;field&quot;&gt;&lt;label&gt;Accent color&lt;/label&gt;&lt;input style=&quot;width:100%&quot; class=&quot;mono&quot; value=&quot;#44C7F4&quot;&gt;&lt;/div&gt;
-    &lt;div class=&quot;field&quot;&gt;&lt;label&gt;Branding&lt;/label&gt;&lt;button class=&quot;btn&quot; style=&quot;width:100%&quot; onclick=&quot;toast(&#x27;Branded header uploaded — applied to portal + emails&#x27;)&quot;&gt;Upload event header…&lt;/button&gt;&lt;/div&gt;
+    &lt;div class=&quot;field&quot;&gt;&lt;label&gt;Event header&lt;/label&gt;&lt;button class=&quot;btn&quot; style=&quot;width:100%&quot; onclick=&quot;toast(&#x27;Branded header uploaded — applied to portal + emails&#x27;)&quot;&gt;Upload event header…&lt;/button&gt;&lt;/div&gt;
+    &lt;div class=&quot;field&quot;&gt;&lt;label&gt;Slide template&lt;/label&gt;&lt;button class=&quot;btn&quot; style=&quot;width:100%&quot; onclick=&quot;toast(&#x27;Template attached — offered to speakers on the portal&#x27;)&quot;&gt;Attach slide template…&lt;/button&gt;&lt;/div&gt;
+  &lt;/div&gt;`};
+ return `&lt;h1 class=&quot;htitle&quot;&gt;Create event&lt;/h1&gt;
+&lt;div class=&quot;card&quot;&gt;&lt;div class=&quot;cbd&quot; style=&quot;display:flex;gap:6px;flex-wrap:wrap;border-bottom:1px solid var(--line)&quot;&gt;
+  ${steps.map((s,i)=&gt;`&lt;span class=&quot;chip ${i+1===st?&#x27;c-info&#x27;:i+1&lt;st?&#x27;c-ok&#x27;:&#x27;c-mut&#x27;}&quot; style=&quot;cursor:pointer&quot; onclick=&quot;S._wizStep=${i+1};render()&quot;&gt;${i+1}. ${s}&lt;/span&gt;`).join(&#x27;&#x27;)}
+&lt;/div&gt;&lt;div class=&quot;cbd&quot;&gt;
+  ${bodies[st]}
+  &lt;div style=&quot;display:flex;gap:8px;margin-top:6px&quot;&gt;
+    &lt;button class=&quot;btn&quot; ${st===1?&#x27;disabled&#x27;:&#x27;&#x27;} onclick=&quot;S._wizStep=${st-1};render()&quot;&gt;Back&lt;/button&gt;
+    ${st&lt;4?`&lt;button class=&quot;btn pri&quot; onclick=&quot;S._wizStep=${st+1};render()&quot;&gt;Save &amp; continue&lt;/button&gt;`
+      :`&lt;button class=&quot;btn pri&quot; onclick=&quot;S._wizStep=1;nav(&#x27;import&#x27;)&quot;&gt;Create event → Import schedule&lt;/button&gt;`}
+    &lt;span style=&quot;flex:1&quot;&gt;&lt;/span&gt;
+    &lt;button class=&quot;btn&quot; onclick=&quot;toast(&#x27;Duplicated structure/settings/templates only — no speaker files or statuses copied&#x27;)&quot;&gt;Duplicate an existing event…&lt;/button&gt;
   &lt;/div&gt;
-  &lt;div class=&quot;note&quot; style=&quot;margin-bottom:10px&quot;&gt;⚠ Invitations can’t be sent until the event has at least one day and one room.&lt;/div&gt;
-  &lt;button class=&quot;btn&quot; onclick=&quot;toast(&#x27;Saved — you can finish rooms and deadlines later&#x27;)&quot;&gt;Save &amp; continue&lt;/button&gt;
-  &lt;button class=&quot;btn pri&quot; onclick=&quot;nav(&#x27;import&#x27;)&quot;&gt;Create event → Import schedule&lt;/button&gt;
-  &lt;button class=&quot;btn&quot; onclick=&quot;toast(&#x27;Duplicated structure/settings/templates only — no speaker files or statuses copied&#x27;)&quot;&gt;Duplicate from Gulf Coast HR Summit&lt;/button&gt;
-&lt;/div&gt;&lt;/div&gt;`;
+&lt;/div&gt;&lt;/div&gt;`};
 
 V.import=()=&gt;`&lt;h1 class=&quot;htitle&quot;&gt;Import schedule · &lt;span class=&quot;mono&quot; style=&quot;font-size:16px&quot;&gt;MTF26_agenda_v4.xlsx&lt;/span&gt;&lt;/h1&gt;
-&lt;div class=&quot;card&quot;&gt;&lt;div class=&quot;chd&quot;&gt;&lt;h3&gt;Column mapping&lt;/h3&gt;&lt;span class=&quot;m&quot;&gt;Auto-mapped 7 / 7&lt;/span&gt;&lt;/div&gt;&lt;div class=&quot;cbd&quot;&gt;
-  &lt;table&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;Source column&lt;/th&gt;&lt;th&gt;Platform field&lt;/th&gt;&lt;th&gt;Sample&lt;/th&gt;&lt;th&gt;Status&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;
-  &lt;tr&gt;&lt;td class=&quot;mono&quot;&gt;B · Session Title&lt;/td&gt;&lt;td&gt;Session · title&lt;/td&gt;&lt;td&gt;Robotics Live Lab&lt;/td&gt;&lt;td&gt;&lt;span class=&quot;chip c-ok&quot;&gt;Mapped&lt;/span&gt;&lt;/td&gt;&lt;/tr&gt;
-  &lt;tr&gt;&lt;td class=&quot;mono&quot;&gt;D · Hall&lt;/td&gt;&lt;td&gt;Room&lt;/td&gt;&lt;td&gt;Ballroom A&lt;/td&gt;&lt;td&gt;&lt;span class=&quot;chip c-ok&quot;&gt;Mapped&lt;/span&gt;&lt;/td&gt;&lt;/tr&gt;
-  &lt;tr&gt;&lt;td class=&quot;mono&quot;&gt;E · Start&lt;/td&gt;&lt;td&gt;Session · start&lt;/td&gt;&lt;td class=&quot;mono num&quot;&gt;Mar 11 10:30&lt;/td&gt;&lt;td&gt;&lt;span class=&quot;chip c-ok&quot;&gt;Mapped&lt;/span&gt;&lt;/td&gt;&lt;/tr&gt;
-  &lt;tr&gt;&lt;td class=&quot;mono&quot;&gt;H · Presenter Email&lt;/td&gt;&lt;td&gt;Speaker · email&lt;/td&gt;&lt;td class=&quot;mono&quot;&gt;p.raman@…&lt;/td&gt;&lt;td&gt;&lt;span class=&quot;chip c-ok&quot;&gt;Mapped&lt;/span&gt;&lt;/td&gt;&lt;/tr&gt;
+&lt;div class=&quot;krow&quot;&gt;
+ &lt;div class=&quot;kpi&quot;&gt;&lt;div class=&quot;kl&quot;&gt;Rows&lt;/div&gt;&lt;div class=&quot;kv num&quot;&gt;212&lt;/div&gt;&lt;/div&gt;
+ &lt;div class=&quot;kpi&quot;&gt;&lt;div class=&quot;kl&quot;&gt;Blocking errors&lt;/div&gt;&lt;div class=&quot;kv num&quot; style=&quot;color:var(--block)&quot;&gt;1&lt;/div&gt;&lt;/div&gt;
+ &lt;div class=&quot;kpi&quot;&gt;&lt;div class=&quot;kl&quot;&gt;Warnings&lt;/div&gt;&lt;div class=&quot;kv num&quot; style=&quot;color:var(--warn)&quot;&gt;9&lt;/div&gt;&lt;/div&gt;
+ &lt;div class=&quot;kpi&quot;&gt;&lt;div class=&quot;kl&quot;&gt;New speakers&lt;/div&gt;&lt;div class=&quot;kv num&quot;&gt;348&lt;/div&gt;&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class=&quot;card&quot;&gt;&lt;div class=&quot;chd&quot;&gt;&lt;h3&gt;Column mapping&lt;/h3&gt;&lt;span class=&quot;m&quot;&gt;Auto-mapped 7 / 7&lt;/span&gt;&lt;/div&gt;&lt;div class=&quot;cbd&quot; style=&quot;padding:0 0 4px&quot;&gt;
+  &lt;table&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;Source column&lt;/th&gt;&lt;th&gt;Platform field&lt;/th&gt;&lt;th&gt;Mapped&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;
+  ${[[&#x27;Session Title&#x27;,&#x27;session.title&#x27;],[&#x27;Room&#x27;,&#x27;room.name&#x27;],[&#x27;Date&#x27;,&#x27;session.date&#x27;],[&#x27;Start&#x27;,&#x27;session.start&#x27;],[&#x27;End&#x27;,&#x27;session.end&#x27;],[&#x27;Speaker Name&#x27;,&#x27;speaker.name&#x27;],[&#x27;Speaker Email&#x27;,&#x27;speaker.email&#x27;]]
+    .map(([s,p])=&gt;`&lt;tr&gt;&lt;td&gt;${s}&lt;/td&gt;&lt;td class=&quot;mono&quot;&gt;${p}&lt;/td&gt;&lt;td style=&quot;color:var(--ok)&quot;&gt;✓&lt;/td&gt;&lt;/tr&gt;`).join(&#x27;&#x27;)}
   &lt;/tbody&gt;&lt;/table&gt;
-  &lt;div style=&quot;margin-top:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap&quot;&gt;
-    &lt;span class=&quot;chip c-ok&quot;&gt;208 rows valid&lt;/span&gt;&lt;span class=&quot;chip c-warn&quot;&gt;4 rows: unknown room “Hall C”&lt;/span&gt;&lt;span class=&quot;chip c-mut&quot;&gt;0 blocking&lt;/span&gt;
-  &lt;/div&gt;
-  &lt;div class=&quot;lane int&quot; style=&quot;margin-top:10px&quot;&gt;&lt;b&gt;Suggested fix:&lt;/b&gt; “Hall C” looks like renamed “Room 210”. &lt;button class=&quot;btn&quot; style=&quot;margin-left:6px&quot; onclick=&quot;toast(&#x27;Fix applied to 4 rows — re-validated, 212/212 valid&#x27;);this.disabled=true&quot;&gt;Apply fix&lt;/button&gt;&lt;/div&gt;
+&lt;/div&gt;&lt;/div&gt;
+&lt;div class=&quot;card&quot;&gt;&lt;div class=&quot;chd&quot;&gt;&lt;h3&gt;Validation&lt;/h3&gt;&lt;/div&gt;&lt;div class=&quot;cbd&quot;&gt;
+  &lt;div class=&quot;lane cli&quot;&gt;&lt;b&gt;Row 41 ·&lt;/b&gt; Room “Ballroon B” doesn&#x27;t match any room. Closest match: &lt;b&gt;Ballroom B&lt;/b&gt;.
+   &lt;button class=&quot;btn&quot; style=&quot;margin-left:6px&quot; onclick=&quot;toast(&#x27;Fix applied — row 41 re-validated, 0 blocking errors&#x27;);this.disabled=true&quot;&gt;Apply fix&lt;/button&gt;&lt;/div&gt;
+  &lt;div class=&quot;lane int&quot;&gt;9 sessions have no speaker email — invitations will be held for these until emails are added.&lt;/div&gt;
   &lt;div style=&quot;margin-top:12px;display:flex;gap:8px&quot;&gt;
-   &lt;button class=&quot;btn pri&quot; onclick=&quot;toast(&#x27;Committed transactionally — 212 sessions created. Re-import later matches by room+start+title and updates instead of duplicating.&#x27;)&quot;&gt;Fix &amp; import 212 sessions&lt;/button&gt;
    &lt;button class=&quot;btn&quot; onclick=&quot;toast(&#x27;error_report.csv downloaded — row-level detail&#x27;)&quot;&gt;Download error report&lt;/button&gt;
+   &lt;button class=&quot;btn pri&quot; onclick=&quot;toast(&#x27;Committed transactionally — 212 sessions created. Re-import later matches by room+start+title and updates instead of duplicating.&#x27;)&quot;&gt;Fix &amp; import 212 sessions&lt;/button&gt;
   &lt;/div&gt;
 &lt;/div&gt;&lt;/div&gt;`;
 
@@ -352,10 +385,16 @@ V.command=()=&gt;{const readyRooms=S.talks.raman.sync===&#x27;active&#x27;&amp;&
   &lt;div class=&quot;kpi&quot;&gt;&lt;div class=&quot;kl&quot;&gt;Missing&lt;/div&gt;&lt;div class=&quot;kv num&quot; style=&quot;color:var(--block)&quot;&gt;45&lt;/div&gt;&lt;/div&gt;
   &lt;div class=&quot;kpi&quot;&gt;&lt;div class=&quot;kl&quot;&gt;Rooms ready&lt;/div&gt;&lt;div class=&quot;kv num&quot; style=&quot;color:var(--sync)&quot;&gt;${readyRooms} / 14&lt;/div&gt;&lt;/div&gt;
 &lt;/div&gt;
-&lt;div class=&quot;card&quot;&gt;&lt;div class=&quot;chd&quot;&gt;&lt;h3&gt;Live status — Today · Wed Mar 11&lt;/h3&gt;&lt;span class=&quot;m&quot;&gt;derived automatically; click to open&lt;/span&gt;&lt;/div&gt;
-&lt;div class=&quot;cbd&quot; style=&quot;padding:0 0 4px&quot;&gt;&lt;table&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;Talk&lt;/th&gt;&lt;th&gt;Speaker&lt;/th&gt;&lt;th&gt;Room · slot&lt;/th&gt;&lt;th&gt;Status&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;
-${Object.entries(S.talks).map(([k,t])=&gt;{const[l,c]=derived(t);return `&lt;tr class=&quot;rb&quot; onclick=&quot;S.selTalk=&#x27;${k}&#x27;;nav(&#x27;detail&#x27;)&quot;&gt;&lt;td&gt;&lt;b&gt;${t.talk}&lt;/b&gt;&lt;/td&gt;&lt;td&gt;${t.short}&lt;/td&gt;&lt;td&gt;${t.room} · ${t.slot}&lt;/td&gt;&lt;td&gt;&lt;span class=&quot;chip ${c}&quot;&gt;${l}&lt;/span&gt;&lt;/td&gt;&lt;/tr&gt;`}).join(&#x27;&#x27;)}
-&lt;tr&gt;&lt;td colspan=&quot;4&quot; class=&quot;note&quot;&gt;M. Bell · Room 214 10:30 — &lt;span class=&quot;chip c-mut&quot;&gt;Not submitted&lt;/span&gt; · included in reminder batch&lt;/td&gt;&lt;/tr&gt;
+&lt;div class=&quot;card&quot;&gt;&lt;div class=&quot;chd&quot;&gt;&lt;h3&gt;Today&#x27;s risk list&lt;/h3&gt;&lt;span class=&quot;m&quot;&gt;4 items · statuses derived live; click to open&lt;/span&gt;&lt;/div&gt;
+&lt;div class=&quot;cbd&quot; style=&quot;padding:0 0 4px&quot;&gt;&lt;table&gt;&lt;tbody&gt;
+${Object.entries(S.talks).map(([k,t])=&gt;{const[l,c]=derived(t);return `&lt;tr class=&quot;rb&quot; onclick=&quot;S.selTalk=&#x27;${k}&#x27;;nav(&#x27;detail&#x27;)&quot;&gt;&lt;td&gt;${t.room} · ${t.slot.split(&#x27;· &#x27;)[1]} · ${t.short} — ${t.talk}&lt;/td&gt;&lt;td style=&quot;text-align:right&quot;&gt;&lt;span class=&quot;chip ${c}&quot;&gt;${l}&lt;/span&gt;&lt;/td&gt;&lt;/tr&gt;`}).join(&#x27;&#x27;)}
+&lt;tr class=&quot;rb&quot;&gt;&lt;td&gt;Room 214 · 10:30 · M. Bell — Panel: Valve Futures (1 of 4 missing)&lt;/td&gt;&lt;td style=&quot;text-align:right&quot;&gt;&lt;span class=&quot;chip c-mut&quot;&gt;Not submitted&lt;/span&gt;&lt;/td&gt;&lt;/tr&gt;
+&lt;/tbody&gt;&lt;/table&gt;&lt;/div&gt;&lt;/div&gt;
+&lt;div class=&quot;card&quot;&gt;&lt;div class=&quot;chd&quot;&gt;&lt;h3&gt;Activity&lt;/h3&gt;&lt;/div&gt;&lt;div class=&quot;cbd&quot; style=&quot;padding:0 0 4px&quot;&gt;&lt;table&gt;&lt;tbody&gt;
+&lt;tr&gt;&lt;td class=&quot;mono num&quot; style=&quot;width:56px&quot;&gt;08:44&lt;/td&gt;&lt;td&gt;SRR Station 2 accepted v3 for P. Raman (T. Okafor)&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td class=&quot;mono num&quot;&gt;08:12&lt;/td&gt;&lt;td&gt;Room 214 agent offline — last library complete 07:58&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td class=&quot;mono num&quot;&gt;07:55&lt;/td&gt;&lt;td&gt;12 files approved by C. Reviewer queue&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td class=&quot;mono num&quot;&gt;07:31&lt;/td&gt;&lt;td&gt;Reminder batch delivered to 22 speakers (0 bounces)&lt;/td&gt;&lt;/tr&gt;
 &lt;/tbody&gt;&lt;/table&gt;&lt;/div&gt;&lt;/div&gt;`};
 
 V.speakers=()=&gt;`&lt;div style=&quot;display:flex;justify-content:space-between;align-items:center;margin-bottom:14px&quot;&gt;
@@ -363,15 +402,16 @@ V.speakers=()=&gt;`&lt;div style=&quot;display:flex;justify-content:space-betwee
 &lt;span&gt;&lt;button class=&quot;btn&quot; onclick=&quot;toast(&#x27;Reminder queued to the 45 speakers without files&#x27;)&quot;&gt;Bulk remind (45)&lt;/button&gt;
 &lt;button class=&quot;btn pri&quot; onclick=&quot;toast(&#x27;New speaker profile — merge detection runs on save&#x27;)&quot;&gt;+ Add speaker&lt;/button&gt;&lt;/span&gt;&lt;/div&gt;
 &lt;div class=&quot;card&quot;&gt;&lt;div class=&quot;cbd&quot; style=&quot;padding-bottom:6px&quot;&gt;&lt;input placeholder=&quot;Search 348 speakers…&quot; style=&quot;width:100%&quot;&gt;&lt;/div&gt;
-&lt;div class=&quot;cbd&quot; style=&quot;padding-top:0&quot;&gt;&lt;table&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;Speaker&lt;/th&gt;&lt;th&gt;Talks&lt;/th&gt;&lt;th&gt;Link status&lt;/th&gt;&lt;th&gt;Last activity&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;
-${Object.values(S.talks).map((t,i)=&gt;`&lt;tr class=&quot;rb&quot; onclick=&quot;nav(&#x27;detail&#x27;)&quot;&gt;&lt;td&gt;&lt;b&gt;${t.name}&lt;/b&gt;&lt;br&gt;&lt;span class=&quot;note&quot;&gt;${t.track}&lt;/span&gt;&lt;/td&gt;&lt;td&gt;${t.talk}&lt;/td&gt;&lt;td&gt;&lt;span class=&quot;chip c-info&quot;&gt;Invited · link active&lt;/span&gt;&lt;/td&gt;&lt;td class=&quot;mono num&quot;&gt;Day 2 · 09:1${i+2}&lt;/td&gt;&lt;/tr&gt;`).join(&#x27;&#x27;)}
-&lt;tr class=&quot;rb&quot;&gt;&lt;td&gt;&lt;b&gt;M. Bell&lt;/b&gt;&lt;br&gt;&lt;span class=&quot;note&quot;&gt;Regulatory&lt;/span&gt;&lt;/td&gt;&lt;td&gt;Room 214 10:30&lt;/td&gt;&lt;td&gt;&lt;span class=&quot;chip c-warn&quot;&gt;Invited · no upload&lt;/span&gt;&lt;/td&gt;&lt;td class=&quot;mono num&quot;&gt;—&lt;/td&gt;&lt;/tr&gt;
+&lt;div class=&quot;cbd&quot; style=&quot;padding-top:0&quot;&gt;&lt;table&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;Speaker&lt;/th&gt;&lt;th&gt;Organization&lt;/th&gt;&lt;th&gt;Talks&lt;/th&gt;&lt;th&gt;Status&lt;/th&gt;&lt;th&gt;&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;
+${Object.entries(S.talks).map(([k,t])=&gt;{const[l,c]=derived(t);return `&lt;tr class=&quot;rb&quot; onclick=&quot;S.selTalk=&#x27;${k}&#x27;;nav(&#x27;detail&#x27;)&quot;&gt;&lt;td&gt;&lt;b&gt;${t.name}&lt;/b&gt;&lt;/td&gt;&lt;td&gt;${t.org}&lt;/td&gt;&lt;td class=&quot;num&quot;&gt;${k===&#x27;raman&#x27;?3:k===&#x27;fontaine&#x27;?2:1}&lt;/td&gt;&lt;td&gt;&lt;span class=&quot;chip ${c}&quot;&gt;${l}&lt;/span&gt;&lt;/td&gt;&lt;td&gt;&lt;span class=&quot;chip c-info&quot;&gt;Open →&lt;/span&gt;&lt;/td&gt;&lt;/tr&gt;`}).join(&#x27;&#x27;)}
+&lt;tr class=&quot;rb&quot;&gt;&lt;td&gt;&lt;b&gt;Marcus Bell&lt;/b&gt;&lt;/td&gt;&lt;td&gt;SurgiField Robotics&lt;/td&gt;&lt;td class=&quot;num&quot;&gt;1&lt;/td&gt;&lt;td&gt;&lt;span class=&quot;chip c-mut&quot;&gt;Not submitted&lt;/span&gt;&lt;/td&gt;&lt;td&gt;&lt;span class=&quot;chip c-info&quot;&gt;Open →&lt;/span&gt;&lt;/td&gt;&lt;/tr&gt;
+&lt;tr class=&quot;rb&quot;&gt;&lt;td&gt;&lt;b&gt;Dr. Elena Voss&lt;/b&gt;&lt;/td&gt;&lt;td&gt;Tampa General&lt;/td&gt;&lt;td class=&quot;num&quot;&gt;1&lt;/td&gt;&lt;td&gt;&lt;span class=&quot;chip c-warn&quot;&gt;Client review&lt;/span&gt;&lt;/td&gt;&lt;td&gt;&lt;span class=&quot;chip c-info&quot;&gt;Open →&lt;/span&gt;&lt;/td&gt;&lt;/tr&gt;
 &lt;/tbody&gt;&lt;/table&gt;&lt;/div&gt;&lt;/div&gt;`;
 
 V.detail=()=&gt;{const t=S.talks[S.selTalk];const[l,c]=derived(t);const latest=t.versions[t.versions.length-1];
  return `&lt;h1 class=&quot;htitle&quot;&gt;Presentation detail&lt;/h1&gt;
 &lt;div class=&quot;card&quot;&gt;&lt;div class=&quot;chd&quot;&gt;&lt;h3&gt;${t.talk}&lt;/h3&gt;&lt;span class=&quot;chip ${c}&quot;&gt;${l}&lt;/span&gt;&lt;/div&gt;&lt;div class=&quot;cbd&quot;&gt;
-  &lt;div class=&quot;note&quot; style=&quot;margin-bottom:6px&quot;&gt;${t.name} · ${t.track} · ${t.room} · ${t.slot}&lt;/div&gt;
+  &lt;div class=&quot;note&quot; style=&quot;margin-bottom:6px&quot;&gt;${t.name} · ${t.room} · Day 2 · 10:30–11:00 · ${t.track}&lt;/div&gt;
   &lt;div class=&quot;mono note&quot; style=&quot;margin-bottom:10px&quot;&gt;RAMAN_FINAL_v${latest.v}.pptx · ${latest.size} · sha256 9f2c…e41a&lt;/div&gt;
   ${t.review===&#x27;approved&#x27;?`&lt;div class=&quot;note&quot; style=&quot;margin-bottom:10px&quot;&gt;&lt;span class=&quot;chip c-ok&quot;&gt;Approved by C. Delgado · Feb 26, 09:12 · logged&lt;/span&gt;&lt;/div&gt;`:&#x27;&#x27;}
   &lt;div style=&quot;display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px&quot;&gt;
@@ -379,6 +419,7 @@ V.detail=()=&gt;{const t=S.talks[S.selTalk];const[l,c]=derived(t);const latest=t
     &lt;button class=&quot;btn&quot; onclick=&quot;nav(&#x27;inspect&#x27;)&quot;&gt;Open inspection report&lt;/button&gt;
     &lt;button class=&quot;btn&quot; onclick=&quot;nav(&#x27;ingest&#x27;)&quot;&gt;Replace file / USB intake&lt;/button&gt;
     &lt;button class=&quot;btn warnb&quot; onclick=&quot;toast(&#x27;Prior approved version restored byte-identically — rooms notified&#x27;)&quot;&gt;Roll back ✎&lt;/button&gt;
+    &lt;button class=&quot;btn&quot; onclick=&quot;nav(&#x27;review&#x27;)&quot;&gt;Review workspace&lt;/button&gt;
   &lt;/div&gt;
   &lt;h3 style=&quot;font-size:13px;margin-bottom:6px&quot;&gt;Version history&lt;/h3&gt;
   &lt;table&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;Version&lt;/th&gt;&lt;th&gt;Size&lt;/th&gt;&lt;th&gt;State&lt;/th&gt;&lt;th&gt;&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;
@@ -389,20 +430,17 @@ V.detail=()=&gt;{const t=S.talks[S.selTalk];const[l,c]=derived(t);const latest=t
 &lt;/div&gt;&lt;/div&gt;`};
 
 V.inspect=()=&gt;{const t=S.talks[S.selTalk]||S.talks.raman;
- return `&lt;h1 class=&quot;htitle&quot;&gt;Inspection report · &lt;span style=&quot;font-size:16px&quot;&gt;${t.short}&lt;/span&gt;&lt;/h1&gt;
-&lt;div class=&quot;card&quot;&gt;&lt;div class=&quot;chd&quot;&gt;&lt;h3&gt;${t.talk} · v${t.versions.length}&lt;/h3&gt;
- &lt;span&gt;&lt;span class=&quot;chip c-mut&quot;&gt;0 blocking&lt;/span&gt; &lt;span class=&quot;chip c-warn&quot;&gt;1 warning&lt;/span&gt; &lt;span class=&quot;chip c-info&quot;&gt;2 informational&lt;/span&gt;&lt;/span&gt;&lt;/div&gt;&lt;div class=&quot;cbd&quot;&gt;
-  &lt;table&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;Check&lt;/th&gt;&lt;th&gt;Result&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;
-   &lt;tr&gt;&lt;td&gt;File integrity · SHA-256&lt;/td&gt;&lt;td&gt;&lt;span class=&quot;chip c-ok&quot;&gt;Verified&lt;/span&gt; &lt;span class=&quot;mono note&quot;&gt;9f2c…e41a&lt;/span&gt;&lt;/td&gt;&lt;/tr&gt;
-   &lt;tr&gt;&lt;td&gt;Fonts&lt;/td&gt;&lt;td&gt;&lt;span class=&quot;chip c-ok&quot;&gt;Embedded&lt;/span&gt;&lt;/td&gt;&lt;/tr&gt;
-   &lt;tr&gt;&lt;td&gt;Video codecs&lt;/td&gt;&lt;td&gt;&lt;span class=&quot;chip c-warn&quot;&gt;${t.insp.text}&lt;/span&gt;&lt;/td&gt;&lt;/tr&gt;
-   &lt;tr&gt;&lt;td&gt;Macros&lt;/td&gt;&lt;td&gt;&lt;span class=&quot;chip c-ok&quot;&gt;None found&lt;/span&gt; &lt;span class=&quot;note&quot;&gt;· Blocking severity for macros&lt;/span&gt;&lt;/td&gt;&lt;/tr&gt;
-   &lt;tr&gt;&lt;td&gt;External links&lt;/td&gt;&lt;td&gt;&lt;span class=&quot;chip c-ok&quot;&gt;None found&lt;/span&gt;&lt;/td&gt;&lt;/tr&gt;
-   &lt;tr&gt;&lt;td&gt;Malware scan&lt;/td&gt;&lt;td&gt;&lt;span class=&quot;chip c-ok&quot;&gt;Clean · 6s&lt;/span&gt;&lt;/td&gt;&lt;/tr&gt;
-  &lt;/tbody&gt;&lt;/table&gt;
-  &lt;div class=&quot;lane cli&quot; style=&quot;margin-top:12px&quot;&gt;&lt;b&gt;Suggested fix:&lt;/b&gt; re-export the Slide 14 clip as H.264 .mp4 — or accept: the room pipeline transcodes automatically with a fidelity check.&lt;/div&gt;
-  &lt;div class=&quot;lane int&quot;&gt;&lt;b&gt;What these checks can’t see:&lt;/b&gt; content accuracy, slide design, or animation behavior on the room PC — the reviewer and fidelity test decide those.&lt;/div&gt;
+ return `&lt;h1 class=&quot;htitle&quot;&gt;Inspection report · &lt;span class=&quot;mono&quot; style=&quot;font-size:16px&quot;&gt;raman_robotics_v${t.versions.length}.pptx&lt;/span&gt;&lt;/h1&gt;
+&lt;div class=&quot;card&quot;&gt;&lt;div class=&quot;chd&quot;&gt;&lt;h3&gt;Findings&lt;/h3&gt;
+ &lt;span&gt;&lt;span class=&quot;chip c-warn&quot;&gt;1 warning&lt;/span&gt; &lt;span class=&quot;chip c-info&quot;&gt;2 informational&lt;/span&gt; &lt;span class=&quot;chip c-mut&quot;&gt;0 blocking&lt;/span&gt;&lt;/span&gt;&lt;/div&gt;&lt;div class=&quot;cbd&quot;&gt;
+  &lt;div class=&quot;lane cli&quot;&gt;&lt;b&gt;⚠ Warning · Unsupported video codec&lt;/b&gt;&lt;br&gt;
+   Slide 14 · &lt;span class=&quot;mono&quot;&gt;device_demo.mov&lt;/span&gt; uses HEVC 10-bit. The Ballroom A playback profile guarantees H.264 only — HEVC may stutter or fail on this fleet.&lt;br&gt;
+   &lt;b&gt;Suggested fix:&lt;/b&gt; re-export the clip as H.264 / .mp4 and re-insert, or upload the clip separately and DXG will convert.&lt;/div&gt;
+  &lt;div class=&quot;lane int&quot;&gt;ℹ File size 481 MB — within the 10 GB limit.&lt;/div&gt;
+  &lt;div class=&quot;lane int&quot;&gt;ℹ Slide size 16:9 matches the room profile.&lt;/div&gt;
+  &lt;div class=&quot;note&quot; style=&quot;margin:8px 0&quot;&gt;Macros carry blocking severity when found (none here). Automated checks can’t judge content, design, or on-fleet animation behavior — the reviewer and fidelity test decide those.&lt;/div&gt;
   &lt;div style=&quot;display:flex;gap:8px;margin-top:8px&quot;&gt;
+    &lt;button class=&quot;btn&quot; onclick=&quot;toast(&#x27;Prefilled revision note from this finding — sent to speaker&#x27;)&quot;&gt;Request revision (prefilled)&lt;/button&gt;
     &lt;button class=&quot;btn warnb&quot; onclick=&quot;waive(this)&quot;&gt;Waive finding ✎&lt;/button&gt;
     &lt;button class=&quot;btn&quot; onclick=&quot;nav(&#x27;review&#x27;)&quot;&gt;Open in review workspace →&lt;/button&gt;
   &lt;/div&gt;
@@ -430,28 +468,36 @@ ${inQ?`&lt;div class=&quot;card&quot;&gt;&lt;div class=&quot;chd&quot;&gt;&lt;h3
   &lt;/div&gt;&lt;/div&gt;&lt;/div&gt;`:&#x27;&#x27;}`};
 
 V.comms=()=&gt;`&lt;h1 class=&quot;htitle&quot;&gt;Communications&lt;/h1&gt;
-&lt;div class=&quot;card&quot;&gt;&lt;div class=&quot;chd&quot;&gt;&lt;h3&gt;Upload invitation — branded&lt;/h3&gt;&lt;span class=&quot;m&quot;&gt;template · merge fields&lt;/span&gt;&lt;/div&gt;&lt;div class=&quot;cbd&quot;&gt;
+&lt;div class=&quot;card&quot;&gt;&lt;div class=&quot;chd&quot;&gt;&lt;h3&gt;Upload invitation · MedTech Forward 2026&lt;/h3&gt;&lt;span class=&quot;chip c-ok&quot;&gt;Delivered 348 · 0 bounces&lt;/span&gt;&lt;/div&gt;&lt;div class=&quot;cbd&quot;&gt;
   &lt;div class=&quot;darkpane&quot; style=&quot;padding:14px 16px;margin-bottom:12px&quot;&gt;&lt;b style=&quot;color:var(--white)&quot;&gt;MEDTECH FORWARD 2026&lt;/b&gt;&lt;br&gt;
-  &lt;span style=&quot;font-size:13px&quot;&gt;Hi {{speaker_first}} — you&#x27;re presenting at MedTech Forward 2026. Upload your presentation by {{deadline}} using your personal link.&lt;br&gt;· Embed all fonts and videos (H.264 .mp4) — &lt;a style=&quot;color:var(--blue)&quot; href=&quot;#&quot; onclick=&quot;return false&quot;&gt;how to do this&lt;/a&gt;&lt;br&gt;· &lt;a style=&quot;color:var(--blue)&quot; href=&quot;#&quot; onclick=&quot;return false&quot;&gt;Download the event slide template&lt;/a&gt;&lt;/span&gt;&lt;/div&gt;
+  &lt;span style=&quot;font-size:13px&quot;&gt;Hi {{speaker_first}},&lt;br&gt;You&#x27;re presenting at MedTech Forward 2026. Please upload your presentation by {{deadline}} using your personal secure link — no account needed.&lt;/span&gt;&lt;br&gt;
+  &lt;button class=&quot;btn pri&quot; style=&quot;margin-top:10px;padding:5px 14px&quot; onclick=&quot;toast(&#x27;This button carries the recipient’s magic link&#x27;)&quot;&gt;Open my upload page&lt;/button&gt;&lt;/div&gt;
   &lt;div style=&quot;display:flex;gap:8px&quot;&gt;&lt;button class=&quot;btn pri&quot; onclick=&quot;toast(&#x27;Batch queued: 348 invitations · deliveries tracked per speaker&#x27;)&quot;&gt;Send batch (348)&lt;/button&gt;
-  &lt;button class=&quot;btn&quot; onclick=&quot;toast(&#x27;Test send to m.vega@dxg.live&#x27;)&quot;&gt;Test send&lt;/button&gt;&lt;/div&gt;
+  &lt;button class=&quot;btn&quot; onclick=&quot;toast(&#x27;Test send to m.vega@dxg.live&#x27;)&quot;&gt;Test send&lt;/button&gt;
+  &lt;button class=&quot;btn&quot; onclick=&quot;toast(&#x27;Per-speaker delivery log opened&#x27;)&quot;&gt;Delivery log&lt;/button&gt;&lt;/div&gt;
 &lt;/div&gt;&lt;/div&gt;
-&lt;div class=&quot;card&quot;&gt;&lt;div class=&quot;chd&quot;&gt;&lt;h3&gt;Delivery log&lt;/h3&gt;&lt;span class=&quot;m&quot;&gt;reminders T-14 · T-7 · T-2&lt;/span&gt;&lt;/div&gt;&lt;div class=&quot;cbd&quot;&gt;
-  &lt;table&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;Batch&lt;/th&gt;&lt;th&gt;Delivered&lt;/th&gt;&lt;th&gt;Opened&lt;/th&gt;&lt;th&gt;Bounces&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;
-  &lt;tr&gt;&lt;td&gt;Invitation · Feb 10&lt;/td&gt;&lt;td class=&quot;num&quot;&gt;Delivered 348 · 0 bounces&lt;/td&gt;&lt;td class=&quot;num&quot;&gt;301&lt;/td&gt;&lt;td class=&quot;num&quot;&gt;0&lt;/td&gt;&lt;/tr&gt;
-  &lt;tr&gt;&lt;td&gt;Reminder T-7 · Feb 20&lt;/td&gt;&lt;td class=&quot;num&quot;&gt;45&lt;/td&gt;&lt;td class=&quot;num&quot;&gt;38&lt;/td&gt;&lt;td&gt;&lt;span class=&quot;chip c-bad&quot;&gt;2 — flagged on speaker records&lt;/span&gt;&lt;/td&gt;&lt;/tr&gt;
-  &lt;/tbody&gt;&lt;/table&gt;&lt;/div&gt;&lt;/div&gt;`;
+&lt;div class=&quot;card&quot;&gt;&lt;div class=&quot;chd&quot;&gt;&lt;h3&gt;Automated reminders&lt;/h3&gt;&lt;/div&gt;&lt;div class=&quot;cbd&quot;&gt;
+  &lt;div class=&quot;note&quot;&gt;T-14 · T-7 · T-2 before deadline, missing-file only. Opens 61% · clicks 44% on last batch. Bounces are flagged on the speaker record.&lt;/div&gt;
+&lt;/div&gt;&lt;/div&gt;`;
 
 V.archive=()=&gt;{const built=S._archiveBuilt;
  return `&lt;h1 class=&quot;htitle&quot;&gt;Post-event archive builder&lt;/h1&gt;
-&lt;div class=&quot;card&quot;&gt;&lt;div class=&quot;chd&quot;&gt;&lt;h3&gt;Client package — MedTech Industry Association&lt;/h3&gt;
+&lt;div class=&quot;card&quot;&gt;&lt;div class=&quot;chd&quot;&gt;&lt;h3&gt;Scope&lt;/h3&gt;&lt;/div&gt;&lt;div class=&quot;cbd&quot; style=&quot;padding:0 0 4px&quot;&gt;&lt;table&gt;&lt;tbody&gt;
+  &lt;tr&gt;&lt;td&gt;Event&lt;/td&gt;&lt;td&gt;MedTech Forward 2026&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;Days&lt;/td&gt;&lt;td&gt;all 3&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;Rooms&lt;/td&gt;&lt;td&gt;all 14&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;Rule&lt;/td&gt;&lt;td&gt;approved finals only&lt;/td&gt;&lt;/tr&gt;
+  &lt;tr&gt;&lt;td&gt;Restricted&lt;/td&gt;&lt;td&gt;&lt;span class=&quot;chip c-bad&quot;&gt;excluded (12)&lt;/span&gt;&lt;/td&gt;&lt;/tr&gt;
+&lt;/tbody&gt;&lt;/table&gt;&lt;/div&gt;&lt;/div&gt;
+&lt;div class=&quot;card&quot;&gt;&lt;div class=&quot;chd&quot;&gt;&lt;h3&gt;Options&lt;/h3&gt;&lt;/div&gt;&lt;div class=&quot;cbd&quot;&gt;
+  &lt;label style=&quot;display:flex;gap:8px;align-items:center;font-weight:400&quot;&gt;&lt;input type=&quot;checkbox&quot; checked&gt; Convert to PDF where speaker release permission allows (141 of 187)&lt;/label&gt;
+  &lt;label style=&quot;display:flex;gap:8px;align-items:center;font-weight:400&quot;&gt;&lt;input type=&quot;checkbox&quot; checked&gt; Include manifest (file · version · checksum · approval record)&lt;/label&gt;
+  &lt;label style=&quot;display:flex;gap:8px;align-items:center;font-weight:400&quot;&gt;&lt;input type=&quot;checkbox&quot; checked&gt; Expiring client link · 7 days · downloads logged · retention 90 days with notice at T-14&lt;/label&gt;
+&lt;/div&gt;&lt;/div&gt;
+&lt;div class=&quot;card&quot;&gt;&lt;div class=&quot;chd&quot;&gt;&lt;h3&gt;Package&lt;/h3&gt;
  &lt;span class=&quot;chip ${built?&#x27;c-ok&#x27;:&#x27;c-mut&#x27;}&quot;&gt;${built?&#x27;Built · delivered to client portal&#x27;:&#x27;Not built&#x27;}&lt;/span&gt;&lt;/div&gt;&lt;div class=&quot;cbd&quot;&gt;
-  &lt;table&gt;&lt;tbody&gt;
-  &lt;tr&gt;&lt;td&gt;Scope&lt;/td&gt;&lt;td&gt;All tracks · approved final versions only&lt;/td&gt;&lt;/tr&gt;
-  &lt;tr&gt;&lt;td&gt;Excluded&lt;/td&gt;&lt;td&gt;&lt;span class=&quot;chip c-bad&quot;&gt;7 talks restricted from distribution&lt;/span&gt; &lt;span class=&quot;chip c-warn&quot;&gt;12 PDF-only per release permission&lt;/span&gt;&lt;/td&gt;&lt;/tr&gt;
-  &lt;tr&gt;&lt;td&gt;Package&lt;/td&gt;&lt;td class=&quot;mono&quot;&gt;MTF26_final_presentations.zip · 41.2 GB · manifest.json (SHA-256 each)&lt;/td&gt;&lt;/tr&gt;
-  &lt;tr&gt;&lt;td&gt;Delivery&lt;/td&gt;&lt;td&gt;Expiring link · 7 days · every download logged&lt;/td&gt;&lt;/tr&gt;
-  &lt;/tbody&gt;&lt;/table&gt;
+  &lt;div class=&quot;mono&quot; style=&quot;margin-bottom:4px&quot;&gt;MTF26_final_presentations.zip&lt;/div&gt;
+  &lt;div class=&quot;note&quot;&gt;187 files · 41.2 GB estimated · includes v3 for P. Raman (final onsite version)&lt;/div&gt;
   &lt;div style=&quot;margin-top:12px;display:flex;gap:8px&quot;&gt;
    &lt;button class=&quot;btn pri&quot; onclick=&quot;S._archiveBuilt=true;render();toast(&#x27;Package built — delivered to client portal (≤4h after close, OBJ-7)&#x27;)&quot;&gt;Build package&lt;/button&gt;
    &lt;button class=&quot;btn&quot; ${built?&#x27;&#x27;:&#x27;disabled&#x27;} onclick=&quot;toast(&#x27;MTF26_final_presentations.zip · download logged&#x27;)&quot;&gt;Download package&lt;/button&gt;
@@ -459,24 +505,27 @@ V.archive=()=&gt;{const built=S._archiveBuilt;
 &lt;/div&gt;&lt;/div&gt;`};
 
 V.srr=()=&gt;`&lt;h1 class=&quot;htitle&quot;&gt;Speaker Ready Room · Room 118&lt;/h1&gt;
-&lt;div class=&quot;krow&quot;&gt;
- &lt;div class=&quot;kpi&quot;&gt;&lt;div class=&quot;kl&quot;&gt;Checked in today&lt;/div&gt;&lt;div class=&quot;kv num&quot;&gt;61&lt;/div&gt;&lt;/div&gt;
- &lt;div class=&quot;kpi&quot;&gt;&lt;div class=&quot;kl&quot;&gt;Waiting&lt;/div&gt;&lt;div class=&quot;kv num&quot; style=&quot;color:var(--warn)&quot;&gt;3&lt;/div&gt;&lt;/div&gt;
- &lt;div class=&quot;kpi&quot;&gt;&lt;div class=&quot;kl&quot;&gt;Avg lookup&lt;/div&gt;&lt;div class=&quot;kv num&quot;&gt;2.1s&lt;/div&gt;&lt;/div&gt;
- &lt;div class=&quot;kpi&quot;&gt;&lt;div class=&quot;kl&quot;&gt;USB intakes&lt;/div&gt;&lt;div class=&quot;kv num&quot;&gt;14&lt;/div&gt;&lt;/div&gt;
-&lt;/div&gt;
-&lt;div class=&quot;card&quot;&gt;&lt;div class=&quot;chd&quot;&gt;&lt;h3&gt;Stations 1–4 · 3 technicians on&lt;/h3&gt;&lt;span class=&quot;m&quot;&gt;Day 2&lt;/span&gt;&lt;/div&gt;&lt;div class=&quot;cbd&quot; style=&quot;padding:0 0 4px&quot;&gt;
-&lt;table&gt;&lt;tbody&gt;
-&lt;tr&gt;&lt;td&gt;Station 1 · D. Ruiz&lt;/td&gt;&lt;td&gt;A. Fontaine · Room 212 11:15&lt;/td&gt;&lt;td style=&quot;text-align:right&quot;&gt;&lt;span class=&quot;chip c-info&quot;&gt;With speaker&lt;/span&gt;&lt;/td&gt;&lt;/tr&gt;
-&lt;tr class=&quot;rb&quot; onclick=&quot;nav(&#x27;checkin&#x27;)&quot;&gt;&lt;td&gt;Station 2 · T. Okafor&lt;/td&gt;&lt;td&gt;&lt;b&gt;Dr. Priya Raman&lt;/b&gt; · Ballroom A 10:30&lt;/td&gt;&lt;td style=&quot;text-align:right&quot;&gt;&lt;button class=&quot;btn pri&quot; style=&quot;padding:4px 12px&quot;&gt;Check in →&lt;/button&gt;&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;Station 3 · USB scan&lt;/td&gt;&lt;td&gt;Last-minute intake · Station 3 (USB)&lt;/td&gt;&lt;td style=&quot;text-align:right&quot;&gt;&lt;span class=&quot;chip c-warn&quot;&gt;Scanning…&lt;/span&gt;&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;Station 4&lt;/td&gt;&lt;td&gt;M. Bell · Room 214 10:30&lt;/td&gt;&lt;td style=&quot;text-align:right&quot;&gt;&lt;span class=&quot;chip c-mut&quot;&gt;Not yet arrived&lt;/span&gt;&lt;/td&gt;&lt;/tr&gt;
+&lt;div class=&quot;note&quot; style=&quot;margin:-8px 0 14px&quot;&gt;Stations 1–4 · 3 technicians on&lt;/div&gt;
+&lt;div class=&quot;card&quot;&gt;&lt;div class=&quot;chd&quot;&gt;&lt;h3&gt;Expected before 10:00 · 9&lt;/h3&gt;&lt;/div&gt;&lt;div class=&quot;cbd&quot; style=&quot;padding:0 0 4px&quot;&gt;&lt;table&gt;&lt;tbody&gt;
+&lt;tr class=&quot;rb&quot; onclick=&quot;nav(&#x27;checkin&#x27;)&quot;&gt;&lt;td&gt;&lt;b&gt;P. Raman&lt;/b&gt; · Ballroom A 10:30&lt;/td&gt;&lt;td style=&quot;text-align:right&quot;&gt;&lt;button class=&quot;btn pri&quot; style=&quot;padding:4px 12px&quot;&gt;Check in →&lt;/button&gt;&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;M. Bell · Room 214 10:30&lt;/td&gt;&lt;td style=&quot;text-align:right&quot;&gt;&lt;span class=&quot;chip c-bad&quot;&gt;File missing&lt;/span&gt;&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;A. Fontaine · Room 212 11:15&lt;/td&gt;&lt;td style=&quot;text-align:right&quot;&gt;&lt;span class=&quot;chip c-mut&quot;&gt;Not yet arrived&lt;/span&gt;&lt;/td&gt;&lt;/tr&gt;
+&lt;/tbody&gt;&lt;/table&gt;&lt;/div&gt;&lt;/div&gt;
+&lt;div class=&quot;card&quot;&gt;&lt;div class=&quot;chd&quot;&gt;&lt;h3&gt;Unresolved warnings · 2&lt;/h3&gt;&lt;/div&gt;&lt;div class=&quot;cbd&quot; style=&quot;padding:0 0 4px&quot;&gt;&lt;table&gt;&lt;tbody&gt;
+&lt;tr class=&quot;rb&quot; onclick=&quot;S.selTalk=&#x27;osei&#x27;;nav(&#x27;inspect&#x27;)&quot;&gt;&lt;td&gt;K. Osei · linked video&lt;/td&gt;&lt;td style=&quot;text-align:right&quot;&gt;&lt;span class=&quot;chip c-warn&quot;&gt;Tech review&lt;/span&gt;&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;Sponsor loop B&lt;/td&gt;&lt;td style=&quot;text-align:right&quot;&gt;&lt;span class=&quot;chip c-info&quot;&gt;Client review&lt;/span&gt;&lt;/td&gt;&lt;/tr&gt;
+&lt;/tbody&gt;&lt;/table&gt;&lt;/div&gt;&lt;/div&gt;
+&lt;div class=&quot;card&quot;&gt;&lt;div class=&quot;chd&quot;&gt;&lt;h3&gt;Stations&lt;/h3&gt;&lt;/div&gt;&lt;div class=&quot;cbd&quot; style=&quot;padding:0 0 4px&quot;&gt;&lt;table&gt;&lt;tbody&gt;
+&lt;tr&gt;&lt;td&gt;Station 1 · D. Ruiz&lt;/td&gt;&lt;td style=&quot;text-align:right&quot;&gt;&lt;span class=&quot;chip c-mut&quot;&gt;Free&lt;/span&gt;&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;Station 2 · T. Okafor&lt;/td&gt;&lt;td style=&quot;text-align:right&quot;&gt;&lt;span class=&quot;chip c-mut&quot;&gt;Free&lt;/span&gt;&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;Station 3 · USB scan&lt;/td&gt;&lt;td style=&quot;text-align:right&quot;&gt;&lt;span class=&quot;chip c-mut&quot;&gt;Free&lt;/span&gt;&lt;/td&gt;&lt;/tr&gt;
 &lt;/tbody&gt;&lt;/table&gt;&lt;/div&gt;&lt;/div&gt;`;
 
 V.checkin=()=&gt;{const u=S.usb;
  return `&lt;h1 class=&quot;htitle&quot;&gt;Check-in · Dr. Priya Raman&lt;/h1&gt;
-&lt;div class=&quot;card&quot;&gt;&lt;div class=&quot;chd&quot;&gt;&lt;h3&gt;${S.talks.raman.talk}&lt;/h3&gt;&lt;span class=&quot;m&quot;&gt;Checked in 08:42 · Station 2 · Technician T. Okafor&lt;/span&gt;&lt;/div&gt;&lt;div class=&quot;cbd&quot;&gt;
-  &lt;div class=&quot;note&quot; style=&quot;margin-bottom:10px&quot;&gt;Ballroom A · today 10:30 · current approved: &lt;b class=&quot;mono&quot;&gt;v2&lt;/b&gt; (Synchronized onsite)&lt;/div&gt;
+&lt;div class=&quot;card&quot;&gt;&lt;div class=&quot;chd&quot;&gt;&lt;h3&gt;${S.talks.raman.talk}&lt;/h3&gt;&lt;span class=&quot;chip ${derived(S.talks.raman)[1]}&quot;&gt;${derived(S.talks.raman)[0]}&lt;/span&gt;&lt;/div&gt;&lt;div class=&quot;cbd&quot;&gt;
+  &lt;div class=&quot;note&quot; style=&quot;margin-bottom:4px&quot;&gt;Ballroom A · today 10:30 · current approved: &lt;b class=&quot;mono&quot;&gt;v${u.signed?3:2}&lt;/b&gt;&lt;/div&gt;
+  &lt;div class=&quot;note&quot; style=&quot;margin-bottom:12px&quot;&gt;Checked in 08:42 · Station 2 · Technician T. Okafor&lt;/div&gt;
   ${u.signed?`&lt;span class=&quot;chip c-ok&quot;&gt;Signed off · v3 · 08:51 · ✓ logged&lt;/span&gt;
    &lt;div class=&quot;card&quot; style=&quot;max-width:420px;margin-top:12px&quot;&gt;&lt;div class=&quot;cbd&quot;&gt;
     &lt;h3 style=&quot;font-size:14px;border-bottom:1px solid var(--line);padding-bottom:6px;margin-bottom:8px&quot;&gt;Presentation receipt&lt;/h3&gt;
@@ -486,45 +535,60 @@ V.checkin=()=&gt;{const u=S.usb;
     &lt;tr&gt;&lt;td class=&quot;note&quot;&gt;Technician&lt;/td&gt;&lt;td style=&quot;text-align:right&quot;&gt;T. Okafor&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;
     &lt;div style=&quot;margin-top:10px&quot;&gt;&lt;button class=&quot;btn&quot; onclick=&quot;toast(&#x27;Receipt sent to printer&#x27;)&quot;&gt;Print receipt&lt;/button&gt; &lt;button class=&quot;btn&quot; onclick=&quot;toast(&#x27;Receipt emailed to Dr. Raman&#x27;)&quot;&gt;Email receipt&lt;/button&gt;&lt;/div&gt;
    &lt;/div&gt;&lt;/div&gt;`
-  :u.scanned?`&lt;h3 style=&quot;font-size:13px;margin-bottom:6px&quot;&gt;Compare v2 (approved) vs v3 (USB)&lt;/h3&gt;
-  &lt;table&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;&lt;/th&gt;&lt;th&gt;v2&lt;/th&gt;&lt;th&gt;v3&lt;/th&gt;&lt;th&gt;Δ&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;
-   &lt;tr&gt;&lt;td&gt;Size&lt;/td&gt;&lt;td class=&quot;num&quot;&gt;486 MB&lt;/td&gt;&lt;td class=&quot;num&quot;&gt;492 MB&lt;/td&gt;&lt;td&gt;&lt;span class=&quot;chip c-warn&quot;&gt;+6 MB&lt;/span&gt;&lt;/td&gt;&lt;/tr&gt;
-   &lt;tr&gt;&lt;td&gt;Slides&lt;/td&gt;&lt;td class=&quot;num&quot;&gt;42&lt;/td&gt;&lt;td class=&quot;num&quot;&gt;44&lt;/td&gt;&lt;td&gt;&lt;span class=&quot;chip c-warn&quot;&gt;+2&lt;/span&gt;&lt;/td&gt;&lt;/tr&gt;
-   &lt;tr&gt;&lt;td&gt;Video&lt;/td&gt;&lt;td class=&quot;num&quot;&gt;2 clips&lt;/td&gt;&lt;td class=&quot;num&quot;&gt;2 clips&lt;/td&gt;&lt;td&gt;&lt;span class=&quot;chip c-ok&quot;&gt;unchanged&lt;/span&gt;&lt;/td&gt;&lt;/tr&gt;
-  &lt;/tbody&gt;&lt;/table&gt;
-  &lt;p class=&quot;note&quot;&gt;Accepting v3 sends it to re-approval. Ballroom A keeps playing v2 until v3 is approved and re-synced — approved room copies are never replaced silently.&lt;/p&gt;
-  &lt;button class=&quot;btn pri&quot; onclick=&quot;signOff()&quot;&gt;Accept as v3 · speaker present ✓&lt;/button&gt;
-  &lt;button class=&quot;btn&quot; onclick=&quot;toast(&#x27;v3 discarded — v2 remains the final onsite version&#x27;)&quot;&gt;Keep v2&lt;/button&gt;`
-  :`&lt;p class=&quot;note&quot;&gt;Speaker brought an update on USB. Send it through USB intake first — unscanned files can’t enter the library.&lt;/p&gt;
-  &lt;button class=&quot;btn pri&quot; onclick=&quot;nav(&#x27;ingest&#x27;)&quot;&gt;Go to USB intake →&lt;/button&gt;`}
+  :`&lt;h3 style=&quot;font-size:13px;margin-bottom:6px&quot;&gt;Actions&lt;/h3&gt;
+  &lt;div style=&quot;display:flex;flex-direction:column;gap:8px;max-width:380px&quot;&gt;
+   &lt;button class=&quot;btn&quot; onclick=&quot;toast(&#x27;v2 confirmed as final onsite version — speaker-portal replacement now locked&#x27;)&quot;&gt;Confirm current version as final&lt;/button&gt;
+   &lt;button class=&quot;btn pri&quot; onclick=&quot;nav(&#x27;ingest&#x27;)&quot;&gt;Replace file / USB intake&lt;/button&gt;
+   &lt;button class=&quot;btn&quot; onclick=&quot;toast(&#x27;Slide preview opened — 42 slides · 16:9&#x27;)&quot;&gt;Preview slides&lt;/button&gt;
+   &lt;button class=&quot;btn&quot; onclick=&quot;toast(&#x27;Nothing to print yet — receipt is produced at sign-off&#x27;)&quot;&gt;Print receipt&lt;/button&gt;
+  &lt;/div&gt;
+  ${u.scanned?`&lt;div class=&quot;note&quot; style=&quot;margin-top:12px&quot;&gt;USB v3 scanned clean — finish acceptance in &lt;a href=&quot;#&quot; onclick=&quot;nav(&#x27;ingest&#x27;);return false&quot;&gt;USB intake step 3&lt;/a&gt;.&lt;/div&gt;`:&#x27;&#x27;}`}
 &lt;/div&gt;&lt;/div&gt;`};
 
 V.ingest=()=&gt;{const u=S.usb;
- return `&lt;h1 class=&quot;htitle&quot;&gt;USB intake · Station 3&lt;/h1&gt;
-&lt;div class=&quot;card&quot;&gt;&lt;div class=&quot;chd&quot;&gt;&lt;h3&gt;SANDISK_32GB&lt;/h3&gt;&lt;span class=&quot;m&quot;&gt;mandatory malware scan&lt;/span&gt;&lt;/div&gt;&lt;div class=&quot;cbd&quot;&gt;
-  &lt;div class=&quot;frow&quot; style=&quot;border-top:none&quot;&gt;&lt;span class=&quot;mono&quot;&gt;RAMAN_FINAL_v3.pptx&lt;/span&gt;&lt;span class=&quot;num mono&quot;&gt;492 MB&lt;/span&gt;&lt;/div&gt;
-  ${u.scanned?`&lt;span class=&quot;chip c-ok&quot;&gt;Clean · imported as v3 · original preserved&lt;/span&gt;
-   &lt;div style=&quot;margin-top:12px&quot;&gt;&lt;button class=&quot;btn pri&quot; onclick=&quot;nav(&#x27;checkin&#x27;)&quot;&gt;Back to check-in → compare&lt;/button&gt;&lt;/div&gt;`
+ return `&lt;h1 class=&quot;htitle&quot;&gt;Last-minute intake · Station 3 (USB)&lt;/h1&gt;
+&lt;div class=&quot;card&quot;&gt;&lt;div class=&quot;chd&quot;&gt;&lt;h3&gt;1 · Malware scan&lt;/h3&gt;${u.scanned?&#x27;&lt;span class=&quot;chip c-ok&quot;&gt;Clean&lt;/span&gt;&#x27;:&#x27;&lt;span class=&quot;chip c-mut&quot;&gt;Required&lt;/span&gt;&#x27;}&lt;/div&gt;&lt;div class=&quot;cbd&quot;&gt;
+  &lt;div class=&quot;mono&quot; style=&quot;margin-bottom:6px&quot;&gt;RAMAN_FINAL_v3.pptx · 486 MB · sha256 9f2c…e41a&lt;/div&gt;
+  &lt;p class=&quot;note&quot; style=&quot;margin-top:0&quot;&gt;Files cannot enter any library until scanning completes. Failures are quarantined; the approved version stays active.&lt;/p&gt;
+  ${u.scanned?`&lt;span class=&quot;chip c-ok&quot;&gt;Clean · imported as v3 · original preserved&lt;/span&gt;`
   :`&lt;div id=&quot;scanrun&quot; class=&quot;hidden&quot;&gt;&lt;span class=&quot;chip c-info&quot;&gt;Scanning…&lt;/span&gt;&lt;/div&gt;
-   &lt;div id=&quot;scanbtn&quot;&gt;&lt;button class=&quot;btn pri&quot; onclick=&quot;usbScan()&quot;&gt;Scan drive&lt;/button&gt;
-   &lt;p class=&quot;note&quot;&gt;Scan failure quarantines the file and preserves the approved version — there is no override that skips scanning.&lt;/p&gt;&lt;/div&gt;`}
+   &lt;div id=&quot;scanbtn&quot;&gt;&lt;button class=&quot;btn pri&quot; onclick=&quot;usbScan()&quot;&gt;Scan drive&lt;/button&gt;&lt;/div&gt;`}
+&lt;/div&gt;&lt;/div&gt;
+&lt;div class=&quot;card&quot;&gt;&lt;div class=&quot;chd&quot;&gt;&lt;h3&gt;2 · Inspection &amp; comparison vs. approved v2&lt;/h3&gt;${u.scanned?&#x27;&lt;span class=&quot;chip c-ok&quot;&gt;Checks passed&lt;/span&gt;&#x27;:&#x27;&lt;span class=&quot;chip c-mut&quot;&gt;Awaiting scan&lt;/span&gt;&#x27;}&lt;/div&gt;&lt;div class=&quot;cbd&quot; style=&quot;padding:0 0 4px&quot;&gt;
+  ${u.scanned?`&lt;table&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;&lt;/th&gt;&lt;th&gt;v2&lt;/th&gt;&lt;th&gt;v3&lt;/th&gt;&lt;th&gt;Δ&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;
+   &lt;tr&gt;&lt;td&gt;Slides&lt;/td&gt;&lt;td class=&quot;num&quot;&gt;42&lt;/td&gt;&lt;td class=&quot;num&quot;&gt;43&lt;/td&gt;&lt;td&gt;&lt;span class=&quot;chip c-warn&quot;&gt;+1 (new closing slide)&lt;/span&gt;&lt;/td&gt;&lt;/tr&gt;
+   &lt;tr&gt;&lt;td&gt;Videos&lt;/td&gt;&lt;td&gt;1 · H.264&lt;/td&gt;&lt;td&gt;1 · H.264&lt;/td&gt;&lt;td&gt;&lt;span class=&quot;chip c-ok&quot;&gt;unchanged&lt;/span&gt;&lt;/td&gt;&lt;/tr&gt;
+   &lt;tr&gt;&lt;td&gt;Fonts&lt;/td&gt;&lt;td&gt;embedded&lt;/td&gt;&lt;td&gt;embedded&lt;/td&gt;&lt;td&gt;&lt;span class=&quot;chip c-ok&quot;&gt;unchanged&lt;/span&gt;&lt;/td&gt;&lt;/tr&gt;
+   &lt;tr&gt;&lt;td&gt;Size&lt;/td&gt;&lt;td class=&quot;num&quot;&gt;481 MB&lt;/td&gt;&lt;td class=&quot;num&quot;&gt;486 MB&lt;/td&gt;&lt;td&gt;&lt;span class=&quot;chip c-warn&quot;&gt;+5 MB&lt;/span&gt;&lt;/td&gt;&lt;/tr&gt;
+  &lt;/tbody&gt;&lt;/table&gt;`:`&lt;div class=&quot;cbd note&quot;&gt;Runs automatically after a clean scan.&lt;/div&gt;`}
+&lt;/div&gt;&lt;/div&gt;
+&lt;div class=&quot;card&quot;&gt;&lt;div class=&quot;chd&quot;&gt;&lt;h3&gt;3 · Accept&lt;/h3&gt;&lt;/div&gt;&lt;div class=&quot;cbd&quot;&gt;
+  &lt;p class=&quot;note&quot; style=&quot;margin-top:0&quot;&gt;Accepting sends v3 to re-approval. Ballroom A keeps playing v2 until v3 is approved and re-synced — approved room copies are never replaced silently.&lt;/p&gt;
+  &lt;div class=&quot;field&quot; style=&quot;max-width:420px&quot;&gt;&lt;label&gt;Reason (required)&lt;/label&gt;&lt;input id=&quot;usb-reason&quot; style=&quot;width:100%&quot; placeholder=&quot;e.g. speaker added closing slide onsite&quot;&gt;&lt;/div&gt;
+  &lt;button class=&quot;btn pri&quot; ${u.scanned&amp;&amp;!u.signed?&#x27;&#x27;:&#x27;disabled&#x27;} onclick=&quot;acceptUsb()&quot;&gt;Accept as v3 · speaker present ✓&lt;/button&gt;
+  &lt;button class=&quot;btn&quot; ${u.scanned&amp;&amp;!u.signed?&#x27;&#x27;:&#x27;disabled&#x27;} onclick=&quot;toast(&#x27;v3 discarded — v2 remains the final onsite version&#x27;)&quot;&gt;Keep v2&lt;/button&gt;
+  ${u.signed?&#x27;&lt;div style=&quot;margin-top:8px&quot;&gt;&lt;span class=&quot;chip c-ok&quot;&gt;Accepted · sign-off recorded — see Check-in for the receipt&lt;/span&gt;&lt;/div&gt;&#x27;:&#x27;&#x27;}
 &lt;/div&gt;&lt;/div&gt;`};
 
 V.sync=()=&gt;{const r=S.talks.raman;const hasV3=r.versions.length&gt;=3;
+ const aPending=r.review===&#x27;approved&#x27;&amp;&amp;(!r.ack||r.sync!==&#x27;active&#x27;);
+ const aState=aPending?(!r.ack&amp;&amp;r.sync===&#x27;active&#x27;?&#x27;Update pending ack&#x27;:&#x27;Syncing v&#x27;+r.versions.length+&#x27;…&#x27;):hasV3&amp;&amp;r.review!==&#x27;approved&#x27;?&#x27;v3 waiting · approved version differs from room copy&#x27;:&#x27;18/18 files current · sync 1 min ago&#x27;;
+ const aReady=!aPending&amp;&amp;!(hasV3&amp;&amp;r.review!==&#x27;approved&#x27;);
  const rooms=[
-  {n:&#x27;Ballroom A&#x27;,code:&#x27;BLRM-A-01&#x27;,beat:&#x27;21s&#x27;,files:[[`${r.short} — v${r.versions.length}`, r.sync===&#x27;active&#x27;&amp;&amp;r.ack?&#x27;Synchronized onsite&#x27;:!r.ack?&#x27;Update pending ack&#x27;:hasV3&amp;&amp;r.review!==&#x27;approved&#x27;?&#x27;v3 waiting · approved version differs from room copy&#x27;:&#x27;Syncing…&#x27;, r.sync===&#x27;active&#x27;&amp;&amp;r.ack?&#x27;c-ok&#x27;:&#x27;c-warn&#x27;],[&#x27;Holding loop — MTF26&#x27;,&#x27;Synchronized onsite&#x27;,&#x27;c-ok&#x27;]]},
-  {n:&#x27;Ballroom B&#x27;,code:&#x27;BLRM-B-01&#x27;,beat:&#x27;44s&#x27;,files:[[&#x27;Sponsor loop v2 · 14:30&#x27;,&#x27;Pending&#x27;,&#x27;c-warn&#x27;],[&#x27;Holding loop — MTF26&#x27;,&#x27;Synchronized onsite&#x27;,&#x27;c-ok&#x27;]]},
-  {n:&#x27;Room 210&#x27;,code:&#x27;RM-210&#x27;,beat:&#x27;55s&#x27;,files:[[&#x27;K. Osei — linked video · 13:00&#x27;,&#x27;Awaiting approval&#x27;,&#x27;c-mut&#x27;],[&#x27;Holding loop — MTF26&#x27;,&#x27;Synchronized onsite&#x27;,&#x27;c-ok&#x27;]]}];
+  {n:&#x27;Ballroom A&#x27;,s:aState,chip:aReady?[&#x27;Ready&#x27;,&#x27;c-ok&#x27;]:[&#x27;Attention&#x27;,&#x27;c-warn&#x27;]},
+  {n:&#x27;Ballroom B&#x27;,s:&#x27;14/14 files current · sync 3 min ago&#x27;,chip:[&#x27;Ready&#x27;,&#x27;c-ok&#x27;]},
+  {n:&#x27;Room 210&#x27;,s:&#x27;22/22 files current · sync 2 min ago&#x27;,chip:[&#x27;Ready&#x27;,&#x27;c-ok&#x27;]},
+  {n:&#x27;Room 212&#x27;,s:&#x27;19/20 files current · sync 6 min ago&#x27;,chip:[&#x27;1 file missing&#x27;,&#x27;c-warn&#x27;]},
+  {n:&#x27;Room 214&#x27;,s:&#x27;16/16 files current · sync offline since 08:12&#x27;,chip:[&#x27;Agent offline&#x27;,&#x27;c-bad&#x27;]}];
+ const ready=13+(aReady?0:0); // 13/14 with room 214 offline
  return `&lt;h1 class=&quot;htitle&quot;&gt;Room synchronization · Day 2&lt;/h1&gt;
-&lt;div class=&quot;grid2&quot;&gt;${rooms.map(rm=&gt;{const ready=!rm.off&amp;&amp;rm.files.every(f=&gt;f[2]===&#x27;c-ok&#x27;);
- return `&lt;div class=&quot;roomcard&quot;&gt;&lt;div style=&quot;display:flex;justify-content:space-between;align-items:center&quot;&gt;
-  &lt;h4&gt;${rm.n} &lt;span class=&quot;mono note&quot;&gt;${rm.code}&lt;/span&gt;&lt;/h4&gt;
-  &lt;span class=&quot;chip ${ready?&#x27;c-ok&#x27;:&#x27;c-warn&#x27;}&quot;&gt;${ready?&#x27;Ready&#x27;:&#x27;Attention&#x27;}&lt;/span&gt;&lt;/div&gt;
-  &lt;div class=&quot;note mono&quot;&gt;heartbeat ${rm.beat} · agent 1.4.2 event-pinned&lt;/div&gt;
-  ${rm.files.map(f=&gt;`&lt;div class=&quot;frow&quot;&gt;&lt;span&gt;${f[0]}&lt;/span&gt;&lt;span class=&quot;chip ${f[2]}&quot;&gt;${f[1]}&lt;/span&gt;&lt;/div&gt;`).join(&#x27;&#x27;)}
-  &lt;button class=&quot;btn&quot; style=&quot;margin-top:8px&quot; onclick=&quot;toast(&#x27;${rm.n}: delta manifest rebuilt and pushed&#x27;)&quot;&gt;Manual sync&lt;/button&gt;&lt;/div&gt;`}).join(&#x27;&#x27;)}
-&lt;/div&gt;
-&lt;div class=&quot;note&quot; style=&quot;margin-top:10px&quot;&gt;+ 9 more rooms · all ready&lt;/div&gt;`};
+&lt;div class=&quot;note&quot; style=&quot;margin:-8px 0 14px&quot;&gt;&lt;b class=&quot;num&quot;&gt;${aReady?13:12} / 14&lt;/b&gt; rooms ready&lt;/div&gt;
+&lt;div class=&quot;card&quot;&gt;&lt;div class=&quot;cbd&quot; style=&quot;padding:0 0 4px&quot;&gt;&lt;table&gt;&lt;tbody&gt;
+ ${rooms.map(rm=&gt;`&lt;tr class=&quot;rb&quot; onclick=&quot;toast(&#x27;${rm.n}: delta manifest rebuilt and pushed (Manual sync)&#x27;)&quot;&gt;&lt;td&gt;&lt;b&gt;${rm.n}&lt;/b&gt;&lt;br&gt;&lt;span class=&quot;note&quot;&gt;${rm.s}&lt;/span&gt;&lt;/td&gt;
+  &lt;td style=&quot;text-align:right&quot;&gt;&lt;span class=&quot;chip ${rm.chip[1]}&quot;&gt;${rm.chip[0]}&lt;/span&gt; &lt;button class=&quot;btn&quot; style=&quot;padding:4px 10px&quot;&gt;Manual sync&lt;/button&gt;&lt;/td&gt;&lt;/tr&gt;`).join(&#x27;&#x27;)}
+&lt;/tbody&gt;&lt;/table&gt;&lt;/div&gt;&lt;/div&gt;
+&lt;div class=&quot;note&quot;&gt;+ 9 more rooms · all ready&lt;/div&gt;
+&lt;div class=&quot;note&quot; style=&quot;margin-top:6px&quot;&gt;Rooms keep complete offline libraries — internet loss pauses updates, never playback.&lt;/div&gt;`};
 
 V.agent=()=&gt;{const r=S.talks.raman;const hasV3=r.versions.length&gt;=3;const approvedV3=hasV3&amp;&amp;r.review===&#x27;approved&#x27;;
  const curV=approvedV3&amp;&amp;r.ack?3:2;
@@ -576,11 +640,16 @@ V.agent=()=&gt;{const r=S.talks.raman;const hasV3=r.versions.length&gt;=3;const 
 
 V.speaker=()=&gt;{const t=S.talks.raman;const pct=t.upPct;
  return `&lt;div style=&quot;max-width:640px;margin:0 auto&quot;&gt;
-&lt;div class=&quot;darkpane&quot; style=&quot;padding:16px 20px;margin-bottom:16px&quot;&gt;&lt;span style=&quot;font-size:12px;letter-spacing:.1em;color:var(--dim)&quot;&gt;YOU&#x27;RE PRESENTING AT&lt;/span&gt;&lt;br&gt;
-&lt;b style=&quot;color:var(--white);font-family:&#x27;Barlow Semi Condensed&#x27;;font-size:18px&quot;&gt;MEDTECH FORWARD 2026&lt;/b&gt;&lt;br&gt;
-&lt;span style=&quot;font-size:13px&quot;&gt;Hi Dr. Raman — secure personal link · &lt;button class=&quot;btn&quot; style=&quot;padding:3px 10px;margin-top:6px&quot; onclick=&quot;toast(&#x27;This is your upload page&#x27;)&quot;&gt;Open my upload page&lt;/button&gt;&lt;/span&gt;&lt;/div&gt;
+&lt;div class=&quot;darkpane&quot; style=&quot;padding:16px 20px;margin-bottom:16px&quot;&gt;&lt;b style=&quot;color:var(--white);font-family:&#x27;Barlow Semi Condensed&#x27;;font-size:18px&quot;&gt;MedTech Forward 2026 · &lt;span style=&quot;color:var(--blue)&quot;&gt;Speaker Upload&lt;/span&gt;&lt;/b&gt;&lt;br&gt;
+&lt;span style=&quot;font-size:13px&quot;&gt;Dr. Priya Raman&lt;/span&gt;&lt;/div&gt;
 &lt;div class=&quot;card&quot;&gt;&lt;div class=&quot;chd&quot;&gt;&lt;h3&gt;${t.talk}&lt;/h3&gt;&lt;span class=&quot;chip ${derived(t)[1]}&quot;&gt;${derived(t)[0]}&lt;/span&gt;&lt;/div&gt;&lt;div class=&quot;cbd&quot;&gt;
-  &lt;div class=&quot;note&quot; style=&quot;margin-bottom:12px&quot;&gt;Ballroom A · Day 2, 10:30 · Upload deadline Feb 27 · 23:59 ET · 16:9 · up to 10 GB&lt;/div&gt;
+  &lt;div class=&quot;note&quot; style=&quot;margin-bottom:8px&quot;&gt;Ballroom A · Wed Mar 11 · 10:30–11:00 · &lt;a href=&quot;#&quot; onclick=&quot;toast(&#x27;You also present on Day 1 and Day 3&#x27;);return false&quot;&gt;you have 2 other talks ▾&lt;/a&gt;&lt;/div&gt;
+  &lt;div class=&quot;grid2&quot; style=&quot;margin-bottom:12px&quot;&gt;
+    &lt;div&gt;&lt;div class=&quot;kl&quot; style=&quot;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);font-weight:600&quot;&gt;Upload deadline&lt;/div&gt;&lt;b&gt;Feb 27 · 23:59 ET&lt;/b&gt;&lt;/div&gt;
+    &lt;div&gt;&lt;div class=&quot;kl&quot; style=&quot;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);font-weight:600&quot;&gt;Requirements&lt;/div&gt;
+     &lt;div class=&quot;note&quot;&gt;· 16:9 widescreen · PowerPoint (.pptx) preferred, PDF accepted&lt;br&gt;· Embed all fonts and videos (H.264 .mp4)&lt;br&gt;· &lt;a href=&quot;#&quot; onclick=&quot;return false&quot;&gt;Download the event slide template&lt;/a&gt;&lt;/div&gt;&lt;/div&gt;
+  &lt;/div&gt;
+  &lt;h3 style=&quot;font-size:13px;margin-bottom:8px&quot;&gt;Your presentation&lt;/h3&gt;
   ${pct&gt;=100?`&lt;div class=&quot;lane spk&quot;&gt;&lt;b&gt;v${t.versions.length} received.&lt;/b&gt; Checksum verified — automated checks are running. We’ll email you if anything needs attention. Earlier versions are kept safe.&lt;/div&gt;
     &lt;div class=&quot;note&quot;&gt;ℹ File size ${t.versions[t.versions.length-1].size} — within the 10 GB limit. &amp;nbsp; ℹ Slide size 16:9 matches the room profile.&lt;/div&gt;
     &lt;div style=&quot;margin-top:10px&quot;&gt;&lt;button class=&quot;btn&quot; onclick=&quot;S.talks.raman.upPct=0;render()&quot;&gt;Replace file&lt;/button&gt;
@@ -590,9 +659,9 @@ V.speaker=()=&gt;{const t=S.talks.raman;const pct=t.upPct;
     &lt;div style=&quot;display:flex;justify-content:space-between;align-items:center&quot;&gt;&lt;span class=&quot;note&quot; id=&quot;upmsg&quot;&gt;${Math.round(pct)}% · resumable · ~40s remaining&lt;/span&gt;
     &lt;button class=&quot;btn hidden&quot; id=&quot;upresume&quot; onclick=&quot;resumeUp()&quot;&gt;Resume upload&lt;/button&gt;&lt;/div&gt;`
   :`&lt;div style=&quot;border:2px dashed var(--line);border-radius:10px;padding:26px;text-align:center&quot;&gt;
-     &lt;b&gt;Drag your presentation here&lt;/b&gt;&lt;div class=&quot;note&quot; style=&quot;margin:4px 0 10px&quot;&gt;or&lt;/div&gt;
-     &lt;button class=&quot;btn pri&quot; onclick=&quot;startUp()&quot;&gt;Choose file…&lt;/button&gt;&lt;/div&gt;
-   &lt;div class=&quot;note&quot; style=&quot;margin-top:10px&quot;&gt;· Embed all fonts and videos (H.264 .mp4) — &lt;a href=&quot;#&quot; onclick=&quot;return false&quot;&gt;how to do this&lt;/a&gt;&lt;br&gt;· &lt;a href=&quot;#&quot; onclick=&quot;return false&quot;&gt;Download the event slide template&lt;/a&gt;&lt;/div&gt;`}
+     &lt;b&gt;Drag your presentation here&lt;/b&gt;
+     &lt;div class=&quot;note&quot; style=&quot;margin:4px 0 10px&quot;&gt;PPTX preferred · up to 10 GB · uploads resume automatically if your connection drops&lt;/div&gt;
+     &lt;button class=&quot;btn pri&quot; onclick=&quot;startUp()&quot;&gt;Choose file…&lt;/button&gt;&lt;/div&gt;`}
 &lt;/div&gt;&lt;/div&gt;
 &lt;div class=&quot;card&quot;&gt;&lt;div class=&quot;chd&quot;&gt;&lt;h3&gt;Feedback&lt;/h3&gt;&lt;/div&gt;&lt;div class=&quot;cbd&quot;&gt;
   &lt;div class=&quot;lane spk&quot;&gt;&lt;b&gt;DXG presentation team&lt;/b&gt;&lt;span class=&quot;aud&quot;&gt;to you&lt;/span&gt;&lt;br&gt;Approved with a note: export videos as H.264 .mp4 next time. Speaker Ready Room opens 07:30 (Room 118).&lt;/div&gt;
@@ -615,7 +684,7 @@ V.client=()=&gt;{const built=S._archiveBuilt;
 &lt;div class=&quot;card&quot;&gt;&lt;div class=&quot;chd&quot;&gt;&lt;h3&gt;Archive package&lt;/h3&gt;&lt;span class=&quot;m&quot;&gt;after event close&lt;/span&gt;&lt;/div&gt;&lt;div class=&quot;cbd&quot;&gt;
  &lt;div class=&quot;frow&quot; style=&quot;border-top:none&quot;&gt;&lt;span class=&quot;mono&quot;&gt;MTF26_final_presentations.zip · 41.2 GB&lt;/span&gt;
   &lt;span class=&quot;chip ${built?&#x27;c-ok&#x27;:&#x27;c-mut&#x27;}&quot;&gt;${built?&#x27;Built · delivered to client portal&#x27;:&#x27;Available after the event&#x27;}&lt;/span&gt;&lt;/div&gt;
- &lt;div class=&quot;note&quot;&gt;Expiring 7-day link · restricted talks excluded · downloads logged.&lt;/div&gt;
+ &lt;div class=&quot;note&quot;&gt;DXG will publish the approved-finals package here within 4 hours of event close. Retention: 90 days. Expiring 7-day link · restricted talks excluded · downloads logged.&lt;/div&gt;
  &lt;button class=&quot;btn pri&quot; style=&quot;margin-top:10px&quot; ${built?&#x27;&#x27;:&#x27;disabled&#x27;} onclick=&quot;toast(&#x27;Download logged for Jordan Ellis · link expires in 7 days&#x27;)&quot;&gt;Download package&lt;/button&gt;
 &lt;/div&gt;&lt;/div&gt;`};
 
@@ -649,8 +718,11 @@ function resumeUp(){const m=$(&#x27;upmsg&#x27;);if(m){m.textContent=&#x27;Resum
 function usbScan(){$(&#x27;scanbtn&#x27;).classList.add(&#x27;hidden&#x27;);$(&#x27;scanrun&#x27;).classList.remove(&#x27;hidden&#x27;);
   setTimeout(()=&gt;{S.usb.scanned=true;render();toast(&#x27;Malware scan clean in 8s — v3 created, original preserved&#x27;)},1500);}
 function signOff(){const t=S.talks.raman;S.usb.signed=true;
-  t.versions.push({v:3,size:&#x27;492 MB&#x27;,state:&#x27;awaiting_review&#x27;});t.review=&#x27;awaiting_review&#x27;;t.sync=&#x27;none&#x27;;S.selTalk=&#x27;raman&#x27;;
+  t.versions.push({v:3,size:&#x27;486 MB&#x27;,state:&#x27;awaiting_review&#x27;});t.review=&#x27;awaiting_review&#x27;;t.sync=&#x27;none&#x27;;S.selTalk=&#x27;raman&#x27;;
   render();toast(&#x27;Signed off · ✓ logged — v3 entered re-approval; Ballroom A keeps v2 until approved&#x27;);}
+function acceptUsb(){const inp=$(&#x27;usb-reason&#x27;);
+  if(inp&amp;&amp;!inp.value.trim()){toast(&#x27;Reason is required to accept a USB version&#x27;);inp.focus();return;}
+  signOff();}
 function ackChange(){S.talks.raman.ack=true;render();toast(&#x27;Acknowledged — v3 synced, readiness green&#x27;);}
 
 /* ── 19-step demo (verbatim; docs/ACCEPTANCE_WALKTHROUGH.md) ── */
