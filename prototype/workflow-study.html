@@ -1,0 +1,472 @@
+<meta charset="utf-8">
+<title>Presentation Manager Prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+  :root{
+    --bg:#F5F7F8; --panel:#FFFFFF; --panel2:#EDF1F3; --line:#D8E0E4;
+    --ink:#16232A; --ink2:#4A5A63; --ink3:#7C8B93;
+    --accent:#0E7490; --accent-ink:#FFFFFF; --accent-soft:#E0F2F7;
+    --ok:#188A4C; --ok-soft:#E2F3E9; --warn:#C77414; --warn-soft:#FBEEDD; --bad:#C2342B; --bad-soft:#FAE6E4;
+    --shadow:0 1px 3px rgba(22,35,42,.08);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#101A20; --panel:#182630; --panel2:#132028; --line:#2A3B46;
+      --ink:#E6EDF0; --ink2:#A6B6BE; --ink3:#6E8089;
+      --accent:#22B8CF; --accent-ink:#08252B; --accent-soft:#0F3540;
+      --ok:#3FBF7A; --ok-soft:#123122; --warn:#E9A23B; --warn-soft:#3A2B12; --bad:#E4635A; --bad-soft:#3B1B18;
+      --shadow:0 1px 3px rgba(0,0,0,.4);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#101A20; --panel:#182630; --panel2:#132028; --line:#2A3B46;
+    --ink:#E6EDF0; --ink2:#A6B6BE; --ink3:#6E8089;
+    --accent:#22B8CF; --accent-ink:#08252B; --accent-soft:#0F3540;
+    --ok:#3FBF7A; --ok-soft:#123122; --warn:#E9A23B; --warn-soft:#3A2B12; --bad:#E4635A; --bad-soft:#3B1B18;
+    --shadow:0 1px 3px rgba(0,0,0,.4);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 "Instrument Sans",system-ui,sans-serif}
+  h1,h2,h3{font-family:"Archivo",system-ui,sans-serif;letter-spacing:-.01em;text-wrap:balance;margin:0}
+  .mono{font-family:"JetBrains Mono",monospace;font-size:.85em}
+  button{font:inherit;cursor:pointer}
+
+  /* shell */
+  .protobar{display:flex;gap:12px;align-items:center;padding:8px 20px;background:var(--panel2);border-bottom:1px solid var(--line);font-size:12.5px;color:var(--ink2)}
+  .protobar b{color:var(--ink)}
+  .topbar{display:flex;align-items:center;gap:20px;padding:14px 20px;border-bottom:1px solid var(--line);background:var(--panel)}
+  .brand{display:flex;align-items:center;gap:10px;font-family:"Archivo";font-weight:700;font-size:16px}
+  .brand .dot{width:10px;height:10px;border-radius:2px;background:var(--accent)}
+  .apps{display:flex;gap:4px;margin-left:8px}
+  .apps button{border:1px solid transparent;background:none;color:var(--ink2);padding:7px 14px;border-radius:6px;font-weight:500}
+  .apps button.on{background:var(--accent);color:var(--accent-ink);font-weight:600}
+  .apps button:not(.on):hover{background:var(--panel2)}
+  .evt{margin-left:auto;text-align:right;font-size:12.5px;color:var(--ink3)}
+  .evt b{display:block;color:var(--ink);font-size:13.5px}
+
+  .wrap{max-width:1180px;margin:0 auto;padding:22px 20px 60px}
+  .cols{display:grid;grid-template-columns:200px 1fr;gap:22px}
+  nav.side{display:flex;flex-direction:column;gap:2px;position:sticky;top:16px;align-self:start}
+  nav.side button{text-align:left;border:none;background:none;color:var(--ink2);padding:8px 12px;border-radius:6px}
+  nav.side button.on{background:var(--panel);box-shadow:var(--shadow);color:var(--ink);font-weight:600}
+  nav.side .cnt{float:right;background:var(--panel2);border-radius:10px;padding:0 8px;font-size:12px;color:var(--ink2)}
+  nav.side button.on .cnt{background:var(--accent-soft);color:var(--accent)}
+
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow)}
+  .card + .card{margin-top:16px}
+  .card .hd{display:flex;align-items:baseline;gap:12px;padding:14px 18px;border-bottom:1px solid var(--line)}
+  .card .hd h2{font-size:16px}
+  .card .hd .sub{font-size:12.5px;color:var(--ink3)}
+  .card .bd{padding:16px 18px}
+
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th{font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink3);text-align:left;font-weight:600;padding:4px 10px 8px}
+  td{padding:9px 10px;border-top:1px solid var(--line);vertical-align:middle}
+  tr.rowbtn{cursor:pointer}
+  tr.rowbtn:hover td{background:var(--panel2)}
+  .num{font-variant-numeric:tabular-nums}
+
+  .pill{display:inline-flex;align-items:center;gap:6px;border-radius:20px;padding:2px 10px;font-size:12px;font-weight:600;white-space:nowrap}
+  .pill::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
+  .p-ok{background:var(--ok-soft);color:var(--ok)} .p-warn{background:var(--warn-soft);color:var(--warn)}
+  .p-bad{background:var(--bad-soft);color:var(--bad)} .p-info{background:var(--accent-soft);color:var(--accent)}
+  .p-mut{background:var(--panel2);color:var(--ink2)}
+
+  .btn{border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:7px 14px;border-radius:7px;font-weight:600;font-size:13.5px}
+  .btn:hover{background:var(--panel2)}
+  .btn.pri{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+  .btn.pri:hover{filter:brightness(1.08)}
+  .btn.good{background:var(--ok);border-color:var(--ok);color:#fff}
+  .btn.danger{color:var(--bad);border-color:var(--bad)}
+  .btn:disabled{opacity:.45;cursor:default}
+  .btn:focus-visible,.apps button:focus-visible,nav.side button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:16px}
+  .kpi{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;box-shadow:var(--shadow)}
+  .kpi .v{font-family:"Archivo";font-weight:700;font-size:26px;line-height:1.1}
+  .kpi .l{font-size:12px;color:var(--ink3);margin-top:2px}
+  .kpi.warn .v{color:var(--warn)} .kpi.bad .v{color:var(--bad)} .kpi.ok .v{color:var(--ok)}
+
+  .lane{border-left:3px solid var(--line);padding:8px 12px;margin:8px 0;border-radius:0 8px 8px 0;background:var(--panel2);font-size:13.5px}
+  .lane .who{font-weight:600;font-size:12.5px}
+  .lane .aud{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink3);margin-left:6px}
+  .lane.internal{border-color:var(--ink3)} .lane.client{border-color:var(--warn)} .lane.speaker{border-color:var(--accent)}
+
+  .preview{background:var(--panel2);border:1px dashed var(--line);border-radius:8px;aspect-ratio:16/9;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:var(--ink3);font-size:13px}
+  .preview .big{font-family:"Archivo";font-weight:600;font-size:18px;color:var(--ink2)}
+
+  .grid-rooms{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+  .room{border:1px solid var(--line);border-radius:10px;padding:14px;background:var(--panel)}
+  .room .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+  .room h3{font-size:15px}
+  .beat{font-size:12px;color:var(--ink3)}
+  .meter{height:6px;border-radius:4px;background:var(--panel2);overflow:hidden;margin:8px 0 4px}
+  .meter i{display:block;height:100%;background:var(--ok)}
+
+  /* portal */
+  .portal{max-width:660px;margin:0 auto}
+  .phead{padding:26px 0 18px;border-bottom:1px solid var(--line);margin-bottom:18px}
+  .phead .cl{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--accent);font-weight:600}
+  .phead h1{font-size:26px;margin-top:4px}
+  .upzone{border:2px dashed var(--line);border-radius:12px;padding:30px;text-align:center;color:var(--ink2)}
+  .upzone.on{border-color:var(--accent);background:var(--accent-soft)}
+  .prog{height:10px;border-radius:6px;background:var(--panel2);overflow:hidden;margin:14px 0 6px}
+  .prog i{display:block;height:100%;background:var(--accent);transition:width .2s}
+  .steps{display:flex;gap:0;margin-bottom:18px;font-size:12.5px}
+  .steps span{flex:1;text-align:center;padding:8px 4px;border-bottom:3px solid var(--line);color:var(--ink3)}
+  .steps span.done{border-color:var(--ok);color:var(--ok)}
+  .steps span.cur{border-color:var(--accent);color:var(--accent);font-weight:600}
+
+  .receipt{border:1px solid var(--line);border-radius:10px;padding:20px;background:var(--panel);max-width:460px}
+  .receipt h3{border-bottom:1px solid var(--line);padding-bottom:8px;margin-bottom:10px}
+  .receipt dl{display:grid;grid-template-columns:auto 1fr;gap:4px 16px;font-size:13.5px;margin:0}
+  .receipt dt{color:var(--ink3)} .receipt dd{margin:0;text-align:right}
+
+  .toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 18px;border-radius:8px;font-size:13.5px;opacity:0;transition:opacity .25s;pointer-events:none;z-index:50}
+  .toast.show{opacity:1}
+  .hidden{display:none !important}
+  @media (max-width:820px){.cols{grid-template-columns:1fr}.kpis{grid-template-columns:repeat(2,1fr)}.grid-rooms{grid-template-columns:1fr}nav.side{flex-direction:row;flex-wrap:wrap;position:static}}
+  @media (prefers-reduced-motion: reduce){*{transition:none !important}}
+</style>
+
+<div class="protobar">
+  <b>Prototype</b><span>· G0-6 usability walkthrough · no real data · switch persona above to follow a file from upload to the room</span>
+</div>
+<header class="topbar">
+  <div class="brand"><span class="dot"></span>Presentation Manager</div>
+  <div class="apps" role="tablist">
+    <button id="app-cc" class="on" onclick="showApp('cc')">Control Center</button>
+    <button id="app-portal" onclick="showApp('portal')">Speaker Portal</button>
+    <button id="app-srr" onclick="showApp('srr')">SRR Console</button>
+  </div>
+  <div class="evt"><b>Great Lakes Orthopaedics Congress 2026</b>Lakeside Medical Events · Sep 14–16 · 4 rooms · 212 speakers</div>
+</header>
+
+<!-- ══════════ CONTROL CENTER ══════════ -->
+<main id="cc" class="wrap">
+  <div class="cols">
+    <nav class="side">
+      <button id="nav-dash" class="on" onclick="showCC('dash')">Dashboard</button>
+      <button id="nav-review" onclick="showCC('review')">Review queue <span class="cnt" id="queue-count">3</span></button>
+      <button id="nav-sync" onclick="showCC('sync')">Sync &amp; rooms</button>
+    </nav>
+    <div>
+      <!-- dashboard -->
+      <section id="cc-dash">
+        <div class="kpis">
+          <div class="kpi ok"><div class="v num" id="kpi-collected">178<span style="font-size:15px;color:var(--ink3)">/212</span></div><div class="l">Files collected</div></div>
+          <div class="kpi warn"><div class="v num" id="kpi-pending">3</div><div class="l">Awaiting review</div></div>
+          <div class="kpi bad"><div class="v num">11</div><div class="l">Missing · deadline in 4 days</div></div>
+          <div class="kpi"><div class="v num" id="kpi-ready">2<span style="font-size:15px;color:var(--ink3)">/4</span></div><div class="l">Rooms ready</div></div>
+        </div>
+        <div class="card">
+          <div class="hd"><h2>Needs attention</h2><span class="sub">derived status across all talks</span></div>
+          <div class="bd" style="padding:0 0 6px">
+            <table>
+              <thead><tr><th>Talk</th><th>Speaker</th><th>Room · slot</th><th>Status</th></tr></thead>
+              <tbody id="attention-rows"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- review queue -->
+      <section id="cc-review" class="hidden">
+        <div class="card">
+          <div class="hd"><h2>Review queue</h2><span class="sub">oldest first · SLA aging shown · keyboard: A approve, R request changes</span></div>
+          <div class="bd" style="padding:0 0 6px">
+            <table>
+              <thead><tr><th>File</th><th>Speaker</th><th>Inspection</th><th>Waiting</th><th></th></tr></thead>
+              <tbody id="queue-rows"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card" id="review-detail" class="hidden"></div>
+      </section>
+
+      <!-- sync dashboard -->
+      <section id="cc-sync" class="hidden">
+        <div class="card"><div class="hd"><h2>Room fleet</h2><span class="sub">readiness = all talks active + agent heartbeat fresh + changes acknowledged</span></div>
+        <div class="bd"><div class="grid-rooms" id="rooms-grid"></div></div></div>
+      </section>
+    </div>
+  </div>
+</main>
+
+<!-- ══════════ SPEAKER PORTAL ══════════ -->
+<main id="portal" class="wrap hidden">
+  <div class="portal">
+    <div class="phead">
+      <div class="cl">Lakeside Medical Events</div>
+      <h1>Welcome, Dr. Amara Okafor</h1>
+      <div style="color:var(--ink2);margin-top:4px">You’re signed in with your personal link. It only works for your talks.</div>
+    </div>
+    <div class="card">
+      <div class="hd"><h2>Revision Total Knee Arthroplasty: Decision Pathways</h2>
+        <span class="sub">Ballroom A · Mon Sep 14, 10:30 · deadline Sep 10, 23:59</span></div>
+      <div class="bd">
+        <div style="display:flex;gap:10px;align-items:center;margin-bottom:14px">
+          <span class="pill" id="portal-status-pill"></span>
+          <span style="font-size:13px;color:var(--ink3)">16:9 required · PPTX, PDF or Keynote · up to 10 GB</span>
+        </div>
+        <div id="up-idle">
+          <div class="upzone" id="upzone">
+            <div style="font-weight:600;color:var(--ink)">Drop your presentation here</div>
+            <div style="font-size:13px;margin:4px 0 12px">or</div>
+            <button class="btn pri" onclick="startUpload()">Choose file</button>
+          </div>
+        </div>
+        <div id="up-active" class="hidden">
+          <div style="display:flex;justify-content:space-between;font-size:13.5px">
+            <span class="mono">okafor_revision-tka_v3.pptx</span><span class="mono num" id="up-size">2.4 GB</span>
+          </div>
+          <div class="prog"><i id="up-bar" style="width:0%"></i></div>
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span style="font-size:13px;color:var(--ink2)" id="up-msg">Uploading…</span>
+            <button class="btn hidden" id="up-resume" onclick="resumeUpload()">Resume upload</button>
+          </div>
+        </div>
+        <div id="up-done" class="hidden">
+          <div class="lane speaker" style="margin-top:0"><span class="who">Upload complete.</span>
+            We verified your file is intact (checksum <span class="mono">9f2c…e1d7</span>) and it’s now being checked automatically — fonts, media, video formats. You’ll get an email if anything needs your attention.</div>
+          <div style="font-size:13px;color:var(--ink3);margin-top:8px">Version 3 · replaces v2 from Sep 2 · your earlier versions are kept safe.</div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="hd"><h2>Messages from the event team</h2></div>
+      <div class="bd">
+        <div class="lane speaker"><span class="who">Presentation team</span><span class="aud">Sep 2</span><br>Your v2 uses the font “Neo Sans Std” which won’t be on the room machines. Please embed fonts or export to PDF.</div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<!-- ══════════ SRR CONSOLE ══════════ -->
+<main id="srr" class="wrap hidden">
+  <div class="steps" id="srr-steps">
+    <span class="cur">1 · Find speaker</span><span>2 · USB intake</span><span>3 · Compare</span><span>4 · Sign-off</span>
+  </div>
+  <section id="srr-1">
+    <div class="card">
+      <div class="hd"><h2>Speaker Ready Room · Check-in</h2><span class="sub">Station 2 · Technician: J. Whitfield</span></div>
+      <div class="bd">
+        <input id="srr-search" placeholder="Search speaker or talk…  (try “Vasquez”)" style="width:100%;padding:11px 14px;border:1px solid var(--line);border-radius:8px;background:var(--panel2);color:var(--ink);font:inherit" oninput="srrSearch(this.value)">
+        <table style="margin-top:10px"><tbody id="srr-results"></tbody></table>
+      </div>
+    </div>
+  </section>
+  <section id="srr-2" class="hidden">
+    <div class="card">
+      <div class="hd"><h2>USB intake — Dr. Elena Vasquez</h2><span class="sub">checked in 09:41 · Station 2</span></div>
+      <div class="bd">
+        <p style="margin-top:0;color:var(--ink2)">Speaker brought a revised deck on USB. Files must pass a malware scan before they can enter the library — there is no way around this step.</p>
+        <div id="scan-idle"><button class="btn pri" onclick="startScan()">Scan USB drive</button></div>
+        <div id="scan-run" class="hidden"><span class="pill p-info">Scanning vasquez_shoulder_final_FINAL2.pptx…</span></div>
+        <div id="scan-done" class="hidden">
+          <span class="pill p-ok">Clean — imported as version 4</span>
+          <div style="margin-top:12px"><button class="btn pri" onclick="srrStep(3)">Compare with approved version</button></div>
+        </div>
+      </div>
+    </div>
+  </section>
+  <section id="srr-3" class="hidden">
+    <div class="card">
+      <div class="hd"><h2>Version comparison</h2><span class="sub">v3 (approved, in Ballroom B) vs v4 (USB, just imported)</span></div>
+      <div class="bd">
+        <table>
+          <thead><tr><th></th><th>v3 · approved</th><th>v4 · new</th><th>Δ</th></tr></thead>
+          <tbody>
+            <tr><td>Size</td><td class="num">148 MB</td><td class="num">213 MB</td><td><span class="pill p-warn">+65 MB</span></td></tr>
+            <tr><td>Slides</td><td class="num">42</td><td class="num">47</td><td><span class="pill p-warn">+5 slides</span></td></tr>
+            <tr><td>Video clips</td><td class="num">2</td><td class="num">3</td><td><span class="pill p-warn">1 added (H.264 ✓)</span></td></tr>
+            <tr><td>Fonts</td><td>embedded</td><td>embedded</td><td><span class="pill p-ok">OK</span></td></tr>
+          </tbody>
+        </table>
+        <p style="font-size:13.5px;color:var(--ink2)">Accepting v4 sends it to re-approval. Ballroom B keeps playing v3 until v4 is approved and re-synced — the approved room copy is never replaced silently.</p>
+        <button class="btn pri" onclick="srrStep(4)">Accept v4 → speaker sign-off</button>
+        <button class="btn" onclick="srrStep(1)">Keep v3, discard</button>
+      </div>
+    </div>
+  </section>
+  <section id="srr-4" class="hidden">
+    <div class="card"><div class="hd"><h2>Sign-off complete</h2></div>
+      <div class="bd" style="display:flex;gap:24px;flex-wrap:wrap">
+        <div class="receipt">
+          <h3>Presentation receipt</h3>
+          <dl>
+            <dt>Speaker</dt><dd>Dr. Elena Vasquez</dd>
+            <dt>Talk</dt><dd>Arthroscopic Shoulder Repair</dd>
+            <dt>Version</dt><dd class="mono">v4 · a81f…c9b2</dd>
+            <dt>Signed</dt><dd>Sep 14, 09:47</dd>
+            <dt>Technician</dt><dd>J. Whitfield · Station 2</dd>
+            <dt>Room</dt><dd>Ballroom B · 14:00</dd>
+          </dl>
+        </div>
+        <div style="flex:1;min-width:220px">
+          <p style="margin-top:0;color:var(--ink2)">v4 is now in re-approval. The reviewer queue and Ballroom B’s sync status update automatically — check the Control Center.</p>
+          <button class="btn">Print receipt</button> <button class="btn">Email receipt</button>
+          <div style="margin-top:14px"><button class="btn pri" onclick="srrStep(1);showApp('cc');showCC('review')">Open review queue →</button></div>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ————— single store: talks drive both review queue and room readiness —————
+const S = {
+  talks: [
+    {id:'t1', talk:'Revision Total Knee Arthroplasty', speaker:'Dr. A. Okafor', room:'Ballroom A', slot:'Mon 10:30',
+     ver:'v3', size:'2.4 GB', wait:'2h 10m', insp:{level:'warn', text:'1 warning · missing font “Neo Sans Std” (slides 4, 12)'},
+     review:'awaiting_review', sync:'synced_old'},
+    {id:'t2', talk:'Pediatric Scoliosis Outcomes', speaker:'Dr. M. Lindqvist', room:'Riverside Theater', slot:'Mon 13:00',
+     ver:'v1', size:'96 MB', wait:'4h 55m', insp:{level:'ok', text:'passed · fonts embedded, media OK'},
+     review:'awaiting_review', sync:'none'},
+    {id:'t3', talk:'Arthroscopic Shoulder Repair', speaker:'Dr. E. Vasquez', room:'Ballroom B', slot:'Mon 14:00',
+     ver:'v4', size:'213 MB', wait:'12m', insp:{level:'warn', text:'re-inspection after SRR import · linked video re-encoded'},
+     review:'awaiting_review', sync:'active_prev'},
+  ],
+  rooms: [
+    {name:'Ballroom A', code:'GLO-A', beat:'42s ago', files:[['Okafor — Revision TKA','v2 active · v3 pending approval','warn'],['Holding slide — GLO26','active','ok'],['Session bumper.mp4','active','ok']]},
+    {name:'Ballroom B', code:'GLO-B', beat:'18s ago', files:[['Vasquez — Shoulder Repair','v3 active · v4 in re-approval','warn'],['Holding slide — GLO26','active','ok']]},
+    {name:'Riverside Theater', code:'GLO-R', beat:'55s ago', files:[['Holding slide — GLO26','active','ok'],['Lindqvist — Scoliosis','not yet approved','mut']]},
+    {name:'Salon 3', code:'GLO-S3', beat:'6m ago ⚠', files:[['Holding slide — GLO26','active','ok']], offline:true},
+  ],
+};
+
+const $ = id => document.getElementById(id);
+function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove('show'),2600);}
+
+// derived status (WORKFLOW_STATES §8, simplified)
+function derived(t){
+  if(t.review==='awaiting_review'||t.review==='in_review') return ['Needs review','warn'];
+  if(t.review==='changes_requested') return ['Needs revision','bad'];
+  if(t.review==='approved' && t.sync!=='active') return ['Approved — delivering','info'];
+  if(t.review==='approved') return ['Ready','ok'];
+  return ['Processing','mut'];
+}
+
+function showApp(a){for(const x of ['cc','portal','srr']){$(x).classList.toggle('hidden',x!==a);$('app-'+x).classList.toggle('on',x===a);}}
+function showCC(v){for(const x of ['dash','review','sync']){$('cc-'+x).classList.toggle('hidden',x!==v);$('nav-'+x).classList.toggle('on',x===v);}render();}
+
+function render(){
+  // dashboard attention
+  $('attention-rows').innerHTML = S.talks.map(t=>{const[l,c]=derived(t);
+    return `<tr><td>${t.talk}</td><td>${t.speaker}</td><td>${t.room} · ${t.slot}</td><td><span class="pill p-${c}">${l}</span></td></tr>`}).join('');
+  // queue
+  const q=S.talks.filter(t=>t.review==='awaiting_review');
+  $('queue-count').textContent=q.length; $('kpi-pending').textContent=q.length;
+  $('queue-rows').innerHTML = q.length? q.map(t=>
+    `<tr class="rowbtn" onclick="openReview('${t.id}')"><td><b>${t.talk}</b><br><span class="mono" style="color:var(--ink3)">${t.ver} · ${t.size}</span></td>
+     <td>${t.speaker}</td><td><span class="pill p-${t.insp.level}">${t.insp.level==='ok'?'passed':'warnings'}</span></td>
+     <td class="num">${t.wait}</td><td><span class="pill p-info">open →</span></td></tr>`).join('')
+    : `<tr><td colspan="5" style="text-align:center;color:var(--ink3);padding:22px">Queue is clear 🎉</td></tr>`;
+  // rooms
+  $('rooms-grid').innerHTML = S.rooms.map(r=>{
+    const pend=r.files.some(f=>f[2]==='warn'||f[2]==='mut');
+    const ready=!r.offline&&!pend;
+    return `<div class="room"><div class="top"><h3>${r.name} <span class="mono" style="color:var(--ink3);font-weight:400">${r.code}</span></h3>
+      <span class="pill p-${r.offline?'bad':ready?'ok':'warn'}">${r.offline?'Agent offline':ready?'Ready':'Pending changes'}</span></div>
+      <div class="beat">heartbeat ${r.beat} · agent 1.4.2 (event-pinned)</div>
+      ${r.files.map(f=>`<div style="display:flex;justify-content:space-between;gap:10px;font-size:13.5px;border-top:1px solid var(--line);padding:7px 0">
+        <span>${f[0]}</span><span class="pill p-${f[2]}">${f[1]}</span></div>`).join('')}
+      <button class="btn" style="margin-top:10px" onclick="toast('${r.name}: sync manifest rebuilt and pushed')">Force sync</button></div>`;}).join('');
+}
+
+let openId=null;
+function openReview(id){
+  openId=id; const t=S.talks.find(x=>x.id===id); const d=$('review-detail'); d.classList.remove('hidden');
+  d.innerHTML = `<div class="hd"><h2>${t.talk}</h2><span class="sub">${t.speaker} · ${t.room} · ${t.slot} · ${t.ver}</span></div>
+  <div class="bd">
+    <div class="preview"><span class="big">Slide preview</span><span>42 slides · 16:9 · embedded video ✓</span></div>
+    <div style="margin:12px 0"><span class="pill p-${t.insp.level}">${t.insp.text}</span>
+      ${t.insp.level==='warn'?`<button class="btn" style="margin-left:8px" onclick="toast('Finding waived — stays visible in the audit trail'); this.disabled=true">Waive finding…</button>`:''}</div>
+    <h3 style="font-size:13.5px;margin:14px 0 4px;color:var(--ink2)">Comments — three lanes, audience enforced</h3>
+    <div class="lane internal"><span class="who">You</span><span class="aud">internal only</span><br>Font issue is cosmetic; titles fall back fine.</div>
+    <div class="lane client"><span class="who">Client admin</span><span class="aud">client-visible</span><br>Keynote — please prioritize this one.</div>
+    <div class="lane speaker"><span class="who">To speaker</span><span class="aud">speaker-visible</span><br>Please embed fonts next time — approved as-is for now.</div>
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <button class="btn good" onclick="decide('approved')">Approve (A)</button>
+      <button class="btn" onclick="decide('changes_requested')">Request changes (R)</button>
+      <button class="btn danger" onclick="decide('rejected')">Reject…</button>
+    </div>
+  </div>`;
+  d.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+function decide(v){
+  const t=S.talks.find(x=>x.id===openId); if(!t) return;
+  t.review=v;
+  if(v==='approved'){
+    t.sync='active';
+    // reflect into rooms: mark this talk's room file active
+    const surname=t.speaker.split(' ').pop().toLowerCase();
+    for(const r of S.rooms) for(const f of r.files)
+      if(r.name===t.room && f[0].toLowerCase().includes(surname)){f[1]=t.ver+' active · synced ✓';f[2]='ok';}
+    toast(`Approved ${t.ver} — delta manifest queued for ${t.room}`);
+  } else if(v==='changes_requested'){ toast('Sent back to speaker with your speaker-visible comment'); }
+  else { toast('Rejected — speaker and client admin notified'); }
+  $('review-detail').classList.add('hidden'); openId=null; render();
+}
+document.addEventListener('keydown',e=>{
+  if(!openId||$('cc').classList.contains('hidden'))return;
+  if(e.key==='a'||e.key==='A')decide('approved');
+  if(e.key==='r'||e.key==='R')decide('changes_requested');
+});
+
+// ————— portal upload simulation —————
+let upT=null;
+function portalPill(state){
+  const p=$('portal-status-pill');
+  const m={wait:['p-warn','Waiting for your file'],up:['p-info','Uploading'],done:['p-info','Being checked']};
+  p.className='pill '+m[state][0]; p.textContent=m[state][1];
+}
+portalPill('wait');
+function startUpload(){
+  $('up-idle').classList.add('hidden');$('up-active').classList.remove('hidden');portalPill('up');
+  let pct=0;
+  upT=setInterval(()=>{
+    pct+=Math.random()*7;
+    if(pct>=68&&pct<100&&!$('up-resume')._used){ // simulate drop at ~70%
+      clearInterval(upT);$('up-msg').textContent='Connection lost at 68% — nothing was lost. 1.6 GB already uploaded is saved.';
+      $('up-msg').style.color='var(--warn)';$('up-resume').classList.remove('hidden');$('up-resume')._used=true;return;
+    }
+    if(pct>=100){clearInterval(upT);$('up-bar').style.width='100%';
+      setTimeout(()=>{$('up-active').classList.add('hidden');$('up-done').classList.remove('hidden');portalPill('done');toast('Checksum verified — inspection queued');},400);return;}
+    $('up-bar').style.width=pct+'%';
+  },180);
+}
+function resumeUpload(){
+  $('up-resume').classList.add('hidden');$('up-msg').textContent='Resumed from 68% — not from zero.';$('up-msg').style.color='var(--ink2)';
+  let pct=68;
+  upT=setInterval(()=>{pct+=Math.random()*7;
+    if(pct>=100){clearInterval(upT);$('up-bar').style.width='100%';
+      setTimeout(()=>{$('up-active').classList.add('hidden');$('up-done').classList.remove('hidden');portalPill('done');toast('Checksum verified — inspection queued');},400);return;}
+    $('up-bar').style.width=pct+'%';},180);
+}
+
+// ————— SRR flow —————
+function srrStep(n){
+  for(let i=1;i<=4;i++)$('srr-'+i).classList.toggle('hidden',i!==n);
+  const spans=$('srr-steps').children;
+  for(let i=0;i<4;i++){spans[i].className=i+1<n?'done':i+1===n?'cur':'';}
+  if(n===4){toast('Signed off — v4 entered re-approval; Ballroom B keeps v3 until then');}
+}
+function srrSearch(v){
+  const hits=[['Dr. Elena Vasquez','Arthroscopic Shoulder Repair · Ballroom B · Mon 14:00','ok'],
+              ['Dr. Mateo Vásquez-Rey','Ankle Fusion Techniques · Salon 3 · Tue 09:00','mut']]
+    .filter(h=>h[0].toLowerCase().includes(v.toLowerCase())&&v.length>1);
+  $('srr-results').innerHTML=hits.map(h=>
+    `<tr class="rowbtn" onclick="srrStep(2)"><td><b>${h[0]}</b><br><span style="color:var(--ink3);font-size:13px">${h[1]}</span></td>
+     <td style="text-align:right"><span class="pill p-info">Check in →</span></td></tr>`).join('');
+}
+function startScan(){
+  $('scan-idle').classList.add('hidden');$('scan-run').classList.remove('hidden');
+  setTimeout(()=>{$('scan-run').classList.add('hidden');$('scan-done').classList.remove('hidden');toast('Malware scan clean in 8s — v4 created, original preserved');},1600);
+}
+
+render();
+</script>

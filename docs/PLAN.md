@@ -51,7 +51,8 @@ The milestone tasks below (M1–M7) are **planning-level units**. Before startin
 - [ ] P0-E8 Role × permission matrix for all SRS §5 roles across M01–M15 (DXG sign-off)
 - [x] P0-E9 Screen inventory — established by the client-given prototype (`prototype/client-baseline.html`, 17 screens; D-010)
 - [~] P0-E10 Usability prototypes — client-given 17-screen prototype is the baseline (`prototype/client-baseline.html`, already in DXG's hands; D-010); internal interaction sketch at `prototype/index.html`. DXG walkthrough feedback still pending
-- [~] P0-E11a The 19-step walkthrough exists as the baseline prototype's built-in "Run 19-step demo"; transcribe it into a written script once DXG confirms the flow
+- [x] P0-E11a 19-step demo transcribed into the written acceptance script — `docs/ACCEPTANCE_WALKTHROUGH.md` (2026-08-30)
+- [ ] P0-E16 **Visual acceptance gate**: side-by-side screenshot approval of all 17 baseline screens (`docs/VISUAL_ACCEPTANCE.md` §3) — REQUIRED before application scaffolding; graft workflow-study behaviors into the baseline IA (`VISUAL_ACCEPTANCE.md` §4) as part of producing the comparison sheet
 - [ ] P0-E11 Draft the 19-step scripted acceptance walkthrough (SRS §22) against the prototype
 - [ ] P0-E12 Assemble representative presentation/media test corpus (≥30 decks + video codec matrix)
 - [ ] P0-E13 Collect sample agenda imports from DXG and spike the column mapping

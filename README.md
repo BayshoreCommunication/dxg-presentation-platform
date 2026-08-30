@@ -16,6 +16,9 @@ Node.js/TypeScript throughout: Express API (+ BullMQ worker, outbox dispatcher),
 
 | Doc | Purpose |
 |---|---|
+| `prototype/client-baseline.html` | **UI design authority** — the 17-screen prototype DXG was given (Portfolio, Create event, Schedule import, Command center, Speakers, Presentation detail, Inspection, Review & approval, Communications, Archive builder, SRR, Check-in, USB intake, Room sync, Room Agent, Speaker portal, Client portal) |
+| `docs/VISUAL_ACCEPTANCE.md` | Visual match rules + 17-screen screenshot approval gate (blocks scaffolding) |
+| `docs/ACCEPTANCE_WALKTHROUGH.md` | The 19-step scripted acceptance walkthrough |
 | `docs/SRS.md` | Requirements baseline (functional requirements & acceptance criteria agreed with DXG) |
 | `docs/SPEC.md` | Working spec: interpretation, stack, open questions |
 | `docs/PLAN.md` | Task breakdown and working order |

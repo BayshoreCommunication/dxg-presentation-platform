@@ -60,8 +60,8 @@ Documented design for: signed application binaries (code-signing cert acquisitio
 
 ## G0-6: Usability prototypes + acceptance walkthrough
 
-- Screen inventory for Control Center/Speaker Portal/SRR Console; clickable prototypes of the critical flows (speaker upload; review queue; SRR check-in; sync dashboard); the 19-step scripted acceptance walkthrough (SRS §22) drafted against the prototype.
-- Pass: DXG stakeholders complete the walkthrough on the prototype with no more than minor revisions (SRS §22 prototype criterion). **DXG approval: required.**
+- Design authority is the client baseline prototype (`prototype/client-baseline.html`, D-010): 17-screen inventory (VISUAL_ACCEPTANCE.md §1) and the built-in 19-step demo, transcribed as `docs/ACCEPTANCE_WALKTHROUGH.md`.
+- Pass requires BOTH: (a) DXG stakeholders complete the 19-step walkthrough with no more than minor revisions (SRS §22 prototype criterion); (b) the **side-by-side screenshot sheet for all 17 screens** (VISUAL_ACCEPTANCE.md §3) is approved screen-by-screen. **No application scaffolding before (b).** **DXG approval: required.**
 
 ## G0-7: Test corpus + sample imports
 

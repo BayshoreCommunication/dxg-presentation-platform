@@ -14,7 +14,7 @@ Guidance for Claude Code working in this project. This project lives inside the 
 
 - **Backend**: Node.js + TypeScript + Express (RFPilot pattern: API process + BullMQ worker + outbox dispatcher)
 - **Data**: PostgreSQL (authoritative, with RLS for client/event isolation), Redis (BullMQ job transport only — recoverable from the outbox, never authoritative state; see D-003), private S3 (versioned file storage, KMS)
-- **Frontends**: Next.js 16 + React 19 + Tailwind CSS 4 — Control Center (DXG staff, plus scoped client-admin/reviewer views via role gates) and Speaker Portal. No separate Client Portal app in MVP.
+- **Frontends**: Next.js 16 + React 19 + Tailwind CSS 4. **UI design authority: `prototype/client-baseline.html`** (D-010) — 17 screens (Portfolio, Create event, Schedule import, Command center, Speakers, Presentation detail, Inspection, Review & approval, Communications, Archive builder, SRR, Check-in, USB intake, Room sync, Room Agent view, Speaker portal, Client portal); match its navigation, terminology, branding, colors, typography, layout, and states (`docs/VISUAL_ACCEPTANCE.md`). The Client portal is a **distinct user-facing surface** even though it is served by the same Next.js app behind role gates. Side-by-side screenshot approval of all 17 screens is required before application scaffolding.
 - **Room Agent**: Electron (Node/TypeScript) Windows app. Drives PowerPoint via COM automation from Node (Phase 0 PoC required). SQLite + content-addressed local cache, offline-first.
 - **Contracts**: backend `src/contracts/` as source of truth, generated types for frontends (`contracts:generate` / `contracts:check`), same as RFPilot
 - **Testing**: backend `node:test`; frontends Jest (jsdom); Playwright E2E

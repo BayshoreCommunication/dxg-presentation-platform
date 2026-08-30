@@ -19,7 +19,9 @@ PowerPoint COM automation from Electron/Node is the least-proven part of the sta
 
 ## 2. Applications
 
-1. **Control Center** (Next.js) — DXG staff: events, import, schedule, speakers, comms, files, review queue, SRR console, sync dashboard, reports, archive, admin. Client event administrators and scoped reviewers use the same app through role-gated views (client-visible comment lane, approvals visibility, archive access) — no separate Client Portal app in MVP.
+**UX authority: `prototype/client-baseline.html`** (D-010) — the 17-screen prototype DXG was given: Portfolio, Create event, Schedule import, Command center, Speakers, Presentation detail, Inspection, Review & approval, Communications, Archive builder, Speaker Ready Room, Check-in, USB intake, Room sync, Room Agent view, Speaker portal, Client portal. Screen structure, navigation, terminology, and visual language follow it (match rules: `VISUAL_ACCEPTANCE.md`; acceptance script: `ACCEPTANCE_WALKTHROUGH.md`).
+
+1. **Control Center** (Next.js) — DXG staff: the ten Control Center + four Onsite screens above. The **Client portal is a distinct user-facing surface** (its own navigation context, branding, and screens per the baseline — e.g. client-oversight dashboard with collection-by-track) even though it is technically served by the same Next.js application behind role gates; client event admins and scoped reviewers never see staff chrome.
 2. **Speaker Portal** (Next.js) — magic-link access, mobile-friendly, resumable ≤10 GB uploads.
 3. **Backend** (Express) — versioned REST API + WebSocket/SSE, BullMQ workers (inspection, malware scan, preview/PDF conversion, email, archive build), outbox dispatcher.
 4. **Room Agent** (Electron, Windows 10 21H2+/11) — registration, delta sync, offline library, playback, holding screen, log reconciliation, signed auto-update.
