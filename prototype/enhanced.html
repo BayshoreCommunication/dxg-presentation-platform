@@ -11,11 +11,10 @@
 }
 *{box-sizing:border-box} html,body{height:100%}
 body{margin:0;background:var(--mist);color:var(--ink);font:14px/1.5 Inter,system-ui,sans-serif;display:flex;flex-direction:column}
-h1,h2,h3{font-family:"Barlow Semi Condensed",sans-serif;margin:0;letter-spacing:.005em}
+h1,h2,h3,h4{font-family:"Barlow Semi Condensed",sans-serif;margin:0;letter-spacing:.005em}
 .mono{font-family:"IBM Plex Mono",monospace}
 button{font:inherit;cursor:pointer}
 .shell{display:flex;flex:1;min-height:0}
-/* sidebar */
 aside{width:216px;flex-shrink:0;background:var(--ink);color:var(--paneink);display:flex;flex-direction:column;overflow-y:auto}
 .logo{display:flex;justify-content:space-between;align-items:center;padding:14px 16px 8px}
 .logo b{font-family:"Barlow Semi Condensed";font-weight:700;font-size:19px;color:var(--white);letter-spacing:.02em}
@@ -28,7 +27,6 @@ aside nav button.on{background:#22303A;color:var(--white)} aside nav button.on::
 aside nav button:not(.on):hover{background:var(--ink2)}
 .demo-btn{margin:12px;padding:9px;border:none;border-radius:6px;background:var(--blue);color:var(--ink);font-weight:700;font-size:13.5px}
 .demo-btn.stop{background:#22303A;color:var(--paneink)}
-/* main */
 main{flex:1;min-width:0;overflow-y:auto;padding:24px}
 .htitle{font-size:23px;font-weight:700;margin-bottom:14px}
 .card{background:var(--white);border:1px solid var(--line);border-radius:8px;margin-bottom:14px}
@@ -66,24 +64,40 @@ tr.rb{cursor:pointer} tr.rb:hover td{background:var(--mist)} tr.sel td{backgroun
 .slides div{aspect-ratio:16/9;background:var(--mist);border:1px solid var(--line);border-radius:4px;display:flex;align-items:center;justify-content:center;color:var(--dim);font-family:"IBM Plex Mono";font-size:12px}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
 .roomcard{border:1px solid var(--line);border-radius:8px;background:var(--white);padding:12px 14px}
-.roomcard h4{font-family:"Barlow Semi Condensed";font-size:15px;margin:0 0 2px}
+.roomcard h4{font-size:15px;margin:0 0 2px}
 .frow{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-top:1px solid var(--line);font-size:13px;align-items:center}
 input,select{font:inherit;color:var(--ink);background:var(--white);border:1px solid var(--line);border-radius:6px;padding:8px 12px}
 label{font-size:12px;color:var(--slate);font-weight:600;display:block;margin-bottom:4px}
 .field{margin-bottom:12px}
-/* dark surfaces: login, agent, portals headers */
 .darkpane{background:var(--ink);color:var(--paneink);border-radius:8px}
 .demo-bar{flex-shrink:0;display:flex;align-items:center;gap:12px;background:var(--ink);color:var(--paneink);padding:10px 16px;font-size:13.5px;border-top:2px solid var(--blue)}
-.demo-bar b{color:var(--blue);font-family:"IBM Plex Mono")}
+.demo-bar b{color:var(--blue);font-family:"IBM Plex Mono"}
 .toast{position:fixed;bottom:64px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--white);padding:9px 16px;border-radius:6px;font-size:13px;opacity:0;transition:opacity .25s;pointer-events:none;z-index:60}
 .toast.show{opacity:1}
 .hidden{display:none!important}
 .note{font-size:12.5px;color:var(--slate)}
+/* login */
+.login{min-height:100%;display:flex;align-items:center;justify-content:center;background:var(--ink);flex:1}
+.login .box{background:var(--ink2);border:1px solid #2A3B46;border-radius:10px;padding:28px 30px;width:360px;color:var(--paneink)}
+.login .box b{font-family:"Barlow Semi Condensed";font-weight:700;font-size:22px;color:var(--white);letter-spacing:.02em}
+.login input{width:100%;background:var(--ink);border-color:#2A3B46;color:var(--white)}
+.login label{color:var(--dim)}
 @media (max-width:560px){aside{width:64px}.logo b{font-size:12px}.evtctx,.grp,.logo .clock{display:none}aside nav button{padding:8px 10px;font-size:11px}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 
-<div class="shell">
+<div id="loginView" class="login">
+  <div class="box">
+    <b>DXG·PM</b>
+    <div style="font-size:13px;margin:4px 0 18px">Presentation Management Platform · Staff access</div>
+    <div class="field"><label>Work email</label><input value="m.vega@dxg.live"></div>
+    <div class="field"><label>Password</label><input type="password" value="••••••••••"></div>
+    <button class="btn pri" style="width:100%;padding:9px" onclick="signIn()">Sign in · MFA required</button>
+    <div style="text-align:center;font-size:12.5px;color:var(--dim);margin-top:12px">Or continue with DXG single sign-on</div>
+  </div>
+</div>
+
+<div class="shell hidden" id="appShell">
 <aside>
   <div class="logo"><b>DXG·PM</b><span class="clock" id="clock">10:24:08</span></div>
   <div class="evtctx">MedTech Fwd 26 · Day 2</div>
@@ -104,23 +118,24 @@ label{font-size:12px;color:var(--slate);font-weight:600;display:block;margin-bot
 'use strict';
 const $=id=>document.getElementById(id);
 function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove('show'),2800);}
-setInterval(()=>{const d=new Date();$('clock').textContent=d.toTimeString().slice(0,8)},1000);
+setInterval(()=>{const d=new Date();const c=$('clock');if(c)c.textContent=d.toTimeString().slice(0,8)},1000);
+function signIn(){$('loginView').classList.add('hidden');$('appShell').classList.remove('hidden');render();}
 
-/* ── store: live workflow state (graft from workflow-study; WORKFLOW_STATES §1–§4, §8) ── */
+/* ── store (live workflow state; WORKFLOW_STATES §1–§4, §8) — cast matches the baseline ── */
 const S={
   screen:'portfolio', selTalk:'raman',
   talks:{
-    raman:{name:'Dr. P. Raman',talk:'Robotic-Assisted Surgery Outcomes',track:'Surgical Innovation',room:'Ballroom A',slot:'Day 2 · 10:30',
-      versions:[{v:1,size:'480 MB',state:'superseded'},{v:2,size:'505 MB',state:'approved'}],
-      insp:{chip:'c-warn',text:'Warning · HEVC video on slide 18 — will be transcoded for the room PC'},
+    raman:{name:'Dr. Priya Raman',short:'P. Raman',talk:'Robotic Surgery Outcomes: Five-Year Data',track:'Surgical Innovation',room:'Ballroom A',slot:'Day 2 · 10:30',
+      versions:[{v:1,size:'481 MB',state:'superseded'},{v:2,size:'486 MB',state:'approved'}],
+      insp:{chip:'c-warn',text:'⚠ Warning · Unsupported video codec (HEVC) — Slide 14'},
       review:'approved', sync:'active', ack:true, upPct:100},
-    osei:{name:'K. Osei',talk:'Wearable Sensor Talk',track:'Digital Health',room:'Ballroom B',slot:'Day 2 · 13:15',
+    osei:{name:'K. Osei',short:'K. Osei',talk:'Sensor Talk — linked video',track:'Digital Health',room:'Room 210',slot:'Day 2 · 13:00',
       versions:[{v:1,size:'96 MB',state:'awaiting_review'}],
-      insp:{chip:'c-warn',text:'Warning · font “Neo Sans Std” not on room build (slides 4, 12)'},
+      insp:{chip:'c-warn',text:'⚠ Warning · linked (not embedded) video — slides 6, 9'},
       review:'awaiting_review', sync:'none', ack:true, upPct:100},
-    fontaine:{name:'A. Fontaine',talk:'CardioNext Trial Results',track:'Cardiology',room:'Ballroom A',slot:'Day 2 · 14:00',
+    fontaine:{name:'A. Fontaine',short:'A. Fontaine',talk:'CardioNext Trial Results',track:'Cardiology',room:'Room 212',slot:'Day 2 · 11:15',
       versions:[{v:1,size:'148 MB',state:'awaiting_review'}],
-      insp:{chip:'c-ok',text:'Passed · fonts embedded, media OK. Automated checks can’t judge content — reviewer decides.'},
+      insp:{chip:'c-ok',text:'Checks passed · fonts embedded, media OK'},
       review:'awaiting_review', sync:'none', ack:true, upPct:100},
   },
   usb:{scanned:false, signed:false},
@@ -136,26 +151,28 @@ const derived=t=>{
 };
 const queue=()=>Object.entries(S.talks).filter(([,t])=>t.review==='awaiting_review'||t.review==='in_review');
 
-/* ── navigation (baseline IA, D-010) ── */
 const NAV=[['CONTROL CENTER',[['portfolio','Portfolio'],['wizard','Create event'],['import','Schedule import'],['command','Command center'],['speakers','Speakers'],['detail','Presentation detail'],['inspect','Inspection'],['review','Review & approval'],['comms','Communications'],['archive','Archive builder']]],
   ['ONSITE',[['srr','Speaker Ready Room'],['checkin','Check-in'],['ingest','USB intake'],['sync','Room sync']]],
   ['DEVICE',[['agent','Room Agent (Ballroom A)']]],
   ['EXTERNAL',[['speaker','Speaker portal'],['client','Client portal']]]];
-function nav(scr){S.screen=scr;render();}
+function nav(scr){S.screen=scr;
+  if(!$('appShell').classList.contains('hidden')||scr){$('loginView').classList.add('hidden');$('appShell').classList.remove('hidden');}
+  render();}
 function renderNav(){
   $('nav').innerHTML=NAV.map(([g,items])=>`<div class="grp">${g}</div>`+items.map(([k,l])=>
     `<button class="${S.screen===k?'on':''}" onclick="nav('${k}')">${l}</button>`).join('')).join('');
 }
 
-/* ── screens ── */
 const V={};
 
-V.portfolio=()=>`<h1 class="htitle">Event portfolio</h1>
+V.portfolio=()=>`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+<h1 class="htitle" style="margin:0">Event portfolio</h1><button class="btn pri" onclick="nav('wizard')">+ Create event</button></div>
 <div class="card" style="border-color:var(--blue)"><div class="cbd">
   <div style="display:flex;justify-content:space-between;align-items:baseline"><h3 style="font-size:17px">MedTech Forward 2026</h3><span class="chip c-info">Onsite now</span></div>
   <div class="note">Tampa Convention Center · Mar 10–12, 2026</div>
   <div class="bar" style="margin:10px 0 4px"><i style="width:87%"></i></div>
-  <div style="display:flex;justify-content:space-between"><span class="chip c-warn" id="pf-warn"></span><span class="mono num">87%</span></div>
+  <div style="display:flex;justify-content:space-between;align-items:center"><span class="chip c-warn" id="pf-warn"></span>
+  <span><span class="mono num">87%</span> <button class="btn" onclick="nav('command')">Open →</button></span></div>
 </div></div>
 <div class="card"><div class="cbd">
   <div style="display:flex;justify-content:space-between;align-items:baseline"><h3 style="font-size:17px">Gulf Coast HR Summit</h3><span class="chip c-mut">Closed</span></div>
@@ -168,33 +185,39 @@ V.wizard=()=>`<h1 class="htitle">Create event</h1>
 <div class="card"><div class="chd"><h3>Event details</h3><span class="m">step 1 of 3</span></div><div class="cbd">
   <div class="grid2">
     <div class="field"><label>Event name</label><input style="width:100%" value="MedTech Forward 2026"></div>
-    <div class="field"><label>Client</label><select style="width:100%"><option>MedTech Industry Association</option></select></div>
+    <div class="field"><label>Organization</label><select style="width:100%"><option>MedTech Industry Association</option></select></div>
     <div class="field"><label>Venue</label><input style="width:100%" value="Tampa Convention Center"></div>
     <div class="field"><label>Time zone</label><select style="width:100%"><option>America/New_York</option></select></div>
     <div class="field"><label>Dates</label><input style="width:100%" value="Mar 10 – Mar 12, 2026"></div>
-    <div class="field"><label>Upload deadline</label><input style="width:100%" value="Mar 3, 2026 · 23:59"></div>
+    <div class="field"><label>Speaker upload deadline</label><input style="width:100%" value="Feb 27, 2026 · 23:59 ET"></div>
+    <div class="field"><label>Accent color</label><input style="width:100%" class="mono" value="#44C7F4"></div>
+    <div class="field"><label>Branding</label><button class="btn" style="width:100%" onclick="toast('Branded header uploaded — applied to portal + emails')">Upload event header…</button></div>
   </div>
   <div class="note" style="margin-bottom:10px">⚠ Invitations can’t be sent until the event has at least one day and one room.</div>
-  <button class="btn pri" onclick="toast('Rooms & deadlines — step 2 (not in this walkthrough)')">Continue → Rooms</button>
-  <button class="btn" onclick="toast('Duplicated structure only — no speaker files or statuses copied')">Duplicate from Gulf Coast HR Summit</button>
+  <button class="btn" onclick="toast('Saved — you can finish rooms and deadlines later')">Save & continue</button>
+  <button class="btn pri" onclick="nav('import')">Create event → Import schedule</button>
+  <button class="btn" onclick="toast('Duplicated structure/settings/templates only — no speaker files or statuses copied')">Duplicate from Gulf Coast HR Summit</button>
 </div></div>`;
 
-V.import=()=>`<h1 class="htitle">Schedule import</h1>
-<div class="card"><div class="chd"><h3>medtech_agenda_v4.xlsx</h3><span class="m">348 rows · mapped automatically</span></div><div class="cbd">
-  <table><thead><tr><th>Sheet column</th><th>Mapped to</th><th>Sample</th></tr></thead><tbody>
-  <tr><td class="mono">B · Session Title</td><td>Session · title</td><td>Robotics Live Lab</td></tr>
-  <tr><td class="mono">D · Hall</td><td>Room</td><td>Ballroom A</td></tr>
-  <tr><td class="mono">E · Start</td><td>Session · start</td><td class="mono num">Mar 11 10:30</td></tr>
-  <tr><td class="mono">H · Presenter Email</td><td>Speaker · email</td><td class="mono">p.raman@…</td></tr>
+V.import=()=>`<h1 class="htitle">Import schedule · <span class="mono" style="font-size:16px">MTF26_agenda_v4.xlsx</span></h1>
+<div class="card"><div class="chd"><h3>Column mapping</h3><span class="m">Auto-mapped 7 / 7</span></div><div class="cbd">
+  <table><thead><tr><th>Source column</th><th>Platform field</th><th>Sample</th><th>Status</th></tr></thead><tbody>
+  <tr><td class="mono">B · Session Title</td><td>Session · title</td><td>Robotics Live Lab</td><td><span class="chip c-ok">Mapped</span></td></tr>
+  <tr><td class="mono">D · Hall</td><td>Room</td><td>Ballroom A</td><td><span class="chip c-ok">Mapped</span></td></tr>
+  <tr><td class="mono">E · Start</td><td>Session · start</td><td class="mono num">Mar 11 10:30</td><td><span class="chip c-ok">Mapped</span></td></tr>
+  <tr><td class="mono">H · Presenter Email</td><td>Speaker · email</td><td class="mono">p.raman@…</td><td><span class="chip c-ok">Mapped</span></td></tr>
   </tbody></table>
-  <div style="margin-top:12px;display:flex;gap:8px;align-items:center">
-    <span class="chip c-ok">344 rows valid</span><span class="chip c-warn">4 rows: unknown room “Hall C” — fix or skip</span>
+  <div style="margin-top:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+    <span class="chip c-ok">208 rows valid</span><span class="chip c-warn">4 rows: unknown room “Hall C”</span><span class="chip c-mut">0 blocking</span>
   </div>
-  <div style="margin-top:12px"><button class="btn pri" onclick="toast('Committed transactionally — 344 sessions created, 4 skipped rows reported')">Commit 344 rows</button>
-  <button class="btn" onclick="toast('Re-import matches by room+start+title — updates existing sessions, no duplicates')">Re-import updated file…</button></div>
+  <div class="lane int" style="margin-top:10px"><b>Suggested fix:</b> “Hall C” looks like renamed “Room 210”. <button class="btn" style="margin-left:6px" onclick="toast('Fix applied to 4 rows — re-validated, 212/212 valid');this.disabled=true">Apply fix</button></div>
+  <div style="margin-top:12px;display:flex;gap:8px">
+   <button class="btn pri" onclick="toast('Committed transactionally — 212 sessions created. Re-import later matches by room+start+title and updates instead of duplicating.')">Fix & import 212 sessions</button>
+   <button class="btn" onclick="toast('error_report.csv downloaded — row-level detail')">Download error report</button>
+  </div>
 </div></div>`;
 
-V.command=()=>{const q=queue().length;const readyRooms=S.talks.raman.sync==='active'&&S.talks.raman.ack?13:12;
+V.command=()=>{const readyRooms=S.talks.raman.sync==='active'&&S.talks.raman.ack?13:12;
  return `<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:14px">
   <div><h1 class="htitle" style="margin-bottom:2px">MedTech Forward 2026</h1><span class="note">Tampa Convention Center · Day 2 of 3 · Doors 08:00</span></div>
   <button class="btn" onclick="toast('Reminder batch queued to 45 speakers with missing files')">Send reminder batch</button></div>
@@ -205,129 +228,157 @@ V.command=()=>{const q=queue().length;const readyRooms=S.talks.raman.sync==='act
   <div class="kpi"><div class="kl">Missing</div><div class="kv num" style="color:var(--block)">45</div></div>
   <div class="kpi"><div class="kl">Rooms ready</div><div class="kv num" style="color:var(--sync)">${readyRooms} / 14</div></div>
 </div>
-<div class="card"><div class="chd"><h3>Live status — today’s talks</h3><span class="m">derived automatically; click to open</span></div>
+<div class="card"><div class="chd"><h3>Live status — Today · Wed Mar 11</h3><span class="m">derived automatically; click to open</span></div>
 <div class="cbd" style="padding:0 0 4px"><table><thead><tr><th>Talk</th><th>Speaker</th><th>Room · slot</th><th>Status</th></tr></thead><tbody>
-${Object.entries(S.talks).map(([k,t])=>{const[l,c]=derived(t);return `<tr class="rb" onclick="S.selTalk='${k}';nav('detail')"><td><b>${t.talk}</b></td><td>${t.name}</td><td>${t.room} · ${t.slot}</td><td><span class="chip ${c}">${l}</span></td></tr>`}).join('')}
+${Object.entries(S.talks).map(([k,t])=>{const[l,c]=derived(t);return `<tr class="rb" onclick="S.selTalk='${k}';nav('detail')"><td><b>${t.talk}</b></td><td>${t.short}</td><td>${t.room} · ${t.slot}</td><td><span class="chip ${c}">${l}</span></td></tr>`}).join('')}
+<tr><td colspan="4" class="note">M. Bell · Room 214 10:30 — <span class="chip c-mut">Not submitted</span> · included in reminder batch</td></tr>
 </tbody></table></div></div>`};
 
-V.speakers=()=>`<h1 class="htitle">Speakers</h1>
+V.speakers=()=>`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+<h1 class="htitle" style="margin:0">Speakers · 348</h1>
+<span><button class="btn" onclick="toast('Reminder queued to the 45 speakers without files')">Bulk remind (45)</button>
+<button class="btn pri" onclick="toast('New speaker profile — merge detection runs on save')">+ Add speaker</button></span></div>
 <div class="card"><div class="cbd" style="padding-bottom:6px"><input placeholder="Search 348 speakers…" style="width:100%"></div>
 <div class="cbd" style="padding-top:0"><table><thead><tr><th>Speaker</th><th>Talks</th><th>Link status</th><th>Last activity</th></tr></thead><tbody>
-${Object.values(S.talks).map(t=>`<tr class="rb" onclick="nav('detail')"><td><b>${t.name}</b><br><span class="note">${t.track}</span></td><td>${t.talk}</td><td><span class="chip c-info">Invited · link active</span></td><td class="mono num">Day 2 · 09:1${Math.floor(Math.random()*9)}</td></tr>`).join('')}
+${Object.values(S.talks).map((t,i)=>`<tr class="rb" onclick="nav('detail')"><td><b>${t.name}</b><br><span class="note">${t.track}</span></td><td>${t.talk}</td><td><span class="chip c-info">Invited · link active</span></td><td class="mono num">Day 2 · 09:1${i+2}</td></tr>`).join('')}
+<tr class="rb"><td><b>M. Bell</b><br><span class="note">Regulatory</span></td><td>Room 214 10:30</td><td><span class="chip c-warn">Invited · no upload</span></td><td class="mono num">—</td></tr>
 </tbody></table></div></div>`;
 
-V.detail=()=>{const t=S.talks[S.selTalk];const[l,c]=derived(t);
+V.detail=()=>{const t=S.talks[S.selTalk];const[l,c]=derived(t);const latest=t.versions[t.versions.length-1];
  return `<h1 class="htitle">Presentation detail</h1>
 <div class="card"><div class="chd"><h3>${t.talk}</h3><span class="chip ${c}">${l}</span></div><div class="cbd">
-  <div class="note" style="margin-bottom:10px">${t.name} · ${t.track} · ${t.room} · ${t.slot}</div>
+  <div class="note" style="margin-bottom:6px">${t.name} · ${t.track} · ${t.room} · ${t.slot}</div>
+  <div class="mono note" style="margin-bottom:10px">RAMAN_FINAL_v${latest.v}.pptx · ${latest.size} · sha256 9f2c…e41a</div>
+  ${t.review==='approved'?`<div class="note" style="margin-bottom:10px"><span class="chip c-ok">Approved by C. Delgado · Feb 26, 09:12 · logged</span></div>`:''}
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+    <button class="btn" onclick="toast('Slide preview opened — 42 slides · 16:9')">Preview slides</button>
+    <button class="btn" onclick="nav('inspect')">Open inspection report</button>
+    <button class="btn" onclick="nav('ingest')">Replace file / USB intake</button>
+    <button class="btn warnb" onclick="toast('Prior approved version restored byte-identically — rooms notified')">Roll back ✎</button>
+  </div>
   <h3 style="font-size:13px;margin-bottom:6px">Version history</h3>
   <table><thead><tr><th>Version</th><th>Size</th><th>State</th><th></th></tr></thead><tbody>
   ${t.versions.map(v=>`<tr><td class="mono">v${v.v}</td><td class="num">${v.size}</td><td><span class="chip ${v.state==='approved'?'c-ok':v.state==='superseded'?'c-mut':'c-info'}">${v.state.replace('_',' ')}</span></td>
    <td>${v.state==='approved'?'<span class="chip c-sync">Final onsite version</span>':''}</td></tr>`).join('')}
   </tbody></table>
-  <div style="margin-top:10px"><button class="btn" onclick="toast('Prior approved version restored byte-identically — Ballroom A notified')">Roll back to previous approved…</button></div>
+  <div class="note" style="margin-top:8px">previous versions kept: ${16+t.versions.length}</div>
 </div></div>`};
 
 V.inspect=()=>{const t=S.talks[S.selTalk]||S.talks.raman;
- return `<h1 class="htitle">Inspection</h1>
-<div class="card"><div class="chd"><h3>${t.talk} · v${t.versions.length}</h3><span class="m">tier-1 automated checks</span></div><div class="cbd">
+ return `<h1 class="htitle">Inspection report · <span style="font-size:16px">${t.short}</span></h1>
+<div class="card"><div class="chd"><h3>${t.talk} · v${t.versions.length}</h3>
+ <span><span class="chip c-mut">0 blocking</span> <span class="chip c-warn">1 warning</span> <span class="chip c-info">2 informational</span></span></div><div class="cbd">
   <table><thead><tr><th>Check</th><th>Result</th></tr></thead><tbody>
-   <tr><td>File integrity · SHA-256</td><td><span class="chip c-ok">Verified</span> <span class="mono note">9f2c…e1d7</span></td></tr>
-   <tr><td>Fonts</td><td><span class="chip ${t.insp.chip==='c-warn'&&t.insp.text.includes('font')?'c-warn':'c-ok'}">${t.insp.text.includes('font')?'Warning':'Embedded'}</span></td></tr>
-   <tr><td>Video codecs</td><td><span class="chip ${t.insp.text.includes('HEVC')?'c-warn':'c-ok'}">${t.insp.text.includes('HEVC')?'HEVC on slide 18':'H.264 ✓'}</span></td></tr>
-   <tr><td>Macros / external links</td><td><span class="chip c-ok">None found</span></td></tr>
+   <tr><td>File integrity · SHA-256</td><td><span class="chip c-ok">Verified</span> <span class="mono note">9f2c…e41a</span></td></tr>
+   <tr><td>Fonts</td><td><span class="chip c-ok">Embedded</span></td></tr>
+   <tr><td>Video codecs</td><td><span class="chip c-warn">${t.insp.text}</span></td></tr>
+   <tr><td>Macros</td><td><span class="chip c-ok">None found</span> <span class="note">· Blocking severity for macros</span></td></tr>
+   <tr><td>External links</td><td><span class="chip c-ok">None found</span></td></tr>
    <tr><td>Malware scan</td><td><span class="chip c-ok">Clean · 6s</span></td></tr>
   </tbody></table>
-  <div class="lane int" style="margin-top:12px"><b>What these checks can’t see:</b> content accuracy, slide design, or whether animations behave on the room PC — those need the reviewer and the fidelity test. <span class="chip ${t.insp.chip}" style="margin-left:6px">${t.insp.text}</span></div>
-  <button class="btn warnb" onclick="toast('Finding waived by M. Vega — waiver stays visible and audited');this.disabled=true">Waive finding…</button>
+  <div class="lane cli" style="margin-top:12px"><b>Suggested fix:</b> re-export the Slide 14 clip as H.264 .mp4 — or accept: the room pipeline transcodes automatically with a fidelity check.</div>
+  <div class="lane int"><b>What these checks can’t see:</b> content accuracy, slide design, or animation behavior on the room PC — the reviewer and fidelity test decide those.</div>
+  <div style="display:flex;gap:8px;margin-top:8px">
+    <button class="btn warnb" onclick="waive(this)">Waive finding ✎</button>
+    <button class="btn" onclick="nav('review')">Open in review workspace →</button>
+  </div>
 </div></div>`};
 
 V.review=()=>{const q=queue();const t=S.talks[S.selTalk];const inQ=q.some(([k])=>k===S.selTalk);
  return `<h1 class="htitle">Review & approval</h1>
 <div class="card"><div class="chd"><h3>Queue · ${q.length+9}</h3><span class="m">oldest first · A approve · R request revision</span></div>
 <div class="cbd" style="padding:0 0 4px"><table><tbody>
-${q.length?q.map(([k,t])=>`<tr class="rb ${k===S.selTalk?'sel':''}" onclick="S.selTalk='${k}';render()"><td><b>${t.name}</b> · ${t.talk}</td><td style="text-align:right"><span class="chip ${t.insp.chip}">${t.insp.chip==='c-ok'?'Submitted':'Warning'}</span></td></tr>`).join(''):'<tr><td class="note" style="text-align:center;padding:18px">Queue clear — 9 items with other reviewers</td></tr>'}
+${q.length?q.map(([k,t])=>`<tr class="rb ${k===S.selTalk?'sel':''}" onclick="S.selTalk='${k}';render()"><td><b>${t.short}</b> · ${t.talk}</td><td style="text-align:right"><span class="chip ${t.insp.chip}">${t.insp.chip==='c-ok'?'Submitted':'Warning'}</span></td></tr>`).join(''):'<tr><td class="note" style="text-align:center;padding:18px">Queue clear — 9 items with other reviewers</td></tr>'}
 </tbody></table></div></div>
-${inQ?`<div class="card"><div class="chd"><h3>Preview · ${t.talk.toLowerCase().split(' ')[0]}_v${t.versions.length}</h3><span class="m">v${t.versions.length} · 42 slides</span></div><div class="cbd">
+${inQ?`<div class="card"><div class="chd"><h3>Review workspace · ${t.short}</h3><span class="m">v${t.versions.length} · 42 slides · 16:9</span></div><div class="cbd">
   <div class="slides">${[1,2,3,4,5,6,7,8].map(n=>`<div>${n}</div>`).join('')}</div>
   <div style="margin:10px 0"><span class="chip ${t.insp.chip}">${t.insp.text}</span></div>
-  <div class="lane int"><b>M. Vega</b><span class="aud">internal</span><br>Fallback font is acceptable for titles.</div>
-  <div class="lane cli"><b>J. Ellis</b><span class="aud">client review</span><br>Please prioritize — board members attending this one.</div>
-  <div class="lane spk"><b>To speaker</b><span class="aud">speaker-visible</span><br>Approved with a note: embed fonts on future versions.</div>
-  <div style="display:flex;gap:8px;margin-top:12px">
+  <div class="note" style="margin-bottom:4px">Comment lanes:</div>
+  <div class="lane int"><b>M. Vega</b><span class="aud">Internal</span><br>Fallback behavior acceptable — transcode pipeline covers the clip.</div>
+  <div class="lane cli"><b>J. Ellis</b><span class="aud">Client review lane · Enabled · comment + approve</span><br>Please prioritize — board members attending this one.</div>
+  <div class="lane spk"><b>To speaker</b><span class="aud">Speaker</span><br>Approved with a note: export videos as H.264 .mp4 next time.</div>
+  <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
     <button class="btn good" onclick="decide('approved')">Approve (A)</button>
-    <button class="btn" onclick="decide('changes_requested')">Request revision (R)</button>
+    <button class="btn" style="background:var(--block);border-color:var(--block);color:#fff" onclick="decide('changes_requested')">Request revision (R)</button>
+    <button class="btn" onclick="toast('Prefilled revision note from the inspection finding — sent to speaker')">Request revision (prefilled)</button>
+    <button class="btn" onclick="toast('Sent to the client review lane — J. Ellis notified')">Send to client review</button>
     <button class="btn danger" onclick="decide('rejected')">Reject…</button>
   </div></div></div>`:''}`};
 
 V.comms=()=>`<h1 class="htitle">Communications</h1>
 <div class="card"><div class="chd"><h3>Upload invitation — branded</h3><span class="m">template · merge fields</span></div><div class="cbd">
-  <div class="darkpane" style="padding:14px 16px;margin-bottom:12px"><b style="color:var(--white)">MedTech Forward 2026</b><br>
-  <span style="font-size:13px">Dear {{speaker.name}} — your talk “{{talk.title}}” is scheduled for {{slot.time}} in {{room.name}}. Upload by {{event.deadline}} using your personal link.</span></div>
+  <div class="darkpane" style="padding:14px 16px;margin-bottom:12px"><b style="color:var(--white)">MEDTECH FORWARD 2026</b><br>
+  <span style="font-size:13px">Hi {{speaker_first}} — you're presenting at MedTech Forward 2026. Upload your presentation by {{deadline}} using your personal link.<br>· Embed all fonts and videos (H.264 .mp4) — <a style="color:var(--blue)" href="#" onclick="return false">how to do this</a><br>· <a style="color:var(--blue)" href="#" onclick="return false">Download the event slide template</a></span></div>
   <div style="display:flex;gap:8px"><button class="btn pri" onclick="toast('Batch queued: 348 invitations · deliveries tracked per speaker')">Send batch (348)</button>
   <button class="btn" onclick="toast('Test send to m.vega@dxg.live')">Test send</button></div>
 </div></div>
-<div class="card"><div class="chd"><h3>Delivery tracking</h3><span class="m">reminders T-14 · T-7 · T-2</span></div><div class="cbd">
-  <table><thead><tr><th>Batch</th><th>Delivered</th><th>Opened</th><th>Bounced</th></tr></thead><tbody>
-  <tr><td>Invitation · Feb 10</td><td class="num">346</td><td class="num">301</td><td><span class="chip c-bad">2 — flagged on speaker records</span></td></tr>
-  <tr><td>Reminder T-7 · Feb 25</td><td class="num">45</td><td class="num">38</td><td class="num">0</td></tr>
+<div class="card"><div class="chd"><h3>Delivery log</h3><span class="m">reminders T-14 · T-7 · T-2</span></div><div class="cbd">
+  <table><thead><tr><th>Batch</th><th>Delivered</th><th>Opened</th><th>Bounces</th></tr></thead><tbody>
+  <tr><td>Invitation · Feb 10</td><td class="num">Delivered 348 · 0 bounces</td><td class="num">301</td><td class="num">0</td></tr>
+  <tr><td>Reminder T-7 · Feb 20</td><td class="num">45</td><td class="num">38</td><td><span class="chip c-bad">2 — flagged on speaker records</span></td></tr>
   </tbody></table></div></div>`;
 
-V.archive=()=>`<h1 class="htitle">Archive builder</h1>
-<div class="card"><div class="chd"><h3>Client package — MedTech Industry Association</h3><span class="m">approved finals only</span></div><div class="cbd">
+V.archive=()=>{const built=S._archiveBuilt;
+ return `<h1 class="htitle">Post-event archive builder</h1>
+<div class="card"><div class="chd"><h3>Client package — MedTech Industry Association</h3>
+ <span class="chip ${built?'c-ok':'c-mut'}">${built?'Built · delivered to client portal':'Not built'}</span></div><div class="cbd">
   <table><tbody>
-  <tr><td>Scope</td><td>All tracks · approved final versions</td></tr>
+  <tr><td>Scope</td><td>All tracks · approved final versions only</td></tr>
   <tr><td>Excluded</td><td><span class="chip c-bad">7 talks restricted from distribution</span> <span class="chip c-warn">12 PDF-only per release permission</span></td></tr>
-  <tr><td>Manifest</td><td class="mono">manifest.json · 296 files · SHA-256 each</td></tr>
+  <tr><td>Package</td><td class="mono">MTF26_final_presentations.zip · 41.2 GB · manifest.json (SHA-256 each)</td></tr>
   <tr><td>Delivery</td><td>Expiring link · 7 days · every download logged</td></tr>
   </tbody></table>
-  <div style="margin-top:12px"><button class="btn pri" onclick="toast('Package build queued — ready ≤4h after event close (OBJ-7)')">Build package</button></div>
-</div></div>`;
+  <div style="margin-top:12px;display:flex;gap:8px">
+   <button class="btn pri" onclick="S._archiveBuilt=true;render();toast('Package built — delivered to client portal (≤4h after close, OBJ-7)')">Build package</button>
+   <button class="btn" ${built?'':'disabled'} onclick="toast('MTF26_final_presentations.zip · download logged')">Download package</button>
+  </div>
+</div></div>`};
 
-V.srr=()=>`<h1 class="htitle">Speaker Ready Room</h1>
+V.srr=()=>`<h1 class="htitle">Speaker Ready Room · Room 118</h1>
 <div class="krow">
  <div class="kpi"><div class="kl">Checked in today</div><div class="kv num">61</div></div>
  <div class="kpi"><div class="kl">Waiting</div><div class="kv num" style="color:var(--warn)">3</div></div>
  <div class="kpi"><div class="kl">Avg lookup</div><div class="kv num">2.1s</div></div>
  <div class="kpi"><div class="kl">USB intakes</div><div class="kv num">14</div></div>
 </div>
-<div class="card"><div class="chd"><h3>Stations</h3><span class="m">Day 2 · 4 technicians</span></div><div class="cbd" style="padding:0 0 4px">
-<table><thead><tr><th>Station</th><th>Technician</th><th>Now serving</th></tr></thead><tbody>
-<tr><td>1</td><td>T. Brooks</td><td>—</td></tr>
-<tr class="rb" onclick="nav('checkin')"><td>2</td><td>J. Whitfield</td><td><b>Dr. P. Raman</b> <span class="chip c-info">open →</span></td></tr>
-<tr><td>3</td><td>S. Ito</td><td>K. Osei</td></tr>
+<div class="card"><div class="chd"><h3>Stations 1–4 · 3 technicians on</h3><span class="m">Day 2</span></div><div class="cbd" style="padding:0 0 4px">
+<table><tbody>
+<tr><td>Station 1 · D. Ruiz</td><td>A. Fontaine · Room 212 11:15</td><td style="text-align:right"><span class="chip c-info">With speaker</span></td></tr>
+<tr class="rb" onclick="nav('checkin')"><td>Station 2 · T. Okafor</td><td><b>Dr. Priya Raman</b> · Ballroom A 10:30</td><td style="text-align:right"><button class="btn pri" style="padding:4px 12px">Check in →</button></td></tr>
+<tr><td>Station 3 · USB scan</td><td>Last-minute intake · Station 3 (USB)</td><td style="text-align:right"><span class="chip c-warn">Scanning…</span></td></tr>
+<tr><td>Station 4</td><td>M. Bell · Room 214 10:30</td><td style="text-align:right"><span class="chip c-mut">Not yet arrived</span></td></tr>
 </tbody></table></div></div>`;
 
 V.checkin=()=>{const u=S.usb;
- return `<h1 class="htitle">Check-in — Station 2</h1>
-<div class="card"><div class="chd"><h3>Dr. P. Raman · Robotic-Assisted Surgery Outcomes</h3><span class="m">checked in 09:41</span></div><div class="cbd">
-  <div class="note" style="margin-bottom:10px">Ballroom A · Day 2 10:30 · current approved version <b class="mono">v2</b> (Synchronized onsite)</div>
-  ${u.signed?`<span class="chip c-ok">Signed off · v3 · 09:52</span>
+ return `<h1 class="htitle">Check-in · Dr. Priya Raman</h1>
+<div class="card"><div class="chd"><h3>${S.talks.raman.talk}</h3><span class="m">Checked in 08:42 · Station 2 · Technician T. Okafor</span></div><div class="cbd">
+  <div class="note" style="margin-bottom:10px">Ballroom A · today 10:30 · current approved: <b class="mono">v2</b> (Synchronized onsite)</div>
+  ${u.signed?`<span class="chip c-ok">Signed off · v3 · 08:51 · ✓ logged</span>
    <div class="card" style="max-width:420px;margin-top:12px"><div class="cbd">
     <h3 style="font-size:14px;border-bottom:1px solid var(--line);padding-bottom:6px;margin-bottom:8px">Presentation receipt</h3>
     <table style="font-size:13px"><tbody>
     <tr><td class="note">Version</td><td class="mono" style="text-align:right">v3 · a81f…c9b2</td></tr>
-    <tr><td class="note">Signed</td><td style="text-align:right">Day 2 · 09:52 · Station 2</td></tr>
-    <tr><td class="note">Technician</td><td style="text-align:right">J. Whitfield</td></tr></tbody></table>
-    <div style="margin-top:10px"><button class="btn">Print</button> <button class="btn">Email receipt</button></div>
+    <tr><td class="note">Signed</td><td style="text-align:right">Day 2 · 08:51 · Station 2</td></tr>
+    <tr><td class="note">Technician</td><td style="text-align:right">T. Okafor</td></tr></tbody></table>
+    <div style="margin-top:10px"><button class="btn" onclick="toast('Receipt sent to printer')">Print receipt</button> <button class="btn" onclick="toast('Receipt emailed to Dr. Raman')">Email receipt</button></div>
    </div></div>`
   :u.scanned?`<h3 style="font-size:13px;margin-bottom:6px">Compare v2 (approved) vs v3 (USB)</h3>
   <table><thead><tr><th></th><th>v2</th><th>v3</th><th>Δ</th></tr></thead><tbody>
-   <tr><td>Size</td><td class="num">505 MB</td><td class="num">548 MB</td><td><span class="chip c-warn">+43 MB</span></td></tr>
+   <tr><td>Size</td><td class="num">486 MB</td><td class="num">492 MB</td><td><span class="chip c-warn">+6 MB</span></td></tr>
    <tr><td>Slides</td><td class="num">42</td><td class="num">44</td><td><span class="chip c-warn">+2</span></td></tr>
    <tr><td>Video</td><td class="num">2 clips</td><td class="num">2 clips</td><td><span class="chip c-ok">unchanged</span></td></tr>
   </tbody></table>
   <p class="note">Accepting v3 sends it to re-approval. Ballroom A keeps playing v2 until v3 is approved and re-synced — approved room copies are never replaced silently.</p>
-  <button class="btn pri" onclick="signOff()">Accept v3 → speaker sign-off</button>
+  <button class="btn pri" onclick="signOff()">Accept as v3 · speaker present ✓</button>
   <button class="btn" onclick="toast('v3 discarded — v2 remains the final onsite version')">Keep v2</button>`
   :`<p class="note">Speaker brought an update on USB. Send it through USB intake first — unscanned files can’t enter the library.</p>
   <button class="btn pri" onclick="nav('ingest')">Go to USB intake →</button>`}
 </div></div>`};
 
 V.ingest=()=>{const u=S.usb;
- return `<h1 class="htitle">USB intake</h1>
-<div class="card"><div class="chd"><h3>SANDISK_32GB — Station 2</h3><span class="m">mandatory malware scan</span></div><div class="cbd">
-  <div class="frow" style="border-top:none"><span class="mono">raman_robotics_FINAL_v3.pptx</span><span class="num mono">548 MB</span></div>
+ return `<h1 class="htitle">USB intake · Station 3</h1>
+<div class="card"><div class="chd"><h3>SANDISK_32GB</h3><span class="m">mandatory malware scan</span></div><div class="cbd">
+  <div class="frow" style="border-top:none"><span class="mono">RAMAN_FINAL_v3.pptx</span><span class="num mono">492 MB</span></div>
   ${u.scanned?`<span class="chip c-ok">Clean · imported as v3 · original preserved</span>
    <div style="margin-top:12px"><button class="btn pri" onclick="nav('checkin')">Back to check-in → compare</button></div>`
   :`<div id="scanrun" class="hidden"><span class="chip c-info">Scanning…</span></div>
@@ -335,59 +386,69 @@ V.ingest=()=>{const u=S.usb;
    <p class="note">Scan failure quarantines the file and preserves the approved version — there is no override that skips scanning.</p></div>`}
 </div></div>`};
 
-V.sync=()=>{const r=S.talks.raman;
+V.sync=()=>{const r=S.talks.raman;const hasV3=r.versions.length>=3;
  const rooms=[
-  {n:'Ballroom A',code:'MTF-A',beat:'21s',files:[[`Raman — Robotics ${r.versions.length>=3?'v3':'v2'}`, r.sync==='active'&&r.ack?'Synchronized onsite':!r.ack?'Update pending ack':'Syncing…', r.sync==='active'&&r.ack?'c-ok':'c-warn'],['Holding loop — MTF26','Synchronized onsite','c-ok']]},
-  {n:'Ballroom B',code:'MTF-B',beat:'44s',files:[['Osei — Sensor Talk','Awaiting approval','c-mut'],['Holding loop — MTF26','Synchronized onsite','c-ok']]},
-  {n:'Riverview 8',code:'MTF-R8',beat:'6m ⚠',off:true,files:[['Holding loop — MTF26','Synchronized onsite','c-ok']]}];
- return `<h1 class="htitle">Room sync</h1>
+  {n:'Ballroom A',code:'BLRM-A-01',beat:'21s',files:[[`${r.short} — v${r.versions.length}`, r.sync==='active'&&r.ack?'Synchronized onsite':!r.ack?'Update pending ack':hasV3&&r.review!=='approved'?'v3 waiting · approved version differs from room copy':'Syncing…', r.sync==='active'&&r.ack?'c-ok':'c-warn'],['Holding loop — MTF26','Synchronized onsite','c-ok']]},
+  {n:'Ballroom B',code:'BLRM-B-01',beat:'44s',files:[['Sponsor loop v2 · 14:30','Pending','c-warn'],['Holding loop — MTF26','Synchronized onsite','c-ok']]},
+  {n:'Room 210',code:'RM-210',beat:'55s',files:[['K. Osei — linked video · 13:00','Awaiting approval','c-mut'],['Holding loop — MTF26','Synchronized onsite','c-ok']]}];
+ return `<h1 class="htitle">Room synchronization · Day 2</h1>
 <div class="grid2">${rooms.map(rm=>{const ready=!rm.off&&rm.files.every(f=>f[2]==='c-ok');
  return `<div class="roomcard"><div style="display:flex;justify-content:space-between;align-items:center">
   <h4>${rm.n} <span class="mono note">${rm.code}</span></h4>
-  <span class="chip ${rm.off?'c-bad':ready?'c-ok':'c-warn'}">${rm.off?'Agent offline':ready?'Ready':'Attention'}</span></div>
+  <span class="chip ${ready?'c-ok':'c-warn'}">${ready?'Ready':'Attention'}</span></div>
   <div class="note mono">heartbeat ${rm.beat} · agent 1.4.2 event-pinned</div>
   ${rm.files.map(f=>`<div class="frow"><span>${f[0]}</span><span class="chip ${f[2]}">${f[1]}</span></div>`).join('')}
-  <button class="btn" style="margin-top:8px" onclick="toast('${rm.n}: delta manifest rebuilt and pushed')">Force sync</button></div>`}).join('')}
-</div>`};
+  <button class="btn" style="margin-top:8px" onclick="toast('${rm.n}: delta manifest rebuilt and pushed')">Manual sync</button></div>`}).join('')}
+</div>
+<div class="note" style="margin-top:10px">+ 9 more rooms · all ready</div>`};
 
-V.agent=()=>{const r=S.talks.raman;const hasV3=r.versions.length>=3;
- return `<h1 class="htitle">Room Agent — Ballroom A</h1>
+V.agent=()=>{const r=S.talks.raman;const hasV3=r.versions.length>=3;const approvedV3=hasV3&&r.review==='approved';
+ return `<h1 class="htitle">Room Agent · Ballroom A</h1>
 <div class="darkpane" style="padding:18px">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-    <b style="color:var(--white);font-family:'Barlow Semi Condensed';font-size:16px">Ballroom A · MTF-A</b>
-    <span class="mono" style="color:var(--ok)">● ONLINE · offline library 72h OK</span></div>
-  ${hasV3&&!r.ack?`<div style="background:#3A2C10;border:1px solid var(--warn);border-radius:6px;padding:10px 14px;margin-bottom:12px;color:#F5C97B">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:6px">
+    <b style="color:var(--white);font-family:'Barlow Semi Condensed';font-size:16px">Ballroom A — General Session</b>
+    <span class="mono" style="color:var(--ok)">OFFLINE-SAFE ✓</span></div>
+  <div class="mono" style="font-size:12px;color:var(--dim);margin-bottom:10px">BLRM-A-01 · agent 1.4.2 · library complete · 18 files · 12.6 GB local · previous versions kept: 18</div>
+  ${approvedV3&&!r.ack?`<div style="background:#3A2C10;border:1px solid var(--warn);border-radius:6px;padding:10px 14px;margin-bottom:12px;color:#F5C97B">
     ⚠ <b>Change alert:</b> Raman v3 approved — replaces v2 for the 10:30 slot.
-    <button class="btn" style="margin-left:8px" onclick="ackChange()">Acknowledge</button></div>`:''}
-  <div class="frow" style="border-color:#33414B"><span style="color:var(--white)">Raman — Robotic-Assisted Surgery Outcomes ${hasV3?'v3':'v2'}</span>
+    <button class="btn" style="margin-left:8px" onclick="ackChange()">Acknowledge & sync v3</button></div>`:''}
+  <div class="frow" style="border-color:#33414B"><span style="color:var(--white)">Ballroom A · 10:30 · Dr. Priya Raman — v${approvedV3?3:2}</span>
     <span class="chip ${r.ack&&r.sync==='active'?'c-ok':'c-warn'}">${r.ack&&r.sync==='active'?'Verified · SHA-256 ✓':'Update pending ack'}</span></div>
   <div class="frow" style="border-color:#33414B"><span style="color:var(--white)">Previous version v2</span><span class="chip c-mut">Kept for rollback</span></div>
   <div class="frow" style="border-color:#33414B"><span style="color:var(--white)">Holding screen — MedTech Forward loop</span><span class="chip c-ok">Standby</span></div>
-  <div style="margin-top:12px"><button class="btn pri" onclick="toast('Launched in PowerPoint slideshow · logged 10:31 · works fully offline')">▶ Launch 10:30 presentation</button></div>
-  <div class="mono" style="font-size:12px;color:var(--dim);margin-top:12px">10:29:41 sync verified v3 · 10:24:02 heartbeat · 09:58:11 delta manifest applied (1 add)</div>
+  <div style="margin-top:12px;display:flex;gap:8px">
+    <button class="btn pri" onclick="toast('Launched in PowerPoint slideshow · Launched 10:31 · logged · works fully offline')">▶ Launch</button>
+    <button class="btn" onclick="toast('Holding screen displayed')">Show holding screen</button>
+  </div>
+  <div class="mono" style="font-size:12px;color:var(--dim);margin-top:12px">10:29:41 sync verified · 10:24:02 heartbeat · 09:58:11 delta manifest applied (1 add)</div>
 </div>`};
 
 V.speaker=()=>{const t=S.talks.raman;const pct=t.upPct;
  return `<div style="max-width:640px;margin:0 auto">
-<div class="darkpane" style="padding:16px 20px;margin-bottom:16px"><b style="color:var(--white);font-family:'Barlow Semi Condensed';font-size:17px">MedTech Forward 2026</b><br>
-<span style="font-size:13px">Your presentation · secure personal link · Dr. P. Raman</span></div>
-<div class="card"><div class="chd"><h3>Robotic-Assisted Surgery Outcomes</h3><span class="chip ${derived(t)[1]}">${derived(t)[0]}</span></div><div class="cbd">
-  <div class="note" style="margin-bottom:12px">Ballroom A · Day 2, 10:30 · Upload deadline Mar 3, 23:59 · 16:9 · up to 10 GB</div>
+<div class="darkpane" style="padding:16px 20px;margin-bottom:16px"><span style="font-size:12px;letter-spacing:.1em;color:var(--dim)">YOU'RE PRESENTING AT</span><br>
+<b style="color:var(--white);font-family:'Barlow Semi Condensed';font-size:18px">MEDTECH FORWARD 2026</b><br>
+<span style="font-size:13px">Hi Dr. Raman — secure personal link · <button class="btn" style="padding:3px 10px;margin-top:6px" onclick="toast('This is your upload page')">Open my upload page</button></span></div>
+<div class="card"><div class="chd"><h3>${t.talk}</h3><span class="chip ${derived(t)[1]}">${derived(t)[0]}</span></div><div class="cbd">
+  <div class="note" style="margin-bottom:12px">Ballroom A · Day 2, 10:30 · Upload deadline Feb 27 · 23:59 ET · 16:9 · up to 10 GB</div>
   ${pct>=100?`<div class="lane spk"><b>v${t.versions.length} received.</b> Checksum verified — automated checks are running. We’ll email you if anything needs attention. Earlier versions are kept safe.</div>
-    <button class="btn" onclick="S.talks.raman.upPct=0;render()">Replace with a new version…</button>`
-  :pct>0?`<div style="display:flex;justify-content:space-between;font-size:13px"><span class="mono">raman_robotics_v2.pptx</span><span class="mono num">505 MB</span></div>
+    <div class="note">ℹ File size ${t.versions[t.versions.length-1].size} — within the 10 GB limit. &nbsp; ℹ Slide size 16:9 matches the room profile.</div>
+    <div style="margin-top:10px"><button class="btn" onclick="S.talks.raman.upPct=0;render()">Replace file</button>
+    <button class="btn" onclick="toast('Message sent to the DXG presentation team')">Message DXG</button></div>`
+  :pct>0?`<div style="display:flex;justify-content:space-between;font-size:13px"><span class="mono">raman_robotics_v1.pptx</span><span class="mono num">481 MB</span></div>
     <div class="bar blue" style="margin:10px 0 6px"><i style="width:${pct}%"></i></div>
-    <div style="display:flex;justify-content:space-between;align-items:center"><span class="note" id="upmsg">Uploading… ${Math.round(pct)}%</span>
+    <div style="display:flex;justify-content:space-between;align-items:center"><span class="note" id="upmsg">${Math.round(pct)}% · resumable · ~40s remaining</span>
     <button class="btn hidden" id="upresume" onclick="resumeUp()">Resume upload</button></div>`
   :`<div style="border:2px dashed var(--line);border-radius:10px;padding:26px;text-align:center">
-     <b>Drop your presentation here</b><div class="note" style="margin:4px 0 10px">or</div>
-     <button class="btn pri" onclick="startUp()">Choose file</button></div>`}
+     <b>Drag your presentation here</b><div class="note" style="margin:4px 0 10px">or</div>
+     <button class="btn pri" onclick="startUp()">Choose file…</button></div>
+   <div class="note" style="margin-top:10px">· Embed all fonts and videos (H.264 .mp4) — <a href="#" onclick="return false">how to do this</a><br>· <a href="#" onclick="return false">Download the event slide template</a></div>`}
 </div></div>
 <div class="card"><div class="chd"><h3>Feedback</h3></div><div class="cbd">
-  <div class="lane spk"><b>DXG presentation team</b><span class="aud">to you</span><br>Approved with a note: please embed fonts on future versions. See you in the Speaker Ready Room from 07:30.</div>
+  <div class="lane spk"><b>DXG presentation team</b><span class="aud">to you</span><br>Approved with a note: export videos as H.264 .mp4 next time. Speaker Ready Room opens 07:30 (Room 118).</div>
 </div></div></div>`};
 
-V.client=()=>`<div class="darkpane" style="padding:14px 20px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center">
+V.client=()=>{const built=S._archiveBuilt;
+ return `<div class="darkpane" style="padding:14px 20px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center">
  <b style="color:var(--white)">MedTech Industry Association · <span style="color:var(--blue)">Client Oversight</span></b>
  <span style="font-size:12.5px">Jordan Ellis · Client Event Admin</span></div>
 <div class="krow">
@@ -401,12 +462,13 @@ V.client=()=>`<div class="darkpane" style="padding:14px 20px;margin-bottom:16px;
    <div class="bar ${w}" style="flex:1"><i style="width:${p}%"></i></div><span class="mono num" style="width:36px;text-align:right">${p}%</span></div>`).join('')}
 </div></div>
 <div class="card"><div class="chd"><h3>Archive package</h3><span class="m">after event close</span></div><div class="cbd">
- <div class="frow" style="border-top:none"><span>MedTech Forward 2026 — final presentations</span><span class="chip c-info">Available ≤4h after close</span></div>
+ <div class="frow" style="border-top:none"><span class="mono">MTF26_final_presentations.zip · 41.2 GB</span>
+  <span class="chip ${built?'c-ok':'c-mut'}">${built?'Built · delivered to client portal':'Available after the event'}</span></div>
  <div class="note">Expiring 7-day link · restricted talks excluded · downloads logged.</div>
- <button class="btn pri" style="margin-top:10px" onclick="toast('Download logged for Jordan Ellis · link expires in 7 days')">Download permitted package</button>
-</div></div>`;
+ <button class="btn pri" style="margin-top:10px" ${built?'':'disabled'} onclick="toast('Download logged for Jordan Ellis · link expires in 7 days')">Download package</button>
+</div></div>`};
 
-/* ── behaviors (grafted from workflow-study) ── */
+/* ── behaviors (grafted; WORKFLOW_STATES) ── */
 function decide(v){const t=S.talks[S.selTalk];if(!t||t.review!=='awaiting_review'&&t.review!=='in_review')return;
   t.review=v;
   if(v==='approved'){t.versions[t.versions.length-1].state='approved';
@@ -418,26 +480,29 @@ function decide(v){const t=S.talks[S.selTalk];if(!t||t.review!=='awaiting_review
   render();}
 document.addEventListener('keydown',e=>{if(S.screen!=='review')return;
   if(e.key==='a'||e.key==='A')decide('approved'); if(e.key==='r'||e.key==='R')decide('changes_requested');});
+function waive(btn){const reason=prompt('Waive finding — Reason (required):','Fallback verified on room build');
+  if(!reason)return toast('Waiver needs a reason — nothing recorded');
+  btn.disabled=true;toast('Finding waived by M. Vega — reason logged, waiver stays visible in the audit trail');}
 
 let upT=null;
 function startUp(){const t=S.talks.raman;t.upPct=1;render();tick();}
 function tick(){const t=S.talks.raman;upT=setInterval(()=>{t.upPct+=Math.random()*6;
   if(t.upPct>=68&&!S._dropped){clearInterval(upT);S._dropped=true;render();
-    const m=$('upmsg'),b=$('upresume');if(m){m.textContent='Connection lost at 68% — 343 MB already uploaded is saved.';m.style.color='#8A5A12';}if(b)b.classList.remove('hidden');return;}
+    const m=$('upmsg'),b=$('upresume');if(m){m.textContent='Connection lost at 68% — 327 MB already uploaded is saved.';m.style.color='#8A5A12';}if(b)b.classList.remove('hidden');return;}
   if(t.upPct>=100){t.upPct=100;clearInterval(upT);render();toast('Checksum verified — inspection queued');return;}
   const bar=document.querySelector('.bar.blue i');const m=$('upmsg');
-  if(bar)bar.style.width=t.upPct+'%'; if(m)m.textContent='Uploading… '+Math.round(t.upPct)+'%';},170);}
+  if(bar)bar.style.width=t.upPct+'%'; if(m)m.textContent=Math.round(t.upPct)+'% · resumable · ~40s remaining';},170);}
 function resumeUp(){const m=$('upmsg');if(m){m.textContent='Resumed from 68% — not from zero.';m.style.color='';}
   $('upresume').classList.add('hidden');tick();}
 
 function usbScan(){$('scanbtn').classList.add('hidden');$('scanrun').classList.remove('hidden');
   setTimeout(()=>{S.usb.scanned=true;render();toast('Malware scan clean in 8s — v3 created, original preserved')},1500);}
 function signOff(){const t=S.talks.raman;S.usb.signed=true;
-  t.versions.push({v:3,size:'548 MB',state:'awaiting_review'});t.review='awaiting_review';t.sync='none';S.selTalk='raman';
-  render();toast('Signed off — v3 entered re-approval; Ballroom A keeps v2 until approved');}
-function ackChange(){S.talks.raman.ack=true;render();toast('Change acknowledged — Ballroom A readiness green');}
+  t.versions.push({v:3,size:'492 MB',state:'awaiting_review'});t.review='awaiting_review';t.sync='none';S.selTalk='raman';
+  render();toast('Signed off · ✓ logged — v3 entered re-approval; Ballroom A keeps v2 until approved');}
+function ackChange(){S.talks.raman.ack=true;render();toast('Acknowledged — v3 synced, readiness green');}
 
-/* ── 19-step demo (verbatim from client baseline; docs/ACCEPTANCE_WALKTHROUGH.md) ── */
+/* ── 19-step demo (verbatim; docs/ACCEPTANCE_WALKTHROUGH.md) ── */
 const DEMO=[["wizard","PM creates the 3-day conference"],["import","Rooms, sessions & speakers imported from Excel"],
  ["comms","Branded upload invitations sent (348)"],["speaker","Dr. Raman opens her secure link"],
  ["speaker","She uploads a deck (480 MB, resumable)"],["inspect","Inspection flags an HEVC video warning"],
@@ -460,5 +525,4 @@ function demoPrev(){if(S.demo.i>0){S.demo.i--;demoShow();}}
 
 function render(){renderNav();$('main').innerHTML=V[S.screen]();
   const pf=$('pf-warn');if(pf)pf.textContent=`${5+queue().length} unresolved warnings`;}
-render();
 </script>
