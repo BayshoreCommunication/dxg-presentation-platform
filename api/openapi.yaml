@@ -1,0 +1,469 @@
+openapi: 3.1.0
+info:
+  title: DXG Presentation Management Platform API
+  version: 1.0.0-draft
+  description: >
+    Phase 0 API surface (P0-C2, gate G0-3). Versioned under /api/v1. Covers the
+    SRS §11 endpoint areas across all platform domains. Conventions: cursor
+    pagination (`cursor`/`limit`, response `next_cursor`); all state transitions
+    accept an Idempotency-Key header and an expected `lock_version`
+    (WORKFLOW_STATES common rules); errors use the Error schema; webhooks and
+    agent endpoints authenticate with their own schemes. Detailed request/response
+    schemas are elaborated per milestone task; entity shapes follow db/migrations.
+servers:
+  - url: https://api.example.com/api/v1
+security:
+  - staffAuth: []
+tags:
+  - {name: auth}
+  - {name: events}
+  - {name: import}
+  - {name: schedule}
+  - {name: speakers}
+  - {name: communications}
+  - {name: portal, description: Speaker-portal endpoints (speaker token auth)}
+  - {name: files}
+  - {name: inspection}
+  - {name: review}
+  - {name: srr}
+  - {name: agent, description: Room Agent endpoints (device credential auth)}
+  - {name: sync}
+  - {name: reports}
+  - {name: archive}
+  - {name: admin}
+  - {name: ops}
+  - {name: webhooks}
+  - {name: integration}
+
+paths:
+  # ── auth ────────────────────────────────────────────────────────────
+  /auth/session:
+    get:
+      tags: [auth]
+      summary: Current staff session (identity, event roles)
+      responses: {'200': {$ref: '#/components/responses/OK'}}
+  /auth/logout:
+    post:
+      tags: [auth]
+      summary: End session
+      responses: {'204': {description: Logged out}}
+
+  # ── events (M01) ────────────────────────────────────────────────────
+  /events:
+    get:
+      tags: [events]
+      summary: List events (role-scoped)
+      parameters: [{$ref: '#/components/parameters/cursor'}, {$ref: '#/components/parameters/limit'}]
+      responses: {'200': {$ref: '#/components/responses/Page'}}
+    post:
+      tags: [events]
+      summary: Create event (FR-EVT-001)
+      responses: {'201': {$ref: '#/components/responses/Created'}}
+  /events/{eventId}:
+    parameters: [{$ref: '#/components/parameters/eventId'}]
+    get: {tags: [events], summary: Get event, responses: {'200': {$ref: '#/components/responses/OK'}}}
+    patch: {tags: [events], summary: Update settings/branding/deadlines, responses: {'200': {$ref: '#/components/responses/OK'}}}
+  /events/{eventId}:duplicate:
+    parameters: [{$ref: '#/components/parameters/eventId'}]
+    post:
+      tags: [events]
+      summary: Duplicate structure/settings/templates only (FR-EVT-002)
+      responses: {'201': {$ref: '#/components/responses/Created'}}
+  /events/{eventId}/team:
+    parameters: [{$ref: '#/components/parameters/eventId'}]
+    get: {tags: [events], summary: List event role assignments, responses: {'200': {$ref: '#/components/responses/OK'}}}
+    put: {tags: [events], summary: Assign event roles, responses: {'200': {$ref: '#/components/responses/OK'}}}
+
+  # ── import (M02) ────────────────────────────────────────────────────
+  /events/{eventId}/imports:
+    parameters: [{$ref: '#/components/parameters/eventId'}]
+    post:
+      tags: [import]
+      summary: Upload agenda XLSX/CSV; returns mapping guess + validation (FR-IMP-001)
+      responses: {'201': {$ref: '#/components/responses/Created'}}
+    get: {tags: [import], summary: List imports, responses: {'200': {$ref: '#/components/responses/Page'}}}
+  /imports/{importId}:
+    parameters: [{$ref: '#/components/parameters/importId'}]
+    get: {tags: [import], summary: 'Import status, row errors, re-import diff (FR-IMP-002)', responses: {'200': {$ref: '#/components/responses/OK'}}}
+  /imports/{importId}:commit:
+    parameters: [{$ref: '#/components/parameters/importId'}, {$ref: '#/components/parameters/idempotencyKey'}]
+    post:
+      tags: [import]
+      summary: Transactional commit; only with zero blocking errors
+      responses: {'200': {$ref: '#/components/responses/OK'}, '409': {$ref: '#/components/responses/Conflict'}}
+
+  # ── schedule (M03) ──────────────────────────────────────────────────
+  /events/{eventId}/rooms:
+    parameters: [{$ref: '#/components/parameters/eventId'}]
+    get: {tags: [schedule], summary: List rooms, responses: {'200': {$ref: '#/components/responses/Page'}}}
+    post: {tags: [schedule], summary: Create room, responses: {'201': {$ref: '#/components/responses/Created'}}}
+  /events/{eventId}/sessions:
+    parameters: [{$ref: '#/components/parameters/eventId'}]
+    get:
+      tags: [schedule]
+      summary: List sessions/slots (filter by room/day/track/state)
+      parameters: [{$ref: '#/components/parameters/cursor'}, {$ref: '#/components/parameters/limit'}]
+      responses: {'200': {$ref: '#/components/responses/Page'}}
+    post: {tags: [schedule], summary: Create session, responses: {'201': {$ref: '#/components/responses/Created'}}}
+  /sessions/{sessionId}:
+    parameters: [{$ref: '#/components/parameters/sessionId'}]
+    get: {tags: [schedule], summary: Get session with slots, responses: {'200': {$ref: '#/components/responses/OK'}}}
+    patch: {tags: [schedule], summary: Edit session, responses: {'200': {$ref: '#/components/responses/OK'}}}
+  /sessions/{sessionId}:transition:
+    parameters: [{$ref: '#/components/parameters/sessionId'}, {$ref: '#/components/parameters/idempotencyKey'}]
+    post:
+      tags: [schedule]
+      summary: Move/cancel/replace/complete (WORKFLOW_STATES §5; triggers file re-routing)
+      requestBody: {$ref: '#/components/requestBodies/Transition'}
+      responses: {'200': {$ref: '#/components/responses/OK'}, '409': {$ref: '#/components/responses/Conflict'}, '422': {$ref: '#/components/responses/IllegalTransition'}}
+  /events/{eventId}/holding-media:
+    parameters: [{$ref: '#/components/parameters/eventId'}]
+    get: {tags: [schedule], summary: List holding slides/shared media + room assignments, responses: {'200': {$ref: '#/components/responses/OK'}}}
+    post: {tags: [schedule], summary: Create holding/shared media and assign rooms (FR-EVT-003), responses: {'201': {$ref: '#/components/responses/Created'}}}
+
+  # ── speakers (M04) ──────────────────────────────────────────────────
+  /events/{eventId}/speakers:
+    parameters: [{$ref: '#/components/parameters/eventId'}]
+    get:
+      tags: [speakers]
+      summary: Directory search
+      parameters: [{$ref: '#/components/parameters/q'}, {$ref: '#/components/parameters/cursor'}, {$ref: '#/components/parameters/limit'}]
+      responses: {'200': {$ref: '#/components/responses/Page'}}
+    post: {tags: [speakers], summary: Create speaker, responses: {'201': {$ref: '#/components/responses/Created'}}}
+  /speakers/{speakerId}:
+    parameters: [{$ref: '#/components/parameters/speakerId'}]
+    get: {tags: [speakers], summary: 'Profile, assignments, communication history', responses: {'200': {$ref: '#/components/responses/OK'}}}
+    patch: {tags: [speakers], summary: 'Update profile, notes, accessibility, release permission (FR-SPK-003)', responses: {'200': {$ref: '#/components/responses/OK'}}}
+  /speakers/{speakerId}:merge:
+    parameters: [{$ref: '#/components/parameters/speakerId'}, {$ref: '#/components/parameters/idempotencyKey'}]
+    post: {tags: [speakers], summary: Merge duplicate into this speaker preserving history (FR-SPK-001), responses: {'200': {$ref: '#/components/responses/OK'}}}
+  /slots/{slotId}/assignments:
+    parameters: [{$ref: '#/components/parameters/slotId'}]
+    post: {tags: [speakers], summary: Assign speaker/moderator/panelist (FR-SPK-002), responses: {'201': {$ref: '#/components/responses/Created'}}}
+  /speakers/{speakerId}/invite:
+    parameters: [{$ref: '#/components/parameters/speakerId'}]
+    post: {tags: [speakers], summary: Issue/revoke magic link + one-time code, responses: {'201': {$ref: '#/components/responses/Created'}}}
+
+  # ── communications (M05) ────────────────────────────────────────────
+  /events/{eventId}/comm-templates:
+    parameters: [{$ref: '#/components/parameters/eventId'}]
+    get: {tags: [communications], summary: List templates, responses: {'200': {$ref: '#/components/responses/Page'}}}
+    post: {tags: [communications], summary: Create template with merge fields (FR-COM-001), responses: {'201': {$ref: '#/components/responses/Created'}}}
+  /events/{eventId}/comm-batches:
+    parameters: [{$ref: '#/components/parameters/eventId'}, {$ref: '#/components/parameters/idempotencyKey'}]
+    post: {tags: [communications], summary: Batch send to selected speakers, responses: {'202': {$ref: '#/components/responses/Accepted'}}}
+  /events/{eventId}/reminder-schedule:
+    parameters: [{$ref: '#/components/parameters/eventId'}]
+    get: {tags: [communications], summary: Reminder cadence (default T-14/7/2), responses: {'200': {$ref: '#/components/responses/OK'}}}
+    put: {tags: [communications], summary: Configure cadence (FR-COM-002), responses: {'200': {$ref: '#/components/responses/OK'}}}
+
+  # ── speaker portal (M06, speaker token auth) ────────────────────────
+  /portal/session:
+    post:
+      tags: [portal]
+      summary: Resolve magic link / one-time code into portal session
+      security: [{speakerToken: []}]
+      responses: {'200': {$ref: '#/components/responses/OK'}, '401': {$ref: '#/components/responses/Unauthorized'}}
+  /portal/talks:
+    get:
+      tags: [portal]
+      summary: Speaker's talks, deadlines, requirements, templates, statuses, feedback
+      security: [{speakerToken: []}]
+      responses: {'200': {$ref: '#/components/responses/OK'}}
+  /portal/talks/{slotId}/uploads:
+    parameters: [{$ref: '#/components/parameters/slotId'}]
+    post:
+      tags: [portal]
+      summary: Initiate resumable upload ≤10 GB (FR-FILE-003; blocked when final-locked or post-deadline)
+      security: [{speakerToken: []}]
+      responses: {'201': {$ref: '#/components/responses/Created'}, '409': {$ref: '#/components/responses/Conflict'}}
+
+  # ── files (M07) ─────────────────────────────────────────────────────
+  /uploads/{uploadId}/parts:
+    parameters: [{$ref: '#/components/parameters/uploadId'}]
+    post:
+      tags: [files]
+      summary: Get signed URL(s) for next part(s); resume-safe
+      security: [{speakerToken: []}, {staffAuth: []}]
+      responses: {'200': {$ref: '#/components/responses/OK'}}
+  /uploads/{uploadId}:complete:
+    parameters: [{$ref: '#/components/parameters/uploadId'}, {$ref: '#/components/parameters/idempotencyKey'}]
+    post:
+      tags: [files]
+      summary: Complete upload; triggers checksum verify + scan (WORKFLOW_STATES §1)
+      security: [{speakerToken: []}, {staffAuth: []}]
+      responses: {'200': {$ref: '#/components/responses/OK'}}
+  /events/{eventId}/files:
+    parameters: [{$ref: '#/components/parameters/eventId'}]
+    get:
+      tags: [files]
+      summary: Role-scoped search/filter (FR-FILE-005)
+      parameters: [{$ref: '#/components/parameters/q'}, {$ref: '#/components/parameters/cursor'}, {$ref: '#/components/parameters/limit'}]
+      responses: {'200': {$ref: '#/components/responses/Page'}}
+  /events/{eventId}/files:bulk-download:
+    parameters: [{$ref: '#/components/parameters/eventId'}, {$ref: '#/components/parameters/idempotencyKey'}]
+    post: {tags: [files], summary: Build bulk download (async job → signed link ≤15 min), responses: {'202': {$ref: '#/components/responses/Accepted'}}}
+  /file-versions/{versionId}:
+    parameters: [{$ref: '#/components/parameters/versionId'}]
+    get: {tags: [files], summary: 'Version detail: states, checksum, findings, comments', responses: {'200': {$ref: '#/components/responses/OK'}}}
+  /file-versions/{versionId}/download:
+    parameters: [{$ref: '#/components/parameters/versionId'}]
+    post: {tags: [files], summary: "Signed download URL (≤15 min, NFR-SEC-05, audited)", responses: {'200': {$ref: '#/components/responses/OK'}}}
+
+  # ── inspection (M08) ────────────────────────────────────────────────
+  /file-versions/{versionId}/findings:
+    parameters: [{$ref: '#/components/parameters/versionId'}]
+    get: {tags: [inspection], summary: Tier-1 findings with severities + limitations copy (FR-INSP-002/004), responses: {'200': {$ref: '#/components/responses/OK'}}}
+  /findings/{findingId}:waive:
+    parameters: [{$ref: '#/components/parameters/findingId'}, {$ref: '#/components/parameters/idempotencyKey'}]
+    post:
+      tags: [inspection]
+      summary: Waive finding (authorized role + reason; stays visible, audited — FR-INSP-003)
+      requestBody: {$ref: '#/components/requestBodies/Reason'}
+      responses: {'200': {$ref: '#/components/responses/OK'}, '403': {$ref: '#/components/responses/Forbidden'}}
+
+  # ── review (M09) ────────────────────────────────────────────────────
+  /events/{eventId}/review-queue:
+    parameters: [{$ref: '#/components/parameters/eventId'}]
+    get:
+      tags: [review]
+      summary: Reviewer queue with SLA aging (FR-REV-001)
+      parameters: [{$ref: '#/components/parameters/cursor'}, {$ref: '#/components/parameters/limit'}]
+      responses: {'200': {$ref: '#/components/responses/Page'}}
+  /file-versions/{versionId}:transition:
+    parameters: [{$ref: '#/components/parameters/versionId'}, {$ref: '#/components/parameters/idempotencyKey'}]
+    post:
+      tags: [review]
+      summary: Lifecycle transition (claim/approve/request-changes/reject/override/rollback — WORKFLOW_STATES §3)
+      requestBody: {$ref: '#/components/requestBodies/Transition'}
+      responses: {'200': {$ref: '#/components/responses/OK'}, '409': {$ref: '#/components/responses/Conflict'}, '422': {$ref: '#/components/responses/IllegalTransition'}}
+  /file-versions/{versionId}/comments:
+    parameters: [{$ref: '#/components/parameters/versionId'}]
+    get: {tags: [review], summary: Comments (lanes filtered by role — FR-REV-003), responses: {'200': {$ref: '#/components/responses/OK'}}}
+    post: {tags: [review], summary: Add comment to a lane, responses: {'201': {$ref: '#/components/responses/Created'}}}
+
+  # ── SRR (M10) ───────────────────────────────────────────────────────
+  /events/{eventId}/srr/checkins:
+    parameters: [{$ref: '#/components/parameters/eventId'}]
+    get:
+      tags: [srr]
+      summary: Search/check-in dashboard (P95 ≤1s server-side)
+      parameters: [{$ref: '#/components/parameters/q'}, {$ref: '#/components/parameters/cursor'}, {$ref: '#/components/parameters/limit'}]
+      responses: {'200': {$ref: '#/components/responses/Page'}}
+    post: {tags: [srr], summary: Check speaker in (FR-SRR-001), responses: {'201': {$ref: '#/components/responses/Created'}}}
+  /srr/checkins/{checkinId}/usb-ingestions:
+    parameters: [{$ref: '#/components/parameters/checkinId'}, {$ref: '#/components/parameters/idempotencyKey'}]
+    post:
+      tags: [srr]
+      summary: USB import with mandatory scan; quarantine on failure (FR-SRR-002)
+      responses: {'201': {$ref: '#/components/responses/Created'}, '422': {$ref: '#/components/responses/Error'}}
+  /file-versions/{versionId}/compare/{otherVersionId}:
+    parameters:
+      - {$ref: '#/components/parameters/versionId'}
+      - {name: otherVersionId, in: path, required: true, schema: {type: string, format: uuid}}
+    get: {tags: [srr], summary: 'Size/slide/media deltas (FR-SRR-003)', responses: {'200': {$ref: '#/components/responses/OK'}}}
+  /srr/checkins/{checkinId}/sign-off:
+    parameters: [{$ref: '#/components/parameters/checkinId'}, {$ref: '#/components/parameters/idempotencyKey'}]
+    post: {tags: [srr], summary: 'Bind speaker + exact version + timestamp; produce receipt (FR-SRR-004)', responses: {'201': {$ref: '#/components/responses/Created'}}}
+  /srr/checkins/{checkinId}:depart:
+    parameters: [{$ref: '#/components/parameters/checkinId'}]
+    post: {tags: [srr], summary: Record departure, responses: {'200': {$ref: '#/components/responses/OK'}}}
+
+  # ── room agent (M11, device credential auth) ───────────────────────
+  /agent/register:
+    post:
+      tags: [agent]
+      summary: Register with room code + device fingerprint; warns on duplicate agent (FR-AGT-001)
+      security: []
+      responses: {'201': {$ref: '#/components/responses/Created'}}
+  /agent/heartbeat:
+    post:
+      tags: [agent]
+      summary: 60s heartbeat (version, library hash, playback status)
+      security: [{agentAuth: []}]
+      responses: {'200': {$ref: '#/components/responses/OK'}}
+  /agent/manifest:
+    get:
+      tags: [agent]
+      summary: Delta manifest for this room (<500ms P95; FR-SYNC-001)
+      security: [{agentAuth: []}]
+      responses: {'200': {$ref: '#/components/responses/OK'}}
+  /agent/manifest/{manifestId}:applied:
+    parameters: [{name: manifestId, in: path, required: true, schema: {type: string, format: uuid}}]
+    post:
+      tags: [agent]
+      summary: Report manifest application result (per-file checksum outcomes)
+      security: [{agentAuth: []}]
+      responses: {'200': {$ref: '#/components/responses/OK'}}
+  /agent/logs:
+    post:
+      tags: [agent]
+      summary: Ship queued launch/error logs; deduped by agent_seq (FR-SYNC-003)
+      security: [{agentAuth: []}]
+      responses: {'202': {$ref: '#/components/responses/Accepted'}}
+
+  # ── sync dashboard (M12) ────────────────────────────────────────────
+  /events/{eventId}/sync/fleet:
+    parameters: [{$ref: '#/components/parameters/eventId'}]
+    get: {tags: [sync], summary: 'Fleet status: agents, heartbeats, readiness per room', responses: {'200': {$ref: '#/components/responses/OK'}}}
+  /rooms/{roomId}:force-sync:
+    parameters: [{$ref: '#/components/parameters/roomId'}, {$ref: '#/components/parameters/idempotencyKey'}]
+    post: {tags: [sync], summary: Force manifest rebuild + push notification, responses: {'202': {$ref: '#/components/responses/Accepted'}}}
+  /room-files/{roomFileId}:transition:
+    parameters:
+      - {name: roomFileId, in: path, required: true, schema: {type: string, format: uuid}}
+      - {$ref: '#/components/parameters/idempotencyKey'}
+    post:
+      tags: [sync]
+      summary: Acknowledge change / activate / obsolete (WORKFLOW_STATES §4)
+      requestBody: {$ref: '#/components/requestBodies/Transition'}
+      responses: {'200': {$ref: '#/components/responses/OK'}, '409': {$ref: '#/components/responses/Conflict'}, '422': {$ref: '#/components/responses/IllegalTransition'}}
+
+  # ── reports (M13) ───────────────────────────────────────────────────
+  /events/{eventId}/reports/{reportCode}:
+    parameters:
+      - {$ref: '#/components/parameters/eventId'}
+      - {name: reportCode, in: path, required: true, schema: {type: string, enum: [collection, missing, pending, warnings, approvals, revisions, checkins, sync, launch, comms, archive]}}
+    get: {tags: [reports], summary: Report data (FR-RPT-001), responses: {'200': {$ref: '#/components/responses/OK'}}}
+  /events/{eventId}/reports/{reportCode}:export:
+    parameters:
+      - {$ref: '#/components/parameters/eventId'}
+      - {name: reportCode, in: path, required: true, schema: {type: string}}
+      - {$ref: '#/components/parameters/idempotencyKey'}
+    post: {tags: [reports], summary: Async CSV export → signed link, responses: {'202': {$ref: '#/components/responses/Accepted'}}}
+
+  # ── archive (M14) ───────────────────────────────────────────────────
+  /events/{eventId}/archive-packages:
+    parameters: [{$ref: '#/components/parameters/eventId'}]
+    get: {tags: [archive], summary: List packages, responses: {'200': {$ref: '#/components/responses/Page'}}}
+    post: {tags: [archive], summary: Create draft package with scope filters (FR-ARCH-001), responses: {'201': {$ref: '#/components/responses/Created'}}}
+  /archive-packages/{packageId}:transition:
+    parameters: [{$ref: '#/components/parameters/packageId'}, {$ref: '#/components/parameters/idempotencyKey'}]
+    post:
+      tags: [archive]
+      summary: Build/deliver/expire/delete (WORKFLOW_STATES §6; legal holds block delete)
+      requestBody: {$ref: '#/components/requestBodies/Transition'}
+      responses: {'200': {$ref: '#/components/responses/OK'}, '409': {$ref: '#/components/responses/Conflict'}, '422': {$ref: '#/components/responses/IllegalTransition'}}
+  /archive-packages/{packageId}/link:
+    parameters: [{$ref: '#/components/parameters/packageId'}]
+    post: {tags: [archive], summary: Issue expiring link ≤7 days; downloads logged (FR-ARCH-002), responses: {'201': {$ref: '#/components/responses/Created'}}}
+
+  # ── admin (M15) ─────────────────────────────────────────────────────
+  /admin/users:
+    get: {tags: [admin], summary: List users, responses: {'200': {$ref: '#/components/responses/Page'}}}
+    post: {tags: [admin], summary: Create user, responses: {'201': {$ref: '#/components/responses/Created'}}}
+  /admin/client-grants:
+    post: {tags: [admin], summary: Grant client access (FR-ADMIN-001), responses: {'201': {$ref: '#/components/responses/Created'}}}
+  /admin/retention-policies:
+    get: {tags: [admin], summary: List policies, responses: {'200': {$ref: '#/components/responses/Page'}}}
+    post: {tags: [admin], summary: Create policy (FR-ADMIN-003), responses: {'201': {$ref: '#/components/responses/Created'}}}
+  /admin/audit:
+    get:
+      tags: [admin]
+      summary: Audit viewer/export (append-only chain)
+      parameters: [{$ref: '#/components/parameters/cursor'}, {$ref: '#/components/parameters/limit'}]
+      responses: {'200': {$ref: '#/components/responses/Page'}}
+  /admin/audit:verify:
+    post: {tags: [admin], summary: Chain integrity verification (FR-ADMIN-002), responses: {'200': {$ref: '#/components/responses/OK'}}}
+  /admin/legal-holds:
+    post: {tags: [admin], summary: Place legal hold (blocks deletion; audited), responses: {'201': {$ref: '#/components/responses/Created'}}}
+
+  # ── ops ─────────────────────────────────────────────────────────────
+  /ops/deploy-gate:
+    get:
+      tags: [ops]
+      summary: Event-freeze deploy gate (EDGE_APP_TIER §5)
+      security: [{serviceAuth: []}]
+      responses: {'200': {$ref: '#/components/responses/OK'}}
+  /ops/health:
+    get: {tags: [ops], summary: Health check, security: [], responses: {'200': {$ref: '#/components/responses/OK'}}}
+
+  # ── webhooks (inbound) ──────────────────────────────────────────────
+  /webhooks/email:
+    post:
+      tags: [webhooks]
+      summary: SES delivery/open/click/bounce events (FR-COM-003; idempotent by provider event id)
+      security: [{webhookSignature: []}]
+      responses: {'200': {$ref: '#/components/responses/OK'}}
+
+  # ── integration (RFPILOT_INTEGRATION; designed, not built in MVP) ───
+  /integration/events:import-handoff:
+    post:
+      tags: [integration]
+      summary: Idempotent event handoff from RFPilot (service token; stub for post-MVP)
+      security: [{serviceAuth: []}]
+      parameters: [{$ref: '#/components/parameters/idempotencyKey'}]
+      responses: {'201': {$ref: '#/components/responses/Created'}, '200': {$ref: '#/components/responses/OK'}}
+
+components:
+  securitySchemes:
+    staffAuth: {type: openIdConnect, openIdConnectUrl: https://auth.example.com/.well-known/openid-configuration, description: Staff OIDC (MFA enforced)}
+    speakerToken: {type: http, scheme: bearer, description: "Hashed, recipient-bound speaker portal token"}
+    agentAuth: {type: http, scheme: bearer, description: Room Agent device-credential signed token}
+    serviceAuth: {type: http, scheme: bearer, description: Service-to-service short-lived token}
+    webhookSignature: {type: apiKey, in: header, name: X-Webhook-Signature, description: Provider HMAC signature}
+  parameters:
+    eventId: {name: eventId, in: path, required: true, schema: {type: string, format: uuid}}
+    sessionId: {name: sessionId, in: path, required: true, schema: {type: string, format: uuid}}
+    slotId: {name: slotId, in: path, required: true, schema: {type: string, format: uuid}}
+    speakerId: {name: speakerId, in: path, required: true, schema: {type: string, format: uuid}}
+    versionId: {name: versionId, in: path, required: true, schema: {type: string, format: uuid}}
+    uploadId: {name: uploadId, in: path, required: true, schema: {type: string, format: uuid}}
+    importId: {name: importId, in: path, required: true, schema: {type: string, format: uuid}}
+    checkinId: {name: checkinId, in: path, required: true, schema: {type: string, format: uuid}}
+    packageId: {name: packageId, in: path, required: true, schema: {type: string, format: uuid}}
+    roomId: {name: roomId, in: path, required: true, schema: {type: string, format: uuid}}
+    findingId: {name: findingId, in: path, required: true, schema: {type: string, format: uuid}}
+    cursor: {name: cursor, in: query, schema: {type: string}}
+    limit: {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
+    q: {name: q, in: query, schema: {type: string}, description: Search query}
+    idempotencyKey: {name: Idempotency-Key, in: header, required: true, schema: {type: string, format: uuid}}
+  requestBodies:
+    Transition:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [action, lock_version]
+            properties:
+              action: {type: string}
+              lock_version: {type: integer, description: Expected optimistic-lock version}
+              reason: {type: string, description: Mandatory for overrides}
+              detail: {type: object}
+    Reason:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [reason]
+            properties:
+              reason: {type: string}
+  responses:
+    OK: {description: Success, content: {application/json: {schema: {type: object}}}}
+    Created: {description: Created, content: {application/json: {schema: {type: object}}}}
+    Accepted: {description: Accepted (async job), content: {application/json: {schema: {type: object, properties: {job_id: {type: string, format: uuid}}}}}}
+    Page:
+      description: Paginated list
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              items: {type: array, items: {type: object}}
+              next_cursor: {type: [string, 'null']}
+    Conflict: {description: "Optimistic-lock or idempotency conflict; body carries current state", content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    IllegalTransition: {description: "Illegal workflow transition, rejected with explanation (SRS §9)", content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    Unauthorized: {description: Invalid/expired credentials, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    Forbidden: {description: Role not authorized (cross-event attempts logged + alerted), content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    Error: {description: Error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+  schemas:
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code: {type: string}
+        message: {type: string}
+        detail: {type: object}
+        current_state: {type: string, description: Present on 409/422 transition failures}
