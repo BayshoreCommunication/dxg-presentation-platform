@@ -118,7 +118,8 @@ label{font-size:12px;color:var(--slate);font-weight:600;display:block;margin-bot
 'use strict';
 const $=id=>document.getElementById(id);
 function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove('show'),2800);}
-setInterval(()=>{const d=new Date();const c=$('clock');if(c)c.textContent=d.toTimeString().slice(0,8)},1000);
+setInterval(()=>{const t=new Date().toTimeString().slice(0,8);const c=$('clock');if(c)c.textContent=t;
+  document.querySelectorAll('.agclock').forEach(e=>e.textContent=t);},1000);
 function signIn(){$('loginView').classList.add('hidden');$('appShell').classList.remove('hidden');render();}
 
 /* ── store (live workflow state; WORKFLOW_STATES §1–§4, §8) — cast matches the baseline ── */
@@ -403,24 +404,51 @@ V.sync=()=>{const r=S.talks.raman;const hasV3=r.versions.length>=3;
 <div class="note" style="margin-top:10px">+ 9 more rooms · all ready</div>`};
 
 V.agent=()=>{const r=S.talks.raman;const hasV3=r.versions.length>=3;const approvedV3=hasV3&&r.review==='approved';
- return `<h1 class="htitle">Room Agent · Ballroom A</h1>
-<div class="darkpane" style="padding:18px">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:6px">
-    <b style="color:var(--white);font-family:'Barlow Semi Condensed';font-size:16px">Ballroom A — General Session</b>
-    <span class="mono" style="color:var(--ok)">OFFLINE-SAFE ✓</span></div>
-  <div class="mono" style="font-size:12px;color:var(--dim);margin-bottom:10px">BLRM-A-01 · agent 1.4.2 · library complete · 18 files · 12.6 GB local · previous versions kept: 18</div>
-  ${approvedV3&&!r.ack?`<div style="background:#3A2C10;border:1px solid var(--warn);border-radius:6px;padding:10px 14px;margin-bottom:12px;color:#F5C97B">
-    ⚠ <b>Change alert:</b> Raman v3 approved — replaces v2 for the 10:30 slot.
-    <button class="btn" style="margin-left:8px" onclick="ackChange()">Acknowledge & sync v3</button></div>`:''}
-  <div class="frow" style="border-color:#33414B"><span style="color:var(--white)">Ballroom A · 10:30 · Dr. Priya Raman — v${approvedV3?3:2}</span>
-    <span class="chip ${r.ack&&r.sync==='active'?'c-ok':'c-warn'}">${r.ack&&r.sync==='active'?'Verified · SHA-256 ✓':'Update pending ack'}</span></div>
-  <div class="frow" style="border-color:#33414B"><span style="color:var(--white)">Previous version v2</span><span class="chip c-mut">Kept for rollback</span></div>
-  <div class="frow" style="border-color:#33414B"><span style="color:var(--white)">Holding screen — MedTech Forward loop</span><span class="chip c-ok">Standby</span></div>
-  <div style="margin-top:12px;display:flex;gap:8px">
-    <button class="btn pri" onclick="toast('Launched in PowerPoint slideshow · Launched 10:31 · logged · works fully offline')">▶ Launch</button>
-    <button class="btn" onclick="toast('Holding screen displayed')">Show holding screen</button>
+ const curV=approvedV3&&r.ack?3:2;
+ const ramanState=approvedV3&&!r.ack?`<span class="chip c-warn">Update pending ack</span>`:`v${curV} · current · ready`;
+ return `<div class="darkpane" style="margin:-24px;min-height:calc(100% + 48px);border-radius:0;padding:18px 22px">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+    <div><h1 style="font-size:20px;color:var(--white)">Room Agent · <span style="color:var(--blue)">Ballroom A</span></h1>
+    <div class="mono" style="font-size:12px;color:var(--dim)">BLRM-A-01 · agent 1.4.2 · library complete · online</div></div>
+    <div style="display:flex;align-items:center;gap:12px"><span class="mono agclock" style="font-size:16px;color:var(--blue)">10:24:08</span>
+    <span class="chip c-ok">OFFLINE-SAFE ✓</span></div>
   </div>
-  <div class="mono" style="font-size:12px;color:var(--dim);margin-top:12px">10:29:41 sync verified · 10:24:02 heartbeat · 09:58:11 delta manifest applied (1 add)</div>
+  ${approvedV3&&!r.ack?`<div style="background:#3A2C10;border:1px solid var(--warn);border-radius:6px;padding:10px 14px;margin-bottom:14px;color:#F5C97B">
+    ⚠ <b>Change alert:</b> Raman v3 approved — replaces v2 for the 10:30 slot. Previous version kept for rollback.
+    <button class="btn" style="margin-left:8px" onclick="ackChange()">Acknowledge & sync v3</button></div>`:''}
+  <div style="display:grid;grid-template-columns:1fr 250px;gap:16px;align-items:start">
+    <div style="background:var(--ink2);border:1px solid #2A3B46;border-radius:8px">
+      <div class="mono" style="font-size:11px;letter-spacing:.1em;color:var(--dim);padding:10px 14px;border-bottom:1px solid #2A3B46">TODAY · WED MAR 11</div>
+      ${[
+        {t:'09:00',n:'Opening remarks — A. Whitfield',s:'v1 · presented ✓',log:true},
+        {t:'09:10',n:'Keynote: The Decade of Devices — E. Voss',s:'v2 · presented ✓',log:true},
+        {t:'10:30',n:'Robotic Surgery Outcomes — P. Raman',s:ramanState,next:true,launch:true},
+        {t:'11:15',n:'Panel: Robotics Investment Outlook',s:'v1 · current · ready',launch:true},
+      ].map(row=>`<div style="display:flex;align-items:center;gap:14px;padding:11px 14px;border-bottom:1px solid #2A3B46;${row.next?'background:#0F2A36;':''}">
+        <span class="mono" style="color:${row.next?'var(--blue)':'var(--dim)'};width:44px">${row.t}</span>
+        <span style="flex:1;min-width:0"><b style="color:var(--white)">${row.n}</b>${row.next?' <span class="mono" style="color:var(--blue);font-size:11px">NEXT</span>':''}<br>
+          <span style="font-size:12px;color:var(--dim)">${row.s}</span></span>
+        ${row.log?`<span class="mono" style="color:var(--ok);font-size:12px">✓ logged</span>`:''}
+        ${row.launch?`<button class="btn pri" style="padding:5px 14px" onclick="toast('Launched in PowerPoint slideshow · Launched ${row.t==='10:30'?'10:31':'11:16'} · ✓ logged · works fully offline')">▶ Launch</button>`:''}
+      </div>`).join('')}
+    </div>
+    <div>
+      <div style="background:var(--ink2);border:1px solid #2A3B46;border-radius:8px;padding:12px 14px;margin-bottom:14px">
+        <div class="mono" style="font-size:11px;letter-spacing:.1em;color:var(--dim);margin-bottom:8px">LIBRARY</div>
+        <div style="font-size:13px;color:var(--white)">18 files · 12.6 GB local</div>
+        <div class="mono" style="font-size:12px;color:${approvedV3&&!r.ack?'var(--warn)':'var(--ok)'}">${approvedV3&&!r.ack?'1 update waiting':'all current ✓'}</div>
+        <div style="font-size:12px;color:var(--dim);margin-bottom:10px">previous versions kept: 18</div>
+        <button class="btn pri" style="padding:5px 12px" onclick="toast('Delta manifest requested — checksum-verified sync')">Manual sync</button>
+        <button class="btn" style="padding:5px 12px;background:var(--ink2);color:var(--paneink);border-color:#33414B" onclick="toast('Prior approved version restored byte-identically — control center notified')">Roll back ✎</button>
+      </div>
+      <div style="background:var(--ink2);border:1px solid #2A3B46;border-radius:8px;padding:12px 14px">
+        <div class="mono" style="font-size:11px;letter-spacing:.1em;color:var(--dim);margin-bottom:8px">HOLDING SCREEN</div>
+        <div style="border:1px solid #2A3B46;border-radius:6px;aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;background:var(--ink)">
+          <span style="font-family:'Barlow Semi Condensed';font-weight:700;color:var(--blue);letter-spacing:.06em">MEDTECH FORWARD 2026</span></div>
+        <button class="btn" style="width:100%;margin-top:10px;background:var(--ink2);color:var(--paneink);border-color:#33414B" onclick="toast('Holding screen displayed')">Show holding screen</button>
+      </div>
+    </div>
+  </div>
 </div>`};
 
 V.speaker=()=>{const t=S.talks.raman;const pct=t.upPct;

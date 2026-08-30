@@ -241,7 +241,8 @@ label{font-size:12px;color:var(--slate);font-weight:600;display:block;margin-bot
 &#x27;use strict&#x27;;
 const $=id=&gt;document.getElementById(id);
 function toast(m){const t=$(&#x27;toast&#x27;);t.textContent=m;t.classList.add(&#x27;show&#x27;);clearTimeout(t._h);t._h=setTimeout(()=&gt;t.classList.remove(&#x27;show&#x27;),2800);}
-setInterval(()=&gt;{const d=new Date();const c=$(&#x27;clock&#x27;);if(c)c.textContent=d.toTimeString().slice(0,8)},1000);
+setInterval(()=&gt;{const t=new Date().toTimeString().slice(0,8);const c=$(&#x27;clock&#x27;);if(c)c.textContent=t;
+  document.querySelectorAll(&#x27;.agclock&#x27;).forEach(e=&gt;e.textContent=t);},1000);
 function signIn(){$(&#x27;loginView&#x27;).classList.add(&#x27;hidden&#x27;);$(&#x27;appShell&#x27;).classList.remove(&#x27;hidden&#x27;);render();}
 
 /* ── store (live workflow state; WORKFLOW_STATES §1–§4, §8) — cast matches the baseline ── */
@@ -526,24 +527,51 @@ V.sync=()=&gt;{const r=S.talks.raman;const hasV3=r.versions.length&gt;=3;
 &lt;div class=&quot;note&quot; style=&quot;margin-top:10px&quot;&gt;+ 9 more rooms · all ready&lt;/div&gt;`};
 
 V.agent=()=&gt;{const r=S.talks.raman;const hasV3=r.versions.length&gt;=3;const approvedV3=hasV3&amp;&amp;r.review===&#x27;approved&#x27;;
- return `&lt;h1 class=&quot;htitle&quot;&gt;Room Agent · Ballroom A&lt;/h1&gt;
-&lt;div class=&quot;darkpane&quot; style=&quot;padding:18px&quot;&gt;
-  &lt;div style=&quot;display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:6px&quot;&gt;
-    &lt;b style=&quot;color:var(--white);font-family:&#x27;Barlow Semi Condensed&#x27;;font-size:16px&quot;&gt;Ballroom A — General Session&lt;/b&gt;
-    &lt;span class=&quot;mono&quot; style=&quot;color:var(--ok)&quot;&gt;OFFLINE-SAFE ✓&lt;/span&gt;&lt;/div&gt;
-  &lt;div class=&quot;mono&quot; style=&quot;font-size:12px;color:var(--dim);margin-bottom:10px&quot;&gt;BLRM-A-01 · agent 1.4.2 · library complete · 18 files · 12.6 GB local · previous versions kept: 18&lt;/div&gt;
-  ${approvedV3&amp;&amp;!r.ack?`&lt;div style=&quot;background:#3A2C10;border:1px solid var(--warn);border-radius:6px;padding:10px 14px;margin-bottom:12px;color:#F5C97B&quot;&gt;
-    ⚠ &lt;b&gt;Change alert:&lt;/b&gt; Raman v3 approved — replaces v2 for the 10:30 slot.
-    &lt;button class=&quot;btn&quot; style=&quot;margin-left:8px&quot; onclick=&quot;ackChange()&quot;&gt;Acknowledge &amp; sync v3&lt;/button&gt;&lt;/div&gt;`:&#x27;&#x27;}
-  &lt;div class=&quot;frow&quot; style=&quot;border-color:#33414B&quot;&gt;&lt;span style=&quot;color:var(--white)&quot;&gt;Ballroom A · 10:30 · Dr. Priya Raman — v${approvedV3?3:2}&lt;/span&gt;
-    &lt;span class=&quot;chip ${r.ack&amp;&amp;r.sync===&#x27;active&#x27;?&#x27;c-ok&#x27;:&#x27;c-warn&#x27;}&quot;&gt;${r.ack&amp;&amp;r.sync===&#x27;active&#x27;?&#x27;Verified · SHA-256 ✓&#x27;:&#x27;Update pending ack&#x27;}&lt;/span&gt;&lt;/div&gt;
-  &lt;div class=&quot;frow&quot; style=&quot;border-color:#33414B&quot;&gt;&lt;span style=&quot;color:var(--white)&quot;&gt;Previous version v2&lt;/span&gt;&lt;span class=&quot;chip c-mut&quot;&gt;Kept for rollback&lt;/span&gt;&lt;/div&gt;
-  &lt;div class=&quot;frow&quot; style=&quot;border-color:#33414B&quot;&gt;&lt;span style=&quot;color:var(--white)&quot;&gt;Holding screen — MedTech Forward loop&lt;/span&gt;&lt;span class=&quot;chip c-ok&quot;&gt;Standby&lt;/span&gt;&lt;/div&gt;
-  &lt;div style=&quot;margin-top:12px;display:flex;gap:8px&quot;&gt;
-    &lt;button class=&quot;btn pri&quot; onclick=&quot;toast(&#x27;Launched in PowerPoint slideshow · Launched 10:31 · logged · works fully offline&#x27;)&quot;&gt;▶ Launch&lt;/button&gt;
-    &lt;button class=&quot;btn&quot; onclick=&quot;toast(&#x27;Holding screen displayed&#x27;)&quot;&gt;Show holding screen&lt;/button&gt;
+ const curV=approvedV3&amp;&amp;r.ack?3:2;
+ const ramanState=approvedV3&amp;&amp;!r.ack?`&lt;span class=&quot;chip c-warn&quot;&gt;Update pending ack&lt;/span&gt;`:`v${curV} · current · ready`;
+ return `&lt;div class=&quot;darkpane&quot; style=&quot;margin:-24px;min-height:calc(100% + 48px);border-radius:0;padding:18px 22px&quot;&gt;
+  &lt;div style=&quot;display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;margin-bottom:14px&quot;&gt;
+    &lt;div&gt;&lt;h1 style=&quot;font-size:20px;color:var(--white)&quot;&gt;Room Agent · &lt;span style=&quot;color:var(--blue)&quot;&gt;Ballroom A&lt;/span&gt;&lt;/h1&gt;
+    &lt;div class=&quot;mono&quot; style=&quot;font-size:12px;color:var(--dim)&quot;&gt;BLRM-A-01 · agent 1.4.2 · library complete · online&lt;/div&gt;&lt;/div&gt;
+    &lt;div style=&quot;display:flex;align-items:center;gap:12px&quot;&gt;&lt;span class=&quot;mono agclock&quot; style=&quot;font-size:16px;color:var(--blue)&quot;&gt;10:24:08&lt;/span&gt;
+    &lt;span class=&quot;chip c-ok&quot;&gt;OFFLINE-SAFE ✓&lt;/span&gt;&lt;/div&gt;
   &lt;/div&gt;
-  &lt;div class=&quot;mono&quot; style=&quot;font-size:12px;color:var(--dim);margin-top:12px&quot;&gt;10:29:41 sync verified · 10:24:02 heartbeat · 09:58:11 delta manifest applied (1 add)&lt;/div&gt;
+  ${approvedV3&amp;&amp;!r.ack?`&lt;div style=&quot;background:#3A2C10;border:1px solid var(--warn);border-radius:6px;padding:10px 14px;margin-bottom:14px;color:#F5C97B&quot;&gt;
+    ⚠ &lt;b&gt;Change alert:&lt;/b&gt; Raman v3 approved — replaces v2 for the 10:30 slot. Previous version kept for rollback.
+    &lt;button class=&quot;btn&quot; style=&quot;margin-left:8px&quot; onclick=&quot;ackChange()&quot;&gt;Acknowledge &amp; sync v3&lt;/button&gt;&lt;/div&gt;`:&#x27;&#x27;}
+  &lt;div style=&quot;display:grid;grid-template-columns:1fr 250px;gap:16px;align-items:start&quot;&gt;
+    &lt;div style=&quot;background:var(--ink2);border:1px solid #2A3B46;border-radius:8px&quot;&gt;
+      &lt;div class=&quot;mono&quot; style=&quot;font-size:11px;letter-spacing:.1em;color:var(--dim);padding:10px 14px;border-bottom:1px solid #2A3B46&quot;&gt;TODAY · WED MAR 11&lt;/div&gt;
+      ${[
+        {t:&#x27;09:00&#x27;,n:&#x27;Opening remarks — A. Whitfield&#x27;,s:&#x27;v1 · presented ✓&#x27;,log:true},
+        {t:&#x27;09:10&#x27;,n:&#x27;Keynote: The Decade of Devices — E. Voss&#x27;,s:&#x27;v2 · presented ✓&#x27;,log:true},
+        {t:&#x27;10:30&#x27;,n:&#x27;Robotic Surgery Outcomes — P. Raman&#x27;,s:ramanState,next:true,launch:true},
+        {t:&#x27;11:15&#x27;,n:&#x27;Panel: Robotics Investment Outlook&#x27;,s:&#x27;v1 · current · ready&#x27;,launch:true},
+      ].map(row=&gt;`&lt;div style=&quot;display:flex;align-items:center;gap:14px;padding:11px 14px;border-bottom:1px solid #2A3B46;${row.next?&#x27;background:#0F2A36;&#x27;:&#x27;&#x27;}&quot;&gt;
+        &lt;span class=&quot;mono&quot; style=&quot;color:${row.next?&#x27;var(--blue)&#x27;:&#x27;var(--dim)&#x27;};width:44px&quot;&gt;${row.t}&lt;/span&gt;
+        &lt;span style=&quot;flex:1;min-width:0&quot;&gt;&lt;b style=&quot;color:var(--white)&quot;&gt;${row.n}&lt;/b&gt;${row.next?&#x27; &lt;span class=&quot;mono&quot; style=&quot;color:var(--blue);font-size:11px&quot;&gt;NEXT&lt;/span&gt;&#x27;:&#x27;&#x27;}&lt;br&gt;
+          &lt;span style=&quot;font-size:12px;color:var(--dim)&quot;&gt;${row.s}&lt;/span&gt;&lt;/span&gt;
+        ${row.log?`&lt;span class=&quot;mono&quot; style=&quot;color:var(--ok);font-size:12px&quot;&gt;✓ logged&lt;/span&gt;`:&#x27;&#x27;}
+        ${row.launch?`&lt;button class=&quot;btn pri&quot; style=&quot;padding:5px 14px&quot; onclick=&quot;toast(&#x27;Launched in PowerPoint slideshow · Launched ${row.t===&#x27;10:30&#x27;?&#x27;10:31&#x27;:&#x27;11:16&#x27;} · ✓ logged · works fully offline&#x27;)&quot;&gt;▶ Launch&lt;/button&gt;`:&#x27;&#x27;}
+      &lt;/div&gt;`).join(&#x27;&#x27;)}
+    &lt;/div&gt;
+    &lt;div&gt;
+      &lt;div style=&quot;background:var(--ink2);border:1px solid #2A3B46;border-radius:8px;padding:12px 14px;margin-bottom:14px&quot;&gt;
+        &lt;div class=&quot;mono&quot; style=&quot;font-size:11px;letter-spacing:.1em;color:var(--dim);margin-bottom:8px&quot;&gt;LIBRARY&lt;/div&gt;
+        &lt;div style=&quot;font-size:13px;color:var(--white)&quot;&gt;18 files · 12.6 GB local&lt;/div&gt;
+        &lt;div class=&quot;mono&quot; style=&quot;font-size:12px;color:${approvedV3&amp;&amp;!r.ack?&#x27;var(--warn)&#x27;:&#x27;var(--ok)&#x27;}&quot;&gt;${approvedV3&amp;&amp;!r.ack?&#x27;1 update waiting&#x27;:&#x27;all current ✓&#x27;}&lt;/div&gt;
+        &lt;div style=&quot;font-size:12px;color:var(--dim);margin-bottom:10px&quot;&gt;previous versions kept: 18&lt;/div&gt;
+        &lt;button class=&quot;btn pri&quot; style=&quot;padding:5px 12px&quot; onclick=&quot;toast(&#x27;Delta manifest requested — checksum-verified sync&#x27;)&quot;&gt;Manual sync&lt;/button&gt;
+        &lt;button class=&quot;btn&quot; style=&quot;padding:5px 12px;background:var(--ink2);color:var(--paneink);border-color:#33414B&quot; onclick=&quot;toast(&#x27;Prior approved version restored byte-identically — control center notified&#x27;)&quot;&gt;Roll back ✎&lt;/button&gt;
+      &lt;/div&gt;
+      &lt;div style=&quot;background:var(--ink2);border:1px solid #2A3B46;border-radius:8px;padding:12px 14px&quot;&gt;
+        &lt;div class=&quot;mono&quot; style=&quot;font-size:11px;letter-spacing:.1em;color:var(--dim);margin-bottom:8px&quot;&gt;HOLDING SCREEN&lt;/div&gt;
+        &lt;div style=&quot;border:1px solid #2A3B46;border-radius:6px;aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;background:var(--ink)&quot;&gt;
+          &lt;span style=&quot;font-family:&#x27;Barlow Semi Condensed&#x27;;font-weight:700;color:var(--blue);letter-spacing:.06em&quot;&gt;MEDTECH FORWARD 2026&lt;/span&gt;&lt;/div&gt;
+        &lt;button class=&quot;btn&quot; style=&quot;width:100%;margin-top:10px;background:var(--ink2);color:var(--paneink);border-color:#33414B&quot; onclick=&quot;toast(&#x27;Holding screen displayed&#x27;)&quot;&gt;Show holding screen&lt;/button&gt;
+      &lt;/div&gt;
+    &lt;/div&gt;
+  &lt;/div&gt;
 &lt;/div&gt;`};
 
 V.speaker=()=&gt;{const t=S.talks.raman;const pct=t.upPct;
