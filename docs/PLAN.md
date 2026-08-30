@@ -53,7 +53,7 @@ The milestone tasks below (M1–M7) are **planning-level units**. Before startin
 - [~] P0-E10 Usability prototypes — client-given 17-screen prototype is the baseline (`prototype/client-baseline.html`, already in DXG's hands; D-010); internal interaction sketch at `prototype/index.html`. DXG walkthrough feedback still pending
 - [x] P0-E11a 19-step demo transcribed into the written acceptance script — `docs/ACCEPTANCE_WALKTHROUGH.md` (2026-08-30)
 - [~] P0-E16 **Visual acceptance gate** — comparison sheet built (`prototype/comparison.html`: baseline + enhanced embedded side-by-side, synced 17-screen navigation, per-screen approve/notes, 375px portal view, copyable summary); behaviors grafted via `prototype/enhanced.html`. REMAINING: Travis + DXG approve all 17 rows — scaffolding stays blocked until 17/17
-- [ ] P0-E11 Draft the 19-step scripted acceptance walkthrough (SRS §22) against the prototype
+- [x] P0-E11 19-step scripted acceptance walkthrough — done via P0-E11a (`docs/ACCEPTANCE_WALKTHROUGH.md`); conducting it with DXG stakeholders is part of G0-6
 - [ ] P0-E12 Assemble representative presentation/media test corpus (≥30 decks + video codec matrix)
 - [ ] P0-E13 Collect sample agenda imports from DXG and spike the column mapping
 - [ ] P0-E14 Confirm retention, legal-hold, and deletion policy with DXG
