@@ -12,7 +12,7 @@ The RFPilot stack (team's proven production pattern for the same client), decide
 - **Data**: PostgreSQL (RLS isolation), Redis (queues), versioned S3 + KMS
 - **Workers**: containerized inspection/malware/preview/PDF conversion
 - **Auth**: OIDC for staff; magic links for speakers
-- **Infra**: AWS (CDK IaC), CloudFront; deployment strategy (blue/green or rolling with event-freeze guarantees) is a Phase 0 infrastructure-design deliverable (P0-D), not yet designed; observability follows the RFPilot approach
+- **Infra**: AWS (CDK IaC), CloudFront + WAF; deployment strategy decided in `infra/EDGE_APP_TIER.md` §4 — blue/green (CodeDeploy) for request-serving services, rolling-with-circuit-breaker for workers, CI event-freeze deploy gate; observability follows the RFPilot approach
 
 ### Room Agent risk note
 PowerPoint COM automation from Electron/Node is the least-proven part of the stack. Phase 0 PoC must prove: launch deck in slideshow mode, presenter view handling, monitor targeting, animation/video fidelity, crash recovery, and process supervision over 72h offline operation. Fallback if COM-from-Node proves unstable: a thin local helper (PowerShell script or small compiled sidecar) invoked by the Electron agent — decision recorded in DECISIONS.md after PoC.

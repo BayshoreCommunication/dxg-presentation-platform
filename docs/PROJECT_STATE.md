@@ -32,4 +32,4 @@ Phase 0, documentation stage. Git repository initialized; no application code. *
 - Sign-offs: WORKFLOW_STATES.md, role × permission matrix, prototype walkthrough
 
 ## Next single task
-**P0-D3** (edge/app tier: WAF + CloudFront, worker scaling, deployment + rollback strategy with event-freeze guarantees, termination protection). Completed: P0-D1 (`docs/infra/ENVIRONMENTS.md`), P0-D2 (`docs/infra/DATA_TIER.md`) — both 2026-08-30, pending G0-8 review. P0-C5 (DXG input request) still needs Travis to send it.
+**P0-D4** (observability: golden signals, agent heartbeat <5min detection, queue backlog + outbox-age alarms). Completed: P0-D1 (`docs/infra/ENVIRONMENTS.md`), P0-D2 (`docs/infra/DATA_TIER.md`), P0-D3 (`docs/infra/EDGE_APP_TIER.md` — deployment strategy decided: blue/green request path + rolling workers + event-freeze gate) — all 2026-08-30, pending G0-8 review. P0-C5 (DXG input request) still needs Travis to send it.
