@@ -519,6 +519,7 @@ function demoToggle(){S.demo.on=!S.demo.on;S.demo.i=0;
   $('demoBtn').classList.toggle('stop',S.demo.on);
   if(S.demo.on)demoShow();else render();}
 function demoShow(){const[scr,txt]=DEMO[S.demo.i];S.screen=scr;
+  if(scr==='review'){const q=queue();if(q.length&&!q.some(([k])=>k===S.selTalk))S.selTalk=q[0][0];}
   $('demoNum').textContent=`Step ${S.demo.i+1}/19`;$('demoText').textContent=txt;render();}
 function demoNext(){if(S.demo.i<18){S.demo.i++;demoShow();}else demoToggle();}
 function demoPrev(){if(S.demo.i>0){S.demo.i--;demoShow();}}

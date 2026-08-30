@@ -642,6 +642,7 @@ function demoToggle(){S.demo.on=!S.demo.on;S.demo.i=0;
   $(&#x27;demoBtn&#x27;).classList.toggle(&#x27;stop&#x27;,S.demo.on);
   if(S.demo.on)demoShow();else render();}
 function demoShow(){const[scr,txt]=DEMO[S.demo.i];S.screen=scr;
+  if(scr===&#x27;review&#x27;){const q=queue();if(q.length&amp;&amp;!q.some(([k])=&gt;k===S.selTalk))S.selTalk=q[0][0];}
   $(&#x27;demoNum&#x27;).textContent=`Step ${S.demo.i+1}/19`;$(&#x27;demoText&#x27;).textContent=txt;render();}
 function demoNext(){if(S.demo.i&lt;18){S.demo.i++;demoShow();}else demoToggle();}
 function demoPrev(){if(S.demo.i&gt;0){S.demo.i--;demoShow();}}
