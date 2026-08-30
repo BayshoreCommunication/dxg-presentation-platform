@@ -32,4 +32,4 @@ Phase 0, documentation stage. Git repository initialized; no application code. *
 - Sign-offs: WORKFLOW_STATES.md, role × permission matrix, prototype walkthrough
 
 ## Next single task
-**P0-C5**: send the DXG input-request list above (unblocks discovery), then **P0-D1** (environment/stack design — needs nothing external) while awaiting the Windows test environment for P0-A.
+**P0-D2** (data-tier design: Multi-AZ Postgres, Redis availability, versioned S3+KMS, cross-region replication, backup/PITR with RPO/RTO validation plan). P0-D1 completed 2026-08-30 (`docs/infra/ENVIRONMENTS.md`, pending G0-8 review; open items: account choice, region confirmation, frontend hosting, agent-stack split). P0-C5 (DXG input request) still needs Travis to send it.
