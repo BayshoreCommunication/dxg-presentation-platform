@@ -32,7 +32,10 @@ Guidance for Claude Code working in this project. This project lives inside the 
 
 - `docs/SRS.md` — client SRS (read-only baseline)
 - `docs/SPEC.md` — working spec: stack adaptations, resolved ambiguities, open questions
-- `docs/PLAN.md` — task breakdown and current position
+- `docs/BUILD_SPEC.md` — production build specification (implementation contract, D-011)
+- `docs/SCREEN_SPECS.md` — per-screen build contracts for the 17 baseline screens
+- `docs/ROADMAP.md` — sequenced delivery roadmap (M0–M7), gates, risks
+- `docs/PLAN.md` — milestone checklist; `docs/tasks/M*.md` — executable task lists
 - `docs/DECISIONS.md` — durable architecture decisions
 - `docs/PROJECT_STATE.md` — implementation status
 

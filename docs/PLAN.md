@@ -114,3 +114,16 @@ The milestone tasks below (M1–M7) are **planning-level units**. Before startin
 - [ ] M7-3 Security: SAST/DAST, pentest prep, permission regression ≥95%
 - [ ] M7-4 DR rehearsal, runbooks, live-event simulation, UAT
 - [ ] M7-5 Training & support package: technician certification course, client-admin quickstart, speaker guide + video, on-call/support setup (SRS §19)
+
+---
+
+## Phase 1 planning baseline (2026-09-15)
+
+The milestone list above stays as the checklist of record. Planning-level sequencing, effort, dependencies, gate handling and risk now live in **`docs/ROADMAP.md`**, and the implementation contract in **`docs/BUILD_SPEC.md`** + **`docs/SCREEN_SPECS.md`** (D-011).
+
+Executable, contract-sized task lists (written before a milestone starts, never during):
+
+- `docs/tasks/M0.md` — **Foundation, ready to start, no gate dependency** (contracts package, workspaces, DB plumbing, domain transition engine, request spine, sync PoC closing G0-2, CI)
+- `docs/tasks/M1.md` — Core platform; frontend tasks marked **[B]** stay blocked until the G0-6b visual-acceptance approval
+
+M0 is a new milestone that did not exist in the original breakdown: it converts the Phase-0 artefacts (schema, OpenAPI, state design) into a working skeleton, and absorbs P0-C3 (repo scaffolding) and P0-B (sync PoC).

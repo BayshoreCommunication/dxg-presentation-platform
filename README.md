@@ -6,7 +6,7 @@ Event presentation lifecycle platform for DXG: agenda import, passwordless speak
 
 ## Status
 
-Phase 0 (discovery & technical validation). No application code yet — documentation and gate definition in progress. See `docs/PROJECT_STATE.md`.
+Phase 0 (discovery & technical validation). No application code yet. The Phase 1 build baseline is defined (`docs/BUILD_SPEC.md`, `docs/SCREEN_SPECS.md`, `docs/ROADMAP.md`) and **M0 is ready to start**; frontend work stays blocked on the 17-screen visual-acceptance approval and the Room Agent playback decision on the G0-1 PoC. See `docs/PROJECT_STATE.md`.
 
 ## Stack
 
@@ -21,6 +21,10 @@ Node.js/TypeScript throughout: Express API (+ BullMQ worker, outbox dispatcher),
 | `docs/ACCEPTANCE_WALKTHROUGH.md` | The 19-step scripted acceptance walkthrough |
 | `docs/SRS.md` | Requirements baseline (functional requirements & acceptance criteria agreed with DXG) |
 | `docs/SPEC.md` | Working spec: interpretation, stack, open questions |
+| `docs/BUILD_SPEC.md` | **Production build specification** — the implementation contract (D-011) |
+| `docs/SCREEN_SPECS.md` | Per-screen build contracts for all 17 screens |
+| `docs/ROADMAP.md` | Sequenced delivery roadmap M0–M7: effort, workstreams, gates, risks |
+| `docs/tasks/M*.md` | Executable, contract-sized task checklists per milestone |
 | `docs/PLAN.md` | Task breakdown and working order |
 | `docs/WORKFLOW_STATES.md` | Domain lifecycles/state machines |
 | `docs/PHASE0_GATE.md` | Measurable G0 acceptance criteria |
