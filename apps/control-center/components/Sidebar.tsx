@@ -33,7 +33,7 @@ const GROUPS: { group: string; items: { label: string; href?: string }[] }[] = [
       { label: "Room sync", href: "/events/:id/sync" },
     ],
   },
-  { group: "DEVICE", items: [{ label: "Room Agent" }] },
+  { group: "DEVICE", items: [{ label: "Room Agent", href: "/events/:id/agent" }] },
   { group: "EXTERNAL", items: [{ label: "Speaker portal" }, { label: "Client portal" }] },
 ];
 

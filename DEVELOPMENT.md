@@ -1,11 +1,11 @@
 # DEVELOPMENT.md — running the platform locally
 
 Status: M0 in progress. The backend spine (domain state machines, database layer, API) and
-**five working screens** exist — Portfolio, Command center, Review & approval and Room sync in the
-Control Center, plus the Speaker portal upload screen in its own app — running on real data, with a
-real upload → scan → inspect → review pipeline.
+**six working screens** exist — Portfolio, Command center, Review & approval, Room sync and the
+Room Agent room view in the Control Center, plus the Speaker portal upload screen in its own app —
+running on real data, with a real upload → scan → inspect → review → sync → acknowledge chain.
 
-The other twelve screens are still prototype-only (`prototype/enhanced.html`).
+The other eleven screens are still prototype-only (`prototype/enhanced.html`).
 
 ## Prerequisites
 
@@ -76,6 +76,26 @@ Worth demonstrating if the room is technical:
   version untouched and still `active` in the room.
 - Break the checksum — nothing is stored at all.
 
+### Room Agent (the onsite half) — the chain that justifies the product
+
+**Room Agent → Ballroom A.** This is the view a room technician has on the room machine. The
+Windows Electron client is M5 and its playback half is gated on the G0-1 PoC; the view, the data
+and the rules below are the real ones.
+
+11. **Before anything**, the room shows `v2 · current · ready`.
+12. **Have a speaker upload a new version and DXG approve it.** Press **Manual sync** on the room
+    view: the file is downloaded and its whole-file checksum verified.
+13. **The room does not switch.** v3 sits as *update pending ack*, v2 still reads *current ·
+    ready*, and a change alert explains why. Press **Launch** at this point and the room still
+    plays v2 — the agent never resolves a "closest matching" file.
+14. **Press "Acknowledge & sync v3".** Only now does v3 become the copy the room plays, v2 moves
+    to *previous versions kept: 1* for rollback, and Room sync goes green again.
+
+That sequence is the product's core promise — a room never silently swaps an approved file — and
+it is enforced server-side, not by the screen. Signing in as a content reviewer and pressing
+acknowledge returns *"acknowledge requires one of: room_technician, presentation_manager,
+project_manager, platform_admin."*
+
 Worth saying out loud during the demo: the rules being enforced are the ones that matter
 onsite. Try to approve something before claiming it and the API refuses with
 *"Cannot approve while review is Submitted. Allowed: claim."* Act on a stale copy and it
@@ -122,7 +142,7 @@ workflow transition and a hash-chained audit record are written — all in one t
 | `packages/db` | Pool, RLS scope helper (`withScope`), migration runner, seed, hash-chained audit. |
 | `packages/files` | Storage driver, scanner, and the tier-1 inspection engine (its own ZIP/OOXML reader — no Office, no dependency). |
 | `apps/api` | Express 5: health, events, talks, speakers, review transition, audit verify, portal + upload, agent heartbeat. |
-| `apps/control-center` | Next.js staff app (:3000). |
+| `apps/control-center` | Next.js staff app (:3000), including the Room Agent room view. |
 | `apps/speaker-portal` | Next.js speaker app (:3001), token auth only. |
 
 ## Notes
@@ -141,3 +161,9 @@ workflow transition and a hash-chained audit record are written — all in one t
   `stored` is unreachable without a clean verdict, and scan errors fail closed to quarantine.
 - Inspection is deterministic parsing only. Codec detection currently infers risk from the media
   container; a real codec probe arrives with the media worker (M2-4).
+- The **Room Agent screen is served by the control center** rather than the Electron client (M5).
+  It identifies as the room technician because the room machine is a different principal from a
+  staff session; device credentials arrive with M5-1. `Manual sync` runs the same sequence the
+  agent's sync engine will — read, verify checksum, then make visible — minus the network.
+- **Launching does not drive PowerPoint yet** (M5-3, gated on G0-1). The launch guard, the
+  holding-screen fallback and the launch log are real; the COM call is not there.

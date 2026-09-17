@@ -120,3 +120,26 @@ invariant: files are scanned, and scan errors fail closed.
 
 Five screens now run on real data: Portfolio, Command center, Review & approval, Room sync,
 Speaker portal. Twelve remain prototype-only.
+
+## 2026-09-17 (fourth) — Room Agent room view, and the chain closes
+
+Added screen 15 (`/events/:id/agent/:roomId`) plus the server side it needs: `agentView`,
+`syncRoom`, `acknowledge` and the launch guard. The never-silently-replace chain now runs
+end to end in the running system: speaker uploads → DXG approves → agent syncs and verifies the
+checksum → the copy sits as *update pending ack* while the room keeps playing the approved
+version → the room technician acknowledges → the new version becomes current and the previous one
+is retained for rollback.
+
+**Three real bugs found and fixed while wiring it** (each now covered):
+1. The launch query picked an arbitrary room copy when a room held both an active and a pending
+   one — replaced with a LATERAL that prefers active, then acknowledged, then synced.
+2. The launch guard was fed `requiresAck: !acknowledged`, which blocked every *first* delivery.
+   It only awaits acknowledgment while `synced`. Regression tests added in `invariants.test.ts`.
+3. `syncRoom` passed the human actor to machine-only transitions, so every sync transition was
+   refused — and because the `Result` was ignored, it failed **silently** while reporting success.
+   Sync now acts as the agent and every Result is checked; failures are counted and returned.
+
+Also: authority is now evaluated before the optimistic-lock check, so a forbidden action says so
+instead of reporting a conflict.
+
+Six screens now run on real data. Eleven remain prototype-only. `npm run ci` green (62 tests).

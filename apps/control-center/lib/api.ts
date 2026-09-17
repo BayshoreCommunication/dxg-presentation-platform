@@ -1,7 +1,7 @@
 const BASE = process.env.API_BASE ?? "http://localhost:4000/api/v1";
 
 /** M0 stand-in for the OIDC session (BUILD_SPEC §13; replaced by M1-1). */
-export const DEV_USER = "reviewer";
+export const DEV_USER = process.env.DEV_USER ?? "reviewer";
 
 export class ApiError extends Error {
   constructor(
@@ -14,11 +14,18 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+/**
+ * The room machine is a different principal from staff (BUILD_SPEC §13: agents
+ * authenticate with a signed device credential). Until M5-1 issues those, the
+ * agent screen identifies as the room technician rather than the staff session.
+ */
+export const DEV_ROOM_USER = "room_tech";
+
+async function request<T>(path: string, init?: RequestInit, as: string = DEV_USER): Promise<T> {
   const response = await fetch(`${BASE}${path}`, {
     ...init,
     cache: "no-store",
-    headers: { "content-type": "application/json", "x-dev-user": DEV_USER, ...init?.headers },
+    headers: { "content-type": "application/json", "x-dev-user": as, ...init?.headers },
   });
   const body: unknown = await response.json().catch(() => ({}));
   if (!response.ok) {
@@ -112,3 +119,50 @@ export const transitionVersion = (
     method: "POST",
     body: JSON.stringify(body),
   });
+
+export type AgentScheduleRow = {
+  slot_id: string;
+  title: string;
+  speaker: string | null;
+  starts_at: string;
+  file_version_id: string | null;
+  version_number: number | null;
+  room_file_id: string | null;
+  sync_state: string | null;
+  lock_version: number | null;
+  acknowledged: boolean;
+  requires_ack: boolean;
+  launchable: boolean;
+  presented_at: string | null;
+};
+
+export type AgentView = {
+  room: { id: string; name: string };
+  agent: { id: string | null; fingerprint: string | null; version: string | null; heartbeat_age: number | null };
+  library: { files: number; bytes: string; previous_versions: number; updates_waiting: number };
+  schedule: AgentScheduleRow[];
+};
+
+export const getAgentView = (roomId: string) =>
+  request<AgentView>(`/rooms/${roomId}/agent-view`, undefined, DEV_ROOM_USER);
+
+export const syncRoom = (roomId: string) =>
+  request<{ downloaded: number; awaiting_ack: number; activated: number; failed: number }>(
+    `/rooms/${roomId}/sync`,
+    { method: "POST" },
+    DEV_ROOM_USER,
+  );
+
+export const acknowledgeRoomFile = (roomFileId: string, lockVersion: number) =>
+  request<{ sync_state: string }>(
+    `/room-files/${roomFileId}/acknowledge`,
+    { method: "POST", body: JSON.stringify({ lock_version: lockVersion }) },
+    DEV_ROOM_USER,
+  );
+
+export const launchInRoom = (roomId: string, slotId: string) =>
+  request<{ launched: boolean; at?: string; reason?: string }>(
+    `/rooms/${roomId}/launch`,
+    { method: "POST", body: JSON.stringify({ slot_id: slotId }) },
+    DEV_ROOM_USER,
+  );

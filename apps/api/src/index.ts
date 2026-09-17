@@ -13,6 +13,7 @@ import {
   hashToken,
 } from "./services/portal.ts";
 import { randomUUID } from "node:crypto";
+import { agentView, syncRoom, acknowledge, launch } from "./services/agent.ts";
 import type { PortalSession } from "./services/portal.ts";
 import { decide } from "./services/review.ts";
 
@@ -203,6 +204,59 @@ app.post("/api/v1/agent/heartbeat", async (req, res) => {
     return res.status(404).json({ code: "agent.not_registered", message: "No agent for that room." });
   }
   return res.json({ acknowledged: true, at: new Date().toISOString() });
+});
+
+/* ── room agent (screen 15; M5 builds the Windows client itself) ──────────── */
+
+app.get("/api/v1/rooms/:roomId/agent-view", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  const roomId = String(req.params.roomId);
+  const view = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID }, (tx) => agentView(tx, roomId));
+  if (!view) return res.status(404).json({ code: "agent.room_not_found", message: "No such room." });
+  return res.json(view);
+});
+
+app.post("/api/v1/rooms/:roomId/sync", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  const roomId = String(req.params.roomId);
+  const result = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID }, async (tx) => {
+    await tx.query(
+      `UPDATE pmp.room_agents SET last_heartbeat_at = now() WHERE room_id = $1 AND revoked_at IS NULL`,
+      [roomId],
+    );
+    return syncRoom(tx, actor, roomId);
+  });
+  return res.json(result);
+});
+
+app.post("/api/v1/room-files/:roomFileId/acknowledge", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  const body = req.body as { lock_version?: number };
+  if (typeof body.lock_version !== "number") {
+    return res.status(400).json({ code: "request.invalid", message: "`lock_version` is required." });
+  }
+  const result = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID }, (tx) =>
+    acknowledge(tx, actor, String(req.params.roomFileId), body.lock_version as number),
+  );
+  if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+  return res.json(result.value);
+});
+
+app.post("/api/v1/rooms/:roomId/launch", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  const body = req.body as { slot_id?: string };
+  if (!body.slot_id) {
+    return res.status(400).json({ code: "request.invalid", message: "`slot_id` is required." });
+  }
+  const result = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID }, (tx) =>
+    launch(tx, actor, { roomId: String(req.params.roomId), slotId: body.slot_id as string }),
+  );
+  if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+  return res.json(result.value);
 });
 
 app.get("/api/v1/events/:eventId/speakers", async (req, res) => {

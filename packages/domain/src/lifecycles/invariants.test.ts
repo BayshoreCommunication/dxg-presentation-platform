@@ -113,3 +113,16 @@ describe("inspection gates review eligibility (FR-INSP-003)", () => {
     assert.equal(isReviewEligible("passed_with_warnings", false), true);
   });
 });
+
+describe("launch guard input semantics (regression)", () => {
+  test("a first delivery that never needed acknowledgment is launchable once active", () => {
+    // `acknowledged` is false for a first delivery; that must not block launch.
+    assert.equal(canLaunch({ state: "active", requiresAck: false, acknowledged: false }), true);
+  });
+
+  test("a replacement sitting in `synced` is not launchable until acknowledged", () => {
+    assert.equal(canLaunch({ state: "synced", requiresAck: true, acknowledged: false }), false);
+    assert.equal(canLaunch({ state: "acknowledged", requiresAck: true, acknowledged: true }), false);
+    assert.equal(canLaunch({ state: "active", requiresAck: true, acknowledged: true }), true);
+  });
+});
