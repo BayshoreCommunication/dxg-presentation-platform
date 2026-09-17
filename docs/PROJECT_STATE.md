@@ -97,3 +97,26 @@ against the built app for these four screens; the gate still stands for the othe
 Still open in M0: M0-1 (contracts package), the rest of M0-5 (real OIDC, idempotency store,
 dispatcher, SSE — `AutoRefresh` is a stand-in), M0-6 (sync PoC, closes G0-2), M0-7 (CI).
 Room Agent playback still blocked on G0-1 hardware.
+
+## 2026-09-17 (third) — speaker portal upload shipped
+
+Added the collection half of the product (commit `2efec3d`): `apps/speaker-portal` (own Next.js
+app on :3001, speaker-token auth, no staff code shipped) and `packages/files`.
+
+- **Upload** is genuinely resumable: browser-side SHA-256, part-by-part upload, and a resume that
+  asks the server which parts already landed rather than restarting.
+- **Pipeline** on completion runs in order — assemble, verify whole-file checksum, scan, store,
+  inspect — with the audit record written. `stored` stays unreachable without a clean scan (I-2).
+- **Inspection is real parsing**: `packages/files` contains a minimal ZIP/OOXML reader, so slide
+  count, slide size vs the room profile, macros, embedded media, QuickTime video against the
+  room's H.264 profile, and linked media all come from the file itself. No Office, no dependency.
+- Verified end to end on a purpose-built 5 MB .pptx; the uploaded version appears in the staff
+  review queue with its findings, and the command center follows.
+
+**Two honest substitutions, documented in `DEVELOPMENT.md`:** storage is local disk behind the
+interface the S3 driver implements in M2-2, and the dev scanner is a real scanner with a
+one-signature (EICAR) database until the ClamAV worker lands in M2-5. Neither weakens the
+invariant: files are scanned, and scan errors fail closed.
+
+Five screens now run on real data: Portfolio, Command center, Review & approval, Room sync,
+Speaker portal. Twelve remain prototype-only.
