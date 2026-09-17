@@ -1,6 +1,6 @@
 # PROJECT_STATE.md
 
-Last updated: 2026-09-17
+Last updated: 2026-09-17 (second entry below)
 
 ## Status
 Phase 0, documentation stage. Git repository initialized; no application code. **G0 status: DEFINED, NOT STARTED** — no gate item has been executed; Phase 0 is not complete and production scaffolding is blocked until PHASE0_GATE.md items pass.
@@ -75,3 +75,25 @@ transaction, and the talk's derived status moves to "Approved — delivering". A
 acceptance (G0-6b), and Room Agent playback remains blocked on G0-1. For client walkthroughs the
 artifact is still `prototype/enhanced.html`. Remaining M0 work: M0-1 (contracts package), the rest
 of M0-5 (real auth, idempotency store, dispatcher, SSE), M0-6 (sync PoC, closes G0-2), M0-7 (CI).
+
+## 2026-09-17 (later) — four Control Center screens running on the real API
+
+Client demonstration required at short notice; the prototype had already been shown two days
+earlier, so the ask was working software. Built (commit `b0769ba`):
+
+- **Portfolio**, **Command center**, **Review & approval**, **Room sync** in `apps/control-center`
+  (Next.js), on the live API and database — no browser fixtures.
+- Design tokens, primitives, terminology and the full 17-item navigation extracted from the client
+  baseline; unbuilt screens appear in the nav but are marked.
+- API additions: `/summary`, `/risk-list`, `/review-queue`, `/sync/fleet`, agent heartbeat.
+- `npm run demo:reset` restores the walkthrough state; the script is in `DEVELOPMENT.md`.
+
+Verified in the browser: approving the queued talk queues its room, clears the queue, increments
+Approved and moves the talk to "Approved — delivering" on the command center.
+
+**Gate consequence (D-013):** this crossed G0-6b. The visual acceptance sheet must now be re-run
+against the built app for these four screens; the gate still stands for the other thirteen.
+
+Still open in M0: M0-1 (contracts package), the rest of M0-5 (real OIDC, idempotency store,
+dispatcher, SSE — `AutoRefresh` is a stand-in), M0-6 (sync PoC, closes G0-2), M0-7 (CI).
+Room Agent playback still blocked on G0-1 hardware.
