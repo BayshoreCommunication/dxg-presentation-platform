@@ -25,7 +25,14 @@ export default tseslint.config(
     },
   },
   {
-    files: ["packages/db/src/**", "apps/*/src/**", "**/*.test.ts"],
+    files: ["packages/db/src/**", "apps/*/src/**", "scripts/**", "**/*.test.ts"],
     rules: { "no-console": "off" },
+  },
+  {
+    // Plain Node scripts: no TypeScript project, Node globals available.
+    files: ["scripts/**/*.mjs"],
+    languageOptions: {
+      globals: { console: "readonly", process: "readonly", fetch: "readonly", URL: "readonly" },
+    },
   },
 );

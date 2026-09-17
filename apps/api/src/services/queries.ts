@@ -152,6 +152,7 @@ export type QueueItem = {
   slot_id: string;
   title: string;
   speaker: string | null;
+  speaker_id: string | null;
   room: string | null;
   starts_at: string;
   size_bytes: string;
@@ -166,6 +167,9 @@ export async function reviewQueue(tx: pg.PoolClient, eventId: string): Promise<Q
             (SELECT sp.full_name FROM pmp.speaker_assignments sa
                JOIN pmp.speakers sp ON sp.id = sa.speaker_id
               WHERE sa.slot_id = s.id LIMIT 1) AS speaker,
+            (SELECT sp.id FROM pmp.speaker_assignments sa
+               JOIN pmp.speakers sp ON sp.id = sa.speaker_id
+              WHERE sa.slot_id = s.id LIMIT 1) AS speaker_id,
             COALESCE((SELECT json_agg(json_build_object(
                         'check_code', inf.check_code, 'severity', inf.severity, 'detail', inf.detail))
                         FROM pmp.inspection_findings inf

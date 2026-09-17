@@ -1,0 +1,209 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import { getSession, getTalks, PortalError } from "@/lib/api";
+import type { CompleteResult, PortalSession, PortalTalk } from "@/lib/api";
+import { UploadPanel } from "./UploadPanel";
+
+const mb = (bytes: string | number) => `${Math.round(Number(bytes) / 1_000_000)} MB`;
+
+export function PortalView({ token }: { token: string }) {
+  const [session, setSession] = useState<PortalSession | null>(null);
+  const [talks, setTalks] = useState<PortalTalk[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const [nextSession, nextTalks] = await Promise.all([getSession(token), getTalks(token)]);
+      setSession(nextSession);
+      setTalks(nextTalks.items);
+      setError(null);
+    } catch (caught) {
+      setError(caught instanceof PortalError ? caught.message : "Something went wrong.");
+    }
+  }, [token]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  if (error) {
+    return (
+      <div className="card">
+        <div className="cbd">
+          <h1 className="htitle">Speaker upload</h1>
+          <div className="err">{error}</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!session || !talks) {
+    return (
+      <div className="card">
+        <div className="cbd">
+          <div className="skeleton" style={{ width: "60%", marginBottom: 8 }} />
+          <div className="skeleton" style={{ width: "40%" }} />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div className="darkpane" style={{ padding: "16px 20px", marginBottom: 16 }}>
+        <b style={{ color: "var(--white)", fontFamily: "'Barlow Semi Condensed'", fontSize: 18 }}>
+          {session.event.name} · <span style={{ color: "var(--blue)" }}>Speaker Upload</span>
+        </b>
+        <br />
+        <span style={{ fontSize: 13 }}>{session.speaker.name}</span>
+      </div>
+
+      {talks.map((talk) => (
+        <TalkCard key={talk.slot_id} token={token} talk={talk} timezone={session.event.timezone} onChange={load} />
+      ))}
+    </>
+  );
+}
+
+function TalkCard({
+  token,
+  talk,
+  timezone,
+  onChange,
+}: {
+  token: string;
+  talk: PortalTalk;
+  timezone: string;
+  onChange: () => Promise<void>;
+}) {
+  const [result, setResult] = useState<CompleteResult | null>(null);
+  const latest = talk.versions[0];
+  const when = new Date(talk.starts_at).toLocaleString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: timezone,
+  });
+
+  return (
+    <div className="card">
+      <div className="chd">
+        <h3>{talk.title}</h3>
+        <span className={`chip ${talk.status === "approved" || talk.status === "synchronized_onsite" ? "c-ok" : talk.status === "needs_revision" || talk.status === "attention" ? "c-warn" : talk.status === "missing" ? "c-bad" : "c-info"}`}>
+          {talk.status_label}
+        </span>
+      </div>
+      <div className="cbd">
+        <div className="note" style={{ marginBottom: 10 }}>
+          {talk.room} · {when}
+        </div>
+
+        <div className="grid2" style={{ marginBottom: 12 }}>
+          <div>
+            <div className="kl">Upload deadline</div>
+            <b>Feb 27 · 23:59 ET</b>
+          </div>
+          <div>
+            <div className="kl">Requirements</div>
+            <div className="note">
+              · 16:9 widescreen · PowerPoint (.pptx) preferred, PDF accepted
+              <br />· Embed all fonts and videos (H.264 .mp4)
+              <br />· Up to 10 GB — uploads resume if your connection drops
+            </div>
+          </div>
+        </div>
+
+        <h3 style={{ fontSize: 13, marginBottom: 8 }}>Your presentation</h3>
+
+        {talk.final_locked ? (
+          <div className="lane cli">
+            <b>Locked as the final onsite version.</b> Your presentation was confirmed in the Speaker
+            Ready Room, so it can no longer be replaced here. Please speak to the team onsite.
+          </div>
+        ) : (
+          <UploadPanel
+            token={token}
+            slotId={talk.slot_id}
+            onComplete={async (completed) => {
+              setResult(completed);
+              await onChange();
+            }}
+          />
+        )}
+
+        {latest && !result && (
+          <div className="lane spk" style={{ marginTop: 10 }}>
+            <b>v{latest.version_number} received.</b> Checksum verified — earlier versions are kept
+            safe. {mb(latest.size_bytes)}.
+          </div>
+        )}
+
+        {result && (
+          <div style={{ marginTop: 12 }}>
+            <div className={result.processing_state === "quarantined" ? "err" : "lane spk"}>
+              {result.processing_state === "quarantined" ? (
+                <>
+                  <b>This file could not be accepted.</b> Our security scan flagged it, so it has been
+                  quarantined and your previous version is untouched. Please check the file and upload
+                  again.
+                </>
+              ) : (
+                <>
+                  <b>v{result.version_number} received.</b> Checksum verified —{" "}
+                  <span className="mono">{result.sha256.slice(0, 8)}…{result.sha256.slice(-4)}</span>.
+                  Automated checks have run; we&rsquo;ll email you if anything needs attention.
+                </>
+              )}
+            </div>
+            {result.findings
+              .filter((finding) => finding.severity !== "info")
+              .map((finding, index) => (
+                <div className="lane cli" key={index}>
+                  <b>
+                    {finding.severity === "blocking" ? "⛔" : "⚠"} {finding.check_code.replace("_", " ")}
+                  </b>
+                  <br />
+                  {describe(finding)}
+                </div>
+              ))}
+            {result.findings
+              .filter((finding) => finding.check_code === "metadata")
+              .map((finding, index) => (
+                <div className="note" key={`meta-${index}`}>
+                  ℹ {describe(finding)}
+                </div>
+              ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function describe(finding: { check_code: string; detail: Record<string, unknown> }): string {
+  const detail = finding.detail;
+  switch (finding.check_code) {
+    case "aspect":
+      return `Slide size is ${String(detail.aspect)} and the room is set up for ${String(detail.room_profile)}.`;
+    case "codec":
+      return `${String(detail.file)} is a QuickTime container — the room playback profile guarantees ${String(detail.expected)}. Re-export as H.264 .mp4 to be safe.`;
+    case "linked_media":
+      return `${String(detail.count)} linked (not embedded) media reference(s) — the files will not travel with your deck.`;
+    case "macros":
+      return "The file contains macros, which are blocked for security. Please save it without macros.";
+    case "malware":
+      return `Security signature: ${String(detail.signature)}.`;
+    case "corruption":
+      return String(detail.reason ?? "The file could not be opened.");
+    case "metadata":
+      if (detail.slides !== undefined) return `${String(detail.slides)} slides.`;
+      if (detail.embedded_media !== undefined) return `${String(detail.embedded_media)} embedded media file(s).`;
+      return `${mb(String(detail.bytes ?? 0))} — within the 10 GB limit.`;
+    default:
+      return JSON.stringify(detail);
+  }
+}

@@ -11,7 +11,10 @@
   "dependencies": {
     "@pmp/db": "*",
     "@pmp/domain": "*",
+    "@pmp/files": "*",
     "express": "^5.1.0"
   },
-  "devDependencies": { "@types/express": "^5.0.0" }
+  "devDependencies": {
+    "@types/express": "^5.0.0"
+  }
 }

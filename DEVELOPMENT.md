@@ -1,10 +1,11 @@
 # DEVELOPMENT.md — running the platform locally
 
 Status: M0 in progress. The backend spine (domain state machines, database layer, API) and
-**four working Control Center screens** exist: Portfolio, Command center, Review & approval and
-Room sync — running on real data, not fixtures in the browser.
+**five working screens** exist — Portfolio, Command center, Review & approval and Room sync in the
+Control Center, plus the Speaker portal upload screen in its own app — running on real data, with a
+real upload → scan → inspect → review pipeline.
 
-The other thirteen screens are still prototype-only (`prototype/enhanced.html`).
+The other twelve screens are still prototype-only (`prototype/enhanced.html`).
 
 ## Prerequisites
 
@@ -18,10 +19,14 @@ npm run db:up          # postgres :5434, redis :6380
 npm run db:migrate     # applies db/migrations in order (idempotent)
 npm run db:seed        # synthetic MedTech Forward 2026 fixture — no real content
 npm run db:heartbeat   # marks room agents as freshly online
-npm run dev            # api on :4000 and the control center on :3000
+npm run dev            # api :4000 · control center :3000 · speaker portal :3001
 ```
 
-Open http://localhost:3000.
+Open http://localhost:3000 for staff. For the speaker portal, mint a link:
+
+```bash
+npm run demo:link            # Raman by default; pass a name, e.g. -- Osei
+```
 
 ## Demo script (≈3 minutes)
 
@@ -44,6 +49,32 @@ repeated as often as needed.
 4. **Back to the Command center** — Approved has incremented and the talk now reads
    *Approved — delivering*. Nothing was hand-updated; the status is recomputed from the data.
 5. **Room sync** — the same readiness, per room.
+
+### Speaker portal (the collection half)
+
+`npm run demo:link` prints a personal magic link (`/t/<token>`). Tokens are stored hashed,
+bound to one speaker and one event, and expire — paste a wrong one and the portal says so.
+
+6. **The speaker's view** — their talk, room, time in the event's timezone, requirements and
+   deadline. No staff chrome, no other speakers' content; it is a separate application, so no
+   staff code is shipped to speakers at all.
+7. **Upload a .pptx.** The file is hashed in the browser, uploaded in parts, and the server
+   verifies the whole-file SHA-256 before anything is stored.
+8. **Press "Simulate connection loss" mid-upload**, then **Resume**. The client asks the server
+   which parts already landed and continues from there — the panel says *"Resumed from 5 MB —
+   not from zero."*
+9. **Watch the findings come back.** They are produced by actually parsing the PowerPoint
+   package: slide count, slide size vs the room profile, embedded media, a QuickTime video that
+   the room's H.264 profile does not guarantee, and linked media that would not travel with the
+   deck.
+10. **Switch back to the staff Review queue** — the version is waiting there with those findings.
+
+Worth demonstrating if the room is technical:
+
+- Upload a `.docx` — refused before a single byte is sent.
+- Upload a file containing the EICAR test string — quarantined, with the previous approved
+  version untouched and still `active` in the room.
+- Break the checksum — nothing is stored at all.
 
 Worth saying out loud during the demo: the rules being enforced are the ones that matter
 onsite. Try to approve something before claiming it and the API refuses with
@@ -89,7 +120,10 @@ workflow transition and a hash-chained audit record are written — all in one t
 |---|---|
 | `packages/domain` | Pure domain: the six lifecycles, the transition engine, derived status. No I/O. |
 | `packages/db` | Pool, RLS scope helper (`withScope`), migration runner, seed, hash-chained audit. |
-| `apps/api` | Express 5 slice: health, events, talks, review transition, audit verify. |
+| `packages/files` | Storage driver, scanner, and the tier-1 inspection engine (its own ZIP/OOXML reader — no Office, no dependency). |
+| `apps/api` | Express 5: health, events, talks, speakers, review transition, audit verify, portal + upload, agent heartbeat. |
+| `apps/control-center` | Next.js staff app (:3000). |
+| `apps/speaker-portal` | Next.js speaker app (:3001), token auth only. |
 
 ## Notes
 
@@ -99,3 +133,11 @@ workflow transition and a hash-chained audit record are written — all in one t
   for the superuser. Tampering is therefore not something the application has to prevent.
 - API actions use the `:action` suffix from `api/openapi.yaml`; the colon is not a path
   separator, so the segment is split in `apps/api/src/index.ts`.
+- **Storage is local-disk in development** (`.data/`), behind the same interface the S3 driver
+  will implement in M2-2. The upload protocol, content addressing and checksums are the real
+  thing; only the backing store differs.
+- **The development scanner is a real scanner with a one-signature database** (EICAR). Production
+  uses the ClamAV container (M2-5). It is not a bypass: every file passes through a scanner,
+  `stored` is unreachable without a clean verdict, and scan errors fail closed to quarantine.
+- Inspection is deterministic parsing only. Codec detection currently infers risk from the media
+  container; a real codec probe arrives with the media worker (M2-4).

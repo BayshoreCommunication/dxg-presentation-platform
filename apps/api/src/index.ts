@@ -3,6 +3,17 @@ import { withScope, getPool, verifyAuditChain } from "@pmp/db";
 import type { Actor, DomainError, ReviewAction } from "@pmp/domain";
 import { listTalks } from "./services/talks.ts";
 import { eventSummary, riskList, reviewQueue, syncFleet } from "./services/queries.ts";
+import {
+  resolveToken,
+  portalTalks,
+  beginUpload,
+  uploadState,
+  completeUpload,
+  storage,
+  hashToken,
+} from "./services/portal.ts";
+import { randomUUID } from "node:crypto";
+import type { PortalSession } from "./services/portal.ts";
 import { decide } from "./services/review.ts";
 
 const app = express();
@@ -10,8 +21,8 @@ app.use(express.json());
 app.use((_req, res, next) => {
   // Dev only: the control center runs on a different port until they are served together.
   res.header("Access-Control-Allow-Origin", "*");
-  res.header("Access-Control-Allow-Headers", "content-type, x-dev-user");
-  res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.header("Access-Control-Allow-Headers", "content-type, x-dev-user, authorization");
+  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS");
   next();
 });
 app.options(/.*/, (_req, res) => res.sendStatus(204));
@@ -193,6 +204,145 @@ app.post("/api/v1/agent/heartbeat", async (req, res) => {
   }
   return res.json({ acknowledged: true, at: new Date().toISOString() });
 });
+
+app.get("/api/v1/events/:eventId/speakers", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  const eventId = String(req.params.eventId);
+  const query = String(req.query.q ?? "");
+  const items = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID, eventId }, async (tx) => {
+    const { rows } = await tx.query(
+      `SELECT sp.id, sp.full_name, sp.email::text, sp.release_permission,
+              count(sa.id)::int AS talks
+         FROM pmp.speakers sp
+         LEFT JOIN pmp.speaker_assignments sa ON sa.speaker_id = sp.id
+        WHERE sp.event_id = $1 AND sp.merged_into IS NULL
+          AND ($2 = '' OR sp.full_name ILIKE '%' || $2 || '%')
+        GROUP BY sp.id
+        ORDER BY sp.full_name`,
+      [eventId, query],
+    );
+    return rows;
+  });
+  return res.json({ items, next_cursor: null });
+});
+
+/* ── speaker portal (M06) — speaker-token auth only ───────────────────────── */
+
+app.use(express.raw({ type: "application/octet-stream", limit: "64mb" }));
+
+const bearer = (req: express.Request): string | null => {
+  const header = req.header("authorization") ?? "";
+  return header.startsWith("Bearer ") ? header.slice(7) : null;
+};
+
+async function withPortalSession(
+  req: express.Request,
+  res: express.Response,
+  fn: (session: PortalSession, tx: Parameters<Parameters<typeof withScope>[1]>[0]) => Promise<unknown>,
+): Promise<unknown> {
+  const token = bearer(req);
+  if (!token) return res.status(401).json({ code: "portal.no_token", message: "Missing access token." });
+  return withScope({ userId: DEV_USERS.pm!.id, clientId: DEV_CLIENT_ID }, async (tx) => {
+    const session = await resolveToken(tx, token);
+    if (!session) {
+      return res.status(401).json({
+        code: "portal.invalid_token",
+        message: "This link has expired or been revoked. Ask the DXG team for a new one.",
+      });
+    }
+    return fn(session, tx);
+  });
+}
+
+/** Issues a speaker link. In production this is sent by the comms batch (M3-5). */
+app.post("/api/v1/speakers/:speakerId/invite", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  const speakerId = String(req.params.speakerId);
+  const token = randomUUID();
+  const issued = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID }, async (tx) => {
+    const { rows } = await tx.query<{ event_id: string }>(
+      `SELECT event_id FROM pmp.speakers WHERE id = $1`,
+      [speakerId],
+    );
+    if (!rows[0]) return null;
+    await tx.query(
+      `INSERT INTO pmp.speaker_tokens (speaker_id, event_id, client_id, kind, token_hash, expires_at)
+       VALUES ($1, $2, $3, 'magic_link', $4, now() + interval '30 days')`,
+      [speakerId, rows[0].event_id, DEV_CLIENT_ID, hashToken(token)],
+    );
+    return rows[0].event_id;
+  });
+  if (!issued) return res.status(404).json({ code: "speakers.not_found", message: "No such speaker." });
+  return res.status(201).json({ token, url: `http://localhost:3001/t/${token}` });
+});
+
+app.get("/api/v1/portal/session", (req, res) =>
+  withPortalSession(req, res, async (session) =>
+    res.json({
+      speaker: { id: session.speaker_id, name: session.speaker_name },
+      event: { id: session.event_id, name: session.event_name, timezone: session.timezone },
+    }),
+  ),
+);
+
+app.get("/api/v1/portal/talks", (req, res) =>
+  withPortalSession(req, res, async (session, tx) => res.json({ items: await portalTalks(tx, session) })),
+);
+
+app.post("/api/v1/portal/uploads", (req, res) =>
+  withPortalSession(req, res, async (session, tx) => {
+    const body = req.body as { slot_id?: string; file_name?: string; total_bytes?: number };
+    if (!body.slot_id || !body.file_name || typeof body.total_bytes !== "number") {
+      return res.status(400).json({
+        code: "request.invalid",
+        message: "`slot_id`, `file_name` and `total_bytes` are required.",
+      });
+    }
+    const result = await beginUpload(tx, session, {
+      slotId: body.slot_id,
+      fileName: body.file_name,
+      totalBytes: body.total_bytes,
+    });
+    if (!result.ok) return res.status(422).json({ code: result.code, message: result.message });
+    return res.status(201).json(result.value);
+  }),
+);
+
+/** Resume: the client asks which parts already landed and continues from there. */
+app.get("/api/v1/portal/uploads/:uploadId", (req, res) =>
+  withPortalSession(req, res, async () => res.json(await uploadState(String(req.params.uploadId)))),
+);
+
+app.put("/api/v1/portal/uploads/:uploadId/parts/:partNumber", (req, res) =>
+  withPortalSession(req, res, async () => {
+    const part = Number(req.params.partNumber);
+    const body = req.body as Buffer;
+    if (!Buffer.isBuffer(body) || body.length === 0) {
+      return res.status(400).json({ code: "request.invalid", message: "Empty part." });
+    }
+    const { sha256 } = await storage.putPart(String(req.params.uploadId), part, body);
+    return res.json({ part_number: part, size: body.length, sha256 });
+  }),
+);
+
+app.post("/api/v1/portal/uploads/:uploadId/complete", (req, res) =>
+  withPortalSession(req, res, async (session, tx) => {
+    const body = req.body as { slot_id?: string; file_name?: string; sha256?: string };
+    if (!body.slot_id || !body.file_name) {
+      return res.status(400).json({ code: "request.invalid", message: "`slot_id` and `file_name` are required." });
+    }
+    const result = await completeUpload(tx, session, {
+      uploadId: String(req.params.uploadId),
+      slotId: body.slot_id,
+      fileName: body.file_name,
+      ...(body.sha256 ? { expectedSha256: body.sha256 } : {}),
+    });
+    if (!result.ok) return res.status(422).json({ code: result.code, message: result.message });
+    return res.json(result.value);
+  }),
+);
 
 const port = Number(process.env.PORT ?? 4000);
 app.listen(port, () => {

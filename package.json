@@ -24,7 +24,9 @@
     "db:heartbeat": "node packages/db/src/heartbeat.ts",
     "demo:reset": "npm run db:seed && npm run db:heartbeat",
     "dev:web": "npm run dev -w @pmp/control-center",
-    "dev": "concurrently -n api,web -c cyan,magenta \"npm run dev:api\" \"npm run dev:web\""
+    "dev": "concurrently -n api,web,portal -c cyan,magenta,yellow \"npm run dev:api\" \"npm run dev:web\" \"npm run dev:portal\"",
+    "dev:portal": "npm run dev -w @pmp/speaker-portal",
+    "demo:link": "node scripts/speakerLink.mjs"
   },
   "devDependencies": {
     "@types/node": "^24.3.0",
