@@ -167,3 +167,28 @@ receipt and the **speaker portal then refuses a replacement** — a rule set in 
 honoured in another because both read it from the same place.
 
 Nine screens now run on real data. Eight remain prototype-only. `npm run ci` green (62 tests).
+
+## 2026-09-17 (sixth) — Presentation detail and Inspection, and a state-machine gap closed
+
+Screens 6 and 7, plus the actions they carry: waivers, prefilled revision requests, comment lanes
+and rollback.
+
+**A real gap in WORKFLOW_STATES surfaced while implementing rollback.** FR-REV-005 restores "a
+prior approved version", but that version is `superseded`, which the document defined as fully
+terminal — so rollback had nothing to restore *to*, and the first implementation left the talk
+reading "Missing" with no copy live in any room. Resolved by one added transition,
+`superseded→approved` via `restore`, requiring Presentation Manager or above and a reason, audited
+like any other override. `docs/WORKFLOW_STATES.md` §3 records the amendment and why. The restored
+version then reaches rooms by the ordinary approval path rather than a second delivery route.
+
+`deriveTalkStatus` also had to learn about rollback: a rolled-back latest version is not "Missing"
+when an approved version stands behind it. Three tests pin the behaviour, including the case where
+nothing is behind it and "Missing" is correct.
+
+Verified: waiving is refused for a content reviewer by name and refused with a blank reason, and a
+waiver stays visible with author and reason; "Request revision (prefilled)" writes the speaker
+comment and moves the review state together, and the speaker portal then shows *Needs revision*;
+rollback moves v2 to `rolled_back`/`obsolete` and returns v1 to `approved`/`assigned` with its
+original checksum.
+
+Eleven screens now run on real data. Six remain prototype-only. `npm run ci` green (68 tests).

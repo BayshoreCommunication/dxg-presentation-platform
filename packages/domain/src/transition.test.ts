@@ -59,7 +59,8 @@ describe("transition engine — exhaustive table", () => {
     test(`${lifecycle.name}: terminal states allow nothing (except documented re-entry)`, () => {
       for (const state of lifecycle.terminal) {
         const allowed = allowedActions(lifecycle, state);
-        const documented = ["quarantined", "obsolete", "expired", "delivered"];
+        // Terminal states with a documented, audited way back in.
+        const documented = ["quarantined", "obsolete", "expired", "delivered", "superseded"];
         if (!documented.includes(state)) {
           assert.deepEqual(allowed, [], `${state} should be terminal`);
         }

@@ -52,9 +52,16 @@ FR-REV-001..005. Eligible when inspection is in a terminal non-`failed` state (o
 | `in_review` | Claimed by a reviewer | no |
 | `changes_requested` | Sent back; speaker-visible feedback | no |
 | `approved` | Approved for room delivery | reversible |
-| `superseded` | A newer version was approved | yes |
+| `superseded` | A newer version was approved | yes, except an audited rollback restore (below) |
 | `rejected` | Will not be used | yes (override to reopen) |
 | `rolled_back` | Was approved, then rollback restored an earlier version | yes |
+
+**Amended 2026-09-17 (implementation):** FR-REV-005 restores "a prior approved version", but that
+version is `superseded`, which was written as fully terminal — leaving rollback with nothing to
+restore *to*. Resolved by one added transition: `superseded→approved` via action `restore`,
+requiring Presentation Manager or above **and** a reason, audited like any other override. The
+restored version then fans out to rooms exactly as a normal approval does, so there is no second
+delivery path to get wrong.
 
 Legal: `awaiting_review→in_review→{approved, changes_requested, rejected}`; `changes_requested` resolves when a new version arrives (this version stays; new version starts its own lifecycles); `approved→superseded` (automatic when a newer version is approved); `approved→rolled_back` (FR-REV-005: byte-identical restore of a prior approved version, rooms notified). **Re-approval rule (FR-REV-004)**: a new version never affects room assignments until it independently reaches `approved` — enforced here plus in lifecycle §4. Invalid: `awaiting_review→approved` (skipping review) except via audited override (authorized role + reason); any transition on `superseded`. Roles: reviewer decisions require Content Reviewer or above; overrides and rollback require Presentation Manager or above + reason.
 

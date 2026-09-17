@@ -20,7 +20,8 @@ export type ReviewAction =
   | "request_changes"
   | "reject"
   | "supersede"
-  | "roll_back";
+  | "roll_back"
+  | "restore";
 
 const REVIEWERS = atLeast("content_reviewer");
 const MANAGERS = atLeast("presentation_manager");
@@ -37,6 +38,7 @@ export const reviewLifecycle: Lifecycle<ReviewState, ReviewAction> = {
     rejected: "Rejected",
     rolled_back: "Rolled back",
   },
+  // `superseded` is terminal except for the audited rollback restore below.
   terminal: ["superseded", "rejected", "rolled_back"],
   rules: [
     { from: "awaiting_review", action: "claim", to: "in_review", authority: REVIEWERS },
@@ -46,8 +48,11 @@ export const reviewLifecycle: Lifecycle<ReviewState, ReviewAction> = {
     { from: "in_review", action: "reject", to: "rejected", authority: REVIEWERS, requiresReason: true },
     // Automatic once a newer version is approved.
     { from: "approved", action: "supersede", to: "superseded", authority: "machine" },
-    // FR-REV-005: byte-identical restore of an earlier approved version.
+    // FR-REV-005: byte-identical restore of an earlier approved version. The
+    // current version is rolled back and the earlier one is restored; both halves
+    // need a manager and a reason, and both are audited.
     { from: "approved", action: "roll_back", to: "rolled_back", authority: MANAGERS, requiresReason: true },
+    { from: "superseded", action: "restore", to: "approved", authority: MANAGERS, requiresReason: true },
   ],
   overrideRoles: MANAGERS,
 };

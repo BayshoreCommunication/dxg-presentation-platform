@@ -15,6 +15,15 @@ import {
 import { randomUUID } from "node:crypto";
 import { agentView, syncRoom, acknowledge, launch } from "./services/agent.ts";
 import { srrDashboard, checkIn, checkinDetail, usbIngest, signOff, depart } from "./services/srr.ts";
+import {
+  presentationDetail,
+  findingsFor,
+  waiveFinding,
+  addComment,
+  requestRevisionFromFinding,
+  rollBack,
+} from "./services/presentation.ts";
+import type { Lane } from "./services/presentation.ts";
 import type { PortalSession } from "./services/portal.ts";
 import { decide } from "./services/review.ts";
 
@@ -45,7 +54,15 @@ function actorFrom(req: express.Request): Actor | undefined {
 
 const statusFor = (error: DomainError): number => {
   if (error.code.endsWith("_not_found") || error.code.endsWith(".not_found")) return 404;
-  if (error.code.endsWith(".reason_required") || error.code.endsWith(".not_signable")) return 422;
+  if (
+    error.code.endsWith(".reason_required") ||
+    error.code.endsWith(".not_signable") ||
+    error.code.endsWith(".already_waived") ||
+    error.code.endsWith(".target_not_restorable") ||
+    error.code.endsWith(".nothing_to_roll_back")
+  ) {
+    return 422;
+  }
   if (error.code.endsWith(".conflict")) return 409;
   if (error.code.endsWith(".forbidden") || error.code.endsWith(".override_forbidden")) return 403;
   if (error.code.endsWith(".illegal_transition")) return 422;
@@ -499,6 +516,110 @@ app.post("/api/v1/srr/checkins/:checkinId/depart", async (req, res) => {
   if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
   const result = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID }, (tx) =>
     depart(tx, actor, String(req.params.checkinId)),
+  );
+  if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+  return res.json(result.value);
+});
+
+/* ── presentation detail & inspection (screens 6 and 7) ──────────────────── */
+
+app.get("/api/v1/slots/:slotId", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  const detail = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID }, (tx) =>
+    presentationDetail(tx, String(req.params.slotId)),
+  );
+  if (!detail) return res.status(404).json({ code: "slots.not_found", message: "No such talk." });
+  return res.json(detail);
+});
+
+app.get("/api/v1/file-versions/:versionId/findings", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  const items = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID }, (tx) =>
+    findingsFor(tx, String(req.params.versionId)),
+  );
+  return res.json({ items });
+});
+
+app.post("/api/v1/findings/:findingId/waive", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  const body = req.body as { reason?: string };
+  const result = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID }, (tx) =>
+    waiveFinding(tx, actor, { findingId: String(req.params.findingId), reason: body.reason ?? "" }),
+  );
+  if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+  return res.json(result.value);
+});
+
+app.get("/api/v1/file-versions/:versionId/comments", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  // Lane visibility: staff see every lane here; speaker and client surfaces are
+  // filtered at their own endpoints (FR-REV-003).
+  const items = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID }, async (tx) => {
+    const { rows } = await tx.query(
+      `SELECT c.id, c.lane, c.body, c.created_at, u.display_name AS author
+         FROM pmp.comments c LEFT JOIN pmp.users u ON u.id = c.author_user_id
+        WHERE c.file_version_id = $1 ORDER BY c.created_at`,
+      [String(req.params.versionId)],
+    );
+    return rows;
+  });
+  return res.json({ items });
+});
+
+app.post("/api/v1/file-versions/:versionId/comments", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  const body = req.body as { lane?: string; body?: string };
+  const lanes = ["internal", "client_visible", "speaker_visible"];
+  if (!body.lane || !lanes.includes(body.lane)) {
+    return res.status(400).json({ code: "request.invalid", message: `lane must be one of ${lanes.join(", ")}.` });
+  }
+  const result = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID }, (tx) =>
+    addComment(tx, actor, {
+      versionId: String(req.params.versionId),
+      lane: body.lane as Lane,
+      body: body.body ?? "",
+    }),
+  );
+  if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+  return res.status(201).json(result.value);
+});
+
+app.post("/api/v1/file-versions/:versionId/request-revision", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  const body = req.body as { finding_id?: string; note?: string };
+  if (!body.note) {
+    return res.status(400).json({ code: "request.invalid", message: "`note` is required." });
+  }
+  const result = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID }, (tx) =>
+    requestRevisionFromFinding(tx, actor, {
+      versionId: String(req.params.versionId),
+      findingId: body.finding_id ?? "",
+      note: body.note as string,
+    }),
+  );
+  if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+  return res.json(result.value);
+});
+
+app.post("/api/v1/slots/:slotId/roll-back", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  const body = req.body as { target_version_id?: string; reason?: string };
+  if (!body.target_version_id) {
+    return res.status(400).json({ code: "request.invalid", message: "`target_version_id` is required." });
+  }
+  const result = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID }, (tx) =>
+    rollBack(tx, actor, {
+      slotId: String(req.params.slotId),
+      targetVersionId: body.target_version_id as string,
+      reason: body.reason ?? "",
+    }),
   );
   if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
   return res.json(result.value);

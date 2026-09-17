@@ -72,8 +72,10 @@ export default async function CommandCenterPage({ params }: { params: Promise<{ 
                 {risk.items.map((item) => (
                   <tr className="rb" key={item.slot_id}>
                     <td>
+                      <Link href={`/events/${id}/talks/${item.slot_id}`} style={{ display: "block" }}>
                       {item.room} · {time(item.starts_at, summary.event.timezone)} · {item.speaker} —{" "}
                       {item.title}
+                      </Link>
                     </td>
                     <td style={{ textAlign: "right" }}>
                       <Chip status={item.status} label={item.status_label} />

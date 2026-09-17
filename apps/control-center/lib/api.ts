@@ -266,3 +266,83 @@ export const signOffCheckin = (checkinId: string, fileVersionId: string) =>
 
 export const departCheckin = (checkinId: string) =>
   request<{ departed: true }>(`/srr/checkins/${checkinId}/depart`, { method: "POST" }, DEV_SRR_USER);
+
+/* ── presentation detail & inspection ─────────────────────────────────────── */
+
+export type VersionRow = {
+  file_version_id: string;
+  version_number: number;
+  size_bytes: string;
+  sha256: string | null;
+  source: string;
+  processing_state: string;
+  inspection_state: string;
+  review_state: string;
+  lock_version: number;
+  created_at: string;
+  approved_at: string | null;
+  approved_by: string | null;
+  finding_counts: { info: number; warning: number; blocking: number };
+  room_states: string[];
+};
+
+export type PresentationDetail = {
+  talk: {
+    slot_id: string;
+    title: string;
+    room: string | null;
+    starts_at: string;
+    track: string | null;
+    final_locked: boolean;
+    restricted: boolean;
+    status: string;
+    status_label: string;
+  };
+  speaker: { id: string; name: string; organization: string | null } | null;
+  versions: VersionRow[];
+  retained_versions: number;
+};
+
+export type FindingRow = {
+  id: string;
+  check_code: string;
+  severity: string;
+  detail: Record<string, unknown>;
+  waived_by: string | null;
+  waived_reason: string | null;
+  waived_at: string | null;
+};
+
+export type CommentRow = {
+  id: string;
+  lane: string;
+  body: string;
+  created_at: string;
+  author: string | null;
+};
+
+export const getPresentation = (slotId: string) => request<PresentationDetail>(`/slots/${slotId}`);
+
+export const getFindings = (versionId: string) =>
+  request<{ items: FindingRow[] }>(`/file-versions/${versionId}/findings`);
+
+export const getComments = (versionId: string) =>
+  request<{ items: CommentRow[] }>(`/file-versions/${versionId}/comments`);
+
+export const waiveFinding = (findingId: string, reason: string) =>
+  request<{ waived: true }>(`/findings/${findingId}/waive`, {
+    method: "POST",
+    body: JSON.stringify({ reason }),
+  }, "pm");
+
+export const requestRevision = (versionId: string, body: { finding_id?: string; note: string }) =>
+  request<{ review_state: string }>(`/file-versions/${versionId}/request-revision`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+
+export const rollBackTalk = (slotId: string, targetVersionId: string, reason: string) =>
+  request<{ restored_version: number; rooms_notified: number }>(`/slots/${slotId}/roll-back`, {
+    method: "POST",
+    body: JSON.stringify({ target_version_id: targetVersionId, reason }),
+  }, "pm");

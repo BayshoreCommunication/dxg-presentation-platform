@@ -159,3 +159,24 @@ describe("status labels are the baseline's words (VISUAL_ACCEPTANCE §2.2)", () 
     assert.equal(TALK_STATUS_LABEL.missing, "Missing");
   });
 });
+
+describe("rollback (FR-REV-005)", () => {
+  test("a rolled-back latest version reports the restored copy, not Missing", () => {
+    const t = talk({
+      versions: [version({ review: "approved" }), version({ review: "rolled_back" })],
+      roomCopies: [{ state: "active", requiresAck: false, acknowledged: false }],
+    });
+    assert.equal(deriveTalkStatus(t), "synchronized_onsite");
+  });
+
+  test("a rollback with no room copies yet still reads as Approved", () => {
+    const t = talk({
+      versions: [version({ review: "approved" }), version({ review: "rolled_back" })],
+    });
+    assert.equal(deriveTalkStatus(t), "approved");
+  });
+
+  test("a rolled-back version with nothing approved behind it is Missing", () => {
+    assert.equal(deriveTalkStatus(talk({ versions: [version({ review: "rolled_back" })] })), "missing");
+  });
+});

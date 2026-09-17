@@ -1,12 +1,13 @@
 # DEVELOPMENT.md — running the platform locally
 
 Status: M0 in progress. The backend spine (domain state machines, database layer, API) and
-**nine working screens** exist — Portfolio, Command center, Review & approval, Room sync, Room
-Agent, Speaker Ready Room, Check-in and USB intake in the Control Center, plus the Speaker portal
-upload screen in its own app — running on real data, with a real upload → scan → inspect → review →
-sync → acknowledge → sign-off chain.
+**eleven working screens** exist — Portfolio, Command center, Presentation detail, Inspection,
+Review & approval, Room sync, Room Agent, Speaker Ready Room, Check-in and USB intake in the
+Control Center, plus the Speaker portal upload screen in its own app — running on real data, with a
+real upload → scan → inspect → review → sync → acknowledge → sign-off chain.
 
-The other eight screens are still prototype-only (`prototype/enhanced.html`).
+The other six screens are still prototype-only (`prototype/enhanced.html`): Create event, Schedule
+import, Speakers, Communications, Archive builder, Client portal.
 
 ## Prerequisites
 
@@ -119,6 +120,25 @@ different application, because both read the same rule.
 
 Try also: feed USB intake a file containing the EICAR test string — it is quarantined, the approved
 version stays active, and the intake says so plainly.
+
+### Presentation detail and Inspection — the paper trail
+
+Click any row on the Command center risk list to open **Presentation detail**.
+
+19. **Version history** shows every version ever received — size, checksum, where it came from
+    (speaker portal or USB intake), its findings, its state, and which one is in the room. Nothing
+    is ever overwritten.
+20. **Open inspection report.** Each finding is explained in plain language with the slide it is on
+    and a suggested fix, because the finding came from parsing the file rather than from a label.
+21. **Request revision (prefilled)** writes the finding to the speaker as a comment *and* moves the
+    review state in one action — so a speaker is never asked to fix something the workflow has not
+    moved on (or the reverse). Open the speaker's portal link: the talk now reads *Needs revision*.
+22. **Waive finding** needs a Presentation Manager and a reason. A content reviewer is refused by
+    name; a blank reason records nothing; and a waiver, once made, stays visible with its author and
+    reason forever.
+23. **Roll back to this** on a superseded version restores it byte-identically — the rolled-back
+    version steps aside in every room and the restored one is queued back to them with the same
+    checksum it always had.
 
 Worth saying out loud during the demo: the rules being enforced are the ones that matter
 onsite. Try to approve something before claiming it and the API refuses with

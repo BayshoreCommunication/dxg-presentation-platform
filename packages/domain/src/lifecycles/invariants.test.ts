@@ -84,7 +84,21 @@ describe("I-1 — an approved room copy is never silently replaced", () => {
 });
 
 describe("I-6 — illegal transitions are rejected with an explanation", () => {
-  test("the refusal names the current state and the allowed actions", () => {
+  test("a fully terminal state says so", () => {
+    const result = transition(reviewLifecycle, {
+      from: "rejected",
+      action: "approve",
+      actor: { id: "u", roles: ["presentation_manager"] },
+    });
+    assert.equal(result.ok, false);
+    if (!result.ok) {
+      assert.equal(result.error.current_state, "rejected");
+      assert.match(result.error.message, /Rejected/);
+      assert.match(result.error.message, /terminal/);
+    }
+  });
+
+  test("a state with one legal way out names it", () => {
     const result = transition(reviewLifecycle, {
       from: "superseded",
       action: "approve",
@@ -92,9 +106,8 @@ describe("I-6 — illegal transitions are rejected with an explanation", () => {
     });
     assert.equal(result.ok, false);
     if (!result.ok) {
-      assert.equal(result.error.current_state, "superseded");
       assert.match(result.error.message, /Superseded/);
-      assert.match(result.error.message, /terminal/);
+      assert.match(result.error.message, /Allowed: restore/);
     }
   });
 
@@ -124,5 +137,45 @@ describe("launch guard input semantics (regression)", () => {
     assert.equal(canLaunch({ state: "synced", requiresAck: true, acknowledged: false }), false);
     assert.equal(canLaunch({ state: "acknowledged", requiresAck: true, acknowledged: true }), false);
     assert.equal(canLaunch({ state: "active", requiresAck: true, acknowledged: true }), true);
+  });
+});
+
+describe("rollback restore (FR-REV-005)", () => {
+  test("a superseded version can only be restored by a manager, with a reason", () => {
+    const reviewer: Actor = { id: "u-cr", roles: ["content_reviewer"] };
+    const manager: Actor = { id: "u-pm", roles: ["presentation_manager"] };
+
+    const byReviewer = transition(reviewLifecycle, {
+      from: "superseded",
+      action: "restore",
+      actor: reviewer,
+      reason: "put it back",
+    });
+    assert.equal(byReviewer.ok, false);
+
+    const noReason = transition(reviewLifecycle, {
+      from: "superseded",
+      action: "restore",
+      actor: manager,
+    });
+    assert.equal(noReason.ok, false);
+    if (!noReason.ok) assert.equal(noReason.error.code, "review.reason_required");
+
+    const good = transition(reviewLifecycle, {
+      from: "superseded",
+      action: "restore",
+      actor: manager,
+      reason: "wrong deck approved",
+    });
+    assert.equal(good.ok, true);
+    if (good.ok) assert.equal(good.value.to, "approved");
+  });
+
+  test("restore is not a way to revive a rejected or rolled-back version", () => {
+    const manager: Actor = { id: "u-pm", roles: ["presentation_manager"] };
+    for (const from of ["rejected", "rolled_back"] as const) {
+      const result = transition(reviewLifecycle, { from, action: "restore", actor: manager, reason: "x" });
+      assert.equal(result.ok, false, `${from} must not be restorable`);
+    }
   });
 });

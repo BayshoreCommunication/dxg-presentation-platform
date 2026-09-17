@@ -83,7 +83,16 @@ export function deriveTalkStatus(talk: TalkSnapshot): TalkStatus {
   }
   if (current.review === "awaiting_review" || current.review === "in_review") return "submitted";
 
-  if (current.review === "approved") {
+  // FR-REV-005: a rollback restores an earlier approved version byte-identically.
+  // The latest version is then `rolled_back`, but the talk is not "missing" — it
+  // is running whatever copy the rooms now hold.
+  const restored =
+    current.review === "rolled_back"
+      ? talk.versions.findLast((version) => version.review === "approved")
+      : undefined;
+  const effective = restored ?? current;
+
+  if (effective.review === "approved") {
     if (talk.roomCopies.length === 0) return "approved";
     const pendingAck = talk.roomCopies.some((copy) => copy.requiresAck && !copy.acknowledged);
     if (pendingAck) return "update_pending_ack";
