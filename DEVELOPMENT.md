@@ -1,13 +1,13 @@
 # DEVELOPMENT.md — running the platform locally
 
 Status: M0 in progress. The backend spine (domain state machines, database layer, API) and
-**eleven working screens** exist — Portfolio, Command center, Presentation detail, Inspection,
-Review & approval, Room sync, Room Agent, Speaker Ready Room, Check-in and USB intake in the
-Control Center, plus the Speaker portal upload screen in its own app — running on real data, with a
-real upload → scan → inspect → review → sync → acknowledge → sign-off chain.
+**thirteen working screens** exist — Portfolio, Schedule import, Speakers, Command center,
+Presentation detail, Inspection, Review & approval, Room sync, Room Agent, Speaker Ready Room,
+Check-in and USB intake in the Control Center, plus the Speaker portal upload screen in its own app
+— running on real data, from importing an agenda through to a file playing in a room.
 
-The other six screens are still prototype-only (`prototype/enhanced.html`): Create event, Schedule
-import, Speakers, Communications, Archive builder, Client portal.
+Four screens are still prototype-only (`prototype/enhanced.html`): Create event, Communications,
+Archive builder, Client portal.
 
 ## Prerequisites
 
@@ -140,6 +140,29 @@ Click any row on the Command center risk list to open **Presentation detail**.
     version steps aside in every room and the restored one is queued back to them with the same
     checksum it always had.
 
+### Schedule import and Speakers — the front door
+
+**Schedule import** takes a real .xlsx or .csv. A sample with deliberate problems is in
+`db/seeds/sample_agenda.csv`.
+
+24. **Upload it.** Columns are auto-mapped (the sample maps 9 of 9), and every column can be
+    overridden from a dropdown — changing one re-validates without re-uploading.
+25. **Validation.** Row 3 has “Ballroon B”: the platform says it matches no room and offers
+    **Ballroom B**. Applying the fix edits the staged row only — it never commits anything. Row 4
+    has no speaker email: a warning, because the session should import while invitations wait. Row 5
+    has no room at all: blocking.
+26. **Import is all-or-nothing.** While a blocking row remains, the button is disabled and says why.
+27. **Re-import the same file.** Every row that matched comes back as *unchanged* — matching is on
+    room + start + title, so a second import updates rather than duplicating.
+
+Worth saying: the times in that spreadsheet are venue wall-clock times. They are converted through
+the event's own timezone, so a 10:30 session is 10:30 in Tampa — not 10:30 UTC sitting four hours
+wrong in every room list.
+
+**Speakers** shows the directory with organization, talk count and live status, search across name,
+organization and email, a chase list (*Bulk remind*), and **possible duplicates** with a merge that
+preserves both file histories and every assignment.
+
 Worth saying out loud during the demo: the rules being enforced are the ones that matter
 onsite. Try to approve something before claiming it and the API refuses with
 *"Cannot approve while review is Submitted. Allowed: claim."* Act on a stale copy and it
@@ -184,7 +207,7 @@ workflow transition and a hash-chained audit record are written — all in one t
 |---|---|
 | `packages/domain` | Pure domain: the six lifecycles, the transition engine, derived status. No I/O. |
 | `packages/db` | Pool, RLS scope helper (`withScope`), migration runner, seed, hash-chained audit. |
-| `packages/files` | Storage driver, scanner, and the tier-1 inspection engine (its own ZIP/OOXML reader — no Office, no dependency). |
+| `packages/files` | Storage driver, scanner, tier-1 inspection engine, and the spreadsheet reader — one ZIP/OOXML reader serves both PowerPoint inspection and .xlsx import, with no dependency. |
 | `apps/api` | Express 5: health, events, talks, speakers, review transition, audit verify, portal + upload, agent heartbeat. |
 | `apps/control-center` | Next.js staff app (:3000), including the Room Agent room view. |
 | `apps/speaker-portal` | Next.js speaker app (:3001), token auth only. |

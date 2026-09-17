@@ -19,6 +19,7 @@ const TALKS = [
     key: "raman",
     speaker: "Dr. Priya Raman",
     email: "p.raman@example.invalid",
+    org: "Bayview Medical",
     room: "Ballroom A",
     title: "Robotic Surgery Outcomes: Five-Year Data",
     start: "2026-03-11T10:30:00-04:00",
@@ -33,6 +34,7 @@ const TALKS = [
     key: "fontaine",
     speaker: "Alicia Fontaine",
     email: "a.fontaine@example.invalid",
+    org: "CardioNext",
     room: "Room 212",
     title: "CardioNext Trial Results",
     start: "2026-03-11T11:15:00-04:00",
@@ -44,6 +46,7 @@ const TALKS = [
     key: "osei",
     speaker: "Kwame Osei",
     email: "k.osei@example.invalid",
+    org: "Nordic Devices",
     room: "Room 210",
     title: "Sensor Talk — linked video",
     start: "2026-03-11T13:00:00-04:00",
@@ -104,6 +107,16 @@ async function seed(): Promise<void> {
       );
     }
 
+    // A few extra rooms so the event looks like a real conference floor and
+    // schedule-import matching has something to match against.
+    for (const extra of ["Ballroom B", "Room 214"]) {
+      await client.query(`INSERT INTO rooms (event_id, client_id, name) VALUES ($1, $2, $3)`, [
+        IDS.event,
+        IDS.client,
+        extra,
+      ]);
+    }
+
     const { rows: dayRows } = await client.query<{ id: string }>(
       `INSERT INTO event_days (event_id, client_id, day_date) VALUES ($1, $2, '2026-03-11') RETURNING id`,
       [IDS.event, IDS.client],
@@ -136,9 +149,9 @@ async function seed(): Promise<void> {
       const slotId = slotRows[0]!.id;
 
       const { rows: speakerRows } = await client.query<{ id: string }>(
-        `INSERT INTO speakers (client_id, event_id, email, full_name, release_permission)
-         VALUES ($1, $2, $3, $4, 'full') RETURNING id`,
-        [IDS.client, IDS.event, talk.email, talk.speaker],
+        `INSERT INTO speakers (client_id, event_id, email, full_name, organization, release_permission)
+         VALUES ($1, $2, $3, $4, $5, 'full') RETURNING id`,
+        [IDS.client, IDS.event, talk.email, talk.speaker, talk.org],
       );
       await client.query(
         `INSERT INTO speaker_assignments (speaker_id, slot_id, event_id, client_id) VALUES ($1, $2, $3, $4)`,

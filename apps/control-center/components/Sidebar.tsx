@@ -14,9 +14,9 @@ const GROUPS: { group: string; items: { label: string; href?: string }[] }[] = [
     items: [
       { label: "Portfolio", href: "/" },
       { label: "Create event" },
-      { label: "Schedule import" },
+      { label: "Schedule import", href: "/events/:id/import" },
       { label: "Command center", href: "/events/:id" },
-      { label: "Speakers" },
+      { label: "Speakers", href: "/events/:id/speakers" },
       { label: "Presentation detail" },
       { label: "Inspection" },
       { label: "Review & approval", href: "/events/:id/review" },

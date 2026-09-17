@@ -192,3 +192,28 @@ rollback moves v2 to `rolled_back`/`obsolete` and returns v1 to `approved`/`assi
 original checksum.
 
 Eleven screens now run on real data. Six remain prototype-only. `npm run ci` green (68 tests).
+
+## 2026-09-17 (seventh) — Schedule import and Speakers: the front door
+
+Screens 3 and 5. Migration `006` adds `speakers.organization` (additive).
+
+- **`packages/files/sheet.ts`** — .xlsx and .csv parsing with no new dependency: an XLSX is an OOXML
+  package, so the ZIP reader written for presentation inspection opens it too. Shared strings,
+  inline strings, skipped columns and Excel serial dates are covered by tests.
+- **Auto-mapping** matches header synonyms to platform fields (9/9 on the sample agenda), never maps
+  two columns to the same field, and leaves unknown columns unmapped rather than guessing.
+- **Validation** separates blocking from warning, and offers a room suggestion only for a clear typo
+  (edit distance 1–2, never when two rooms are equally close) — a wrong room means the wrong deck in
+  the wrong room, so the suggestion is always an explicit action, never applied automatically.
+- **Commit** is transactional and all-or-nothing, and re-import matches on (room, start, title) so a
+  second import updates instead of duplicating (FR-IMP-002).
+- **Speakers**: directory with organization and live status, server-side search, chase list, and
+  duplicate detection with a merge that preserves both histories and every assignment.
+
+**A real bug found here:** spreadsheet times were being read as UTC. They are venue wall-clock
+times, so every imported session was landing four hours out and no re-import ever matched an
+existing session. Now converted through the event's timezone with `zonedToUtc`, DST included, with
+tests against known EST/EDT anchors. `updated` was also never being counted — a matched session now
+counts as updated only when something actually differs, so an unchanged re-import writes nothing.
+
+Thirteen screens now run on real data. Four remain prototype-only. `npm run ci` green (90 tests).

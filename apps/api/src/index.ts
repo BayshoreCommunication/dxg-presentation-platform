@@ -1,5 +1,5 @@
 import express from "express";
-import { withScope, getPool, verifyAuditChain } from "@pmp/db";
+import { withScope, getPool, verifyAuditChain, appendAudit as appendAuditRecord } from "@pmp/db";
 import type { Actor, DomainError, ReviewAction } from "@pmp/domain";
 import { listTalks } from "./services/talks.ts";
 import { eventSummary, riskList, reviewQueue, syncFleet } from "./services/queries.ts";
@@ -24,6 +24,8 @@ import {
   rollBack,
 } from "./services/presentation.ts";
 import type { Lane } from "./services/presentation.ts";
+import { buildPreview, commitImport, autoMap } from "./services/scheduleImport.ts";
+import type { ImportField, StagedRow } from "./services/scheduleImport.ts";
 import type { PortalSession } from "./services/portal.ts";
 import { decide } from "./services/review.ts";
 
@@ -46,6 +48,17 @@ const DEV_USERS: Record<string, Actor> = {
   client: { id: "33333333-3333-4333-8333-333333333334", roles: ["client_event_admin"] },
 };
 const DEV_CLIENT_ID = "11111111-1111-4111-8111-111111111111";
+const IMPORT_FIELD_LIST = [
+  "session.title",
+  "room.name",
+  "session.date",
+  "session.start",
+  "session.end",
+  "speaker.name",
+  "speaker.email",
+  "speaker.organization",
+  "track.name",
+];
 
 function actorFrom(req: express.Request): Actor | undefined {
   const key = String(req.header("x-dev-user") ?? "reviewer");
@@ -285,12 +298,18 @@ app.get("/api/v1/events/:eventId/speakers", async (req, res) => {
   const query = String(req.query.q ?? "");
   const items = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID, eventId }, async (tx) => {
     const { rows } = await tx.query(
-      `SELECT sp.id, sp.full_name, sp.email::text, sp.release_permission,
-              count(sa.id)::int AS talks
+      `SELECT sp.id, sp.full_name, sp.email::text, sp.organization, sp.release_permission,
+              count(DISTINCT sa.id)::int AS talks,
+              count(DISTINCT fv.file_id) FILTER (WHERE fv.review_state = 'approved')::int AS approved,
+              count(DISTINCT f.id)::int AS with_files
          FROM pmp.speakers sp
          LEFT JOIN pmp.speaker_assignments sa ON sa.speaker_id = sp.id
+         LEFT JOIN pmp.files f ON f.slot_id = sa.slot_id
+         LEFT JOIN pmp.file_versions fv ON fv.file_id = f.id
         WHERE sp.event_id = $1 AND sp.merged_into IS NULL
-          AND ($2 = '' OR sp.full_name ILIKE '%' || $2 || '%')
+          AND ($2 = '' OR sp.full_name ILIKE '%' || $2 || '%'
+               OR COALESCE(sp.organization,'') ILIKE '%' || $2 || '%'
+               OR COALESCE(sp.email::text,'') ILIKE '%' || $2 || '%')
         GROUP BY sp.id
         ORDER BY sp.full_name`,
       [eventId, query],
@@ -624,6 +643,150 @@ app.post("/api/v1/slots/:slotId/roll-back", async (req, res) => {
   if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
   return res.json(result.value);
 });
+
+/** Duplicate detection + merge (FR-SPK-003). */
+app.get("/api/v1/events/:eventId/speaker-duplicates", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  const eventId = String(req.params.eventId);
+  const items = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID, eventId }, async (tx) => {
+    const { rows } = await tx.query(
+      `SELECT a.id AS a_id, a.full_name AS a_name, a.email::text AS a_email,
+              b.id AS b_id, b.full_name AS b_name, b.email::text AS b_email,
+              CASE WHEN lower(a.email::text) = lower(b.email::text) THEN 'same email'
+                   ELSE 'same name and organization' END AS reason
+         FROM pmp.speakers a
+         JOIN pmp.speakers b
+           ON b.event_id = a.event_id AND b.id > a.id AND b.merged_into IS NULL
+          AND (lower(a.email::text) = lower(b.email::text)
+               OR (lower(a.full_name) = lower(b.full_name)
+                   AND COALESCE(lower(a.organization),'') = COALESCE(lower(b.organization),'')))
+        WHERE a.event_id = $1 AND a.merged_into IS NULL`,
+      [eventId],
+    );
+    return rows;
+  });
+  return res.json({ items });
+});
+
+app.post("/api/v1/speakers/:speakerId/merge", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  const body = req.body as { into?: string };
+  if (!body.into) {
+    return res.status(400).json({ code: "request.invalid", message: "`into` is required." });
+  }
+  const survivor = body.into;
+  const merged = String(req.params.speakerId);
+  if (survivor === merged) {
+    return res.status(422).json({ code: "speakers.same", message: "A speaker cannot be merged into itself." });
+  }
+
+  const result = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID }, async (tx) => {
+    const { rows } = await tx.query<{ event_id: string; client_id: string }>(
+      `SELECT event_id, client_id FROM pmp.speakers WHERE id = $1 AND merged_into IS NULL`,
+      [merged],
+    );
+    if (!rows[0]) return null;
+
+    // Assignments move to the survivor; both file histories stay reachable
+    // because files hang off slots, not speakers.
+    await tx.query(
+      `UPDATE pmp.speaker_assignments sa SET speaker_id = $1
+        WHERE sa.speaker_id = $2
+          AND NOT EXISTS (SELECT 1 FROM pmp.speaker_assignments other
+                           WHERE other.speaker_id = $1 AND other.slot_id = sa.slot_id)`,
+      [survivor, merged],
+    );
+    await tx.query(`DELETE FROM pmp.speaker_assignments WHERE speaker_id = $1`, [merged]);
+    await tx.query(`UPDATE pmp.speaker_tokens SET revoked_at = now() WHERE speaker_id = $1`, [merged]);
+    await tx.query(
+      `UPDATE pmp.speakers SET merged_into = $1, lock_version = lock_version + 1 WHERE id = $2`,
+      [survivor, merged],
+    );
+    await appendAuditRecord(tx, {
+      partitionId: rows[0].event_id,
+      clientId: rows[0].client_id,
+      actorUserId: actor.id,
+      action: "speakers.merged",
+      subjectType: "speaker",
+      subjectId: merged,
+      detail: { merged_into: survivor },
+    });
+    return { merged_into: survivor };
+  });
+
+  if (!result) return res.status(404).json({ code: "speakers.not_found", message: "No such speaker." });
+  return res.json(result);
+});
+
+/* ── schedule import (screen 3) ──────────────────────────────────────────── */
+
+const importCache = new Map<string, { eventId: string; fileName: string; body: Buffer }>();
+
+app.post("/api/v1/events/:eventId/imports", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  const fileName = String(req.header("x-file-name") ?? "agenda.csv");
+  const body = req.body as Buffer;
+  if (!Buffer.isBuffer(body) || body.length === 0) {
+    return res.status(400).json({ code: "request.invalid", message: "Empty file." });
+  }
+
+  const eventId = String(req.params.eventId);
+  const uploadId = randomUUID();
+  importCache.set(uploadId, { eventId, fileName, body });
+
+  const result = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID, eventId }, (tx) =>
+    buildPreview(tx, { eventId, fileName, body, actorId: actor.id, s3Key: `imports/${uploadId}` }),
+  );
+  if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+  return res.status(201).json({ ...result.value, upload_id: uploadId });
+});
+
+/** Re-map columns and re-validate without re-uploading the file. */
+app.post("/api/v1/imports/:uploadId/remap", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  const cached = importCache.get(String(req.params.uploadId));
+  if (!cached) return res.status(404).json({ code: "import.expired", message: "Upload the file again." });
+  const body = req.body as { mapping?: (ImportField | null)[] };
+
+  const result = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID, eventId: cached.eventId }, (tx) =>
+    buildPreview(tx, {
+      eventId: cached.eventId,
+      fileName: cached.fileName,
+      body: cached.body,
+      actorId: actor.id,
+      s3Key: `imports/${String(req.params.uploadId)}`,
+      ...(body.mapping ? { mapping: body.mapping } : {}),
+    }),
+  );
+  if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+  return res.json({ ...result.value, upload_id: String(req.params.uploadId) });
+});
+
+app.post("/api/v1/imports/:importId/commit", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  const body = req.body as { event_id?: string; rows?: StagedRow[] };
+  if (!body.event_id || !Array.isArray(body.rows)) {
+    return res.status(400).json({ code: "request.invalid", message: "`event_id` and `rows` are required." });
+  }
+  const result = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID, eventId: body.event_id }, (tx) =>
+    commitImport(tx, actor, {
+      eventId: body.event_id as string,
+      importId: String(req.params.importId),
+      rows: body.rows as StagedRow[],
+    }),
+  );
+  if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+  return res.json(result.value);
+});
+
+app.get("/api/v1/import-fields", (_req, res) =>
+  res.json({ fields: autoMap([]).length === 0 ? IMPORT_FIELD_LIST : IMPORT_FIELD_LIST }),
+);
 
 const port = Number(process.env.PORT ?? 4000);
 app.listen(port, () => {

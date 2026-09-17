@@ -346,3 +346,117 @@ export const rollBackTalk = (slotId: string, targetVersionId: string, reason: st
     method: "POST",
     body: JSON.stringify({ target_version_id: targetVersionId, reason }),
   }, "pm");
+
+/* ── speakers & schedule import ───────────────────────────────────────────── */
+
+export type SpeakerRow = {
+  id: string;
+  full_name: string;
+  email: string | null;
+  organization: string | null;
+  release_permission: string;
+  talks: number;
+  approved: number;
+  with_files: number;
+};
+
+export type DuplicatePair = {
+  a_id: string;
+  a_name: string;
+  a_email: string | null;
+  b_id: string;
+  b_name: string;
+  b_email: string | null;
+  reason: string;
+};
+
+export const getSpeakers = (eventId: string, q = "") =>
+  request<{ items: SpeakerRow[] }>(`/events/${eventId}/speakers?q=${encodeURIComponent(q)}`, undefined, "pm");
+
+export const getDuplicates = (eventId: string) =>
+  request<{ items: DuplicatePair[] }>(`/events/${eventId}/speaker-duplicates`, undefined, "pm");
+
+export const mergeSpeakers = (speakerId: string, into: string) =>
+  request<{ merged_into: string }>(
+    `/speakers/${speakerId}/merge`,
+    { method: "POST", body: JSON.stringify({ into }) },
+    "pm",
+  );
+
+export const inviteSpeaker = (speakerId: string) =>
+  request<{ token: string; url: string }>(`/speakers/${speakerId}/invite`, { method: "POST" }, "pm");
+
+export type ImportField = string;
+
+export type RowIssue = {
+  row: number;
+  column: string;
+  severity: "blocking" | "warning";
+  message: string;
+  suggestion?: { field: ImportField; value: string };
+};
+
+export type StagedRow = {
+  row: number;
+  title: string;
+  room: string;
+  starts_at: string | null;
+  ends_at: string | null;
+  speaker_name: string;
+  speaker_email: string;
+  organization: string;
+  track: string;
+  action: "create" | "update" | "unchanged";
+};
+
+export type ImportPreview = {
+  import_id: string;
+  upload_id: string;
+  file_name: string;
+  headers: string[];
+  mapping: (ImportField | null)[];
+  total_rows: number;
+  blocking: number;
+  warnings: number;
+  new_speakers: number;
+  counts: { create: number; update: number; unchanged: number };
+  issues: RowIssue[];
+  rows: StagedRow[];
+};
+
+export const IMPORT_FIELDS = [
+  "session.title",
+  "room.name",
+  "session.date",
+  "session.start",
+  "session.end",
+  "speaker.name",
+  "speaker.email",
+  "speaker.organization",
+  "track.name",
+];
+
+export const uploadImport = async (eventId: string, file: File) =>
+  request<ImportPreview>(
+    `/events/${eventId}/imports`,
+    {
+      method: "POST",
+      body: await file.arrayBuffer(),
+      headers: { "content-type": "application/octet-stream", "x-file-name": file.name },
+    },
+    "pm",
+  );
+
+export const remapImport = (uploadId: string, mapping: (ImportField | null)[]) =>
+  request<ImportPreview>(
+    `/imports/${uploadId}/remap`,
+    { method: "POST", body: JSON.stringify({ mapping }) },
+    "pm",
+  );
+
+export const commitImport = (importId: string, eventId: string, rows: StagedRow[]) =>
+  request<{ created: number; updated: number; unchanged: number; speakers: number }>(
+    `/imports/${importId}/commit`,
+    { method: "POST", body: JSON.stringify({ event_id: eventId, rows }) },
+    "pm",
+  );
