@@ -1,6 +1,6 @@
 # PROJECT_STATE.md
 
-Last updated: 2026-09-15
+Last updated: 2026-09-17
 
 ## Status
 Phase 0, documentation stage. Git repository initialized; no application code. **G0 status: DEFINED, NOT STARTED** — no gate item has been executed; Phase 0 is not complete and production scaffolding is blocked until PHASE0_GATE.md items pass.
@@ -46,3 +46,32 @@ Reviewed `prototype/enhanced.html` (all 17 screens + the 19-step demo runner + g
 **Gate reality check (unchanged by this work):** G0-6b (17/17 visual approval) still blocks all frontend scaffolding; G0-1 (PowerPoint PoC) still blocks the Room Agent playback decision and needs Windows/Office hardware; G0-4/5/7 still need DXG inputs and the P0-C5 request. **M0 depends on none of them and can start immediately**; it also closes G0-2 by implementing the sync PoC against the specified protocol.
 
 Highest-leverage open action: approve the 17 comparison rows and send the sheet to DXG — it is the only thing serialising the whole plan.
+
+## 2026-09-17 — M0 started: first production code
+
+Travis asked to start development ahead of the remaining gate items. Built the parts of M0 that
+depend on neither the visual-acceptance approval nor Windows hardware (commit `4caffe5`):
+
+- **`packages/domain`** — the transition engine and all six WORKFLOW_STATES lifecycles, plus
+  `deriveTalkStatus`/`deriveRoomReadiness`. Pure, no I/O, 51 tests covering every state × action
+  pair, role authority, mandatory reasons, audited overrides, and the derived-status truth table.
+- **`packages/db`** — `withScope()` (transaction + RLS session variables), idempotent migration
+  runner (baselines an entrypoint-applied schema), synthetic seed, hash-chained append-only audit
+  with verification.
+- **`apps/api`** — Express 5 slice: health, events, talks (status derived in the domain layer),
+  the review transition with optimistic locking and role gates, and `audit:verify`.
+
+Verified against Postgres 16 in Docker: approve-before-claim refused with an explanation; stale
+`lock_version` → 409; client admin → 403; a reviewer's approval supersedes the prior version,
+queues the room, writes the workflow transition, the audit record and two outbox events in one
+transaction, and the talk's derived status moves to "Approved — delivering". An UPDATE on
+`audit_records` is rejected by the database trigger (I-5 proven at the data layer).
+
+`npm run ci` green. Running instructions: `DEVELOPMENT.md`.
+
+**Doc amendment:** WORKFLOW_STATES §8 now evaluates canceled/archived first (see the note there).
+
+**Still true:** there is no UI — frontend scaffolding remains blocked on the 17-row visual
+acceptance (G0-6b), and Room Agent playback remains blocked on G0-1. For client walkthroughs the
+artifact is still `prototype/enhanced.html`. Remaining M0 work: M0-1 (contracts package), the rest
+of M0-5 (real auth, idempotency store, dispatcher, SSE), M0-6 (sync PoC, closes G0-2), M0-7 (CI).

@@ -113,14 +113,19 @@ The configurable pipeline the SRS describes (M09) is the reviewer-facing project
 
 ## 8. UI-derived overall presentation status
 
-The UI never stores a combined status; it derives one per talk, in priority order:
+The UI never stores a combined status; it derives one per talk, in priority order.
+**Amended 2026-09-17 (implementation):** rules 7 (canceled / archived) are evaluated
+*first*, not last — they are facts about the session and the event, and a canceled slot
+must not be reported as "Missing" merely because nobody uploaded to it. Implemented in
+`packages/domain/src/status/derive.ts`, pinned by tests.
 
+0. Event archived → **Archived**; session `canceled` → **Canceled**
 1. Any current version `quarantined`/`checksum_failed` → **Attention**
 2. No file version at all → **Missing** (red as deadline nears)
 3. Latest version in §1/§2 pipeline → **Processing**
 4. Latest version `changes_requested`/`failed` → **Needs revision**
 5. Approved version exists, any assigned room not `active` → **Approved — delivering** (room readiness amber)
 6. Approved + all assigned rooms `active` (+acknowledged) → **Ready**
-7. Session `canceled` → **Canceled**; event closed + archived → **Archived**
+7. (moved to rule 0 above) Session `canceled` → **Canceled**; event closed + archived → **Archived**
 
 Room readiness (OBJ-6) = all talks in that room's upcoming sessions at "Ready", agent heartbeat fresh, no unacknowledged changes.
