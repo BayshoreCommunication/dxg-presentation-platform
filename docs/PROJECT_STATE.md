@@ -326,3 +326,28 @@ refused the staff surface twice over — first for holding no role, then for not
 accounts. `admin@example.invalid` (A. Whitfield, platform_admin) is now seeded.
 
 Eighteen screens; 139 unit tests, 29 auth/MFA/admin tests, lint and type-check green.
+
+## 2026-09-17 (thirteenth) — self-service password reset, and the outbox dispatcher
+
+Resetting a forgotten password needed email to actually leave the system, which meant building the
+outbox dispatcher the architecture always specified (BUILD_SPEC §6.2) rather than stubbing around
+it. `apps/dispatcher` drains the outbox and delivers through a sender chosen by environment: a file
+transport in development that writes each message to `.data/mail/` and prints it, and an SES
+transport that **throws rather than silently succeeding**, so production cannot look like working
+email while nobody receives anything. Communications batches now travel the same path.
+
+The reset itself:
+- requesting one answers identically whether or not the address has an account, and sends nothing
+  when it does not
+- the link is hashed in storage, single use, 30 minutes, and asking for a new one retires the old
+- at most five requests per account per hour
+- completing a reset revokes every session — and does **not** satisfy the second factor: an
+  enrolled account still needs its authenticator, so a hijacked mailbox alone opens nothing
+
+Three test-design problems fixed rather than worked around: the reset tests were changing a shared
+fixture account's password and breaking the MFA suite (they now create and enrol their own
+account); they raced with previously queued mail (they now wait for a message written after a
+marker and addressed to the right recipient); and a password-policy failure returned 400 where
+every other policy refusal returns 422 — the API was made consistent.
+
+139 unit tests, 34 auth/MFA/admin/reset tests, green twice in a row.

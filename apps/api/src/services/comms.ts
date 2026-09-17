@@ -255,7 +255,12 @@ export async function sendBatch(
 
     // Delivery is a side effect: it goes through the outbox, never the request.
     await tx.query(`INSERT INTO pmp.outbox (topic, payload) VALUES ('email.send', $1)`, [
-      JSON.stringify({ communication_id: comm[0]!.id, to: recipient.email, subject: rendered.subject }),
+      JSON.stringify({
+        communication_id: comm[0]!.id,
+        to: recipient.email,
+        subject: rendered.subject,
+        body: rendered.body,
+      }),
     ]);
     queued += 1;
   }

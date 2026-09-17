@@ -137,9 +137,13 @@ export function LoginForm({ next, reason }: { next: string; reason: string | nul
           {busy ? "Signing in…" : "Sign in"}
         </button>
 
-        <div style={{ textAlign: "center", fontSize: 12.5, color: "var(--dim)", marginTop: 12 }}>
-          Accounts are created by DXG. If you can&rsquo;t get in, ask a platform admin to reset your
-          password.
+        <div style={{ textAlign: "center", fontSize: 12.5, marginTop: 12 }}>
+          <a href="/forgot-password" style={{ color: "var(--blue)" }}>
+            Forgotten your password?
+          </a>
+        </div>
+        <div style={{ textAlign: "center", fontSize: 12.5, color: "var(--dim)", marginTop: 8 }}>
+          Accounts are created by DXG — there is no signup.
         </div>
           </>
         )}

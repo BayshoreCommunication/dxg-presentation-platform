@@ -21,7 +21,7 @@ npm run db:up          # postgres :5434, redis :6380
 npm run db:migrate     # applies db/migrations in order (idempotent)
 npm run db:seed        # synthetic MedTech Forward 2026 fixture — no real content
 npm run db:heartbeat   # marks room agents as freshly online
-npm run dev            # api :4000 · control center :3000 · speaker portal :3001
+npm run dev            # api :4000 · control center :3000 · portal :3001 · mail dispatcher
 ```
 
 Open http://localhost:3000 for staff. For the speaker portal, mint a link:
@@ -38,6 +38,12 @@ There is no signup. Every credential is created by DXG.
 each speaker. Staff sign in at http://localhost:3000/login; presenters at
 http://localhost:3001/login, or by following their link, which pre-fills the code and
 asks only for their email address.
+
+A forgotten password is self-service: **Forgotten your password?** on the sign-in page emails a
+link that works once and expires in 30 minutes. In development the dispatcher writes mail to
+`.data/mail/*.json` instead of sending it, so the link is readable there — nothing leaves the
+machine. Resetting a password does **not** replace the second factor: an enrolled account still
+needs its authenticator afterwards.
 
 Staff accounts are created on **Admin → Staff accounts** (`/admin/users`), which needs a platform
 admin or project manager — the seed includes `admin@example.invalid` for this. Creating an account
@@ -287,6 +293,7 @@ workflow transition and a hash-chained audit record are written — all in one t
 | `packages/db` | Pool, RLS scope helper (`withScope`), migration runner, seed, hash-chained audit. |
 | `packages/files` | Storage driver, scanner, tier-1 inspection engine, spreadsheet reader and archive zip writer — one ZIP/OOXML implementation serves PowerPoint inspection, .xlsx import and package building, with no dependency. |
 | `apps/api` | Express 5: health, events, talks, speakers, review transition, audit verify, portal + upload, agent heartbeat. |
+| `apps/dispatcher` | Drains the outbox and delivers email (file transport in development, SES at M3-5). |
 | `apps/control-center` | Next.js staff app (:3000), including the Room Agent room view. |
 | `apps/speaker-portal` | Next.js speaker app (:3001), token auth only. |
 
@@ -312,9 +319,11 @@ workflow transition and a hash-chained audit record are written — all in one t
   agent's sync engine will — read, verify checksum, then make visible — minus the network.
 - **Launching does not drive PowerPoint yet** (M5-3, gated on G0-1). The launch guard, the
   holding-screen fallback and the launch log are real; the COM call is not there.
-- **Email is queued, not sent.** A batch writes per-recipient communications and outbox rows and
-  issues real per-recipient links; the SES sender and webhook signature verification are M3-5.
-  Delivery events can be posted to the webhook by hand, which is how the bounce path is exercised.
+- **Email is delivered by the outbox dispatcher**, which writes to `.data/mail/` in development.
+  The SES transport is deliberately unimplemented and throws rather than silently succeeding, so
+  production cannot look like working email while nobody receives anything (M3-5). Webhook
+  signature verification is also M3-5; delivery events can be posted by hand, which is how the
+  bounce path is exercised.
 - **Asset upload** (event header, slide template) is not built (M1-4).
 - **MFA is enforced** for every staff account (D-017). The development accounts are pre-enrolled
   with a known secret so local work uses a real second factor rather than a bypass:

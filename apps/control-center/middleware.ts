@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-const PUBLIC = ["/login", "/account/password", "/account/mfa"];
+const PUBLIC = ["/login", "/forgot-password", "/reset-password", "/account/password", "/account/mfa"];
 
 /**
  * First gate only: no session cookie means no point rendering a staff screen.

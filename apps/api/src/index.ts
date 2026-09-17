@@ -27,6 +27,7 @@ import {
 } from "./services/auth.ts";
 import type { Principal } from "./services/auth.ts";
 import { startEnrolment, confirmEnrolment, disableMfa, answerChallenge } from "./services/mfa.ts";
+import { requestReset, completeReset } from "./services/passwordReset.ts";
 import {
   listStaff,
   resetPassword,
@@ -180,6 +181,7 @@ const STAFF_ROLES: EventRole[] = [
 ];
 
 const NON_STAFF_PATHS = [
+  "/api/v1/auth/password-reset/",
   "/api/v1/auth/mfa/",
   "/api/v1/auth/login",
   "/api/v1/auth/logout",
@@ -246,6 +248,18 @@ const statusFor = (error: DomainError): number => {
   if (error.code === "mfa.challenge_expired") return 401;
   if (error.code.startsWith("mfa.")) return 422;
   if (error.code === "auth.email_taken") return 409;
+  if (error.code === "auth.reset_invalid") return 422;
+  // A well-formed request whose value breaks a rule is unprocessable, not malformed.
+  if (
+    error.code === "auth.too_short" ||
+    error.code === "auth.too_long" ||
+    error.code === "auth.too_common" ||
+    error.code === "admin.too_short" ||
+    error.code === "admin.too_long" ||
+    error.code === "admin.too_common"
+  ) {
+    return 422;
+  }
   if (error.code.startsWith("admin.") && error.code.endsWith("forbidden")) return 403;
   if (
     error.code === "admin.reason_required" ||
@@ -1527,6 +1541,42 @@ app.post("/api/v1/admin/users/:userId/roles", async (req, res) => {
       : ((await grantRole(tx, actor, input)) as Result<{ granted?: true; revoked?: true }, DomainError>),
   );
   if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+  return res.json(result.value);
+});
+
+/* ── self-service password reset ─────────────────────────────────────────── */
+
+const STAFF_APP_BASE = process.env.STAFF_BASE ?? "http://localhost:3000";
+
+app.post("/api/v1/auth/password-reset/request", async (req, res) => {
+  const body = req.body as { email?: string };
+  if (!body.email) {
+    return res.status(400).json({ code: "request.invalid", message: "Enter your email address." });
+  }
+  await withSystemScope((tx) =>
+    requestReset(tx, { email: body.email as string, resetBase: STAFF_APP_BASE, ip: clientIp(req) }),
+  );
+  // Always the same answer: whether an account exists is not something this
+  // endpoint will tell you.
+  return res.status(202).json({
+    message: "If that address belongs to an account, a reset link is on its way.",
+  });
+});
+
+app.post("/api/v1/auth/password-reset/confirm", async (req, res) => {
+  const body = req.body as { token?: string; new_password?: string };
+  if (!body.token || !body.new_password) {
+    return res.status(400).json({ code: "request.invalid", message: "A token and a new password are required." });
+  }
+  const result = await withSystemScope((tx) =>
+    completeReset(tx, {
+      token: body.token as string,
+      newPassword: body.new_password as string,
+      ip: clientIp(req),
+    }),
+  );
+  if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+  res.clearCookie(SESSION_COOKIE, { path: "/" });
   return res.json(result.value);
 });
 

@@ -20,6 +20,8 @@ export function Shell({
 
   if (
     pathname.startsWith("/login") ||
+    pathname.startsWith("/forgot-password") ||
+    pathname.startsWith("/reset-password") ||
     pathname.startsWith("/account/password") ||
     pathname.startsWith("/account/mfa")
   ) {

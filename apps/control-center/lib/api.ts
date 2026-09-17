@@ -730,3 +730,17 @@ export const setStaffRole = (userId: string, eventId: string, role: string, gran
     method: "POST",
     body: JSON.stringify({ event_id: eventId, role, grant }),
   });
+
+/* ── self-service password reset ──────────────────────────────────────────── */
+
+export const requestPasswordReset = (email: string) =>
+  request<{ message: string }>("/auth/password-reset/request", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
+
+export const confirmPasswordReset = (token: string, newPassword: string) =>
+  request<{ reset: true; mfa_still_required: boolean }>("/auth/password-reset/confirm", {
+    method: "POST",
+    body: JSON.stringify({ token, new_password: newPassword }),
+  });
