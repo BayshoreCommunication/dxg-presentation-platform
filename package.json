@@ -26,7 +26,8 @@
     "dev:web": "npm run dev -w @pmp/control-center",
     "dev": "concurrently -n api,web,portal -c cyan,magenta,yellow \"npm run dev:api\" \"npm run dev:web\" \"npm run dev:portal\"",
     "dev:portal": "npm run dev -w @pmp/speaker-portal",
-    "demo:link": "node scripts/speakerLink.mjs"
+    "demo:link": "node scripts/speakerLink.mjs",
+    "demo:totp": "node scripts/totp.mjs"
   },
   "devDependencies": {
     "@types/node": "^24.3.0",

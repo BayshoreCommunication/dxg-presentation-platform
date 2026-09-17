@@ -1,11 +1,26 @@
 import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { hashPassword, generateAccessCode, normaliseCode, hashSecret } from "@pmp/auth";
+import {
+  hashPassword,
+  generateAccessCode,
+  normaliseCode,
+  hashSecret,
+  generateRecoveryCodes,
+  normaliseRecoveryCode,
+  groupSecret,
+  totp,
+} from "@pmp/auth";
 import { getPool, closePool } from "./pool.ts";
 
 /** Development credentials only. Real deployments create accounts via the admin API. */
 const DEV_PASSWORD = "dxg-development-password";
+/**
+ * A fixed TOTP secret for the development accounts. MFA is enforced for everyone,
+ * including here — this is a real second factor with a known secret, not a way
+ * around one. `npm run demo:totp` prints the current code.
+ */
+const DEV_MFA_SECRET = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ";
 
 const FILE_ROOT = process.env.FILE_ROOT ?? ".data";
 
@@ -119,19 +134,29 @@ async function seed(): Promise<void> {
       [IDS.clientAdmin, "j.ellis@example.invalid", "J. Ellis", "client_event_admin"],
     ];
     const devHash = await hashPassword(DEV_PASSWORD);
+    const recoveryCodes = generateRecoveryCodes(3);
     for (const [id, email, name, role] of staff) {
       await client.query(
-        `INSERT INTO users (id, email, display_name, password_hash, password_set_at, must_change_password)
-         VALUES ($1, $2, $3, $4, now(), false)
+        `INSERT INTO users (id, email, display_name, password_hash, password_set_at,
+                            must_change_password, mfa_secret, mfa_enrolled_at)
+         VALUES ($1, $2, $3, $4, now(), false, $5, now())
          ON CONFLICT (id) DO UPDATE
-           SET display_name = EXCLUDED.display_name, password_hash = EXCLUDED.password_hash`,
-        [id, email, name, devHash],
+           SET display_name = EXCLUDED.display_name, password_hash = EXCLUDED.password_hash,
+               mfa_secret = EXCLUDED.mfa_secret, mfa_enrolled_at = EXCLUDED.mfa_enrolled_at`,
+        [id, email, name, devHash, DEV_MFA_SECRET],
       );
       await client.query(
         `INSERT INTO event_roles (user_id, event_id, role) VALUES ($1, $2, $3)
          ON CONFLICT DO NOTHING`,
         [id, IDS.event, role],
       );
+      for (const recovery of recoveryCodes) {
+        await client.query(
+          `INSERT INTO mfa_recovery_codes (user_id, code_hash) VALUES ($1, $2)
+           ON CONFLICT DO NOTHING`,
+          [id, hashSecret(normaliseRecoveryCode(recovery))],
+        );
+      }
     }
 
     // A few extra rooms so the event looks like a real conference floor and
@@ -284,6 +309,10 @@ async function seed(): Promise<void> {
     await client.query("COMMIT");
     console.log("\nstaff sign-in (development only):");
     for (const [, email, name] of staff) console.log(`  ${name.padEnd(20)} ${email.padEnd(30)} ${DEV_PASSWORD}`);
+    console.log("\nsecond factor — MFA is enforced, these accounts are pre-enrolled:");
+    console.log(`  authenticator secret  ${groupSecret(DEV_MFA_SECRET)}`);
+    console.log(`  code right now        ${totp(DEV_MFA_SECRET)}   (npm run demo:totp)`);
+    console.log(`  recovery codes        ${recoveryCodes.join("  ")}`);
     console.log("\npresenter access codes (issued by DXG, shown once):");
     for (const line of issued) console.log(line);
     console.log("");

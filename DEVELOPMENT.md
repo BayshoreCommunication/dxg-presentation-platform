@@ -240,7 +240,16 @@ curl -s -c /tmp/dxg.jar -X POST localhost:4000/api/v1/auth/login \
   -d '{"email":"m.vega@example.invalid","password":"dxg-development-password"}'
 ```
 
-Then pass `-b /tmp/dxg.jar` on the calls below. `npm run db:seed` prints the accounts.
+That returns `{"step":"mfa_required"}` — staff sign-in has two steps. Complete it:
+
+```bash
+curl -s -b /tmp/dxg.jar -c /tmp/dxg.jar -X POST localhost:4000/api/v1/auth/mfa/verify \
+  -H 'content-type: application/json' \
+  -d "{\"code\":\"$(npm run demo:totp --silent | awk '{print $1}')\"}"
+```
+
+Then pass `-b /tmp/dxg.jar` on the calls below. `npm run db:seed` prints the accounts, the
+development authenticator secret and recovery codes.
 
 ```bash
 EV=22222222-2222-4222-8222-222222222222
@@ -300,7 +309,12 @@ workflow transition and a hash-chained audit record are written — all in one t
   issues real per-recipient links; the SES sender and webhook signature verification are M3-5.
   Delivery events can be posted to the webhook by hand, which is how the bounce path is exercised.
 - **Asset upload** (event header, slide template) is not built (M1-4).
-- **MFA is not enforced yet** for staff (D-015). NFR-SEC-02 requires it; the columns exist so
-  enabling it is not a schema change. This must close before the pilot.
+- **MFA is enforced** for every staff account (D-017). The development accounts are pre-enrolled
+  with a known secret so local work uses a real second factor rather than a bypass:
+  `npm run demo:totp` prints the current code, and `npm run db:seed` prints the secret and recovery
+  codes. Add the secret to any authenticator app to sign in the way staff will.
+- **Enrolment shows a setup key, not a QR code** — rendering one needs a dependency, and sending
+  the secret to an image service would defeat the point. Every authenticator app accepts a typed
+  key.
 - **There is no development authentication bypass.** The `x-dev-user` header was removed on
   2026-09-17; every request carries a real session, in development exactly as in production.

@@ -93,6 +93,9 @@ export function Sidebar({ principal }: { principal: Principal | null }) {
             <Link href="/account/password" style={{ color: "var(--blue)" }}>
               Password
             </Link>
+            <Link href="/account/mfa" style={{ color: "var(--blue)" }}>
+              2FA
+            </Link>
             <button
               style={{
                 background: "none",

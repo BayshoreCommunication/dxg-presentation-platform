@@ -288,3 +288,24 @@ only exceptions. `tests/invariants/auth-separation.test.ts` covers all three pri
 
 Also fixed: the review workspace rendered informational findings as warnings with raw JSON; the
 client portal 500'd instead of explaining that it is a client surface.
+
+## 2026-09-17 (eleventh) — MFA enforced, closing the last SRS security gap
+
+TOTP (RFC 6238) written against the standard library — no dependency, no SMS, no identity
+provider, and no third party ever sees a secret. Verified against all six RFC 6238 test vectors.
+
+- A password on an enrolled account yields a five-minute challenge, not a session. The challenge
+  cookie opens nothing: `/events` and `/auth/session` both refuse it.
+- A code is accepted once per step, so a glimpsed code cannot be replayed inside its 30 seconds.
+- Ten single-use recovery codes at enrolment, stored hashed, shown once; removing MFA needs both
+  the password and a live code.
+- Unenrolled staff accounts reach the enrolment endpoints and nothing else.
+- **No development bypass**: the seed pre-enrols the development accounts with a known secret, so
+  local work uses a real second factor. `npm run demo:totp` prints the current code.
+
+Two things the tests taught us, both kept: replay protection made sequential tests invalidate each
+other's codes, so the helper waits for a step boundary on first use and hands out a step-unique
+code thereafter; and because the counter is per account, test files that run in separate processes
+need separate accounts. The suite now passes twice in a row with no flakes (21 tests).
+
+This closes the D-015 deviation. NFR-SEC-02 is met.

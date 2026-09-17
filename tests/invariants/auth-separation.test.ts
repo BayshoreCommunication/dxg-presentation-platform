@@ -1,5 +1,6 @@
 import { test, describe, before, after } from "node:test";
 import type { TestContext } from "node:test";
+import { signInStaff, cookieFrom } from "../helpers/signIn.ts";
 import assert from "node:assert/strict";
 
 /**
@@ -19,12 +20,6 @@ let presenterCookie = "";
 let staffCookie = "";
 let clientCookie = "";
 
-const cookieFrom = (response: Response): string =>
-  (response.headers.getSetCookie?.() ?? [])
-    .map((entry) => entry.split(";")[0])
-    .filter(Boolean)
-    .join("; ");
-
 before(async () => {
   try {
     const health = await fetch(`${API.replace("/api/v1", "")}/ops/health`);
@@ -34,19 +29,9 @@ before(async () => {
   }
   if (!up) return;
 
-  const staff = await fetch(`${API}/auth/login`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ email: "m.vega@example.invalid", password: "dxg-development-password" }),
-  });
-  if (staff.ok) staffCookie = cookieFrom(staff);
-
-  const client = await fetch(`${API}/auth/login`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ email: "j.ellis@example.invalid", password: "dxg-development-password" }),
-  });
-  if (client.ok) clientCookie = cookieFrom(client);
+  // Staff sign-in is two steps now: password, then the second factor.
+  staffCookie = await signInStaff(API, "m.vega@example.invalid", "dxg-development-password");
+  clientCookie = await signInStaff(API, "j.ellis@example.invalid", "dxg-development-password");
 
   // A presenter credential is issued by staff, exactly as DXG would.
   const speakers = await fetch(`${API}/events/${EVENT}/speakers?q=Raman`, {

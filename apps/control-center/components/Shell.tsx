@@ -18,7 +18,11 @@ export function Shell({
 }) {
   const pathname = usePathname() ?? "";
 
-  if (pathname.startsWith("/login") || pathname.startsWith("/account/password")) {
+  if (
+    pathname.startsWith("/login") ||
+    pathname.startsWith("/account/password") ||
+    pathname.startsWith("/account/mfa")
+  ) {
     return <>{children}</>;
   }
 

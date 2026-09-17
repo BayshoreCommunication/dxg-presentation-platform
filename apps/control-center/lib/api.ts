@@ -62,15 +62,44 @@ export type Principal = {
   email: string;
   display_name: string;
   roles: string[];
+  client_ids: string[];
   must_change_password: boolean;
+  mfa_enrolled: boolean;
 };
 
 export const getSession = () => request<{ principal: Principal }>("/auth/session");
 
+export type LoginResult =
+  | { step: "signed_in"; principal: Principal }
+  | { step: "mfa_required" };
+
 export const login = (email: string, password: string) =>
-  request<{ principal: Principal }>("/auth/login", {
+  request<LoginResult>("/auth/login", {
     method: "POST",
     body: JSON.stringify({ email, password }),
+  });
+
+export const verifyMfa = (code: string) =>
+  request<{
+    step: "signed_in";
+    principal: Principal;
+    used_recovery_code: boolean;
+    remaining_recovery_codes: number;
+  }>("/auth/mfa/verify", { method: "POST", body: JSON.stringify({ code }) });
+
+export type Enrolment = {
+  secret: string;
+  secret_grouped: string;
+  otpauth_uri: string;
+  account: string;
+};
+
+export const startMfaEnrolment = () => request<Enrolment>("/auth/mfa/start", { method: "POST" });
+
+export const confirmMfaEnrolment = (code: string) =>
+  request<{ recovery_codes: string[] }>("/auth/mfa/confirm", {
+    method: "POST",
+    body: JSON.stringify({ code }),
   });
 
 export const logout = () => request<void>("/auth/logout", { method: "POST" });

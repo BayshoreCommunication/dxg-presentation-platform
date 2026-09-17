@@ -16,6 +16,7 @@ import { randomUUID } from "node:crypto";
 import {
   SESSION_COOKIE,
   staffLogin,
+  completeMfaLogin,
   presenterLogin,
   resolveSession,
   logout as endSession,
@@ -25,6 +26,10 @@ import {
   revokePresenterCredential,
 } from "./services/auth.ts";
 import type { Principal } from "./services/auth.ts";
+import { startEnrolment, confirmEnrolment, disableMfa, answerChallenge } from "./services/mfa.ts";
+
+/** Carries the half-finished sign-in between the password and the code. */
+const MFA_COOKIE = "pmp_mfa";
 import { agentView, syncRoom, acknowledge, launch } from "./services/agent.ts";
 import { srrDashboard, checkIn, checkinDetail, usbIngest, signOff, depart } from "./services/srr.ts";
 import {
@@ -166,6 +171,7 @@ const STAFF_ROLES: EventRole[] = [
 ];
 
 const NON_STAFF_PATHS = [
+  "/api/v1/auth/mfa/",
   "/api/v1/auth/login",
   "/api/v1/auth/logout",
   "/api/v1/auth/session",
@@ -190,6 +196,16 @@ app.use((req, res, next) => {
     return res.status(403).json({
       code: "auth.not_staff",
       message: "This is a DXG staff area. Your account does not have a staff role on this event.",
+    });
+  }
+
+  // NFR-SEC-02: staff accounts carry a second factor. An account that has not
+  // enrolled can reach the enrolment endpoints and nothing else.
+  const principal = (req as express.Request & { principal?: Principal }).principal;
+  if (principal?.kind === "staff" && !principal.mfa_enrolled) {
+    return res.status(403).json({
+      code: "auth.mfa_required",
+      message: "Set up your authenticator app before using the platform.",
     });
   }
   return next();
@@ -217,7 +233,9 @@ const statusFor = (error: DomainError): number => {
   ) {
     return 401;
   }
-  if (error.code === "auth.locked") return 429;
+  if (error.code === "auth.locked" || error.code === "mfa.too_many_attempts") return 429;
+  if (error.code === "mfa.challenge_expired") return 401;
+  if (error.code.startsWith("mfa.")) return 422;
   if (error.code === "auth.email_taken") return 409;
   if (
     error.code.endsWith(".event_incomplete") ||
@@ -1243,8 +1261,91 @@ app.post("/api/v1/auth/login", async (req, res) => {
     }),
   );
   if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+
+  if (result.value.step === "mfa_required") {
+    // The challenge is not a session: on its own it grants nothing.
+    res.cookie(MFA_COOKIE, result.value.challenge, cookieOptions(5));
+    return res.json({ step: "mfa_required" });
+  }
+
   res.cookie(SESSION_COOKIE, result.value.token, cookieOptions(24 * 60));
-  return res.json({ principal: result.value.principal });
+  return res.json({ step: "signed_in", principal: result.value.principal });
+});
+
+app.post("/api/v1/auth/mfa/verify", async (req, res) => {
+  const challenge = readCookie(req, MFA_COOKIE);
+  if (!challenge) {
+    return res.status(401).json({ code: "mfa.challenge_expired", message: "Start signing in again." });
+  }
+  const body = req.body as { code?: string };
+  if (!body.code) {
+    return res.status(400).json({ code: "request.invalid", message: "Enter the code from your authenticator." });
+  }
+
+  const outcome = await withSystemScope((tx) => answerChallenge(tx, { token: challenge, code: body.code as string }));
+  if (!outcome.ok) {
+    if (outcome.error.code === "mfa.challenge_expired" || outcome.error.code === "mfa.too_many_attempts") {
+      res.clearCookie(MFA_COOKIE, { path: "/" });
+    }
+    return res.status(statusFor(outcome.error)).json(outcome.error);
+  }
+
+  const { token, principal } = await withSystemScope((tx) =>
+    completeMfaLogin(tx, outcome.userId, {
+      ip: clientIp(req),
+      userAgent: req.header("user-agent") ?? undefined,
+    }),
+  );
+  res.clearCookie(MFA_COOKIE, { path: "/" });
+  res.cookie(SESSION_COOKIE, token, cookieOptions(24 * 60));
+  return res.json({
+    step: "signed_in",
+    principal,
+    used_recovery_code: outcome.usedRecoveryCode,
+    remaining_recovery_codes: outcome.remainingRecoveryCodes,
+  });
+});
+
+/* ── MFA enrolment ───────────────────────────────────────────────────────── */
+
+app.post("/api/v1/auth/mfa/start", async (req, res) => {
+  const principal = (req as express.Request & { principal?: Principal }).principal;
+  if (principal?.kind !== "staff") {
+    return res.status(401).json({ code: "auth.no_session", message: "Sign in first." });
+  }
+  const result = await withSystemScope((tx) => startEnrolment(tx, principal.user_id));
+  if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+  return res.json(result.value);
+});
+
+app.post("/api/v1/auth/mfa/confirm", async (req, res) => {
+  const principal = (req as express.Request & { principal?: Principal }).principal;
+  if (principal?.kind !== "staff") {
+    return res.status(401).json({ code: "auth.no_session", message: "Sign in first." });
+  }
+  const body = req.body as { code?: string };
+  if (!body.code) {
+    return res.status(400).json({ code: "request.invalid", message: "Enter the code from your authenticator." });
+  }
+  const result = await withSystemScope((tx) => confirmEnrolment(tx, principal.user_id, body.code as string));
+  if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+  return res.json(result.value);
+});
+
+app.post("/api/v1/auth/mfa/disable", async (req, res) => {
+  const principal = (req as express.Request & { principal?: Principal }).principal;
+  if (principal?.kind !== "staff") {
+    return res.status(401).json({ code: "auth.no_session", message: "Sign in first." });
+  }
+  const body = req.body as { password?: string; code?: string };
+  if (!body.password || !body.code) {
+    return res.status(400).json({ code: "request.invalid", message: "Both your password and a code are required." });
+  }
+  const result = await withSystemScope((tx) =>
+    disableMfa(tx, principal.user_id, { password: body.password as string, code: body.code as string }),
+  );
+  if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+  return res.json(result.value);
 });
 
 app.post("/api/v1/portal/login", async (req, res) => {

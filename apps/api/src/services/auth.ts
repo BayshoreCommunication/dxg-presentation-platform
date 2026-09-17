@@ -11,6 +11,7 @@ import {
   lockoutFor,
   lockoutState,
 } from "@pmp/auth";
+import { openChallenge, isEnrolled } from "./mfa.ts";
 import type { Actor, DomainError, EventRole, Result } from "@pmp/domain";
 import { err, ok, atLeast, hasAnyRole } from "@pmp/domain";
 
@@ -30,13 +31,23 @@ export type Principal =
       /** Clients this account has any role on — empty for DXG staff, who work across all. */
       client_ids: string[];
       must_change_password: boolean;
+      mfa_enrolled: boolean;
     }
   | { kind: "presenter"; speaker_id: string; email: string | null; display_name: string; event_id: string; client_id: string };
 
 type Attempt = {
   kind: "staff" | "presenter";
   identifier: string;
-  outcome: "success" | "bad_credentials" | "locked" | "unknown_identity" | "expired" | "revoked";
+  outcome:
+    | "success"
+    | "bad_credentials"
+    | "locked"
+    | "unknown_identity"
+    | "expired"
+    | "revoked"
+    | "mfa_required"
+    | "bad_mfa_code"
+    | "mfa_recovery_used";
   ip?: string | undefined;
   userAgent?: string | undefined;
   detail?: Record<string, unknown>;
@@ -99,10 +110,15 @@ const GENERIC_FAILURE: DomainError = {
   message: "That email and password don't match an account.",
 };
 
+export type LoginOutcome =
+  | { step: "signed_in"; token: string; principal: Principal }
+  /** Password accepted; nothing is granted until the second factor is answered. */
+  | { step: "mfa_required"; challenge: string };
+
 export async function staffLogin(
   tx: pg.PoolClient,
   input: { email: string; password: string; ip?: string | undefined; userAgent?: string | undefined },
-): Promise<Result<{ token: string; principal: Principal }, DomainError>> {
+): Promise<Result<LoginOutcome, DomainError>> {
   const email = input.email.trim().toLowerCase();
   const { rows } = await tx.query<{
     id: string;
@@ -157,21 +173,69 @@ export async function staffLogin(
   }
 
   await tx.query(`UPDATE pmp.users SET failed_logins = 0, locked_until = NULL WHERE id = $1`, [user.id]);
+
+  // A correct password is half of a sign-in for an enrolled account.
+  if (await isEnrolled(tx, user.id)) {
+    const challenge = await openChallenge(tx, user.id, { ip: input.ip, userAgent: input.userAgent });
+    await record(tx, {
+      kind: "staff",
+      identifier: email,
+      outcome: "mfa_required",
+      ip: input.ip,
+      userAgent: input.userAgent,
+    });
+    return ok({ step: "mfa_required", challenge });
+  }
+
   const token = await openSession(tx, { kind: "staff", userId: user.id, ip: input.ip, userAgent: input.userAgent });
   await record(tx, { kind: "staff", identifier: email, outcome: "success", ip: input.ip, userAgent: input.userAgent });
 
-  return ok({
-    token,
-    principal: {
-      kind: "staff",
-      user_id: user.id,
-      email: user.email,
-      display_name: user.display_name,
-      roles: await rolesFor(tx, user.id),
-      client_ids: await clientsFor(tx, user.id),
-      must_change_password: user.must_change_password,
-    },
+  return ok({ step: "signed_in", token, principal: await principalFor(tx, user.id) });
+}
+
+/** Builds the principal for an established session. */
+export async function principalFor(tx: pg.PoolClient, userId: string): Promise<Principal> {
+  const { rows } = await tx.query<{
+    id: string;
+    email: string;
+    display_name: string;
+    must_change_password: boolean;
+    mfa_enrolled: boolean;
+  }>(
+    `SELECT id, email::text, display_name, must_change_password,
+            (mfa_enrolled_at IS NOT NULL) AS mfa_enrolled
+       FROM pmp.users WHERE id = $1`,
+    [userId],
+  );
+  const user = rows[0]!;
+  return {
+    kind: "staff",
+    user_id: user.id,
+    email: user.email,
+    display_name: user.display_name,
+    roles: await rolesFor(tx, user.id),
+    client_ids: await clientsFor(tx, user.id),
+    must_change_password: user.must_change_password,
+    mfa_enrolled: user.mfa_enrolled,
+  };
+}
+
+/** Opens the session once the second factor has been answered. */
+export async function completeMfaLogin(
+  tx: pg.PoolClient,
+  userId: string,
+  context: { ip?: string | undefined; userAgent?: string | undefined },
+): Promise<{ token: string; principal: Principal }> {
+  const token = await openSession(tx, { kind: "staff", userId, ip: context.ip, userAgent: context.userAgent });
+  const principal = await principalFor(tx, userId);
+  await record(tx, {
+    kind: "staff",
+    identifier: principal.kind === "staff" ? principal.email : userId,
+    outcome: "success",
+    ip: context.ip,
+    userAgent: context.userAgent,
   });
+  return { token, principal };
 }
 
 async function rolesFor(tx: pg.PoolClient, userId: string): Promise<EventRole[]> {
@@ -311,15 +375,7 @@ export async function resolveSession(tx: pg.PoolClient, token: string): Promise<
     ]);
     const user = userRows[0];
     if (!user || !user.is_active) return null;
-    return {
-      kind: "staff",
-      user_id: user.id,
-      email: user.email,
-      display_name: user.display_name,
-      roles: await rolesFor(tx, user.id),
-      client_ids: await clientsFor(tx, user.id),
-      must_change_password: user.must_change_password,
-    };
+    return principalFor(tx, user.id);
   }
 
   if (session.speaker_id) {

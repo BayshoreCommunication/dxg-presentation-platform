@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { login, ApiError } from "@/lib/api";
+import { login, verifyMfa, ApiError } from "@/lib/api";
 
 const REASONS: Record<string, string> = {
   expired: "Your session expired. Please sign in again.",
@@ -18,14 +18,26 @@ export function LoginForm({ next, reason }: { next: string; reason: string | nul
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [step, setStep] = useState<"password" | "code">("password");
+  const [code, setCode] = useState("");
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     setBusy(true);
     setError(null);
     try {
-      const { principal } = await login(email, password);
-      router.replace(principal.must_change_password ? "/account/password?first=1" : next);
+      if (step === "password") {
+        const result = await login(email, password);
+        if (result.step === "mfa_required") {
+          setStep("code");
+          setBusy(false);
+          return;
+        }
+        router.replace(result.principal.must_change_password ? "/account/password?first=1" : next);
+      } else {
+        const result = await verifyMfa(code);
+        router.replace(result.principal.must_change_password ? "/account/password?first=1" : next);
+      }
       router.refresh();
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : "Could not sign in. Please try again.");
@@ -52,6 +64,51 @@ export function LoginForm({ next, reason }: { next: string; reason: string | nul
           </div>
         )}
 
+        {step === "code" ? (
+          <>
+            <div className="note" style={{ marginBottom: 12 }}>
+              Enter the six-digit code from your authenticator app. If you have lost your phone, use
+              one of your recovery codes instead.
+            </div>
+            <div className="field">
+              <label htmlFor="code">Authentication code</label>
+              <input
+                id="code"
+                className="mono"
+                inputMode="text"
+                autoComplete="one-time-code"
+                autoFocus
+                required
+                style={{ letterSpacing: "0.2em" }}
+                value={code}
+                onChange={(event) => setCode(event.target.value)}
+                placeholder="000000"
+              />
+            </div>
+            <button
+              className="btn pri"
+              style={{ width: "100%", padding: 9 }}
+              disabled={busy}
+              type="submit"
+            >
+              {busy ? "Checking…" : "Verify"}
+            </button>
+            <div style={{ textAlign: "center", fontSize: 12.5, color: "var(--dim)", marginTop: 12 }}>
+              <button
+                type="button"
+                style={{ background: "none", border: "none", color: "var(--blue)", fontSize: 12.5 }}
+                onClick={() => {
+                  setStep("password");
+                  setCode("");
+                  setError(null);
+                }}
+              >
+                Start again
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
         <div className="field">
           <label htmlFor="email">Work email</label>
           <input
@@ -84,6 +141,8 @@ export function LoginForm({ next, reason }: { next: string; reason: string | nul
           Accounts are created by DXG. If you can&rsquo;t get in, ask a platform admin to reset your
           password.
         </div>
+          </>
+        )}
       </form>
     </div>
   );
