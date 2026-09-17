@@ -14,6 +14,7 @@ import {
 } from "./services/portal.ts";
 import { randomUUID } from "node:crypto";
 import { agentView, syncRoom, acknowledge, launch } from "./services/agent.ts";
+import { srrDashboard, checkIn, checkinDetail, usbIngest, signOff, depart } from "./services/srr.ts";
 import type { PortalSession } from "./services/portal.ts";
 import { decide } from "./services/review.ts";
 
@@ -43,7 +44,8 @@ function actorFrom(req: express.Request): Actor | undefined {
 }
 
 const statusFor = (error: DomainError): number => {
-  if (error.code.endsWith(".not_found")) return 404;
+  if (error.code.endsWith("_not_found") || error.code.endsWith(".not_found")) return 404;
+  if (error.code.endsWith(".reason_required") || error.code.endsWith(".not_signable")) return 422;
   if (error.code.endsWith(".conflict")) return 409;
   if (error.code.endsWith(".forbidden") || error.code.endsWith(".override_forbidden")) return 403;
   if (error.code.endsWith(".illegal_transition")) return 422;
@@ -397,6 +399,110 @@ app.post("/api/v1/portal/uploads/:uploadId/complete", (req, res) =>
     return res.json(result.value);
   }),
 );
+
+/* ── Speaker Ready Room (screens 11–13) ───────────────────────────────────── */
+
+app.get("/api/v1/events/:eventId/srr", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  const eventId = String(req.params.eventId);
+  const view = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID, eventId }, (tx) =>
+    srrDashboard(tx, eventId),
+  );
+  return res.json(view);
+});
+
+app.post("/api/v1/events/:eventId/srr/checkins", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  const body = req.body as { speaker_id?: string; station?: string };
+  if (!body.speaker_id) {
+    return res.status(400).json({ code: "request.invalid", message: "`speaker_id` is required." });
+  }
+  const result = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID }, (tx) =>
+    checkIn(tx, actor, {
+      eventId: String(req.params.eventId),
+      speakerId: body.speaker_id as string,
+      station: body.station ?? "Station 2",
+    }),
+  );
+  if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+  return res.status(201).json(result.value);
+});
+
+app.get("/api/v1/srr/checkins/:checkinId", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  const detail = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID }, (tx) =>
+    checkinDetail(tx, String(req.params.checkinId)),
+  );
+  if (!detail) return res.status(404).json({ code: "srr.checkin_not_found", message: "No such check-in." });
+  return res.json(detail);
+});
+
+/** Staff-side resumable upload, used by USB intake (the portal has its own). */
+app.post("/api/v1/srr/uploads", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  return res.status(201).json({ upload_id: randomUUID(), part_size: 5 * 1024 * 1024 });
+});
+
+app.put("/api/v1/srr/uploads/:uploadId/parts/:partNumber", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  const body = req.body as Buffer;
+  if (!Buffer.isBuffer(body) || body.length === 0) {
+    return res.status(400).json({ code: "request.invalid", message: "Empty part." });
+  }
+  const { sha256 } = await storage.putPart(String(req.params.uploadId), Number(req.params.partNumber), body);
+  return res.json({ size: body.length, sha256 });
+});
+
+app.post("/api/v1/srr/checkins/:checkinId/usb-ingestions", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  const body = req.body as { upload_id?: string; file_name?: string; reason?: string };
+  if (!body.upload_id || !body.file_name) {
+    return res.status(400).json({ code: "request.invalid", message: "`upload_id` and `file_name` are required." });
+  }
+  const result = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID }, (tx) =>
+    usbIngest(tx, actor, {
+      checkinId: String(req.params.checkinId),
+      uploadId: body.upload_id as string,
+      fileName: body.file_name as string,
+      reason: body.reason ?? "",
+    }),
+  );
+  if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+  return res.json(result.value);
+});
+
+app.post("/api/v1/srr/checkins/:checkinId/sign-off", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  const body = req.body as { file_version_id?: string };
+  if (!body.file_version_id) {
+    return res.status(400).json({ code: "request.invalid", message: "`file_version_id` is required." });
+  }
+  const result = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID }, (tx) =>
+    signOff(tx, actor, {
+      checkinId: String(req.params.checkinId),
+      fileVersionId: body.file_version_id as string,
+    }),
+  );
+  if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+  return res.json(result.value);
+});
+
+app.post("/api/v1/srr/checkins/:checkinId/depart", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  const result = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID }, (tx) =>
+    depart(tx, actor, String(req.params.checkinId)),
+  );
+  if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+  return res.json(result.value);
+});
 
 const port = Number(process.env.PORT ?? 4000);
 app.listen(port, () => {

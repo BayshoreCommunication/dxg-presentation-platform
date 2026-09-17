@@ -143,3 +143,27 @@ Also: authority is now evaluated before the optimistic-lock check, so a forbidde
 instead of reporting a conflict.
 
 Six screens now run on real data. Eleven remain prototype-only. `npm run ci` green (62 tests).
+
+## 2026-09-17 (fifth) — Speaker Ready Room: dashboard, check-in, USB intake
+
+Screens 11, 12 and 13, plus the shared intake path they needed.
+
+- **`services/ingest.ts`** — the portal and SRR now share one intake function. The order is fixed
+  and not configurable: assemble → verify whole-file checksum → scan → store → inspect. `stored`
+  stays unreachable without a clean scan whichever door the file came through (I-2).
+- **SRR dashboard** — expected arrivals with live derived status, unresolved warnings on versions
+  still in review, station occupancy.
+- **Check-in** — station and technician captured; sign-off produces a receipt (version, checksum,
+  station, technician) and sets `final_locked`.
+- **USB intake** — three gated steps. No reason, no acceptance. No clean scan, no comparison and no
+  library entry. Acceptance sends the version to re-approval and leaves the room copy alone.
+- **Version comparison** is built from what inspection recorded on both versions (slides, embedded
+  media, slide size, file size with deltas). The seed now records the same metadata a real ingest
+  would, so comparisons are meaningful in development.
+
+Verified end to end: blank reason refused; clean scan compares 42 vs 42 slides and the size delta;
+the room keeps `v2 · active` while the USB version sits in `awaiting_review`; sign-off issues a
+receipt and the **speaker portal then refuses a replacement** — a rule set in one application and
+honoured in another because both read it from the same place.
+
+Nine screens now run on real data. Eight remain prototype-only. `npm run ci` green (62 tests).

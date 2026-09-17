@@ -1,12 +1,10 @@
 import { createHash, randomUUID } from "node:crypto";
 import type pg from "pg";
-import { appendAudit } from "@pmp/db";
-import { DevSignatureScanner, LocalStorage, inspectPresentation, worstSeverity } from "@pmp/files";
 import type { Finding } from "@pmp/files";
-import { deriveTalkStatus, TALK_STATUS_LABEL, scanVerdictToAction } from "@pmp/domain";
+import { deriveTalkStatus, TALK_STATUS_LABEL } from "@pmp/domain";
+import { ingestVersion, storage } from "./ingest.ts";
 
-export const storage = new LocalStorage(process.env.FILE_ROOT ?? ".data");
-const scanner = new DevSignatureScanner();
+export { storage };
 
 /** Speaker tokens are stored hashed and recipient-bound (BUILD_SPEC §13). */
 export const hashToken = (token: string): Buffer => createHash("sha256").update(token).digest();
@@ -191,6 +189,7 @@ export async function uploadState(uploadId: string): Promise<{ received: number[
 }
 
 export type CompleteResult = {
+  file_version_id: string;
   version_number: number;
   sha256: string;
   processing_state: string;
@@ -208,116 +207,17 @@ export async function completeUpload(
   session: PortalSession,
   input: { uploadId: string; slotId: string; fileName: string; expectedSha256?: string },
 ): Promise<{ ok: true; value: CompleteResult } | { ok: false; code: string; message: string }> {
-  const object = await storage.assemble(input.uploadId, `${session.client_id}/${session.event_id}`);
-
-  if (input.expectedSha256 && input.expectedSha256 !== object.sha256) {
-    return {
-      ok: false,
-      code: "file.checksum_mismatch",
-      message: "The uploaded bytes did not match the checksum — nothing was stored. Please try again.",
-    };
-  }
-
-  const { rows: fileRows } = await tx.query<{ id: string }>(
-    `INSERT INTO pmp.files (event_id, client_id, slot_id, display_name)
-     SELECT $1, $2, $3, $4
-      WHERE NOT EXISTS (SELECT 1 FROM pmp.files WHERE slot_id = $3)
-     RETURNING id`,
-    [session.event_id, session.client_id, input.slotId, input.fileName],
-  );
-  let fileId = fileRows[0]?.id;
-  if (!fileId) {
-    const { rows } = await tx.query<{ id: string }>(`SELECT id FROM pmp.files WHERE slot_id = $1`, [input.slotId]);
-    fileId = rows[0]!.id;
-  }
-
-  const { rows: versionNumberRows } = await tx.query<{ next: number }>(
-    `SELECT COALESCE(max(version_number), 0) + 1 AS next FROM pmp.file_versions WHERE file_id = $1`,
-    [fileId],
-  );
-  const versionNumber = versionNumberRows[0]!.next;
-
-  const { rows: created } = await tx.query<{ id: string }>(
-    `INSERT INTO pmp.file_versions (file_id, event_id, client_id, version_number, original_filename,
-                                    content_type, size_bytes, sha256, s3_key, source,
-                                    processing_state, inspection_state, review_state)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'portal','uploaded','pending','awaiting_review')
-     RETURNING id`,
-    [
-      fileId,
-      session.event_id,
-      session.client_id,
-      versionNumber,
-      input.fileName,
-      "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-      object.size,
-      Buffer.from(object.sha256, "hex"),
-      object.key,
-    ],
-  );
-  const versionId = created[0]!.id;
-
-  // Scan — the only path to `stored` (I-2).
-  await tx.query(`UPDATE pmp.file_versions SET processing_state = 'scanning' WHERE id = $1`, [versionId]);
-  const body = await storage.read(object.key);
-  const scan = await scanner.scan(body);
-  const action = scanVerdictToAction(scan.verdict);
-  const processingState = action === "store" ? "stored" : "quarantined";
-  await tx.query(`UPDATE pmp.file_versions SET processing_state = $1 WHERE id = $2`, [processingState, versionId]);
-
-  await appendAudit(tx, {
-    partitionId: session.event_id,
+  const result = await ingestVersion(tx, {
+    eventId: session.event_id,
     clientId: session.client_id,
-    action: `file.${processingState}`,
-    subjectType: "file_version",
-    subjectId: versionId,
-    detail: { sha256: object.sha256, bytes: object.size, scanner: scanner.name, verdict: scan.verdict },
+    slotId: input.slotId,
+    fileName: input.fileName,
+    uploadId: input.uploadId,
+    source: "portal",
+    speakerId: session.speaker_id,
+    ...(input.expectedSha256 === undefined ? {} : { expectedSha256: input.expectedSha256 }),
   });
-
-  if (processingState === "quarantined") {
-    await tx.query(
-      `INSERT INTO pmp.inspection_findings (file_version_id, event_id, client_id, check_code, severity, detail)
-       VALUES ($1,$2,$3,'malware','blocking',$4)`,
-      [versionId, session.event_id, session.client_id, JSON.stringify({ signature: scan.signature })],
-    );
-    return {
-      ok: true,
-      value: {
-        version_number: versionNumber,
-        sha256: object.sha256,
-        processing_state: processingState,
-        inspection_state: "pending",
-        findings: [{ check_code: "malware", severity: "blocking", detail: { signature: scan.signature } }],
-      },
-    };
-  }
-
-  // Inspect.
-  const findings = inspectPresentation(body, input.fileName);
-  for (const finding of findings) {
-    await tx.query(
-      `INSERT INTO pmp.inspection_findings (file_version_id, event_id, client_id, check_code, severity, detail)
-       VALUES ($1,$2,$3,$4,$5,$6)`,
-      [versionId, session.event_id, session.client_id, finding.check_code, finding.severity, JSON.stringify(finding.detail)],
-    );
-  }
-  const worst = worstSeverity(findings);
-  const inspectionState =
-    worst === "blocking" ? "failed" : worst === "warning" ? "passed_with_warnings" : "passed";
-  await tx.query(`UPDATE pmp.file_versions SET inspection_state = $1 WHERE id = $2`, [inspectionState, versionId]);
-
-  await tx.query(`INSERT INTO pmp.outbox (topic, payload) VALUES ('file_version.state_changed', $1)`, [
-    JSON.stringify({ file_version_id: versionId, event_id: session.event_id, inspection_state: inspectionState }),
-  ]);
-
-  return {
-    ok: true,
-    value: {
-      version_number: versionNumber,
-      sha256: object.sha256,
-      processing_state: processingState,
-      inspection_state: inspectionState,
-      findings,
-    },
-  };
+  if (!result.ok) return { ok: false, code: result.error.code, message: result.error.message };
+  return { ok: true, value: result.value };
 }
+

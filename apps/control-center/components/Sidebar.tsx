@@ -27,7 +27,7 @@ const GROUPS: { group: string; items: { label: string; href?: string }[] }[] = [
   {
     group: "ONSITE",
     items: [
-      { label: "Speaker Ready Room" },
+      { label: "Speaker Ready Room", href: "/events/:id/srr" },
       { label: "Check-in" },
       { label: "USB intake" },
       { label: "Room sync", href: "/events/:id/sync" },

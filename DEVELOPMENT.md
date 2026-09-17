@@ -1,11 +1,12 @@
 # DEVELOPMENT.md — running the platform locally
 
 Status: M0 in progress. The backend spine (domain state machines, database layer, API) and
-**six working screens** exist — Portfolio, Command center, Review & approval, Room sync and the
-Room Agent room view in the Control Center, plus the Speaker portal upload screen in its own app —
-running on real data, with a real upload → scan → inspect → review → sync → acknowledge chain.
+**nine working screens** exist — Portfolio, Command center, Review & approval, Room sync, Room
+Agent, Speaker Ready Room, Check-in and USB intake in the Control Center, plus the Speaker portal
+upload screen in its own app — running on real data, with a real upload → scan → inspect → review →
+sync → acknowledge → sign-off chain.
 
-The other eleven screens are still prototype-only (`prototype/enhanced.html`).
+The other eight screens are still prototype-only (`prototype/enhanced.html`).
 
 ## Prerequisites
 
@@ -95,6 +96,29 @@ That sequence is the product's core promise — a room never silently swaps an a
 it is enforced server-side, not by the screen. Signing in as a content reviewer and pressing
 acknowledge returns *"acknowledge requires one of: room_technician, presentation_manager,
 project_manager, platform_admin."*
+
+### Speaker Ready Room — the last-minute-change story
+
+**Speaker Ready Room** in the sidebar shows who is expected, what is still unresolved, and which
+stations are busy. **Check in** a speaker to open their check-in.
+
+15. **USB intake, step 1 — scan.** Pick a file and press **Scan drive & import**. Leave the reason
+    blank and it is refused: *"Accepting a USB version requires a reason — nothing was recorded."*
+16. **Step 2 — comparison.** After a clean scan the incoming version is compared with the approved
+    one: slides, embedded media, slide size, file size, each with its delta. The numbers come from
+    parsing both files, not from a fixture.
+17. **Step 3 — outcome.** The new version goes to *re-approval*. Check the Room Agent view: the
+    room is still playing the approved copy. Nothing about the room changed.
+18. **Sign off.** Confirming the final onsite version produces a receipt with the version, its
+    checksum, the station and the technician — and locks the talk. Open the speaker's portal link
+    and try to replace the file: *"This presentation has been confirmed as the final onsite version
+    in the Speaker Ready Room, so it can no longer be replaced here."*
+
+Step 18 is worth doing live: one action in the Speaker Ready Room changes what a speaker sees in a
+different application, because both read the same rule.
+
+Try also: feed USB intake a file containing the EICAR test string — it is quarantined, the approved
+version stays active, and the intake says so plainly.
 
 Worth saying out loud during the demo: the rules being enforced are the ones that matter
 onsite. Try to approve something before claiming it and the API refuses with

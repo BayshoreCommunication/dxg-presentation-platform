@@ -178,6 +178,24 @@ async function seed(): Promise<void> {
         );
         if (version.review === "approved") approvedVersionId = versionRows[0]!.id;
 
+        // Seeded versions carry the same inspection metadata a real ingest would
+        // record, so version comparison in SRR has something to compare against.
+        for (const meta of [
+          { slides: talk.key === "raman" ? 42 : 24 },
+          { embedded_media: talk.key === "raman" ? 3 : 1 },
+        ]) {
+          await client.query(
+            `INSERT INTO inspection_findings (file_version_id, event_id, client_id, check_code, severity, detail)
+             VALUES ($1, $2, $3, 'metadata', 'info', $4)`,
+            [versionRows[0]!.id, IDS.event, IDS.client, JSON.stringify(meta)],
+          );
+        }
+        await client.query(
+          `INSERT INTO inspection_findings (file_version_id, event_id, client_id, check_code, severity, detail)
+           VALUES ($1, $2, $3, 'aspect', 'info', $4)`,
+          [versionRows[0]!.id, IDS.event, IDS.client, JSON.stringify({ aspect: "16:9", room_profile: "16:9" })],
+        );
+
         if (version.inspection === "passed_with_warnings") {
           await client.query(
             `INSERT INTO inspection_findings (file_version_id, event_id, client_id, check_code, severity, detail)

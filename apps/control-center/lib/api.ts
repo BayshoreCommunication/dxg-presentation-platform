@@ -166,3 +166,103 @@ export const launchInRoom = (roomId: string, slotId: string) =>
     { method: "POST", body: JSON.stringify({ slot_id: slotId }) },
     DEV_ROOM_USER,
   );
+
+/* ── Speaker Ready Room ───────────────────────────────────────────────────── */
+
+export const DEV_SRR_USER = "pm";
+
+export type ExpectedArrival = {
+  speaker_id: string;
+  speaker: string;
+  slot_id: string;
+  title: string;
+  room: string | null;
+  starts_at: string;
+  status: string;
+  status_label: string;
+  checkin_id: string | null;
+  signed_off: boolean;
+};
+
+export type SrrDashboard = {
+  expected: ExpectedArrival[];
+  warnings: { slot_id: string; speaker: string | null; check_code: string; severity: string }[];
+  stations: { station: string; technician: string | null; busy: boolean }[];
+};
+
+export type VersionFacts = {
+  version_number: number;
+  size_bytes: string;
+  slides: number | null;
+  embedded_media: number | null;
+  aspect: string | null;
+  videos_flagged: number;
+};
+
+export type CheckinDetail = {
+  checkin: { id: string; station: string | null; checked_in_at: string; technician: string; departed_at: string | null };
+  speaker: { id: string; name: string };
+  talk: {
+    slot_id: string;
+    title: string;
+    room: string | null;
+    starts_at: string;
+    final_locked: boolean;
+    status: string;
+    status_label: string;
+  };
+  approved: VersionFacts | null;
+  latest: (VersionFacts & { file_version_id: string; review_state: string; processing_state: string }) | null;
+  usb: { id: string; scan_result: string; file_version_id: string | null; created_at: string } | null;
+  receipt: { version_number: number; sha256: string; signed_at: string; station: string | null; technician: string } | null;
+};
+
+export type UsbResult = {
+  ingestion_id: string;
+  scan_result: string;
+  file_version_id: string | null;
+  version_number: number | null;
+  inspection_state: string | null;
+  comparison: { field: string; approved: string; incoming: string; delta: string }[];
+  message: string;
+};
+
+export const getSrrDashboard = (eventId: string) =>
+  request<SrrDashboard>(`/events/${eventId}/srr`, undefined, DEV_SRR_USER);
+
+export const getCheckin = (checkinId: string) =>
+  request<CheckinDetail>(`/srr/checkins/${checkinId}`, undefined, DEV_SRR_USER);
+
+export const startCheckin = (eventId: string, speakerId: string, station: string) =>
+  request<{ checkin_id: string }>(
+    `/events/${eventId}/srr/checkins`,
+    { method: "POST", body: JSON.stringify({ speaker_id: speakerId, station }) },
+    DEV_SRR_USER,
+  );
+
+export const beginSrrUpload = () =>
+  request<{ upload_id: string; part_size: number }>(`/srr/uploads`, { method: "POST" }, DEV_SRR_USER);
+
+export const putSrrPart = (uploadId: string, partNumber: number, chunk: ArrayBuffer) =>
+  request<{ size: number; sha256: string }>(
+    `/srr/uploads/${uploadId}/parts/${partNumber}`,
+    { method: "PUT", body: chunk, headers: { "content-type": "application/octet-stream" } },
+    DEV_SRR_USER,
+  );
+
+export const ingestUsb = (checkinId: string, body: { upload_id: string; file_name: string; reason: string }) =>
+  request<UsbResult>(
+    `/srr/checkins/${checkinId}/usb-ingestions`,
+    { method: "POST", body: JSON.stringify(body) },
+    DEV_SRR_USER,
+  );
+
+export const signOffCheckin = (checkinId: string, fileVersionId: string) =>
+  request<{ receipt: NonNullable<CheckinDetail["receipt"]> }>(
+    `/srr/checkins/${checkinId}/sign-off`,
+    { method: "POST", body: JSON.stringify({ file_version_id: fileVersionId }) },
+    DEV_SRR_USER,
+  );
+
+export const departCheckin = (checkinId: string) =>
+  request<{ departed: true }>(`/srr/checkins/${checkinId}/depart`, { method: "POST" }, DEV_SRR_USER);
