@@ -62,7 +62,18 @@ async function seed(): Promise<void> {
     await client.query("BEGIN");
     await client.query("SET LOCAL search_path TO pmp, public");
 
-    await client.query("DELETE FROM pmp.clients WHERE id = $1", [IDS.client]);
+    // Dev fixture only: start from an empty domain so re-seeding is repeatable.
+    // Never run against anything but a local database (D-009).
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("refusing to seed a production database");
+    }
+    const { rows: tables } = await client.query<{ tablename: string }>(
+      `SELECT tablename FROM pg_tables
+        WHERE schemaname = 'pmp' AND tablename <> 'schema_migrations'`,
+    );
+    await client.query(
+      `TRUNCATE TABLE ${tables.map((t) => `pmp.${t.tablename}`).join(", ")} RESTART IDENTITY CASCADE`,
+    );
     await client.query("INSERT INTO clients (id, name) VALUES ($1, $2)", [
       IDS.client,
       "MedTech Industry Association",

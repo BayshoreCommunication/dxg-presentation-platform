@@ -3,8 +3,13 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "workspaces": ["packages/*", "apps/*"],
-  "engines": { "node": ">=24" },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "lint": "eslint .",
     "type-check": "npm run type-check --workspaces --if-present",
@@ -14,11 +19,16 @@
     "db:up": "docker compose up -d postgres redis",
     "db:migrate": "node packages/db/src/migrate.ts",
     "db:seed": "node packages/db/src/seed.ts",
-    "db:reset": "docker compose down -v && docker compose up -d postgres && node packages/db/src/waitFor.ts && node packages/db/src/seed.ts",
-    "dev:api": "node --watch apps/api/src/index.ts"
+    "db:reset": "docker compose down -v && docker compose up -d postgres redis && node packages/db/src/waitFor.ts && node packages/db/src/migrate.ts && node packages/db/src/seed.ts",
+    "dev:api": "node --watch apps/api/src/index.ts",
+    "db:heartbeat": "node packages/db/src/heartbeat.ts",
+    "demo:reset": "npm run db:seed && npm run db:heartbeat",
+    "dev:web": "npm run dev -w @pmp/control-center",
+    "dev": "concurrently -n api,web -c cyan,magenta \"npm run dev:api\" \"npm run dev:web\""
   },
   "devDependencies": {
     "@types/node": "^24.3.0",
+    "concurrently": "^9.1.0",
     "eslint": "^9.34.0",
     "typescript": "^5.9.2",
     "typescript-eslint": "^8.41.0"
