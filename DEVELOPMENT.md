@@ -1,13 +1,13 @@
 # DEVELOPMENT.md — running the platform locally
 
 Status: M0 in progress. The backend spine (domain state machines, database layer, API) and
-**thirteen working screens** exist — Portfolio, Schedule import, Speakers, Command center,
-Presentation detail, Inspection, Review & approval, Room sync, Room Agent, Speaker Ready Room,
-Check-in and USB intake in the Control Center, plus the Speaker portal upload screen in its own app
-— running on real data, from importing an agenda through to a file playing in a room.
+**fifteen working screens** exist — Portfolio, Schedule import, Speakers, Command center,
+Presentation detail, Inspection, Review & approval, Archive builder, Room sync, Room Agent, Speaker
+Ready Room, Check-in, USB intake and the Client portal in the Control Center app, plus the Speaker
+portal upload screen in its own app — running on real data, from importing an agenda through to a
+file playing in a room and a package delivered to the client.
 
-Four screens are still prototype-only (`prototype/enhanced.html`): Create event, Communications,
-Archive builder, Client portal.
+Two screens are still prototype-only (`prototype/enhanced.html`): Create event and Communications.
 
 ## Prerequisites
 
@@ -163,6 +163,27 @@ wrong in every room list.
 organization and email, a chase list (*Bulk remind*), and **possible duplicates** with a merge that
 preserves both file histories and every assignment.
 
+### Archive builder and Client portal — the handover
+
+**Archive builder** scopes the package to approved finals only.
+
+28. **Scope** shows what is in and, more usefully, what is out — each exclusion with its reason:
+    no approved version, restricted from distribution, speaker withheld permission, release
+    permission not set. Nothing is silently dropped.
+29. **Build package.** Every file is read from storage and checksum-verified as it is packaged; if
+    stored bytes no longer match their recorded checksum the build stops and nothing ships. The
+    result is a real `.zip` that `unzip` opens, with a `manifest.json` listing each file's talk,
+    speaker, room, version, checksum, size and approval record.
+30. **Deliver to client portal** issues a link that expires in 7 days.
+31. **Client portal** (`/client/<eventId>`) — a separate surface with no staff navigation at all.
+    Collection percentage, approvals, collection by track, and the package. The download button is
+    disabled until the package is delivered and after the link expires, and it says which.
+
+Worth demonstrating: open the client portal as a staff user and the API refuses —
+*"The client portal is for client event admins and scoped reviewers."* Expire the link and the
+download is refused with a reason, and the package is marked expired. Every download is logged with
+who and when.
+
 Worth saying out loud during the demo: the rules being enforced are the ones that matter
 onsite. Try to approve something before claiming it and the API refuses with
 *"Cannot approve while review is Submitted. Allowed: claim."* Act on a stale copy and it
@@ -207,7 +228,7 @@ workflow transition and a hash-chained audit record are written — all in one t
 |---|---|
 | `packages/domain` | Pure domain: the six lifecycles, the transition engine, derived status. No I/O. |
 | `packages/db` | Pool, RLS scope helper (`withScope`), migration runner, seed, hash-chained audit. |
-| `packages/files` | Storage driver, scanner, tier-1 inspection engine, and the spreadsheet reader — one ZIP/OOXML reader serves both PowerPoint inspection and .xlsx import, with no dependency. |
+| `packages/files` | Storage driver, scanner, tier-1 inspection engine, spreadsheet reader and archive zip writer — one ZIP/OOXML implementation serves PowerPoint inspection, .xlsx import and package building, with no dependency. |
 | `apps/api` | Express 5: health, events, talks, speakers, review transition, audit verify, portal + upload, agent heartbeat. |
 | `apps/control-center` | Next.js staff app (:3000), including the Room Agent room view. |
 | `apps/speaker-portal` | Next.js speaker app (:3001), token auth only. |

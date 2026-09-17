@@ -1,4 +1,24 @@
+import { createHash } from "node:crypto";
+import { mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
 import { getPool, closePool } from "./pool.ts";
+
+const FILE_ROOT = process.env.FILE_ROOT ?? ".data";
+
+/**
+ * Writes a small stand-in object at the content-addressed key a real upload
+ * would use, so every downstream step (sync verification, archive packaging)
+ * has real bytes with a real checksum to work against.
+ */
+async function writeFixtureObject(clientId: string, eventId: string, label: string) {
+  const body = Buffer.from(`DXG fixture object: ${label}\n`.repeat(64));
+  const sha256 = createHash("sha256").update(body).digest("hex");
+  const key = `${clientId}/${eventId}/${sha256}`;
+  const target = path.join(FILE_ROOT, "library", key);
+  await mkdir(path.dirname(target), { recursive: true });
+  await writeFile(target, body);
+  return { sha256, key, size: body.length };
+}
 
 /**
  * Synthetic development fixture mirroring the prototype's cast (no real client
@@ -165,8 +185,10 @@ async function seed(): Promise<void> {
       const fileId = fileRows[0]!.id;
 
       let approvedVersionId: string | undefined;
+      let approvedSha: Buffer | null = null;
       for (const version of talk.versions) {
-        const sha = Buffer.from(`${talk.key}-v${version.n}`.padEnd(32, "0").slice(0, 32));
+        const object = await writeFixtureObject(IDS.client, IDS.event, `${talk.key}-v${version.n}`);
+        const sha = Buffer.from(object.sha256, "hex");
         const { rows: versionRows } = await client.query<{ id: string }>(
           `INSERT INTO file_versions (file_id, event_id, client_id, version_number, original_filename,
                                       content_type, size_bytes, sha256, s3_key, source,
@@ -181,7 +203,7 @@ async function seed(): Promise<void> {
             `${talk.key}_v${version.n}.pptx`,
             version.size,
             sha,
-            `${IDS.client}/${IDS.event}/${sha.toString("hex")}`,
+            object.key,
             version.processing,
             version.inspection,
             version.review,
@@ -189,7 +211,10 @@ async function seed(): Promise<void> {
             version.review === "approved" ? IDS.reviewer : null,
           ],
         );
-        if (version.review === "approved") approvedVersionId = versionRows[0]!.id;
+        if (version.review === "approved") {
+          approvedVersionId = versionRows[0]!.id;
+          approvedSha = sha;
+        }
 
         // Seeded versions carry the same inspection metadata a real ingest would
         // record, so version comparison in SRR has something to compare against.
@@ -227,14 +252,7 @@ async function seed(): Promise<void> {
         await client.query(
           `INSERT INTO room_files (file_version_id, room_id, event_id, client_id, sync_state, synced_sha256)
            VALUES ($1, $2, $3, $4, $5, $6)`,
-          [
-            approvedVersionId,
-            roomId,
-            IDS.event,
-            IDS.client,
-            talk.roomSync,
-            Buffer.from(`${talk.key}-v2`.padEnd(32, "0").slice(0, 32)),
-          ],
+          [approvedVersionId, roomId, IDS.event, IDS.client, talk.roomSync, approvedSha],
         );
       }
     }

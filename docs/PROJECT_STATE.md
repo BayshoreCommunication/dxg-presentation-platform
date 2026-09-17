@@ -217,3 +217,29 @@ tests against known EST/EDT anchors. `updated` was also never being counted — 
 counts as updated only when something actually differs, so an unchanged re-import writes nothing.
 
 Thirteen screens now run on real data. Four remain prototype-only. `npm run ci` green (90 tests).
+
+## 2026-09-17 (eighth) — Archive builder and Client portal: the handover
+
+Screens 10 and 17, closing the post-event half.
+
+- **`packages/files/zipWrite.ts`** — a ZIP writer to match the reader. Entries are stored
+  uncompressed because the payload (PPTX/PDF) is already compressed. Round-trip tests read back
+  what was written, binary included, and confirm checksums survive.
+- **Scope** is approved finals only, and every exclusion is counted with its reason — no approved
+  version, restricted, speaker withheld permission, release permission not set. A `pdf_only`
+  permission excludes the talk for now rather than shipping the original, because PDF conversion is
+  M6-2: the safer reading of a permission that has not been honoured yet.
+- **Build** verifies each file's checksum as it packages it and aborts the whole build on a
+  mismatch. The manifest records talk, speaker, room, version, checksum, size and approval record.
+- **Deliver** issues an expiring link; **download** is refused before delivery and after expiry
+  (marking the package expired), and every download is logged with actor and time.
+- **Client portal** is a genuinely separate surface: `Shell` renders no staff navigation under
+  `/client`, restricted talks are excluded from every count as well as from the package, and the
+  API refuses a staff role outright.
+
+Also fixed here: the seed fabricated checksums without writing any bytes, so the archive build hit
+a missing object. The seed now writes real content-addressed objects with real digests, and a
+missing object is reported as a clean, explained failure instead of a 500.
+
+Fifteen screens now run on real data. Two remain prototype-only: Create event and Communications.
+`npm run ci` green (94 tests).

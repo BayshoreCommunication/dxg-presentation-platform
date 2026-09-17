@@ -21,7 +21,7 @@ const GROUPS: { group: string; items: { label: string; href?: string }[] }[] = [
       { label: "Inspection" },
       { label: "Review & approval", href: "/events/:id/review" },
       { label: "Communications" },
-      { label: "Archive builder" },
+      { label: "Archive builder", href: "/events/:id/archive" },
     ],
   },
   {
@@ -34,7 +34,10 @@ const GROUPS: { group: string; items: { label: string; href?: string }[] }[] = [
     ],
   },
   { group: "DEVICE", items: [{ label: "Room Agent", href: "/events/:id/agent" }] },
-  { group: "EXTERNAL", items: [{ label: "Speaker portal" }, { label: "Client portal" }] },
+  {
+    group: "EXTERNAL",
+    items: [{ label: "Speaker portal" }, { label: "Client portal", href: "/client/:id" }],
+  },
 ];
 
 export function Sidebar() {

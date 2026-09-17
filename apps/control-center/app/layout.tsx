@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import { Sidebar } from "@/components/Sidebar";
+import { Shell } from "@/components/Shell";
 
 export const metadata: Metadata = {
   title: "DXG·PM — Presentation Management Platform",
@@ -11,10 +11,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body>
-        <div className="shell" style={{ display: "flex" }}>
-          <Sidebar />
-          <main style={{ flex: 1, minWidth: 0, overflowY: "auto", padding: 24 }}>{children}</main>
-        </div>
+        <Shell>{children}</Shell>
       </body>
     </html>
   );

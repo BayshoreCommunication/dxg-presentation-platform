@@ -25,6 +25,13 @@ import {
 } from "./services/presentation.ts";
 import type { Lane } from "./services/presentation.ts";
 import { buildPreview, commitImport, autoMap } from "./services/scheduleImport.ts";
+import {
+  scopePreview,
+  buildPackage,
+  deliverPackage,
+  downloadPackage,
+  latestPackage,
+} from "./services/archive.ts";
 import type { ImportField, StagedRow } from "./services/scheduleImport.ts";
 import type { PortalSession } from "./services/portal.ts";
 import { decide } from "./services/review.ts";
@@ -787,6 +794,113 @@ app.post("/api/v1/imports/:importId/commit", async (req, res) => {
 app.get("/api/v1/import-fields", (_req, res) =>
   res.json({ fields: autoMap([]).length === 0 ? IMPORT_FIELD_LIST : IMPORT_FIELD_LIST }),
 );
+
+/* ── archive builder (screen 10) and client portal (screen 17) ───────────── */
+
+app.get("/api/v1/events/:eventId/archive/scope", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  const eventId = String(req.params.eventId);
+  const scope = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID, eventId }, (tx) =>
+    scopePreview(tx, eventId),
+  );
+  const latest = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID, eventId }, (tx) =>
+    latestPackage(tx, eventId),
+  );
+  return res.json({ ...scope, latest_package: latest });
+});
+
+app.post("/api/v1/events/:eventId/archive-packages", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  const eventId = String(req.params.eventId);
+  const result = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID, eventId }, (tx) =>
+    buildPackage(tx, actor, eventId),
+  );
+  if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+  return res.status(201).json(result.value);
+});
+
+app.post("/api/v1/archive-packages/:packageId/deliver", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  const body = req.body as { days?: number };
+  const result = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID }, (tx) =>
+    deliverPackage(tx, actor, String(req.params.packageId), body.days ?? 7),
+  );
+  if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+  return res.json(result.value);
+});
+
+app.get("/api/v1/archive-packages/:packageId/download", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  const result = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID }, (tx) =>
+    downloadPackage(tx, actor, String(req.params.packageId)),
+  );
+  if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+  res.setHeader("content-type", "application/zip");
+  res.setHeader("content-disposition", `attachment; filename="${result.value.filename}"`);
+  return res.send(result.value.body);
+});
+
+/**
+ * Client portal (screen 17). A distinct surface: read-only, restricted talks
+ * excluded from every count as well as from the package, and scoped reviewers
+ * see only what they are assigned (NFR-SEC-03).
+ */
+app.get("/api/v1/client/events/:eventId", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  const clientRoles = ["client_event_admin", "scoped_reviewer"];
+  if (!actor.roles.some((role) => clientRoles.includes(role))) {
+    return res.status(403).json({
+      code: "auth.not_a_client_role",
+      message: "The client portal is for client event admins and scoped reviewers.",
+    });
+  }
+
+  const eventId = String(req.params.eventId);
+  const data = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID, eventId }, async (tx) => {
+    const { rows: eventRows } = await tx.query(
+      `SELECT e.id, e.name, e.starts_on::text, e.ends_on::text, c.name AS client_name
+         FROM pmp.events e JOIN pmp.clients c ON c.id = e.client_id WHERE e.id = $1`,
+      [eventId],
+    );
+
+    // Restricted talks are excluded from what the client sees, not just from
+    // the package (FR-ARCH-001, SCREEN_SPECS §17).
+    const { rows: totals } = await tx.query<{ total: string; collected: string; approved: string }>(
+      `SELECT count(*)::text AS total,
+              count(*) FILTER (WHERE EXISTS (
+                SELECT 1 FROM pmp.files f JOIN pmp.file_versions fv ON fv.file_id = f.id
+                 WHERE f.slot_id = s.id))::text AS collected,
+              count(*) FILTER (WHERE EXISTS (
+                SELECT 1 FROM pmp.files f JOIN pmp.file_versions fv ON fv.file_id = f.id
+                 WHERE f.slot_id = s.id AND fv.review_state = 'approved'))::text AS approved
+         FROM pmp.slots s WHERE s.event_id = $1 AND s.restricted = false`,
+      [eventId],
+    );
+
+    const { rows: tracks } = await tx.query<{ track: string; total: string; collected: string }>(
+      `SELECT COALESCE(t.name, 'Unassigned') AS track, count(*)::text AS total,
+              count(*) FILTER (WHERE EXISTS (
+                SELECT 1 FROM pmp.files f JOIN pmp.file_versions fv ON fv.file_id = f.id
+                 WHERE f.slot_id = s.id))::text AS collected
+         FROM pmp.slots s
+         JOIN pmp.sessions se ON se.id = s.session_id
+         LEFT JOIN pmp.tracks t ON t.id = se.track_id
+        WHERE s.event_id = $1 AND s.restricted = false
+        GROUP BY COALESCE(t.name, 'Unassigned')
+        ORDER BY 1`,
+      [eventId],
+    );
+
+    return { event: eventRows[0], totals: totals[0], tracks, package: await latestPackage(tx, eventId) };
+  });
+
+  return res.json(data);
+});
 
 const port = Number(process.env.PORT ?? 4000);
 app.listen(port, () => {

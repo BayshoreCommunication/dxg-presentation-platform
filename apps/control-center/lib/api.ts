@@ -460,3 +460,66 @@ export const commitImport = (importId: string, eventId: string, rows: StagedRow[
     { method: "POST", body: JSON.stringify({ event_id: eventId, rows }) },
     "pm",
   );
+
+/* ── archive builder & client portal ──────────────────────────────────────── */
+
+export type ArchiveCandidate = {
+  slot_id: string;
+  title: string;
+  room: string | null;
+  speaker: string | null;
+  version_number: number | null;
+  size_bytes: string | null;
+  sha256: string | null;
+};
+
+export type ArchivePackageRow = {
+  id: string;
+  archive_state: string;
+  manifest: { file_count?: number } | null;
+  link_expires_at: string | null;
+  created_at: string;
+  downloads: string;
+};
+
+export type ArchiveScope = {
+  included: ArchiveCandidate[];
+  excluded: { title: string; speaker: string | null; reason: string }[];
+  total_bytes: number;
+  rooms: number;
+  days: number;
+  latest_package: ArchivePackageRow | null;
+};
+
+export const getArchiveScope = (eventId: string) =>
+  request<ArchiveScope>(`/events/${eventId}/archive/scope`, undefined, "pm");
+
+export const buildArchive = (eventId: string) =>
+  request<{
+    package_id: string;
+    archive_state: string;
+    file_count: number;
+    size_bytes: number;
+    sha256: string;
+    excluded: number;
+  }>(`/events/${eventId}/archive-packages`, { method: "POST" }, "pm");
+
+export const deliverArchive = (packageId: string, days = 7) =>
+  request<{ link_expires_at: string }>(
+    `/archive-packages/${packageId}/deliver`,
+    { method: "POST", body: JSON.stringify({ days }) },
+    "pm",
+  );
+
+export const archiveDownloadUrl = (packageId: string) =>
+  `${process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:4000/api/v1"}/archive-packages/${packageId}/download`;
+
+export type ClientView = {
+  event: { id: string; name: string; starts_on: string; ends_on: string; client_name: string };
+  totals: { total: string; collected: string; approved: string };
+  tracks: { track: string; total: string; collected: string }[];
+  package: ArchivePackageRow | null;
+};
+
+export const getClientView = (eventId: string) =>
+  request<ClientView>(`/client/events/${eventId}`, undefined, "client");
