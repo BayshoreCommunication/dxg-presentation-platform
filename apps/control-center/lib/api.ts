@@ -523,3 +523,79 @@ export type ClientView = {
 
 export const getClientView = (eventId: string) =>
   request<ClientView>(`/client/events/${eventId}`, undefined, "client");
+
+/* ── create event & communications ────────────────────────────────────────── */
+
+export type EventDraft = {
+  id: string;
+  name: string;
+  status: string;
+  rooms: string[];
+  tracks: string[];
+  days: number;
+  settings: Record<string, unknown>;
+};
+
+export const getTimezones = () => request<{ items: string[] }>(`/timezones`, undefined, "pm");
+
+export const createEvent = (body: {
+  name: string;
+  venue: string;
+  timezone: string;
+  starts_on: string;
+  ends_on: string;
+}) => request<{ event_id: string }>(`/events`, { method: "POST", body: JSON.stringify(body) }, "pm");
+
+export const getDraft = (eventId: string) =>
+  request<EventDraft>(`/events/${eventId}/draft`, undefined, "pm");
+
+export const configureEvent = (
+  eventId: string,
+  body: {
+    rooms?: string[];
+    tracks?: string[];
+    settings?: Record<string, unknown>;
+    branding?: Record<string, unknown>;
+  },
+) => request<EventDraft>(`/events/${eventId}`, { method: "PATCH", body: JSON.stringify(body) }, "pm");
+
+export const activateEvent = (eventId: string) =>
+  request<EventDraft>(`/events/${eventId}/activate`, { method: "POST" }, "pm");
+
+export type CommRecipient = {
+  speaker_id: string;
+  name: string;
+  email: string | null;
+  talk_title: string;
+  room: string | null;
+  starts_at: string;
+  status: string;
+  bounced: boolean;
+  already_sent: boolean;
+};
+
+export type CommsView = {
+  templates: { id: string; name: string; subject: string; body: string }[];
+  recipients: CommRecipient[];
+  missing: CommRecipient[];
+  log: {
+    id: string;
+    speaker: string | null;
+    to_address: string;
+    subject: string;
+    status: string;
+    sent_at: string | null;
+    created_at: string;
+  }[];
+  stats: { queued: number; sent: number; delivered: number; opened: number; clicked: number; bounced: number };
+};
+
+export const getComms = (eventId: string) =>
+  request<CommsView>(`/events/${eventId}/comms`, undefined, "pm");
+
+export const sendBatch = (eventId: string, templateId: string, missingOnly: boolean) =>
+  request<{ queued: number; skipped: { reason: string; count: number }[] }>(
+    `/events/${eventId}/comms/send`,
+    { method: "POST", body: JSON.stringify({ template_id: templateId, missing_only: missingOnly }) },
+    "pm",
+  );

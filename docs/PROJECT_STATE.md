@@ -243,3 +243,24 @@ missing object is reported as a clean, explained failure instead of a 500.
 
 Fifteen screens now run on real data. Two remain prototype-only: Create event and Communications.
 `npm run ci` green (94 tests).
+
+## 2026-09-17 (ninth) — Create event and Communications: all seventeen screens are real
+
+The last two screens of the client baseline.
+
+- **Create event** — four-step wizard. Step 1 commits a draft (a draft sends nothing); timezone and
+  date ranges are validated with explanations; activation requires at least one day and one room.
+  Duplication copies rooms, tracks, days, settings, branding and templates, and copies no speakers,
+  files or communications — verified: 5 rooms, 3 days, 0 speakers, 0 files, 0 comms.
+- **Communications** — default templates with merge fields; the audience is resolved at send time,
+  not at schedule time, so a reminder never chases someone who uploaded yesterday; each recipient
+  gets their own token and link; a batch is idempotent per (recipient, template); bounced addresses
+  are excluded with the reason shown; a provider webhook records delivery, open, click and bounce.
+- The "no invitations before the event has a day and a room" rule from the baseline is enforced in
+  the API, not just as wizard copy.
+
+**All seventeen baseline screens now run on real data.** What remains is depth behind them, and it
+is written down honestly in `DEVELOPMENT.md`: PowerPoint playback (G0-1), the S3 driver, ClamAV,
+PDF conversion, slide previews, real OIDC, SES sending and webhook signatures, SSE, asset upload.
+
+`npm run ci` green (94 tests).

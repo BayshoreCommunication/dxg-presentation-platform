@@ -26,6 +26,22 @@ import {
 import type { Lane } from "./services/presentation.ts";
 import { buildPreview, commitImport, autoMap } from "./services/scheduleImport.ts";
 import {
+  createEvent,
+  configureEvent,
+  draftOf,
+  activateEvent,
+  duplicateEvent,
+  supportedTimezones,
+} from "./services/events.ts";
+import {
+  ensureTemplates,
+  recipientsFor,
+  sendBatch,
+  deliveryLog,
+  deliveryStats,
+  recordDeliveryEvent,
+} from "./services/comms.ts";
+import {
   scopePreview,
   buildPackage,
   deliverPackage,
@@ -85,6 +101,15 @@ const statusFor = (error: DomainError): number => {
   }
   if (error.code.endsWith(".conflict")) return 409;
   if (error.code.endsWith(".forbidden") || error.code.endsWith(".override_forbidden")) return 403;
+  if (
+    error.code.endsWith(".event_incomplete") ||
+    error.code.endsWith(".incomplete") ||
+    error.code.endsWith(".bad_dates") ||
+    error.code.endsWith(".name_required") ||
+    error.code.endsWith(".unknown_timezone")
+  ) {
+    return 422;
+  }
   if (error.code.endsWith(".illegal_transition")) return 422;
   return 400;
 };
@@ -900,6 +925,134 @@ app.get("/api/v1/client/events/:eventId", async (req, res) => {
   });
 
   return res.json(data);
+});
+
+/* ── create event (screen 2) ─────────────────────────────────────────────── */
+
+app.get("/api/v1/timezones", (_req, res) => res.json({ items: supportedTimezones() }));
+
+app.post("/api/v1/events", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  const body = req.body as Record<string, string>;
+  const result = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID }, (tx) =>
+    createEvent(tx, actor, DEV_CLIENT_ID, {
+      name: body.name ?? "",
+      venue: body.venue ?? "",
+      timezone: body.timezone ?? "America/New_York",
+      starts_on: body.starts_on ?? "",
+      ends_on: body.ends_on ?? "",
+    }),
+  );
+  if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+  return res.status(201).json(result.value);
+});
+
+app.get("/api/v1/events/:eventId/draft", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  const result = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID }, (tx) =>
+    draftOf(tx, String(req.params.eventId)),
+  );
+  if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+  return res.json(result.value);
+});
+
+app.patch("/api/v1/events/:eventId", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  const body = req.body as {
+    rooms?: string[];
+    tracks?: string[];
+    settings?: Record<string, unknown>;
+    branding?: Record<string, unknown>;
+  };
+  const result = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID }, (tx) =>
+    configureEvent(tx, actor, String(req.params.eventId), body),
+  );
+  if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+  return res.json(result.value);
+});
+
+app.post("/api/v1/events/:eventId/activate", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  const result = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID }, (tx) =>
+    activateEvent(tx, actor, String(req.params.eventId)),
+  );
+  if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+  return res.json(result.value);
+});
+
+app.post("/api/v1/events/:eventId/duplicate", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  const body = req.body as Record<string, string>;
+  const result = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID }, (tx) =>
+    duplicateEvent(tx, actor, String(req.params.eventId), {
+      name: body.name ?? "Copy",
+      starts_on: body.starts_on ?? "",
+      ends_on: body.ends_on ?? "",
+    }),
+  );
+  if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+  return res.status(201).json(result.value);
+});
+
+/* ── communications (screen 9) ───────────────────────────────────────────── */
+
+app.get("/api/v1/events/:eventId/comms", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  const eventId = String(req.params.eventId);
+  const data = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID, eventId }, async (tx) => {
+    const templates = await ensureTemplates(tx, eventId);
+    const invitation = templates[0];
+    return {
+      templates,
+      recipients: invitation ? await recipientsFor(tx, eventId, invitation.id, false) : [],
+      missing: invitation ? await recipientsFor(tx, eventId, invitation.id, true) : [],
+      log: await deliveryLog(tx, eventId),
+      stats: await deliveryStats(tx, eventId),
+    };
+  });
+  return res.json(data);
+});
+
+app.post("/api/v1/events/:eventId/comms/send", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  const body = req.body as { template_id?: string; missing_only?: boolean };
+  if (!body.template_id) {
+    return res.status(400).json({ code: "request.invalid", message: "`template_id` is required." });
+  }
+  const eventId = String(req.params.eventId);
+  const result = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID, eventId }, (tx) =>
+    sendBatch(tx, actor, {
+      eventId,
+      templateId: body.template_id as string,
+      missingOnly: body.missing_only === true,
+    }),
+  );
+  if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+  return res.json(result.value);
+});
+
+/** Provider callback (SES via SNS in production); signature verification is M3-5. */
+app.post("/api/v1/webhooks/email", async (req, res) => {
+  const body = req.body as { communication_id?: string; event_type?: string; payload?: Record<string, unknown> };
+  if (!body.communication_id || !body.event_type) {
+    return res.status(400).json({ code: "request.invalid", message: "`communication_id` and `event_type` are required." });
+  }
+  const result = await withScope({ userId: DEV_USERS.pm!.id, clientId: DEV_CLIENT_ID }, (tx) =>
+    recordDeliveryEvent(tx, {
+      communicationId: body.communication_id as string,
+      eventType: body.event_type as string,
+      payload: body.payload ?? {},
+    }),
+  );
+  if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+  return res.json(result.value);
 });
 
 const port = Number(process.env.PORT ?? 4000);

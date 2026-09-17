@@ -1,13 +1,13 @@
 # DEVELOPMENT.md — running the platform locally
 
 Status: M0 in progress. The backend spine (domain state machines, database layer, API) and
-**fifteen working screens** exist — Portfolio, Schedule import, Speakers, Command center,
-Presentation detail, Inspection, Review & approval, Archive builder, Room sync, Room Agent, Speaker
-Ready Room, Check-in, USB intake and the Client portal in the Control Center app, plus the Speaker
-portal upload screen in its own app — running on real data, from importing an agenda through to a
-file playing in a room and a package delivered to the client.
+**All seventeen screens of the client baseline now run on real data** — the ten Control Center
+screens, the four Onsite screens, the Room Agent room view and the Client portal in the Control
+Center app, plus the Speaker portal in its own app. The product runs end to end: create an event,
+import an agenda, invite speakers, collect and inspect files, review and approve, run the Speaker
+Ready Room, sync and play in a room, and deliver the archive to the client.
 
-Two screens are still prototype-only (`prototype/enhanced.html`): Create event and Communications.
+What is *not* finished is behind those screens, not between them — see Notes at the bottom.
 
 ## Prerequisites
 
@@ -179,6 +179,27 @@ preserves both file histories and every assignment.
     Collection percentage, approvals, collection by track, and the package. The download button is
     disabled until the package is delivered and after the link expires, and it says which.
 
+### Create event and Communications — the start of an event
+
+**Create event** is the four-step wizard: Basics, Rooms & tracks, Deadlines & workflow, Branding.
+
+32. **Step 1 creates a draft.** A draft sends nothing to anyone. Bad input is refused with a
+    reason — an unknown timezone, or an end date before the start date.
+33. **Step 2** warns that invitations cannot go out until the event has a day and a room. That is
+    not just wizard copy: try sending a batch on an event with no rooms and the API refuses —
+    *"a speaker link would point at nothing."*
+34. **Activate** turns the draft into a live event and drops you on its command center.
+
+**Communications** shows the template with its merge fields, and — more useful — **who the batch
+would actually reach**, resolved now rather than when the batch was scheduled.
+
+35. **Send batch.** Each recipient gets their own secure link; a batch never contains a shared URL.
+36. **Press it again.** Nothing is queued and every recipient reads *already received this batch*.
+37. **A bounce arrives** on the provider webhook. The speaker's row flags it, and the next batch
+    skips that address with the reason shown.
+38. **The reminder template** targets only speakers whose derived status is *Missing* — with a full
+    fixture, it correctly reports that there is nobody to chase.
+
 Worth demonstrating: open the client portal as a staff user and the API refuses —
 *"The client portal is for client event admins and scoped reviewers."* Expire the link and the
 download is refused with a reason, and the package is marked expired. Every download is logged with
@@ -255,3 +276,7 @@ workflow transition and a hash-chained audit record are written — all in one t
   agent's sync engine will — read, verify checksum, then make visible — minus the network.
 - **Launching does not drive PowerPoint yet** (M5-3, gated on G0-1). The launch guard, the
   holding-screen fallback and the launch log are real; the COM call is not there.
+- **Email is queued, not sent.** A batch writes per-recipient communications and outbox rows and
+  issues real per-recipient links; the SES sender and webhook signature verification are M3-5.
+  Delivery events can be posted to the webhook by hand, which is how the bounce path is exercised.
+- **Asset upload** (event header, slide template) is not built (M1-4).
