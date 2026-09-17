@@ -1,0 +1,26 @@
+{
+  "name": "dxg-pmp",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "workspaces": ["packages/*", "apps/*"],
+  "engines": { "node": ">=24" },
+  "scripts": {
+    "lint": "eslint .",
+    "type-check": "npm run type-check --workspaces --if-present",
+    "test": "node --test \"packages/*/src/**/*.test.ts\" \"apps/*/src/**/*.test.ts\"",
+    "test:invariants": "node --test \"tests/invariants/**/*.test.ts\"",
+    "ci": "npm run lint && npm run type-check && npm test",
+    "db:up": "docker compose up -d postgres redis",
+    "db:migrate": "node packages/db/src/migrate.ts",
+    "db:seed": "node packages/db/src/seed.ts",
+    "db:reset": "docker compose down -v && docker compose up -d postgres && node packages/db/src/waitFor.ts && node packages/db/src/seed.ts",
+    "dev:api": "node --watch apps/api/src/index.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "eslint": "^9.34.0",
+    "typescript": "^5.9.2",
+    "typescript-eslint": "^8.41.0"
+  }
+}
