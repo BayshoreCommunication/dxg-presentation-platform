@@ -400,3 +400,26 @@ are in `docs/infra/EMAIL.md`.
 Outstanding, none of it code: no SNS subscription (the API has no public URL yet; the webhook is
 built and verifies signatures), open/click tracking off pending a tracking subdomain, and no custom
 MAIL FROM domain for SPF alignment.
+
+## 2026-09-17 (sixteenth) — custom MAIL FROM domain
+
+`mail.dxg-agency.com` is now set as the custom MAIL FROM domain on the `dxg-agency.com` identity.
+Status is **`PENDING`** and will stay there until two DNS records exist; the records and the check
+command are in `docs/infra/EMAIL.md`.
+
+**I cannot add those records.** `dxg-agency.com` is served by Namecheap
+(`dns1.registrar-servers.com`), and the only hosted zone in this AWS account is the private
+`rfpilot-production.local.` — so this needs whoever administers that zone. The two records are an
+MX on `mail` → `feedback-smtp.us-east-2.amazonses.com` priority 10, and a TXT on `mail` →
+`v=spf1 include:amazonses.com ~all`.
+
+**Chose `USE_DEFAULT_VALUE` over `REJECT_MESSAGE` deliberately.** `REJECT_MESSAGE` is the stricter
+setting and the wrong one to start with: the records do not exist yet, so it would reject every
+outgoing message — upload links, reminders, password resets — until work completed in a system we
+do not control. `USE_DEFAULT_VALUE` falls back to `amazonses.com`, which is precisely the behaviour
+that was already in place, so nothing regresses. Once the identity reads `SUCCESS`, tightening to
+`REJECT_MESSAGE` is worth doing and the command is in the runbook.
+
+Confirmed rather than assumed: a real message was sent through the `pmp-email` configuration set
+while the identity was `PENDING` and was accepted (`MessageId 010f01a0aee21e1f-…`), DKIM still
+`SUCCESS`. Sending is unaffected.

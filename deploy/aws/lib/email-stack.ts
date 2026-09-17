@@ -17,7 +17,10 @@ export type EmailStackProps = cdk.StackProps & {
  *
  * The sending identity is intentionally NOT created here. `dxg-agency.com` is
  * already verified in the account, and a CDK-managed identity would try to own
- * DNS records the client controls.
+ * DNS records the client controls. Its custom MAIL FROM domain
+ * (`mail.dxg-agency.com`) is set on that identity for the same reason — it is an
+ * identity attribute, and adopting the identity to manage it would put CDK in
+ * charge of DNS it cannot reach. See `docs/infra/EMAIL.md`.
  *
  * The configuration set is the piece that matters: **without one, SES publishes
  * no delivery, bounce or complaint events at all**, and the platform would
