@@ -1,8 +1,5 @@
 const BASE = process.env.API_BASE ?? "http://localhost:4000/api/v1";
 
-/** M0 stand-in for the OIDC session (BUILD_SPEC §13; replaced by M1-1). */
-export const DEV_USER = process.env.DEV_USER ?? "reviewer";
-
 export class ApiError extends Error {
   constructor(
     readonly code: string,
@@ -15,18 +12,37 @@ export class ApiError extends Error {
 }
 
 /**
- * The room machine is a different principal from staff (BUILD_SPEC §13: agents
- * authenticate with a signed device credential). Until M5-1 issues those, the
- * agent screen identifies as the room technician rather than the staff session.
+ * One fetch wrapper for both halves of the app. In a server component the
+ * browser's cookie has to be forwarded explicitly; in the browser it travels on
+ * its own once credentials are included.
  */
-export const DEV_ROOM_USER = "room_tech";
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const onServer = typeof window === "undefined";
+  const headers: Record<string, string> = {
+    "content-type": "application/json",
+    ...((init?.headers as Record<string, string>) ?? {}),
+  };
 
-async function request<T>(path: string, init?: RequestInit, as: string = DEV_USER): Promise<T> {
+  if (onServer) {
+    // Imported dynamically: a static import would pull next/headers into the
+    // client bundle, which the client components that share this module cannot
+    // have.
+    const { cookies } = await import("next/headers");
+    const jar = await cookies();
+    const cookieHeader = jar
+      .getAll()
+      .map((entry) => `${entry.name}=${entry.value}`)
+      .join("; ");
+    if (cookieHeader) headers.cookie = cookieHeader;
+  }
+
   const response = await fetch(`${BASE}${path}`, {
     ...init,
     cache: "no-store",
-    headers: { "content-type": "application/json", "x-dev-user": as, ...init?.headers },
+    ...(onServer ? {} : { credentials: "include" as const }),
+    headers,
   });
+
   const body: unknown = await response.json().catch(() => ({}));
   if (!response.ok) {
     const error = body as { code?: string; message?: string; detail?: Record<string, unknown> };
@@ -39,6 +55,47 @@ async function request<T>(path: string, init?: RequestInit, as: string = DEV_USE
   }
   return body as T;
 }
+
+export type Principal = {
+  kind: "staff";
+  user_id: string;
+  email: string;
+  display_name: string;
+  roles: string[];
+  must_change_password: boolean;
+};
+
+export const getSession = () => request<{ principal: Principal }>("/auth/session");
+
+export const login = (email: string, password: string) =>
+  request<{ principal: Principal }>("/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ email, password }),
+  });
+
+export const logout = () => request<void>("/auth/logout", { method: "POST" });
+
+export const changePassword = (currentPassword: string, newPassword: string) =>
+  request<{ changed: true }>("/auth/password", {
+    method: "POST",
+    body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+  });
+
+export type IssuedCredential = {
+  speaker_id: string;
+  speaker: string;
+  email: string | null;
+  access_code: string;
+  code_hint: string;
+  link: string;
+  expires_at: string;
+};
+
+export const issueCredential = (speakerId: string) =>
+  request<IssuedCredential>(`/speakers/${speakerId}/credentials`, { method: "POST" });
+
+export const revokeCredential = (speakerId: string) =>
+  request<{ revoked: number }>(`/speakers/${speakerId}/credentials`, { method: "DELETE" });
 
 export type EventRow = {
   id: string;
@@ -144,32 +201,28 @@ export type AgentView = {
 };
 
 export const getAgentView = (roomId: string) =>
-  request<AgentView>(`/rooms/${roomId}/agent-view`, undefined, DEV_ROOM_USER);
+  request<AgentView>(`/rooms/${roomId}/agent-view`);
 
 export const syncRoom = (roomId: string) =>
   request<{ downloaded: number; awaiting_ack: number; activated: number; failed: number }>(
     `/rooms/${roomId}/sync`,
     { method: "POST" },
-    DEV_ROOM_USER,
   );
 
 export const acknowledgeRoomFile = (roomFileId: string, lockVersion: number) =>
   request<{ sync_state: string }>(
     `/room-files/${roomFileId}/acknowledge`,
     { method: "POST", body: JSON.stringify({ lock_version: lockVersion }) },
-    DEV_ROOM_USER,
   );
 
 export const launchInRoom = (roomId: string, slotId: string) =>
   request<{ launched: boolean; at?: string; reason?: string }>(
     `/rooms/${roomId}/launch`,
     { method: "POST", body: JSON.stringify({ slot_id: slotId }) },
-    DEV_ROOM_USER,
   );
 
 /* ── Speaker Ready Room ───────────────────────────────────────────────────── */
 
-export const DEV_SRR_USER = "pm";
 
 export type ExpectedArrival = {
   speaker_id: string;
@@ -229,44 +282,40 @@ export type UsbResult = {
 };
 
 export const getSrrDashboard = (eventId: string) =>
-  request<SrrDashboard>(`/events/${eventId}/srr`, undefined, DEV_SRR_USER);
+  request<SrrDashboard>(`/events/${eventId}/srr`);
 
 export const getCheckin = (checkinId: string) =>
-  request<CheckinDetail>(`/srr/checkins/${checkinId}`, undefined, DEV_SRR_USER);
+  request<CheckinDetail>(`/srr/checkins/${checkinId}`);
 
 export const startCheckin = (eventId: string, speakerId: string, station: string) =>
   request<{ checkin_id: string }>(
     `/events/${eventId}/srr/checkins`,
     { method: "POST", body: JSON.stringify({ speaker_id: speakerId, station }) },
-    DEV_SRR_USER,
   );
 
 export const beginSrrUpload = () =>
-  request<{ upload_id: string; part_size: number }>(`/srr/uploads`, { method: "POST" }, DEV_SRR_USER);
+  request<{ upload_id: string; part_size: number }>(`/srr/uploads`, { method: "POST" });
 
 export const putSrrPart = (uploadId: string, partNumber: number, chunk: ArrayBuffer) =>
   request<{ size: number; sha256: string }>(
     `/srr/uploads/${uploadId}/parts/${partNumber}`,
     { method: "PUT", body: chunk, headers: { "content-type": "application/octet-stream" } },
-    DEV_SRR_USER,
   );
 
 export const ingestUsb = (checkinId: string, body: { upload_id: string; file_name: string; reason: string }) =>
   request<UsbResult>(
     `/srr/checkins/${checkinId}/usb-ingestions`,
     { method: "POST", body: JSON.stringify(body) },
-    DEV_SRR_USER,
   );
 
 export const signOffCheckin = (checkinId: string, fileVersionId: string) =>
   request<{ receipt: NonNullable<CheckinDetail["receipt"]> }>(
     `/srr/checkins/${checkinId}/sign-off`,
     { method: "POST", body: JSON.stringify({ file_version_id: fileVersionId }) },
-    DEV_SRR_USER,
   );
 
 export const departCheckin = (checkinId: string) =>
-  request<{ departed: true }>(`/srr/checkins/${checkinId}/depart`, { method: "POST" }, DEV_SRR_USER);
+  request<{ departed: true }>(`/srr/checkins/${checkinId}/depart`, { method: "POST" });
 
 /* ── presentation detail & inspection ─────────────────────────────────────── */
 
@@ -334,7 +383,7 @@ export const waiveFinding = (findingId: string, reason: string) =>
   request<{ waived: true }>(`/findings/${findingId}/waive`, {
     method: "POST",
     body: JSON.stringify({ reason }),
-  }, "pm");
+  });
 
 export const requestRevision = (versionId: string, body: { finding_id?: string; note: string }) =>
   request<{ review_state: string }>(`/file-versions/${versionId}/request-revision`, {
@@ -346,7 +395,7 @@ export const rollBackTalk = (slotId: string, targetVersionId: string, reason: st
   request<{ restored_version: number; rooms_notified: number }>(`/slots/${slotId}/roll-back`, {
     method: "POST",
     body: JSON.stringify({ target_version_id: targetVersionId, reason }),
-  }, "pm");
+  });
 
 /* ── speakers & schedule import ───────────────────────────────────────────── */
 
@@ -372,20 +421,19 @@ export type DuplicatePair = {
 };
 
 export const getSpeakers = (eventId: string, q = "") =>
-  request<{ items: SpeakerRow[] }>(`/events/${eventId}/speakers?q=${encodeURIComponent(q)}`, undefined, "pm");
+  request<{ items: SpeakerRow[] }>(`/events/${eventId}/speakers?q=${encodeURIComponent(q)}`);
 
 export const getDuplicates = (eventId: string) =>
-  request<{ items: DuplicatePair[] }>(`/events/${eventId}/speaker-duplicates`, undefined, "pm");
+  request<{ items: DuplicatePair[] }>(`/events/${eventId}/speaker-duplicates`);
 
 export const mergeSpeakers = (speakerId: string, into: string) =>
   request<{ merged_into: string }>(
     `/speakers/${speakerId}/merge`,
     { method: "POST", body: JSON.stringify({ into }) },
-    "pm",
   );
 
 export const inviteSpeaker = (speakerId: string) =>
-  request<{ token: string; url: string }>(`/speakers/${speakerId}/invite`, { method: "POST" }, "pm");
+  request<{ token: string; url: string }>(`/speakers/${speakerId}/invite`, { method: "POST" });
 
 export type ImportField = string;
 
@@ -445,21 +493,18 @@ export const uploadImport = async (eventId: string, file: File) =>
       body: await file.arrayBuffer(),
       headers: { "content-type": "application/octet-stream", "x-file-name": file.name },
     },
-    "pm",
   );
 
 export const remapImport = (uploadId: string, mapping: (ImportField | null)[]) =>
   request<ImportPreview>(
     `/imports/${uploadId}/remap`,
     { method: "POST", body: JSON.stringify({ mapping }) },
-    "pm",
   );
 
 export const commitImport = (importId: string, eventId: string, rows: StagedRow[]) =>
   request<{ created: number; updated: number; unchanged: number; speakers: number }>(
     `/imports/${importId}/commit`,
     { method: "POST", body: JSON.stringify({ event_id: eventId, rows }) },
-    "pm",
   );
 
 /* ── archive builder & client portal ──────────────────────────────────────── */
@@ -493,7 +538,7 @@ export type ArchiveScope = {
 };
 
 export const getArchiveScope = (eventId: string) =>
-  request<ArchiveScope>(`/events/${eventId}/archive/scope`, undefined, "pm");
+  request<ArchiveScope>(`/events/${eventId}/archive/scope`);
 
 export const buildArchive = (eventId: string) =>
   request<{
@@ -503,13 +548,12 @@ export const buildArchive = (eventId: string) =>
     size_bytes: number;
     sha256: string;
     excluded: number;
-  }>(`/events/${eventId}/archive-packages`, { method: "POST" }, "pm");
+  }>(`/events/${eventId}/archive-packages`, { method: "POST" });
 
 export const deliverArchive = (packageId: string, days = 7) =>
   request<{ link_expires_at: string }>(
     `/archive-packages/${packageId}/deliver`,
     { method: "POST", body: JSON.stringify({ days }) },
-    "pm",
   );
 
 export const archiveDownloadUrl = (packageId: string) =>
@@ -523,7 +567,7 @@ export type ClientView = {
 };
 
 export const getClientView = (eventId: string) =>
-  request<ClientView>(`/client/events/${eventId}`, undefined, "client");
+  request<ClientView>(`/client/events/${eventId}`);
 
 /* ── create event & communications ────────────────────────────────────────── */
 
@@ -537,7 +581,7 @@ export type EventDraft = {
   settings: Record<string, unknown>;
 };
 
-export const getTimezones = () => request<{ items: string[] }>(`/timezones`, undefined, "pm");
+export const getTimezones = () => request<{ items: string[] }>(`/timezones`);
 
 export const createEvent = (body: {
   name: string;
@@ -545,10 +589,10 @@ export const createEvent = (body: {
   timezone: string;
   starts_on: string;
   ends_on: string;
-}) => request<{ event_id: string }>(`/events`, { method: "POST", body: JSON.stringify(body) }, "pm");
+}) => request<{ event_id: string }>(`/events`, { method: "POST", body: JSON.stringify(body) });
 
 export const getDraft = (eventId: string) =>
-  request<EventDraft>(`/events/${eventId}/draft`, undefined, "pm");
+  request<EventDraft>(`/events/${eventId}/draft`);
 
 export const configureEvent = (
   eventId: string,
@@ -558,10 +602,10 @@ export const configureEvent = (
     settings?: Record<string, unknown>;
     branding?: Record<string, unknown>;
   },
-) => request<EventDraft>(`/events/${eventId}`, { method: "PATCH", body: JSON.stringify(body) }, "pm");
+) => request<EventDraft>(`/events/${eventId}`, { method: "PATCH", body: JSON.stringify(body) });
 
 export const activateEvent = (eventId: string) =>
-  request<EventDraft>(`/events/${eventId}/activate`, { method: "POST" }, "pm");
+  request<EventDraft>(`/events/${eventId}/activate`, { method: "POST" });
 
 export type CommRecipient = {
   speaker_id: string;
@@ -592,11 +636,10 @@ export type CommsView = {
 };
 
 export const getComms = (eventId: string) =>
-  request<CommsView>(`/events/${eventId}/comms`, undefined, "pm");
+  request<CommsView>(`/events/${eventId}/comms`);
 
 export const sendBatch = (eventId: string, templateId: string, missingOnly: boolean) =>
   request<{ queued: number; skipped: { reason: string; count: number }[] }>(
     `/events/${eventId}/comms/send`,
     { method: "POST", body: JSON.stringify({ template_id: templateId, missing_only: missingOnly }) },
-    "pm",
   );

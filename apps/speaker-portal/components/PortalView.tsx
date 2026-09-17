@@ -1,78 +1,82 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { getSession, getTalks, PortalError } from "@/lib/api";
+import { useCallback, useState } from "react";
+import { useRouter } from "next/navigation";
+import { presenterLogout } from "@/lib/api";
 import type { CompleteResult, PortalSession, PortalTalk } from "@/lib/api";
 import { UploadPanel } from "./UploadPanel";
 
 const mb = (bytes: string | number) => `${Math.round(Number(bytes) / 1_000_000)} MB`;
 
-export function PortalView({ token }: { token: string }) {
-  const [session, setSession] = useState<PortalSession | null>(null);
-  const [talks, setTalks] = useState<PortalTalk[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    try {
-      const [nextSession, nextTalks] = await Promise.all([getSession(token), getTalks(token)]);
-      setSession(nextSession);
-      setTalks(nextTalks.items);
-      setError(null);
-    } catch (caught) {
-      setError(caught instanceof PortalError ? caught.message : "Something went wrong.");
-    }
-  }, [token]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  if (error) {
-    return (
-      <div className="card">
-        <div className="cbd">
-          <h1 className="htitle">Speaker upload</h1>
-          <div className="err">{error}</div>
-        </div>
-      </div>
-    );
-  }
-
-  if (!session || !talks) {
-    return (
-      <div className="card">
-        <div className="cbd">
-          <div className="skeleton" style={{ width: "60%", marginBottom: 8 }} />
-          <div className="skeleton" style={{ width: "40%" }} />
-        </div>
-      </div>
-    );
-  }
+export function PortalView({
+  session,
+  talks,
+}: {
+  session: PortalSession;
+  talks: PortalTalk[];
+}) {
+  const router = useRouter();
+  const reload = useCallback(async () => {
+    router.refresh();
+  }, [router]);
 
   return (
     <>
-      <div className="darkpane" style={{ padding: "16px 20px", marginBottom: 16 }}>
-        <b style={{ color: "var(--white)", fontFamily: "'Barlow Semi Condensed'", fontSize: 18 }}>
-          {session.event.name} · <span style={{ color: "var(--blue)" }}>Speaker Upload</span>
-        </b>
-        <br />
-        <span style={{ fontSize: 13 }}>{session.speaker.name}</span>
+      <div
+        className="darkpane"
+        style={{
+          padding: "16px 20px",
+          marginBottom: 16,
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+          gap: 12,
+          flexWrap: "wrap",
+        }}
+      >
+        <div>
+          <b style={{ color: "var(--white)", fontFamily: "'Barlow Semi Condensed'", fontSize: 18 }}>
+            {session.event.name} · <span style={{ color: "var(--blue)" }}>Speaker Upload</span>
+          </b>
+          <br />
+          <span style={{ fontSize: 13 }}>{session.speaker.name}</span>
+        </div>
+        <button
+          className="btn"
+          style={{ background: "var(--ink2)", color: "var(--paneink)", borderColor: "#33414B" }}
+          onClick={() => {
+            void presenterLogout()
+              .catch(() => undefined)
+              .then(() => {
+                router.replace("/login?reason=signed_out");
+                router.refresh();
+              });
+          }}
+        >
+          Sign out
+        </button>
       </div>
 
+      {talks.length === 0 && (
+        <div className="card">
+          <div className="empty">
+            No talks are assigned to you yet. The organisers will be in touch.
+          </div>
+        </div>
+      )}
+
       {talks.map((talk) => (
-        <TalkCard key={talk.slot_id} token={token} talk={talk} timezone={session.event.timezone} onChange={load} />
+        <TalkCard key={talk.slot_id} talk={talk} timezone={session.event.timezone} onChange={reload} />
       ))}
     </>
   );
 }
 
 function TalkCard({
-  token,
   talk,
   timezone,
   onChange,
 }: {
-  token: string;
   talk: PortalTalk;
   timezone: string;
   onChange: () => Promise<void>;
@@ -126,7 +130,6 @@ function TalkCard({
           </div>
         ) : (
           <UploadPanel
-            token={token}
             slotId={talk.slot_id}
             onComplete={async (completed) => {
               setResult(completed);

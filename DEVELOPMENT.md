@@ -30,6 +30,19 @@ Open http://localhost:3000 for staff. For the speaker portal, mint a link:
 npm run demo:link            # Raman by default; pass a name, e.g. -- Osei
 ```
 
+## Signing in
+
+There is no signup. Every credential is created by DXG.
+
+`npm run db:seed` prints the development staff logins and a presenter access code for
+each speaker. Staff sign in at http://localhost:3000/login; presenters at
+http://localhost:3001/login, or by following their link, which pre-fills the code and
+asks only for their email address.
+
+To issue a presenter credential the way DXG does, use the Speakers screen (or
+`POST /speakers/:id/credentials`). The code is shown **once** — afterwards only its last
+four characters are stored, so it cannot be recovered, only replaced.
+
 ## Demo script (≈3 minutes)
 
 `npm run demo:reset` puts the data back to its starting state, so the walkthrough can be
@@ -280,3 +293,8 @@ workflow transition and a hash-chained audit record are written — all in one t
   issues real per-recipient links; the SES sender and webhook signature verification are M3-5.
   Delivery events can be posted to the webhook by hand, which is how the bounce path is exercised.
 - **Asset upload** (event header, slide template) is not built (M1-4).
+- **MFA is not enforced yet** for staff (D-015). NFR-SEC-02 requires it; the columns exist so
+  enabling it is not a schema change. This must close before the pilot.
+- **The `x-dev-user` header still works in development** when no session cookie is present, so
+  scripts and curl examples in this file keep working. It is refused in production, and a request
+  that carries a real session ignores it entirely.

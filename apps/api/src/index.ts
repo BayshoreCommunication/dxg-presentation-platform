@@ -1,6 +1,6 @@
 import express from "express";
 import { withScope, getPool, verifyAuditChain, appendAudit as appendAuditRecord } from "@pmp/db";
-import type { Actor, DomainError, ReviewAction } from "@pmp/domain";
+import type { Actor, DomainError, EventRole, ReviewAction } from "@pmp/domain";
 import { listTalks } from "./services/talks.ts";
 import { eventSummary, riskList, reviewQueue, syncFleet } from "./services/queries.ts";
 import {
@@ -148,6 +148,51 @@ app.use(async (req, _res, next) => {
   }
   return next();
 });
+
+/**
+ * Deny by default on the staff surface. Signing in is not authorisation: a
+ * client event admin is a real account with a real session, and must still be
+ * refused every staff endpoint. Only the paths below are open to non-staff.
+ */
+const STAFF_ROLES: EventRole[] = [
+  "platform_admin",
+  "project_manager",
+  "presentation_manager",
+  "srr_technician",
+  "room_technician",
+  "content_reviewer",
+];
+
+const NON_STAFF_PATHS = [
+  "/api/v1/auth/login",
+  "/api/v1/auth/logout",
+  "/api/v1/auth/session",
+  "/api/v1/auth/password",
+  "/api/v1/portal/",
+  "/api/v1/client/",
+  "/api/v1/webhooks/",
+  "/api/v1/agent/",
+  "/ops/",
+];
+
+app.use((req, res, next) => {
+  if (!req.path.startsWith("/api/v1/") && !req.path.startsWith("/ops/")) return next();
+  if (req.method === "OPTIONS") return next();
+  if (NON_STAFF_PATHS.some((prefix) => req.path.startsWith(prefix))) return next();
+
+  const actor = actorFrom(req);
+  if (!actor) {
+    return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  }
+  if (!actor.roles.some((role) => STAFF_ROLES.includes(role))) {
+    return res.status(403).json({
+      code: "auth.not_staff",
+      message: "This is a DXG staff area. Your account does not have a staff role on this event.",
+    });
+  }
+  return next();
+});
+
 
 const statusFor = (error: DomainError): number => {
   if (error.code.endsWith("_not_found") || error.code.endsWith(".not_found")) return 404;

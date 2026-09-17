@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useParams } from "next/navigation";
+import { usePathname, useParams, useRouter } from "next/navigation";
+import { logout } from "@/lib/api";
+import type { Principal } from "@/lib/api";
 
 /**
  * Navigation structure, grouping and screen names are fixed by the client
@@ -40,9 +42,10 @@ const GROUPS: { group: string; items: { label: string; href?: string }[] }[] = [
   },
 ];
 
-export function Sidebar() {
+export function Sidebar({ principal }: { principal: Principal | null }) {
   const pathname = usePathname();
   const params = useParams<{ id?: string }>();
+  const router = useRouter();
   const eventId = params?.id ?? "22222222-2222-4222-8222-222222222222";
 
   return (
@@ -73,6 +76,45 @@ export function Sidebar() {
           </div>
         ))}
       </nav>
+      {principal && (
+        <div
+          style={{
+            marginTop: "auto",
+            padding: "12px 16px",
+            borderTop: "1px solid #22303A",
+            fontSize: 12.5,
+          }}
+        >
+          <div style={{ color: "var(--white)" }}>{principal.display_name}</div>
+          <div className="mono" style={{ color: "var(--dim)", fontSize: 11 }}>
+            {principal.roles.join(", ") || "no event role"}
+          </div>
+          <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
+            <Link href="/account/password" style={{ color: "var(--blue)" }}>
+              Password
+            </Link>
+            <button
+              style={{
+                background: "none",
+                border: "none",
+                color: "var(--blue)",
+                padding: 0,
+                fontSize: 12.5,
+              }}
+              onClick={() => {
+                void logout()
+                  .catch(() => undefined)
+                  .then(() => {
+                    router.replace("/login?reason=signed_out");
+                    router.refresh();
+                  });
+              }}
+            >
+              Sign out
+            </button>
+          </div>
+        </div>
+      )}
     </aside>
   );
 }

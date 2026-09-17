@@ -17,6 +17,7 @@ const EVENT = "22222222-2222-4222-8222-222222222222";
 let up = false;
 let presenterCookie = "";
 let staffCookie = "";
+let clientCookie = "";
 
 const cookieFrom = (response: Response): string =>
   (response.headers.getSetCookie?.() ?? [])
@@ -39,6 +40,13 @@ before(async () => {
     body: JSON.stringify({ email: "m.vega@example.invalid", password: "dxg-development-password" }),
   });
   if (staff.ok) staffCookie = cookieFrom(staff);
+
+  const client = await fetch(`${API}/auth/login`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ email: "j.ellis@example.invalid", password: "dxg-development-password" }),
+  });
+  if (client.ok) clientCookie = cookieFrom(client);
 
   // A presenter credential is issued by staff, exactly as DXG would.
   const speakers = await fetch(`${API}/events/${EVENT}/speakers?q=Raman`, {
@@ -66,6 +74,7 @@ after(async () => {
     await fetch(`${API}/auth/logout`, { method: "POST", headers: { cookie: presenterCookie } });
   }
   if (staffCookie) await fetch(`${API}/auth/logout`, { method: "POST", headers: { cookie: staffCookie } });
+  if (clientCookie) await fetch(`${API}/auth/logout`, { method: "POST", headers: { cookie: clientCookie } });
 });
 
 describe("a presenter session is not a staff session", () => {
@@ -103,6 +112,31 @@ describe("a presenter session is not a staff session", () => {
       const response = await fetch(`${API}${path}`);
       assert.equal(response.status, 401, `${path} should need a session`);
     }
+  });
+});
+
+describe("a client account is not a staff account", () => {
+  // Signing in is not authorisation: a client event admin holds a real session
+  // and must still be refused the staff surface.
+  const staffOnly = [
+    "/events",
+    `/events/${EVENT}/review-queue`,
+    `/events/${EVENT}/summary`,
+    `/events/${EVENT}/speakers`,
+  ];
+
+  for (const path of staffOnly) {
+    test(`client admin is refused ${path}`, async (t: TestContext) => {
+      if (!up || !clientCookie) return t.skip("API not running");
+      const response = await fetch(`${API}${path}`, { headers: { cookie: clientCookie } });
+      assert.equal(response.status, 403, `${path} returned ${response.status} to a client admin`);
+    });
+  }
+
+  test("the client admin still reaches their own portal", async (t: TestContext) => {
+    if (!up || !clientCookie) return t.skip("API not running");
+    const response = await fetch(`${API}/client/events/${EVENT}`, { headers: { cookie: clientCookie } });
+    assert.equal(response.status, 200);
   });
 });
 

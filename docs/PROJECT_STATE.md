@@ -264,3 +264,27 @@ is written down honestly in `DEVELOPMENT.md`: PowerPoint playback (G0-1), the S3
 PDF conversion, slide previews, real OIDC, SES sending and webhook signatures, SSE, asset upload.
 
 `npm run ci` green (94 tests).
+
+## 2026-09-17 (tenth) — authentication: sign-in screens for both apps
+
+Both apps now require a real session; the `x-dev-user` header only applies in development when no
+session cookie is present.
+
+- **Staff**: `/login` (email + password), forced password change on a temporary password, signed-in
+  identity and sign-out in the sidebar, middleware redirecting deep links through sign-in and back.
+- **Presenters**: `/login` (email + access code). The emailed link `/t/<code>` pre-fills the code
+  and asks for the email — following a link is no longer sign-in on its own, which is the point:
+  a forwarded email does not hand over the presentation (D-016).
+- Both API clients forward the session: cookies from `next/headers` in server components,
+  `credentials: "include"` in the browser. `next/headers` is imported dynamically because a static
+  import pulls it into the client bundle and breaks every client component sharing the module.
+
+**A second, larger gap found while testing:** authentication was enforced but **authorization was
+not**. A signed-in client event admin could read the staff review queue, summary, speakers and
+event list — any account with a session passed, because the read endpoints only checked that an
+actor existed. The staff surface is now deny-by-default: a request must carry a staff event role,
+with `/portal/*`, `/client/*`, `/agent/*`, `/webhooks/*`, `/ops/*` and the auth endpoints as the
+only exceptions. `tests/invariants/auth-separation.test.ts` covers all three principals (15 tests).
+
+Also fixed: the review workspace rendered informational findings as warnings with raw JSON; the
+client portal 500'd instead of explaining that it is a client surface.

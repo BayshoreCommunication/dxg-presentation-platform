@@ -174,17 +174,30 @@ export function ReviewWorkspace({ initialQueue }: { initialQueue: QueueItem[] })
               Slide previews render in M2-7; the decision path below is live.
             </div>
 
-            {selected.findings.map((finding, index) => (
-              <div className="lane cli" key={`${finding.check_code}-${index}`}>
-                <b>
-                  {finding.severity === "blocking" ? "⛔" : "⚠"} {finding.severity} ·{" "}
-                  {finding.check_code.replace("_", " ")}
-                </b>
+            {/* Only findings that need a decision are shown here; the informational
+                ones are counted, with the full report a click away. */}
+            {selected.findings
+              .filter((finding) => finding.severity !== "info")
+              .map((finding, index) => (
+                <div className="lane cli" key={`${finding.check_code}-${index}`}>
+                  <b>
+                    {finding.severity === "blocking" ? "⛔" : "⚠"} {finding.severity} ·{" "}
+                    {finding.check_code.replace("_", " ")}
+                  </b>
+                  <br />
+                  {FINDING_COPY[finding.check_code]?.(finding.detail) ??
+                    "See the inspection report for the detail."}
+                </div>
+              ))}
+
+            {selected.findings.some((finding) => finding.severity !== "info") ? null : (
+              <div className="lane int">
+                <b>Checks passed</b>
                 <br />
-                {FINDING_COPY[finding.check_code]?.(finding.detail) ??
-                  JSON.stringify(finding.detail)}
+                Nothing needs a decision — {selected.findings.length} informational result
+                {selected.findings.length === 1 ? "" : "s"} in the inspection report.
               </div>
-            ))}
+            )}
 
             <div className="note" style={{ margin: "12px 0 4px" }}>
               Comment lanes:

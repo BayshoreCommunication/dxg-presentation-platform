@@ -19,11 +19,9 @@ type Phase = "idle" | "hashing" | "uploading" | "paused" | "completing" | "done"
  * parts already landed and continues from there — never from zero.
  */
 export function UploadPanel({
-  token,
   slotId,
   onComplete,
 }: {
-  token: string;
   slotId: string;
   onComplete: (result: CompleteResult) => Promise<void>;
 }) {
@@ -53,7 +51,7 @@ export function UploadPanel({
       if (alreadyHave.includes(part)) continue;
       const start = (part - 1) * session.part_size;
       const chunk = await chosen.slice(start, start + session.part_size).arrayBuffer();
-      await putPart(token, session.upload_id, part, chunk);
+      await putPart(session.upload_id, part, chunk);
       alreadyHave.push(part);
       setSent(alreadyHave.length);
     }
@@ -67,7 +65,7 @@ export function UploadPanel({
     setMessage("Checking the file…");
     try {
       const digest = await sha256Hex(chosen);
-      const session = await beginUpload(token, {
+      const session = await beginUpload({
         slot_id: slotId,
         file_name: chosen.name,
         total_bytes: chosen.size,
@@ -82,7 +80,7 @@ export function UploadPanel({
 
       setPhase("completing");
       setMessage("Verifying checksum and running automated checks…");
-      const result = await completeUpload(token, session.upload_id, {
+      const result = await completeUpload(session.upload_id, {
         slot_id: slotId,
         file_name: chosen.name,
         sha256: digest,
@@ -103,7 +101,7 @@ export function UploadPanel({
     setPhase("uploading");
     try {
       // Ask the server what it already has, rather than assuming.
-      const state = await getUploadState(token, upload.upload_id);
+      const state = await getUploadState(upload.upload_id);
       setMessage(`Resumed from ${formatBytes(state.bytes)} — not from zero.`);
       setSent(state.received.length);
       const finished = await sendParts(file, upload, [...state.received]);
@@ -111,7 +109,7 @@ export function UploadPanel({
 
       setPhase("completing");
       const digest = await sha256Hex(file);
-      const result = await completeUpload(token, upload.upload_id, {
+      const result = await completeUpload(upload.upload_id, {
         slot_id: slotId,
         file_name: file.name,
         sha256: digest,
