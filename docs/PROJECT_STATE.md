@@ -375,3 +375,28 @@ a 3-recipient batch went queued → dispatched → `sent`, with per-speaker stat
 
 Remaining before SES is live: a verified sender identity and configuration set in AWS, the SNS
 topic and subscription, and production-out-of-sandbox. Those are account actions, not code.
+
+## 2026-09-17 (fifteenth) — SES live in the shared account
+
+Set up in 295229565954 / us-east-2 with the `rfpilot` profile (D-008). Detail and runbook:
+`docs/infra/EMAIL.md`.
+
+Already there and not needing work: **`dxg-agency.com` is verified with DKIM signing**, and the
+account already has **production access** (50,000/day, 14/sec) — no DNS changes, no sandbox
+request. The gap was the part that matters: the account had **no configuration sets at all**, so
+SES was publishing no delivery telemetry anywhere.
+
+Created: configuration set `pmp-email` (TLS `REQUIRE`, reputation metrics on, suppression on bounce
+and complaint), SNS topic `pmp-email-events` with a policy allowing only SES in this account to
+publish, and an event destination for SEND, DELIVERY, BOUNCE, COMPLAINT, REJECT, RENDERING_FAILURE
+and DELIVERY_DELAY. Tagged `product=pmp` to stay separable from RFPilot. Verified by sending a real
+message through the configuration set to the DXG service address.
+
+**Known drift, recorded rather than hidden:** created with the CLI, not CloudFormation.
+`deploy/aws/lib/email-stack.ts` describes the resources and synths clean, but a first `cdk deploy`
+would collide with the existing names — adopt with `cdk import` or delete and deploy. Both commands
+are in `docs/infra/EMAIL.md`.
+
+Outstanding, none of it code: no SNS subscription (the API has no public URL yet; the webhook is
+built and verifies signatures), open/click tracking off pending a tracking subdomain, and no custom
+MAIL FROM domain for SPF alignment.
