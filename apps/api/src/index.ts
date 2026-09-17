@@ -1,5 +1,5 @@
 import express from "express";
-import { withScope, getPool, verifyAuditChain, appendAudit as appendAuditRecord } from "@pmp/db";
+import { withScope, withSystemScope, getPool, verifyAuditChain, appendAudit as appendAuditRecord } from "@pmp/db";
 import type { Actor, DomainError, EventRole, ReviewAction } from "@pmp/domain";
 import { listTalks } from "./services/talks.ts";
 import { eventSummary, riskList, reviewQueue, syncFleet } from "./services/queries.ts";
@@ -72,7 +72,7 @@ app.use((req, res, next) => {
   const origin = req.header("origin");
   if (origin) res.header("Access-Control-Allow-Origin", origin);
   res.header("Access-Control-Allow-Credentials", "true");
-  res.header("Access-Control-Allow-Headers", "content-type, x-dev-user, authorization");
+  res.header("Access-Control-Allow-Headers", "content-type, authorization");
   res.header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
   next();
 });
@@ -95,21 +95,6 @@ const cookieOptions = (maxAgeMinutes: number) => ({
   maxAge: maxAgeMinutes * 60_000,
 });
 
-/**
- * Development convenience only: before the web apps carry a session cookie, the
- * `x-dev-user` header stands in for a signed-in staff member. It is refused
- * outright in production and logged whenever it is used.
- */
-const DEV_HEADER_ALLOWED = process.env.NODE_ENV !== "production" && process.env.AUTH_DEV_HEADER !== "off";
-
-/** M0 stand-in for OIDC (M1-1 replaces it). Never shipped beyond local dev. */
-const DEV_USERS: Record<string, Actor> = {
-  pm: { id: "33333333-3333-4333-8333-333333333331", roles: ["presentation_manager"] },
-  reviewer: { id: "33333333-3333-4333-8333-333333333332", roles: ["content_reviewer"] },
-  room_tech: { id: "33333333-3333-4333-8333-333333333333", roles: ["room_technician"] },
-  client: { id: "33333333-3333-4333-8333-333333333334", roles: ["client_event_admin"] },
-};
-const DEV_CLIENT_ID = "11111111-1111-4111-8111-111111111111";
 const IMPORT_FIELD_LIST = [
   "session.title",
   "room.name",
@@ -122,16 +107,33 @@ const IMPORT_FIELD_LIST = [
   "track.name",
 ];
 
+/** The signed-in staff member, or nobody. A presenter is never a staff actor. */
 function actorFrom(req: express.Request): Actor | undefined {
   const principal = (req as express.Request & { principal?: Principal }).principal;
-  if (principal) {
-    // A presenter is never a staff actor. Falling through to the dev header here
-    // would silently promote a signed-in presenter to a staff role.
-    return principal.kind === "staff" ? { id: principal.user_id, roles: principal.roles } : undefined;
-  }
-  if (!DEV_HEADER_ALLOWED) return undefined;
-  const key = String(req.header("x-dev-user") ?? "reviewer");
-  return DEV_USERS[key];
+  if (principal?.kind !== "staff") return undefined;
+  return { id: principal.user_id, roles: principal.roles };
+}
+
+/**
+ * The database scope a request runs in. DXG staff work across every client;
+ * a client-side account is pinned to the clients it actually holds a role on,
+ * so RLS — not a hardcoded id — decides what it can see.
+ */
+function scopeFor(req: express.Request, eventId?: string): {
+  userId: string;
+  clientId?: string;
+  eventId?: string;
+  allClients?: boolean;
+} {
+  const principal = (req as express.Request & { principal?: Principal }).principal;
+  if (principal?.kind !== "staff") throw new Error("scopeFor requires a staff principal");
+
+  const isStaff = principal.roles.some((role) => STAFF_ROLES.includes(role));
+  return {
+    userId: principal.user_id,
+    ...(eventId ? { eventId } : {}),
+    ...(isStaff ? { allClients: true } : { clientId: principal.client_ids[0] ?? "" }),
+  };
 }
 
 /** Attaches the signed-in principal, if there is one, to every request. */
@@ -139,7 +141,7 @@ app.use(async (req, _res, next) => {
   const token = readCookie(req, SESSION_COOKIE);
   if (!token) return next();
   try {
-    const principal = await withScope({ userId: DEV_USERS.pm!.id, clientId: DEV_CLIENT_ID }, (tx) =>
+    const principal = await withSystemScope((tx) =>
       resolveSession(tx, token),
     );
     if (principal) (req as express.Request & { principal?: Principal }).principal = principal;
@@ -241,8 +243,8 @@ app.get("/ops/health", async (_req, res) => {
 
 app.get("/api/v1/events", async (req, res) => {
   const actor = actorFrom(req);
-  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
-  const items = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID }, async (tx) => {
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  const items = await withScope(scopeFor(req), async (tx) => {
     const { rows } = await tx.query(
       `SELECT id, name, starts_on::text, ends_on::text, timezone, status
          FROM pmp.events ORDER BY starts_on DESC`,
@@ -254,9 +256,9 @@ app.get("/api/v1/events", async (req, res) => {
 
 app.get("/api/v1/events/:eventId/talks", async (req, res) => {
   const actor = actorFrom(req);
-  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   const eventId = String(req.params.eventId);
-  const items = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID, eventId }, (tx) =>
+  const items = await withScope(scopeFor(req, eventId), (tx) =>
     listTalks(tx, eventId),
   );
   return res.json({ items, next_cursor: null });
@@ -280,7 +282,7 @@ app.post("/api/v1/file-versions/:versionAndAction", async (req, res) => {
     return res.status(404).json({ code: "request.unknown_method", message: "Unknown method." });
   }
   const actor = actorFrom(req);
-  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
 
   const body = req.body as { action?: string; lock_version?: number; reason?: string };
   if (typeof body.action !== "string" || typeof body.lock_version !== "number") {
@@ -291,7 +293,7 @@ app.post("/api/v1/file-versions/:versionAndAction", async (req, res) => {
   }
 
   try {
-    const result = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID }, (tx) =>
+    const result = await withScope(scopeFor(req), (tx) =>
       decide(tx, {
         versionId,
         action: body.action as ReviewAction,
@@ -314,9 +316,9 @@ app.get("/api/v1/events/:eventId/:auditAndAction", async (req, res, next) => {
   const { id: resource, action: customMethod } = splitAction(String(req.params.auditAndAction));
   if (resource !== "audit" || customMethod !== "verify") return next();
   const actor = actorFrom(req);
-  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   const eventId = String(req.params.eventId);
-  const verdict = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID, eventId }, (tx) =>
+  const verdict = await withScope(scopeFor(req, eventId), (tx) =>
     verifyAuditChain(tx, eventId),
   );
   return res.json(verdict);
@@ -324,9 +326,9 @@ app.get("/api/v1/events/:eventId/:auditAndAction", async (req, res, next) => {
 
 app.get("/api/v1/events/:eventId/summary", async (req, res) => {
   const actor = actorFrom(req);
-  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   const eventId = String(req.params.eventId);
-  const summary = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID, eventId }, (tx) =>
+  const summary = await withScope(scopeFor(req, eventId), (tx) =>
     eventSummary(tx, eventId),
   );
   if (!summary) return res.status(404).json({ code: "events.not_found", message: "No such event." });
@@ -335,9 +337,9 @@ app.get("/api/v1/events/:eventId/summary", async (req, res) => {
 
 app.get("/api/v1/events/:eventId/risk-list", async (req, res) => {
   const actor = actorFrom(req);
-  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   const eventId = String(req.params.eventId);
-  const items = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID, eventId }, (tx) =>
+  const items = await withScope(scopeFor(req, eventId), (tx) =>
     riskList(tx, eventId),
   );
   return res.json({ items, next_cursor: null });
@@ -345,9 +347,9 @@ app.get("/api/v1/events/:eventId/risk-list", async (req, res) => {
 
 app.get("/api/v1/events/:eventId/review-queue", async (req, res) => {
   const actor = actorFrom(req);
-  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   const eventId = String(req.params.eventId);
-  const items = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID, eventId }, (tx) =>
+  const items = await withScope(scopeFor(req, eventId), (tx) =>
     reviewQueue(tx, eventId),
   );
   return res.json({ items, next_cursor: null });
@@ -355,9 +357,9 @@ app.get("/api/v1/events/:eventId/review-queue", async (req, res) => {
 
 app.get("/api/v1/events/:eventId/sync/fleet", async (req, res) => {
   const actor = actorFrom(req);
-  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   const eventId = String(req.params.eventId);
-  const items = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID, eventId }, (tx) =>
+  const items = await withScope(scopeFor(req, eventId), (tx) =>
     syncFleet(tx, eventId),
   );
   return res.json({ items, next_cursor: null });
@@ -372,7 +374,7 @@ app.post("/api/v1/agent/heartbeat", async (req, res) => {
   if (typeof body.room_id !== "string") {
     return res.status(400).json({ code: "request.invalid", message: "`room_id` is required." });
   }
-  const updated = await withScope({ userId: DEV_USERS.pm!.id, clientId: DEV_CLIENT_ID }, async (tx) => {
+  const updated = await withSystemScope(async (tx) => {
     const { rowCount } = await tx.query(
       `UPDATE pmp.room_agents SET last_heartbeat_at = now(), agent_version = COALESCE($2, agent_version)
         WHERE room_id = $1 AND revoked_at IS NULL`,
@@ -390,18 +392,18 @@ app.post("/api/v1/agent/heartbeat", async (req, res) => {
 
 app.get("/api/v1/rooms/:roomId/agent-view", async (req, res) => {
   const actor = actorFrom(req);
-  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   const roomId = String(req.params.roomId);
-  const view = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID }, (tx) => agentView(tx, roomId));
+  const view = await withScope(scopeFor(req), (tx) => agentView(tx, roomId));
   if (!view) return res.status(404).json({ code: "agent.room_not_found", message: "No such room." });
   return res.json(view);
 });
 
 app.post("/api/v1/rooms/:roomId/sync", async (req, res) => {
   const actor = actorFrom(req);
-  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   const roomId = String(req.params.roomId);
-  const result = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID }, async (tx) => {
+  const result = await withScope(scopeFor(req), async (tx) => {
     await tx.query(
       `UPDATE pmp.room_agents SET last_heartbeat_at = now() WHERE room_id = $1 AND revoked_at IS NULL`,
       [roomId],
@@ -413,12 +415,12 @@ app.post("/api/v1/rooms/:roomId/sync", async (req, res) => {
 
 app.post("/api/v1/room-files/:roomFileId/acknowledge", async (req, res) => {
   const actor = actorFrom(req);
-  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   const body = req.body as { lock_version?: number };
   if (typeof body.lock_version !== "number") {
     return res.status(400).json({ code: "request.invalid", message: "`lock_version` is required." });
   }
-  const result = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID }, (tx) =>
+  const result = await withScope(scopeFor(req), (tx) =>
     acknowledge(tx, actor, String(req.params.roomFileId), body.lock_version as number),
   );
   if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
@@ -427,12 +429,12 @@ app.post("/api/v1/room-files/:roomFileId/acknowledge", async (req, res) => {
 
 app.post("/api/v1/rooms/:roomId/launch", async (req, res) => {
   const actor = actorFrom(req);
-  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   const body = req.body as { slot_id?: string };
   if (!body.slot_id) {
     return res.status(400).json({ code: "request.invalid", message: "`slot_id` is required." });
   }
-  const result = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID }, (tx) =>
+  const result = await withScope(scopeFor(req), (tx) =>
     launch(tx, actor, { roomId: String(req.params.roomId), slotId: body.slot_id as string }),
   );
   if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
@@ -441,10 +443,10 @@ app.post("/api/v1/rooms/:roomId/launch", async (req, res) => {
 
 app.get("/api/v1/events/:eventId/speakers", async (req, res) => {
   const actor = actorFrom(req);
-  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   const eventId = String(req.params.eventId);
   const query = String(req.query.q ?? "");
-  const items = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID, eventId }, async (tx) => {
+  const items = await withScope(scopeFor(req, eventId), async (tx) => {
     const { rows } = await tx.query(
       `SELECT sp.id, sp.full_name, sp.email::text, sp.organization, sp.release_permission,
               count(DISTINCT sa.id)::int AS talks,
@@ -485,7 +487,7 @@ async function withPortalSession(
   // (the emailed link) — the same credential, arriving by a different door.
   const principal = (req as express.Request & { principal?: Principal }).principal;
   if (principal?.kind === "presenter") {
-    return withScope({ userId: DEV_USERS.pm!.id, clientId: DEV_CLIENT_ID }, async (tx) => {
+    return withSystemScope(async (tx) => {
       const { rows } = await tx.query<{ name: string; timezone: string }>(
         `SELECT name, timezone FROM pmp.events WHERE id = $1`,
         [principal.event_id],
@@ -506,7 +508,7 @@ async function withPortalSession(
 
   const token = bearer(req);
   if (!token) return res.status(401).json({ code: "portal.no_token", message: "Sign in with your access code." });
-  return withScope({ userId: DEV_USERS.pm!.id, clientId: DEV_CLIENT_ID }, async (tx) => {
+  return withSystemScope(async (tx) => {
     const session = await resolveToken(tx, token);
     if (!session) {
       return res.status(401).json({
@@ -521,19 +523,19 @@ async function withPortalSession(
 /** Issues a speaker link. In production this is sent by the comms batch (M3-5). */
 app.post("/api/v1/speakers/:speakerId/invite", async (req, res) => {
   const actor = actorFrom(req);
-  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   const speakerId = String(req.params.speakerId);
   const token = randomUUID();
-  const issued = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID }, async (tx) => {
-    const { rows } = await tx.query<{ event_id: string }>(
-      `SELECT event_id FROM pmp.speakers WHERE id = $1`,
+  const issued = await withScope(scopeFor(req), async (tx) => {
+    const { rows } = await tx.query<{ event_id: string; client_id: string }>(
+      `SELECT event_id, client_id FROM pmp.speakers WHERE id = $1`,
       [speakerId],
     );
     if (!rows[0]) return null;
     await tx.query(
       `INSERT INTO pmp.speaker_tokens (speaker_id, event_id, client_id, kind, token_hash, expires_at)
        VALUES ($1, $2, $3, 'magic_link', $4, now() + interval '30 days')`,
-      [speakerId, rows[0].event_id, DEV_CLIENT_ID, hashToken(token)],
+      [speakerId, rows[0].event_id, rows[0].client_id, hashToken(token)],
     );
     return rows[0].event_id;
   });
@@ -611,9 +613,9 @@ app.post("/api/v1/portal/uploads/:uploadId/complete", (req, res) =>
 
 app.get("/api/v1/events/:eventId/srr", async (req, res) => {
   const actor = actorFrom(req);
-  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   const eventId = String(req.params.eventId);
-  const view = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID, eventId }, (tx) =>
+  const view = await withScope(scopeFor(req, eventId), (tx) =>
     srrDashboard(tx, eventId),
   );
   return res.json(view);
@@ -621,12 +623,12 @@ app.get("/api/v1/events/:eventId/srr", async (req, res) => {
 
 app.post("/api/v1/events/:eventId/srr/checkins", async (req, res) => {
   const actor = actorFrom(req);
-  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   const body = req.body as { speaker_id?: string; station?: string };
   if (!body.speaker_id) {
     return res.status(400).json({ code: "request.invalid", message: "`speaker_id` is required." });
   }
-  const result = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID }, (tx) =>
+  const result = await withScope(scopeFor(req), (tx) =>
     checkIn(tx, actor, {
       eventId: String(req.params.eventId),
       speakerId: body.speaker_id as string,
@@ -639,8 +641,8 @@ app.post("/api/v1/events/:eventId/srr/checkins", async (req, res) => {
 
 app.get("/api/v1/srr/checkins/:checkinId", async (req, res) => {
   const actor = actorFrom(req);
-  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
-  const detail = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID }, (tx) =>
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  const detail = await withScope(scopeFor(req), (tx) =>
     checkinDetail(tx, String(req.params.checkinId)),
   );
   if (!detail) return res.status(404).json({ code: "srr.checkin_not_found", message: "No such check-in." });
@@ -650,13 +652,13 @@ app.get("/api/v1/srr/checkins/:checkinId", async (req, res) => {
 /** Staff-side resumable upload, used by USB intake (the portal has its own). */
 app.post("/api/v1/srr/uploads", async (req, res) => {
   const actor = actorFrom(req);
-  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   return res.status(201).json({ upload_id: randomUUID(), part_size: 5 * 1024 * 1024 });
 });
 
 app.put("/api/v1/srr/uploads/:uploadId/parts/:partNumber", async (req, res) => {
   const actor = actorFrom(req);
-  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   const body = req.body as Buffer;
   if (!Buffer.isBuffer(body) || body.length === 0) {
     return res.status(400).json({ code: "request.invalid", message: "Empty part." });
@@ -667,12 +669,12 @@ app.put("/api/v1/srr/uploads/:uploadId/parts/:partNumber", async (req, res) => {
 
 app.post("/api/v1/srr/checkins/:checkinId/usb-ingestions", async (req, res) => {
   const actor = actorFrom(req);
-  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   const body = req.body as { upload_id?: string; file_name?: string; reason?: string };
   if (!body.upload_id || !body.file_name) {
     return res.status(400).json({ code: "request.invalid", message: "`upload_id` and `file_name` are required." });
   }
-  const result = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID }, (tx) =>
+  const result = await withScope(scopeFor(req), (tx) =>
     usbIngest(tx, actor, {
       checkinId: String(req.params.checkinId),
       uploadId: body.upload_id as string,
@@ -686,12 +688,12 @@ app.post("/api/v1/srr/checkins/:checkinId/usb-ingestions", async (req, res) => {
 
 app.post("/api/v1/srr/checkins/:checkinId/sign-off", async (req, res) => {
   const actor = actorFrom(req);
-  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   const body = req.body as { file_version_id?: string };
   if (!body.file_version_id) {
     return res.status(400).json({ code: "request.invalid", message: "`file_version_id` is required." });
   }
-  const result = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID }, (tx) =>
+  const result = await withScope(scopeFor(req), (tx) =>
     signOff(tx, actor, {
       checkinId: String(req.params.checkinId),
       fileVersionId: body.file_version_id as string,
@@ -703,8 +705,8 @@ app.post("/api/v1/srr/checkins/:checkinId/sign-off", async (req, res) => {
 
 app.post("/api/v1/srr/checkins/:checkinId/depart", async (req, res) => {
   const actor = actorFrom(req);
-  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
-  const result = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID }, (tx) =>
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  const result = await withScope(scopeFor(req), (tx) =>
     depart(tx, actor, String(req.params.checkinId)),
   );
   if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
@@ -715,8 +717,8 @@ app.post("/api/v1/srr/checkins/:checkinId/depart", async (req, res) => {
 
 app.get("/api/v1/slots/:slotId", async (req, res) => {
   const actor = actorFrom(req);
-  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
-  const detail = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID }, (tx) =>
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  const detail = await withScope(scopeFor(req), (tx) =>
     presentationDetail(tx, String(req.params.slotId)),
   );
   if (!detail) return res.status(404).json({ code: "slots.not_found", message: "No such talk." });
@@ -725,8 +727,8 @@ app.get("/api/v1/slots/:slotId", async (req, res) => {
 
 app.get("/api/v1/file-versions/:versionId/findings", async (req, res) => {
   const actor = actorFrom(req);
-  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
-  const items = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID }, (tx) =>
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  const items = await withScope(scopeFor(req), (tx) =>
     findingsFor(tx, String(req.params.versionId)),
   );
   return res.json({ items });
@@ -734,9 +736,9 @@ app.get("/api/v1/file-versions/:versionId/findings", async (req, res) => {
 
 app.post("/api/v1/findings/:findingId/waive", async (req, res) => {
   const actor = actorFrom(req);
-  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   const body = req.body as { reason?: string };
-  const result = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID }, (tx) =>
+  const result = await withScope(scopeFor(req), (tx) =>
     waiveFinding(tx, actor, { findingId: String(req.params.findingId), reason: body.reason ?? "" }),
   );
   if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
@@ -745,10 +747,10 @@ app.post("/api/v1/findings/:findingId/waive", async (req, res) => {
 
 app.get("/api/v1/file-versions/:versionId/comments", async (req, res) => {
   const actor = actorFrom(req);
-  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   // Lane visibility: staff see every lane here; speaker and client surfaces are
   // filtered at their own endpoints (FR-REV-003).
-  const items = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID }, async (tx) => {
+  const items = await withScope(scopeFor(req), async (tx) => {
     const { rows } = await tx.query(
       `SELECT c.id, c.lane, c.body, c.created_at, u.display_name AS author
          FROM pmp.comments c LEFT JOIN pmp.users u ON u.id = c.author_user_id
@@ -762,13 +764,13 @@ app.get("/api/v1/file-versions/:versionId/comments", async (req, res) => {
 
 app.post("/api/v1/file-versions/:versionId/comments", async (req, res) => {
   const actor = actorFrom(req);
-  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   const body = req.body as { lane?: string; body?: string };
   const lanes = ["internal", "client_visible", "speaker_visible"];
   if (!body.lane || !lanes.includes(body.lane)) {
     return res.status(400).json({ code: "request.invalid", message: `lane must be one of ${lanes.join(", ")}.` });
   }
-  const result = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID }, (tx) =>
+  const result = await withScope(scopeFor(req), (tx) =>
     addComment(tx, actor, {
       versionId: String(req.params.versionId),
       lane: body.lane as Lane,
@@ -781,12 +783,12 @@ app.post("/api/v1/file-versions/:versionId/comments", async (req, res) => {
 
 app.post("/api/v1/file-versions/:versionId/request-revision", async (req, res) => {
   const actor = actorFrom(req);
-  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   const body = req.body as { finding_id?: string; note?: string };
   if (!body.note) {
     return res.status(400).json({ code: "request.invalid", message: "`note` is required." });
   }
-  const result = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID }, (tx) =>
+  const result = await withScope(scopeFor(req), (tx) =>
     requestRevisionFromFinding(tx, actor, {
       versionId: String(req.params.versionId),
       findingId: body.finding_id ?? "",
@@ -799,12 +801,12 @@ app.post("/api/v1/file-versions/:versionId/request-revision", async (req, res) =
 
 app.post("/api/v1/slots/:slotId/roll-back", async (req, res) => {
   const actor = actorFrom(req);
-  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   const body = req.body as { target_version_id?: string; reason?: string };
   if (!body.target_version_id) {
     return res.status(400).json({ code: "request.invalid", message: "`target_version_id` is required." });
   }
-  const result = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID }, (tx) =>
+  const result = await withScope(scopeFor(req), (tx) =>
     rollBack(tx, actor, {
       slotId: String(req.params.slotId),
       targetVersionId: body.target_version_id as string,
@@ -818,9 +820,9 @@ app.post("/api/v1/slots/:slotId/roll-back", async (req, res) => {
 /** Duplicate detection + merge (FR-SPK-003). */
 app.get("/api/v1/events/:eventId/speaker-duplicates", async (req, res) => {
   const actor = actorFrom(req);
-  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   const eventId = String(req.params.eventId);
-  const items = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID, eventId }, async (tx) => {
+  const items = await withScope(scopeFor(req, eventId), async (tx) => {
     const { rows } = await tx.query(
       `SELECT a.id AS a_id, a.full_name AS a_name, a.email::text AS a_email,
               b.id AS b_id, b.full_name AS b_name, b.email::text AS b_email,
@@ -842,7 +844,7 @@ app.get("/api/v1/events/:eventId/speaker-duplicates", async (req, res) => {
 
 app.post("/api/v1/speakers/:speakerId/merge", async (req, res) => {
   const actor = actorFrom(req);
-  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   const body = req.body as { into?: string };
   if (!body.into) {
     return res.status(400).json({ code: "request.invalid", message: "`into` is required." });
@@ -853,7 +855,7 @@ app.post("/api/v1/speakers/:speakerId/merge", async (req, res) => {
     return res.status(422).json({ code: "speakers.same", message: "A speaker cannot be merged into itself." });
   }
 
-  const result = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID }, async (tx) => {
+  const result = await withScope(scopeFor(req), async (tx) => {
     const { rows } = await tx.query<{ event_id: string; client_id: string }>(
       `SELECT event_id, client_id FROM pmp.speakers WHERE id = $1 AND merged_into IS NULL`,
       [merged],
@@ -897,7 +899,7 @@ const importCache = new Map<string, { eventId: string; fileName: string; body: B
 
 app.post("/api/v1/events/:eventId/imports", async (req, res) => {
   const actor = actorFrom(req);
-  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   const fileName = String(req.header("x-file-name") ?? "agenda.csv");
   const body = req.body as Buffer;
   if (!Buffer.isBuffer(body) || body.length === 0) {
@@ -908,7 +910,7 @@ app.post("/api/v1/events/:eventId/imports", async (req, res) => {
   const uploadId = randomUUID();
   importCache.set(uploadId, { eventId, fileName, body });
 
-  const result = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID, eventId }, (tx) =>
+  const result = await withScope(scopeFor(req, eventId), (tx) =>
     buildPreview(tx, { eventId, fileName, body, actorId: actor.id, s3Key: `imports/${uploadId}` }),
   );
   if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
@@ -918,12 +920,12 @@ app.post("/api/v1/events/:eventId/imports", async (req, res) => {
 /** Re-map columns and re-validate without re-uploading the file. */
 app.post("/api/v1/imports/:uploadId/remap", async (req, res) => {
   const actor = actorFrom(req);
-  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   const cached = importCache.get(String(req.params.uploadId));
   if (!cached) return res.status(404).json({ code: "import.expired", message: "Upload the file again." });
   const body = req.body as { mapping?: (ImportField | null)[] };
 
-  const result = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID, eventId: cached.eventId }, (tx) =>
+  const result = await withScope(scopeFor(req, cached.eventId), (tx) =>
     buildPreview(tx, {
       eventId: cached.eventId,
       fileName: cached.fileName,
@@ -939,12 +941,12 @@ app.post("/api/v1/imports/:uploadId/remap", async (req, res) => {
 
 app.post("/api/v1/imports/:importId/commit", async (req, res) => {
   const actor = actorFrom(req);
-  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   const body = req.body as { event_id?: string; rows?: StagedRow[] };
   if (!body.event_id || !Array.isArray(body.rows)) {
     return res.status(400).json({ code: "request.invalid", message: "`event_id` and `rows` are required." });
   }
-  const result = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID, eventId: body.event_id }, (tx) =>
+  const result = await withScope(scopeFor(req, body.event_id), (tx) =>
     commitImport(tx, actor, {
       eventId: body.event_id as string,
       importId: String(req.params.importId),
@@ -963,12 +965,12 @@ app.get("/api/v1/import-fields", (_req, res) =>
 
 app.get("/api/v1/events/:eventId/archive/scope", async (req, res) => {
   const actor = actorFrom(req);
-  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   const eventId = String(req.params.eventId);
-  const scope = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID, eventId }, (tx) =>
+  const scope = await withScope(scopeFor(req, eventId), (tx) =>
     scopePreview(tx, eventId),
   );
-  const latest = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID, eventId }, (tx) =>
+  const latest = await withScope(scopeFor(req, eventId), (tx) =>
     latestPackage(tx, eventId),
   );
   return res.json({ ...scope, latest_package: latest });
@@ -976,9 +978,9 @@ app.get("/api/v1/events/:eventId/archive/scope", async (req, res) => {
 
 app.post("/api/v1/events/:eventId/archive-packages", async (req, res) => {
   const actor = actorFrom(req);
-  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   const eventId = String(req.params.eventId);
-  const result = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID, eventId }, (tx) =>
+  const result = await withScope(scopeFor(req, eventId), (tx) =>
     buildPackage(tx, actor, eventId),
   );
   if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
@@ -987,9 +989,9 @@ app.post("/api/v1/events/:eventId/archive-packages", async (req, res) => {
 
 app.post("/api/v1/archive-packages/:packageId/deliver", async (req, res) => {
   const actor = actorFrom(req);
-  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   const body = req.body as { days?: number };
-  const result = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID }, (tx) =>
+  const result = await withScope(scopeFor(req), (tx) =>
     deliverPackage(tx, actor, String(req.params.packageId), body.days ?? 7),
   );
   if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
@@ -998,8 +1000,8 @@ app.post("/api/v1/archive-packages/:packageId/deliver", async (req, res) => {
 
 app.get("/api/v1/archive-packages/:packageId/download", async (req, res) => {
   const actor = actorFrom(req);
-  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
-  const result = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID }, (tx) =>
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  const result = await withScope(scopeFor(req), (tx) =>
     downloadPackage(tx, actor, String(req.params.packageId)),
   );
   if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
@@ -1015,7 +1017,7 @@ app.get("/api/v1/archive-packages/:packageId/download", async (req, res) => {
  */
 app.get("/api/v1/client/events/:eventId", async (req, res) => {
   const actor = actorFrom(req);
-  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   const clientRoles = ["client_event_admin", "scoped_reviewer"];
   if (!actor.roles.some((role) => clientRoles.includes(role))) {
     return res.status(403).json({
@@ -1025,7 +1027,7 @@ app.get("/api/v1/client/events/:eventId", async (req, res) => {
   }
 
   const eventId = String(req.params.eventId);
-  const data = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID, eventId }, async (tx) => {
+  const data = await withScope(scopeFor(req, eventId), async (tx) => {
     const { rows: eventRows } = await tx.query(
       `SELECT e.id, e.name, e.starts_on::text, e.ends_on::text, c.name AS client_name
          FROM pmp.events e JOIN pmp.clients c ON c.id = e.client_id WHERE e.id = $1`,
@@ -1070,12 +1072,37 @@ app.get("/api/v1/client/events/:eventId", async (req, res) => {
 
 app.get("/api/v1/timezones", (_req, res) => res.json({ items: supportedTimezones() }));
 
+app.get("/api/v1/clients", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  const items = await withScope(scopeFor(req), async (tx) => {
+    const { rows } = await tx.query(`SELECT id, name FROM pmp.clients ORDER BY name`);
+    return rows;
+  });
+  return res.json({ items });
+});
+
 app.post("/api/v1/events", async (req, res) => {
   const actor = actorFrom(req);
-  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   const body = req.body as Record<string, string>;
-  const result = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID }, (tx) =>
-    createEvent(tx, actor, DEV_CLIENT_ID, {
+
+  // An event belongs to a client. If the caller did not say which and there is
+  // exactly one, use it; otherwise ask rather than guess.
+  const clientId = await withScope(scopeFor(req), async (tx) => {
+    if (body.client_id) return body.client_id;
+    const { rows } = await tx.query<{ id: string }>(`SELECT id FROM pmp.clients`);
+    return rows.length === 1 ? rows[0]!.id : null;
+  });
+  if (!clientId) {
+    return res.status(422).json({
+      code: "events.client_required",
+      message: "Say which client this event is for — `client_id` is required when more than one exists.",
+    });
+  }
+
+  const result = await withScope(scopeFor(req), (tx) =>
+    createEvent(tx, actor, clientId, {
       name: body.name ?? "",
       venue: body.venue ?? "",
       timezone: body.timezone ?? "America/New_York",
@@ -1089,8 +1116,8 @@ app.post("/api/v1/events", async (req, res) => {
 
 app.get("/api/v1/events/:eventId/draft", async (req, res) => {
   const actor = actorFrom(req);
-  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
-  const result = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID }, (tx) =>
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  const result = await withScope(scopeFor(req), (tx) =>
     draftOf(tx, String(req.params.eventId)),
   );
   if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
@@ -1099,14 +1126,14 @@ app.get("/api/v1/events/:eventId/draft", async (req, res) => {
 
 app.patch("/api/v1/events/:eventId", async (req, res) => {
   const actor = actorFrom(req);
-  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   const body = req.body as {
     rooms?: string[];
     tracks?: string[];
     settings?: Record<string, unknown>;
     branding?: Record<string, unknown>;
   };
-  const result = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID }, (tx) =>
+  const result = await withScope(scopeFor(req), (tx) =>
     configureEvent(tx, actor, String(req.params.eventId), body),
   );
   if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
@@ -1115,8 +1142,8 @@ app.patch("/api/v1/events/:eventId", async (req, res) => {
 
 app.post("/api/v1/events/:eventId/activate", async (req, res) => {
   const actor = actorFrom(req);
-  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
-  const result = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID }, (tx) =>
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  const result = await withScope(scopeFor(req), (tx) =>
     activateEvent(tx, actor, String(req.params.eventId)),
   );
   if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
@@ -1125,9 +1152,9 @@ app.post("/api/v1/events/:eventId/activate", async (req, res) => {
 
 app.post("/api/v1/events/:eventId/duplicate", async (req, res) => {
   const actor = actorFrom(req);
-  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   const body = req.body as Record<string, string>;
-  const result = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID }, (tx) =>
+  const result = await withScope(scopeFor(req), (tx) =>
     duplicateEvent(tx, actor, String(req.params.eventId), {
       name: body.name ?? "Copy",
       starts_on: body.starts_on ?? "",
@@ -1142,9 +1169,9 @@ app.post("/api/v1/events/:eventId/duplicate", async (req, res) => {
 
 app.get("/api/v1/events/:eventId/comms", async (req, res) => {
   const actor = actorFrom(req);
-  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   const eventId = String(req.params.eventId);
-  const data = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID, eventId }, async (tx) => {
+  const data = await withScope(scopeFor(req, eventId), async (tx) => {
     const templates = await ensureTemplates(tx, eventId);
     const invitation = templates[0];
     return {
@@ -1160,13 +1187,13 @@ app.get("/api/v1/events/:eventId/comms", async (req, res) => {
 
 app.post("/api/v1/events/:eventId/comms/send", async (req, res) => {
   const actor = actorFrom(req);
-  if (!actor) return res.status(401).json({ code: "auth.unknown_user", message: "Unknown dev user." });
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   const body = req.body as { template_id?: string; missing_only?: boolean };
   if (!body.template_id) {
     return res.status(400).json({ code: "request.invalid", message: "`template_id` is required." });
   }
   const eventId = String(req.params.eventId);
-  const result = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID, eventId }, (tx) =>
+  const result = await withScope(scopeFor(req, eventId), (tx) =>
     sendBatch(tx, actor, {
       eventId,
       templateId: body.template_id as string,
@@ -1183,7 +1210,7 @@ app.post("/api/v1/webhooks/email", async (req, res) => {
   if (!body.communication_id || !body.event_type) {
     return res.status(400).json({ code: "request.invalid", message: "`communication_id` and `event_type` are required." });
   }
-  const result = await withScope({ userId: DEV_USERS.pm!.id, clientId: DEV_CLIENT_ID }, (tx) =>
+  const result = await withSystemScope((tx) =>
     recordDeliveryEvent(tx, {
       communicationId: body.communication_id as string,
       eventType: body.event_type as string,
@@ -1207,7 +1234,7 @@ app.post("/api/v1/auth/login", async (req, res) => {
   if (!body.email || !body.password) {
     return res.status(400).json({ code: "request.invalid", message: "Enter your email address and password." });
   }
-  const result = await withScope({ userId: DEV_USERS.pm!.id, clientId: DEV_CLIENT_ID }, (tx) =>
+  const result = await withSystemScope((tx) =>
     staffLogin(tx, {
       email: body.email as string,
       password: body.password as string,
@@ -1225,7 +1252,7 @@ app.post("/api/v1/portal/login", async (req, res) => {
   if (!body.email || !body.code) {
     return res.status(400).json({ code: "request.invalid", message: "Enter your email address and access code." });
   }
-  const result = await withScope({ userId: DEV_USERS.pm!.id, clientId: DEV_CLIENT_ID }, (tx) =>
+  const result = await withSystemScope((tx) =>
     presenterLogin(tx, {
       email: body.email as string,
       code: body.code as string,
@@ -1241,7 +1268,7 @@ app.post("/api/v1/portal/login", async (req, res) => {
 app.post("/api/v1/auth/logout", async (req, res) => {
   const token = readCookie(req, SESSION_COOKIE);
   if (token) {
-    await withScope({ userId: DEV_USERS.pm!.id, clientId: DEV_CLIENT_ID }, (tx) => endSession(tx, token));
+    await withSystemScope((tx) => endSession(tx, token));
   }
   res.clearCookie(SESSION_COOKIE, { path: "/" });
   return res.status(204).end();
@@ -1262,7 +1289,7 @@ app.post("/api/v1/auth/password", async (req, res) => {
   if (!body.current_password || !body.new_password) {
     return res.status(400).json({ code: "request.invalid", message: "Both the current and new password are required." });
   }
-  const result = await withScope({ userId: principal.user_id, clientId: DEV_CLIENT_ID }, (tx) =>
+  const result = await withScope(scopeFor(req), (tx) =>
     changeOwnPassword(tx, principal.user_id, {
       currentPassword: body.current_password as string,
       newPassword: body.new_password as string,
@@ -1280,7 +1307,7 @@ app.post("/api/v1/admin/users", async (req, res) => {
   if (!body.email) {
     return res.status(400).json({ code: "request.invalid", message: "`email` is required." });
   }
-  const result = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID }, (tx) =>
+  const result = await withScope(scopeFor(req), (tx) =>
     createStaffUser(tx, actor, {
       email: body.email as string,
       displayName: body.display_name ?? "",
@@ -1295,7 +1322,7 @@ app.post("/api/v1/admin/users", async (req, res) => {
 app.post("/api/v1/speakers/:speakerId/credentials", async (req, res) => {
   const actor = actorFrom(req);
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in first." });
-  const result = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID }, (tx) =>
+  const result = await withScope(scopeFor(req), (tx) =>
     issuePresenterCredential(tx, actor, {
       speakerId: String(req.params.speakerId),
       portalBase: process.env.PORTAL_BASE ?? "http://localhost:3001",
@@ -1308,7 +1335,7 @@ app.post("/api/v1/speakers/:speakerId/credentials", async (req, res) => {
 app.delete("/api/v1/speakers/:speakerId/credentials", async (req, res) => {
   const actor = actorFrom(req);
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in first." });
-  const result = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID }, (tx) =>
+  const result = await withScope(scopeFor(req), (tx) =>
     revokePresenterCredential(tx, actor, String(req.params.speakerId)),
   );
   if (!result.ok) return res.status(statusFor(result.error)).json(result.error);

@@ -232,23 +232,30 @@ npm run ci             # lint + type-check + tests (51 domain tests today)
 
 ## Trying the API
 
-The dev user is chosen with an `x-dev-user` header: `pm`, `reviewer`, `room_tech`, `client`
-(an M0 stand-in for OIDC — M1-1 replaces it).
+Every request needs a session. Sign in once and keep the cookie:
+
+```bash
+curl -s -c /tmp/dxg.jar -X POST localhost:4000/api/v1/auth/login \
+  -H 'content-type: application/json' \
+  -d '{"email":"m.vega@example.invalid","password":"dxg-development-password"}'
+```
+
+Then pass `-b /tmp/dxg.jar` on the calls below. `npm run db:seed` prints the accounts.
 
 ```bash
 EV=22222222-2222-4222-8222-222222222222
 
 curl -s localhost:4000/ops/health
-curl -s "http://localhost:4000/api/v1/events/$EV/talks"          # status derived by @pmp/domain
-curl -s "http://localhost:4000/api/v1/events/$EV/audit:verify"   # hash-chain verification
+curl -s -b /tmp/dxg.jar "http://localhost:4000/api/v1/events/$EV/talks"        # status derived by @pmp/domain
+curl -s -b /tmp/dxg.jar "http://localhost:4000/api/v1/events/$EV/audit:verify" # hash-chain verification
 ```
 
 The review decision, with optimistic locking and role gates:
 
 ```bash
 VID=<a file_version id>
-curl -s -X POST "http://localhost:4000/api/v1/file-versions/$VID:transition" \
-  -H 'content-type: application/json' -H 'x-dev-user: reviewer' \
+curl -s -b /tmp/dxg.jar -X POST "http://localhost:4000/api/v1/file-versions/$VID:transition" \
+  -H 'content-type: application/json' \
   -d '{"action":"claim","lock_version":0}'
 ```
 
@@ -295,6 +302,5 @@ workflow transition and a hash-chained audit record are written — all in one t
 - **Asset upload** (event header, slide template) is not built (M1-4).
 - **MFA is not enforced yet** for staff (D-015). NFR-SEC-02 requires it; the columns exist so
   enabling it is not a schema change. This must close before the pilot.
-- **The `x-dev-user` header still works in development** when no session cookie is present, so
-  scripts and curl examples in this file keep working. It is refused in production, and a request
-  that carries a real session ignores it entirely.
+- **There is no development authentication bypass.** The `x-dev-user` header was removed on
+  2026-09-17; every request carries a real session, in development exactly as in production.

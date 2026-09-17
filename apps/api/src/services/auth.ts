@@ -21,7 +21,16 @@ const ABSOLUTE_MINUTES = { staff: 24 * 60, presenter: 24 * 60 } as const;
 export const SESSION_COOKIE = "pmp_session";
 
 export type Principal =
-  | { kind: "staff"; user_id: string; email: string; display_name: string; roles: EventRole[]; must_change_password: boolean }
+  | {
+      kind: "staff";
+      user_id: string;
+      email: string;
+      display_name: string;
+      roles: EventRole[];
+      /** Clients this account has any role on — empty for DXG staff, who work across all. */
+      client_ids: string[];
+      must_change_password: boolean;
+    }
   | { kind: "presenter"; speaker_id: string; email: string | null; display_name: string; event_id: string; client_id: string };
 
 type Attempt = {
@@ -159,6 +168,7 @@ export async function staffLogin(
       email: user.email,
       display_name: user.display_name,
       roles: await rolesFor(tx, user.id),
+      client_ids: await clientsFor(tx, user.id),
       must_change_password: user.must_change_password,
     },
   });
@@ -170,6 +180,19 @@ async function rolesFor(tx: pg.PoolClient, userId: string): Promise<EventRole[]>
     [userId],
   );
   return rows.map((row) => row.role);
+}
+
+/** Which clients this account touches, used to scope client-side accounts. */
+async function clientsFor(tx: pg.PoolClient, userId: string): Promise<string[]> {
+  const { rows } = await tx.query<{ client_id: string }>(
+    `SELECT DISTINCT e.client_id
+       FROM pmp.event_roles er JOIN pmp.events e ON e.id = er.event_id
+      WHERE er.user_id = $1
+      UNION
+     SELECT DISTINCT cg.client_id FROM pmp.client_grants cg WHERE cg.user_id = $1`,
+    [userId],
+  );
+  return rows.map((row) => row.client_id);
 }
 
 /**
@@ -294,6 +317,7 @@ export async function resolveSession(tx: pg.PoolClient, token: string): Promise<
       email: user.email,
       display_name: user.display_name,
       roles: await rolesFor(tx, user.id),
+      client_ids: await clientsFor(tx, user.id),
       must_change_password: user.must_change_password,
     };
   }

@@ -14,10 +14,33 @@ export async function closePool(): Promise<void> {
 }
 
 export type Scope = {
-  readonly userId: string;
-  readonly clientId: string;
+  /** Absent for pre-authentication work (sign-in, webhooks, session lookup). */
+  readonly userId?: string;
+  /** Absent when the caller works across clients (DXG staff, system tasks). */
+  readonly clientId?: string;
   readonly eventId?: string;
+  /**
+   * DXG staff and system tasks work across every client. RLS honours this via
+   * pmp.is_platform_context(); client-scoped callers must never set it.
+   */
+  readonly allClients?: boolean;
 };
+
+async function applyScope(client: pg.PoolClient, scope: Scope): Promise<void> {
+  await client.query("SELECT set_config('app.user_id', $1, true)", [scope.userId ?? ""]);
+  await client.query("SELECT set_config('app.client_id', $1, true)", [scope.clientId ?? ""]);
+  await client.query("SELECT set_config('app.event_id', $1, true)", [scope.eventId ?? ""]);
+  await client.query("SELECT set_config('app.all_clients', $1, true)", [scope.allClients ? "on" : "off"]);
+}
+
+/**
+ * For work that happens before anyone is authenticated — verifying a password,
+ * resolving a session cookie, recording a delivery webhook. It runs in platform
+ * context because it cannot yet know whose data it is looking at.
+ */
+export function withSystemScope<T>(fn: (tx: pg.PoolClient) => Promise<T>): Promise<T> {
+  return withScope({ allClients: true }, fn);
+}
 
 /**
  * The only way to touch tenant data (BUILD_SPEC §6.2). Opens a transaction and
@@ -31,9 +54,7 @@ export async function withScope<T>(
   const client = await getPool().connect();
   try {
     await client.query("BEGIN");
-    await client.query("SELECT set_config('app.user_id', $1, true)", [scope.userId]);
-    await client.query("SELECT set_config('app.client_id', $1, true)", [scope.clientId]);
-    await client.query("SELECT set_config('app.event_id', $1, true)", [scope.eventId ?? ""]);
+    await applyScope(client, scope);
     const result = await fn(client);
     await client.query("COMMIT");
     return result;
@@ -53,9 +74,7 @@ export async function withRollback<T>(
   const client = await getPool().connect();
   try {
     await client.query("BEGIN");
-    await client.query("SELECT set_config('app.user_id', $1, true)", [scope.userId]);
-    await client.query("SELECT set_config('app.client_id', $1, true)", [scope.clientId]);
-    await client.query("SELECT set_config('app.event_id', $1, true)", [scope.eventId ?? ""]);
+    await applyScope(client, scope);
     return await fn(client);
   } finally {
     await client.query("ROLLBACK").catch(() => undefined);

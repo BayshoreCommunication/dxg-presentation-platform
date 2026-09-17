@@ -1,14 +1,28 @@
 /**
- * Prints a fresh speaker-portal link for the demo (production sends these by
- * email, M3-5). Searches every event the user can see, so creating another
- * event does not change which speaker is found.
+ * Issues a presenter access code for the demo, exactly as DXG does in the
+ * product: sign in as staff, then generate the credential.
  *
  *   npm run demo:link            # first speaker with an email
  *   npm run demo:link -- Osei    # by name, organisation or email
  */
 const API = process.env.API_BASE ?? "http://localhost:4000/api/v1";
+const EMAIL = process.env.DXG_EMAIL ?? "m.vega@example.invalid";
+const PASSWORD = process.env.DXG_PASSWORD ?? "dxg-development-password";
 const query = process.argv[2] ?? "";
-const headers = { "x-dev-user": "pm" };
+
+const signIn = await fetch(`${API}/auth/login`, {
+  method: "POST",
+  headers: { "content-type": "application/json" },
+  body: JSON.stringify({ email: EMAIL, password: PASSWORD }),
+});
+if (!signIn.ok) {
+  console.error(`Could not sign in as ${EMAIL}. Run \`npm run db:seed\` first, or set DXG_EMAIL / DXG_PASSWORD.`);
+  process.exit(1);
+}
+const cookie = (signIn.headers.getSetCookie?.() ?? [])
+  .map((entry) => entry.split(";")[0])
+  .join("; ");
+const headers = { cookie, "content-type": "application/json" };
 
 const events = await (await fetch(`${API}/events`, { headers })).json();
 if (!events.items?.length) {
@@ -37,9 +51,13 @@ if (!found) {
   process.exit(1);
 }
 
-const invite = await (
-  await fetch(`${API}/speakers/${found.speaker.id}/invite`, { method: "POST", headers })
+const credential = await (
+  await fetch(`${API}/speakers/${found.speaker.id}/credentials`, { method: "POST", headers })
 ).json();
 
 console.error(`${found.speaker.full_name} · ${found.event.name}`);
-console.log(invite.url);
+console.error(`email: ${found.speaker.email}`);
+console.error(`code:  ${credential.access_code}`);
+console.log(credential.link);
+
+await fetch(`${API}/auth/logout`, { method: "POST", headers });
