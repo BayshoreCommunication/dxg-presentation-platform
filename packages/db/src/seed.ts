@@ -1,7 +1,11 @@
 import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { hashPassword, generateAccessCode, normaliseCode, hashSecret } from "@pmp/auth";
 import { getPool, closePool } from "./pool.ts";
+
+/** Development credentials only. Real deployments create accounts via the admin API. */
+const DEV_PASSWORD = "dxg-development-password";
 
 const FILE_ROOT = process.env.FILE_ROOT ?? ".data";
 
@@ -114,11 +118,14 @@ async function seed(): Promise<void> {
       [IDS.roomTech, "t.okafor@example.invalid", "T. Okafor", "room_technician"],
       [IDS.clientAdmin, "j.ellis@example.invalid", "J. Ellis", "client_event_admin"],
     ];
+    const devHash = await hashPassword(DEV_PASSWORD);
     for (const [id, email, name, role] of staff) {
       await client.query(
-        `INSERT INTO users (id, email, display_name) VALUES ($1, $2, $3)
-         ON CONFLICT (id) DO UPDATE SET display_name = EXCLUDED.display_name`,
-        [id, email, name],
+        `INSERT INTO users (id, email, display_name, password_hash, password_set_at, must_change_password)
+         VALUES ($1, $2, $3, $4, now(), false)
+         ON CONFLICT (id) DO UPDATE
+           SET display_name = EXCLUDED.display_name, password_hash = EXCLUDED.password_hash`,
+        [id, email, name, devHash],
       );
       await client.query(
         `INSERT INTO event_roles (user_id, event_id, role) VALUES ($1, $2, $3)
@@ -257,7 +264,29 @@ async function seed(): Promise<void> {
       }
     }
 
+    // Every seeded speaker gets a presenter credential, printed once below —
+    // exactly how DXG issues them in the product.
+    const issued: string[] = [];
+    const { rows: seededSpeakers } = await client.query<{ id: string; full_name: string; email: string }>(
+      `SELECT id, full_name, email::text FROM speakers WHERE event_id = $1 ORDER BY full_name`,
+      [IDS.event],
+    );
+    for (const speaker of seededSpeakers) {
+      const code = generateAccessCode();
+      await client.query(
+        `INSERT INTO speaker_tokens (speaker_id, event_id, client_id, kind, token_hash, expires_at, code_hint)
+         VALUES ($1, $2, $3, 'access_code', $4, now() + interval '45 days', $5)`,
+        [speaker.id, IDS.event, IDS.client, hashSecret(normaliseCode(code)), code.slice(-4)],
+      );
+      issued.push(`  ${speaker.full_name.padEnd(20)} ${speaker.email.padEnd(30)} ${code}`);
+    }
+
     await client.query("COMMIT");
+    console.log("\nstaff sign-in (development only):");
+    for (const [, email, name] of staff) console.log(`  ${name.padEnd(20)} ${email.padEnd(30)} ${DEV_PASSWORD}`);
+    console.log("\npresenter access codes (issued by DXG, shown once):");
+    for (const line of issued) console.log(line);
+    console.log("");
     console.log(`seeded event ${IDS.event}: 3 rooms, 3 talks, 4 file versions, 4 staff users`);
   } catch (error) {
     await client.query("ROLLBACK");

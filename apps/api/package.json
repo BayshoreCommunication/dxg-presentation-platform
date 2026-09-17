@@ -9,6 +9,7 @@
     "type-check": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
+    "@pmp/auth": "*",
     "@pmp/db": "*",
     "@pmp/domain": "*",
     "@pmp/files": "*",

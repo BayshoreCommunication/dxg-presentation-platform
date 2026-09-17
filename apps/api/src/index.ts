@@ -13,6 +13,18 @@ import {
   hashToken,
 } from "./services/portal.ts";
 import { randomUUID } from "node:crypto";
+import {
+  SESSION_COOKIE,
+  staffLogin,
+  presenterLogin,
+  resolveSession,
+  logout as endSession,
+  createStaffUser,
+  changeOwnPassword,
+  issuePresenterCredential,
+  revokePresenterCredential,
+} from "./services/auth.ts";
+import type { Principal } from "./services/auth.ts";
 import { agentView, syncRoom, acknowledge, launch } from "./services/agent.ts";
 import { srrDashboard, checkIn, checkinDetail, usbIngest, signOff, depart } from "./services/srr.ts";
 import {
@@ -54,14 +66,41 @@ import { decide } from "./services/review.ts";
 
 const app = express();
 app.use(express.json());
-app.use((_req, res, next) => {
+app.use((req, res, next) => {
   // Dev only: the control center runs on a different port until they are served together.
-  res.header("Access-Control-Allow-Origin", "*");
+  // Credentialed requests cannot use a wildcard origin.
+  const origin = req.header("origin");
+  if (origin) res.header("Access-Control-Allow-Origin", origin);
+  res.header("Access-Control-Allow-Credentials", "true");
   res.header("Access-Control-Allow-Headers", "content-type, x-dev-user, authorization");
-  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS");
+  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
   next();
 });
 app.options(/.*/, (_req, res) => res.sendStatus(204));
+
+const readCookie = (req: express.Request, name: string): string | null => {
+  const header = req.header("cookie") ?? "";
+  for (const part of header.split(";")) {
+    const [key, ...rest] = part.trim().split("=");
+    if (key === name) return decodeURIComponent(rest.join("="));
+  }
+  return null;
+};
+
+const cookieOptions = (maxAgeMinutes: number) => ({
+  httpOnly: true,
+  sameSite: "lax" as const,
+  secure: process.env.NODE_ENV === "production",
+  path: "/",
+  maxAge: maxAgeMinutes * 60_000,
+});
+
+/**
+ * Development convenience only: before the web apps carry a session cookie, the
+ * `x-dev-user` header stands in for a signed-in staff member. It is refused
+ * outright in production and logged whenever it is used.
+ */
+const DEV_HEADER_ALLOWED = process.env.NODE_ENV !== "production" && process.env.AUTH_DEV_HEADER !== "off";
 
 /** M0 stand-in for OIDC (M1-1 replaces it). Never shipped beyond local dev. */
 const DEV_USERS: Record<string, Actor> = {
@@ -84,9 +123,31 @@ const IMPORT_FIELD_LIST = [
 ];
 
 function actorFrom(req: express.Request): Actor | undefined {
+  const principal = (req as express.Request & { principal?: Principal }).principal;
+  if (principal) {
+    // A presenter is never a staff actor. Falling through to the dev header here
+    // would silently promote a signed-in presenter to a staff role.
+    return principal.kind === "staff" ? { id: principal.user_id, roles: principal.roles } : undefined;
+  }
+  if (!DEV_HEADER_ALLOWED) return undefined;
   const key = String(req.header("x-dev-user") ?? "reviewer");
   return DEV_USERS[key];
 }
+
+/** Attaches the signed-in principal, if there is one, to every request. */
+app.use(async (req, _res, next) => {
+  const token = readCookie(req, SESSION_COOKIE);
+  if (!token) return next();
+  try {
+    const principal = await withScope({ userId: DEV_USERS.pm!.id, clientId: DEV_CLIENT_ID }, (tx) =>
+      resolveSession(tx, token),
+    );
+    if (principal) (req as express.Request & { principal?: Principal }).principal = principal;
+  } catch (error) {
+    console.error("session resolution failed", error);
+  }
+  return next();
+});
 
 const statusFor = (error: DomainError): number => {
   if (error.code.endsWith("_not_found") || error.code.endsWith(".not_found")) return 404;
@@ -101,6 +162,16 @@ const statusFor = (error: DomainError): number => {
   }
   if (error.code.endsWith(".conflict")) return 409;
   if (error.code.endsWith(".forbidden") || error.code.endsWith(".override_forbidden")) return 403;
+  if (
+    error.code === "auth.invalid_credentials" ||
+    error.code === "auth.expired" ||
+    error.code === "auth.revoked" ||
+    error.code === "auth.no_session"
+  ) {
+    return 401;
+  }
+  if (error.code === "auth.locked") return 429;
+  if (error.code === "auth.email_taken") return 409;
   if (
     error.code.endsWith(".event_incomplete") ||
     error.code.endsWith(".incomplete") ||
@@ -365,8 +436,31 @@ async function withPortalSession(
   res: express.Response,
   fn: (session: PortalSession, tx: Parameters<Parameters<typeof withScope>[1]>[0]) => Promise<unknown>,
 ): Promise<unknown> {
+  // Either a signed-in presenter session, or the access code carried directly
+  // (the emailed link) — the same credential, arriving by a different door.
+  const principal = (req as express.Request & { principal?: Principal }).principal;
+  if (principal?.kind === "presenter") {
+    return withScope({ userId: DEV_USERS.pm!.id, clientId: DEV_CLIENT_ID }, async (tx) => {
+      const { rows } = await tx.query<{ name: string; timezone: string }>(
+        `SELECT name, timezone FROM pmp.events WHERE id = $1`,
+        [principal.event_id],
+      );
+      return fn(
+        {
+          speaker_id: principal.speaker_id,
+          speaker_name: principal.display_name,
+          event_id: principal.event_id,
+          client_id: principal.client_id,
+          event_name: rows[0]?.name ?? "",
+          timezone: rows[0]?.timezone ?? "UTC",
+        },
+        tx,
+      );
+    });
+  }
+
   const token = bearer(req);
-  if (!token) return res.status(401).json({ code: "portal.no_token", message: "Missing access token." });
+  if (!token) return res.status(401).json({ code: "portal.no_token", message: "Sign in with your access code." });
   return withScope({ userId: DEV_USERS.pm!.id, clientId: DEV_CLIENT_ID }, async (tx) => {
     const session = await resolveToken(tx, token);
     if (!session) {
@@ -1050,6 +1144,127 @@ app.post("/api/v1/webhooks/email", async (req, res) => {
       eventType: body.event_type as string,
       payload: body.payload ?? {},
     }),
+  );
+  if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+  return res.json(result.value);
+});
+
+/* ── authentication (two principals: DXG staff and presenters) ───────────── */
+
+const clientIp = (req: express.Request): string | undefined => {
+  const forwarded = req.header("x-forwarded-for")?.split(",")[0]?.trim();
+  const address = forwarded ?? req.socket.remoteAddress ?? undefined;
+  return address?.replace(/^::ffff:/, "");
+};
+
+app.post("/api/v1/auth/login", async (req, res) => {
+  const body = req.body as { email?: string; password?: string };
+  if (!body.email || !body.password) {
+    return res.status(400).json({ code: "request.invalid", message: "Enter your email address and password." });
+  }
+  const result = await withScope({ userId: DEV_USERS.pm!.id, clientId: DEV_CLIENT_ID }, (tx) =>
+    staffLogin(tx, {
+      email: body.email as string,
+      password: body.password as string,
+      ip: clientIp(req),
+      userAgent: req.header("user-agent") ?? undefined,
+    }),
+  );
+  if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+  res.cookie(SESSION_COOKIE, result.value.token, cookieOptions(24 * 60));
+  return res.json({ principal: result.value.principal });
+});
+
+app.post("/api/v1/portal/login", async (req, res) => {
+  const body = req.body as { email?: string; code?: string };
+  if (!body.email || !body.code) {
+    return res.status(400).json({ code: "request.invalid", message: "Enter your email address and access code." });
+  }
+  const result = await withScope({ userId: DEV_USERS.pm!.id, clientId: DEV_CLIENT_ID }, (tx) =>
+    presenterLogin(tx, {
+      email: body.email as string,
+      code: body.code as string,
+      ip: clientIp(req),
+      userAgent: req.header("user-agent") ?? undefined,
+    }),
+  );
+  if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+  res.cookie(SESSION_COOKIE, result.value.token, cookieOptions(24 * 60));
+  return res.json({ principal: result.value.principal });
+});
+
+app.post("/api/v1/auth/logout", async (req, res) => {
+  const token = readCookie(req, SESSION_COOKIE);
+  if (token) {
+    await withScope({ userId: DEV_USERS.pm!.id, clientId: DEV_CLIENT_ID }, (tx) => endSession(tx, token));
+  }
+  res.clearCookie(SESSION_COOKIE, { path: "/" });
+  return res.status(204).end();
+});
+
+app.get("/api/v1/auth/session", (req, res) => {
+  const principal = (req as express.Request & { principal?: Principal }).principal;
+  if (!principal) return res.status(401).json({ code: "auth.no_session", message: "Not signed in." });
+  return res.json({ principal });
+});
+
+app.post("/api/v1/auth/password", async (req, res) => {
+  const principal = (req as express.Request & { principal?: Principal }).principal;
+  if (principal?.kind !== "staff") {
+    return res.status(401).json({ code: "auth.no_session", message: "Sign in first." });
+  }
+  const body = req.body as { current_password?: string; new_password?: string };
+  if (!body.current_password || !body.new_password) {
+    return res.status(400).json({ code: "request.invalid", message: "Both the current and new password are required." });
+  }
+  const result = await withScope({ userId: principal.user_id, clientId: DEV_CLIENT_ID }, (tx) =>
+    changeOwnPassword(tx, principal.user_id, {
+      currentPassword: body.current_password as string,
+      newPassword: body.new_password as string,
+    }),
+  );
+  if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+  res.clearCookie(SESSION_COOKIE, { path: "/" });
+  return res.json(result.value);
+});
+
+app.post("/api/v1/admin/users", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in first." });
+  const body = req.body as { email?: string; display_name?: string; password?: string };
+  if (!body.email) {
+    return res.status(400).json({ code: "request.invalid", message: "`email` is required." });
+  }
+  const result = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID }, (tx) =>
+    createStaffUser(tx, actor, {
+      email: body.email as string,
+      displayName: body.display_name ?? "",
+      ...(body.password ? { password: body.password } : {}),
+    }),
+  );
+  if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+  return res.status(201).json(result.value);
+});
+
+/** Generates a presenter's credential; the code is returned exactly once. */
+app.post("/api/v1/speakers/:speakerId/credentials", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in first." });
+  const result = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID }, (tx) =>
+    issuePresenterCredential(tx, actor, {
+      speakerId: String(req.params.speakerId),
+      portalBase: process.env.PORTAL_BASE ?? "http://localhost:3001",
+    }),
+  );
+  if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+  return res.status(201).json(result.value);
+});
+
+app.delete("/api/v1/speakers/:speakerId/credentials", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in first." });
+  const result = await withScope({ userId: actor.id, clientId: DEV_CLIENT_ID }, (tx) =>
+    revokePresenterCredential(tx, actor, String(req.params.speakerId)),
   );
   if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
   return res.json(result.value);
