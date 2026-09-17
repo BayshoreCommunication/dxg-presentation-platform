@@ -39,6 +39,13 @@ each speaker. Staff sign in at http://localhost:3000/login; presenters at
 http://localhost:3001/login, or by following their link, which pre-fills the code and
 asks only for their email address.
 
+Staff accounts are created on **Admin → Staff accounts** (`/admin/users`), which needs a platform
+admin or project manager — the seed includes `admin@example.invalid` for this. Creating an account
+issues a temporary password shown once; the account must change it and enrol an authenticator
+before it can reach anything. The same screen resets a forgotten password, hands back an account
+whose authenticator is lost (with a reason, because that is an account-takeover path), unlocks a
+locked-out account, and grants or removes event roles.
+
 To issue a presenter credential the way DXG does, use the Speakers screen (or
 `POST /speakers/:id/credentials`). The code is shown **once** — afterwards only its last
 four characters are stored, so it cannot be recovered, only replaced.

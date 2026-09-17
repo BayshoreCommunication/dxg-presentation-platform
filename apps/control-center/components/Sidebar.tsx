@@ -36,6 +36,7 @@ const GROUPS: { group: string; items: { label: string; href?: string }[] }[] = [
     ],
   },
   { group: "DEVICE", items: [{ label: "Room Agent", href: "/events/:id/agent" }] },
+  { group: "ADMIN", items: [{ label: "Staff accounts", href: "/admin/users" }] },
   {
     group: "EXTERNAL",
     items: [{ label: "Speaker portal" }, { label: "Client portal", href: "/client/:id" }],

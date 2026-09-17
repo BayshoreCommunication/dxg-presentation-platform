@@ -51,6 +51,7 @@ const IDS = {
   reviewer: "33333333-3333-4333-8333-333333333332",
   roomTech: "33333333-3333-4333-8333-333333333333",
   clientAdmin: "33333333-3333-4333-8333-333333333334",
+  admin: "33333333-3333-4333-8333-333333333335",
 } as const;
 
 const TALKS = [
@@ -128,6 +129,8 @@ async function seed(): Promise<void> {
     );
 
     const staff: [string, string, string, string][] = [
+      // Someone has to be able to create the others.
+      [IDS.admin, "admin@example.invalid", "A. Whitfield", "platform_admin"],
       [IDS.pm, "m.vega@example.invalid", "M. Vega", "presentation_manager"],
       [IDS.reviewer, "c.delgado@example.invalid", "C. Delgado", "content_reviewer"],
       [IDS.roomTech, "t.okafor@example.invalid", "T. Okafor", "room_technician"],

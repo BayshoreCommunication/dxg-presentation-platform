@@ -1,6 +1,6 @@
 import express from "express";
 import { withScope, withSystemScope, getPool, verifyAuditChain, appendAudit as appendAuditRecord } from "@pmp/db";
-import type { Actor, DomainError, EventRole, ReviewAction } from "@pmp/domain";
+import type { Actor, DomainError, EventRole, Result, ReviewAction } from "@pmp/domain";
 import { listTalks } from "./services/talks.ts";
 import { eventSummary, riskList, reviewQueue, syncFleet } from "./services/queries.ts";
 import {
@@ -27,6 +27,15 @@ import {
 } from "./services/auth.ts";
 import type { Principal } from "./services/auth.ts";
 import { startEnrolment, confirmEnrolment, disableMfa, answerChallenge } from "./services/mfa.ts";
+import {
+  listStaff,
+  resetPassword,
+  resetMfa,
+  setActive,
+  unlock,
+  grantRole,
+  revokeRole,
+} from "./services/admin.ts";
 
 /** Carries the half-finished sign-in between the password and the code. */
 const MFA_COOKIE = "pmp_mfa";
@@ -237,6 +246,15 @@ const statusFor = (error: DomainError): number => {
   if (error.code === "mfa.challenge_expired") return 401;
   if (error.code.startsWith("mfa.")) return 422;
   if (error.code === "auth.email_taken") return 409;
+  if (error.code.startsWith("admin.") && error.code.endsWith("forbidden")) return 403;
+  if (
+    error.code === "admin.reason_required" ||
+    error.code === "admin.self_lockout" ||
+    error.code === "admin.last_admin" ||
+    error.code === "admin.unknown_role"
+  ) {
+    return 422;
+  }
   if (
     error.code.endsWith(".event_incomplete") ||
     error.code.endsWith(".incomplete") ||
@@ -1438,6 +1456,75 @@ app.delete("/api/v1/speakers/:speakerId/credentials", async (req, res) => {
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in first." });
   const result = await withScope(scopeFor(req), (tx) =>
     revokePresenterCredential(tx, actor, String(req.params.speakerId)),
+  );
+  if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+  return res.json(result.value);
+});
+
+/* ── account administration (screen: Admin · Staff accounts) ─────────────── */
+
+app.get("/api/v1/admin/users", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  const result = await withScope(scopeFor(req), (tx) => listStaff(tx, actor));
+  if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+  return res.json({ items: result.value });
+});
+
+app.post("/api/v1/admin/users/:userId/reset-password", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  const result = await withScope(scopeFor(req), (tx) => resetPassword(tx, actor, String(req.params.userId)));
+  if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+  return res.json(result.value);
+});
+
+app.post("/api/v1/admin/users/:userId/reset-mfa", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  const body = req.body as { reason?: string };
+  const result = await withScope(scopeFor(req), (tx) =>
+    resetMfa(tx, actor, String(req.params.userId), body.reason ?? ""),
+  );
+  if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+  return res.json(result.value);
+});
+
+app.post("/api/v1/admin/users/:userId/active", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  const body = req.body as { active?: boolean };
+  const result = await withScope(scopeFor(req), (tx) =>
+    setActive(tx, actor, String(req.params.userId), body.active !== false),
+  );
+  if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+  return res.json(result.value);
+});
+
+app.post("/api/v1/admin/users/:userId/unlock", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  const result = await withScope(scopeFor(req), (tx) => unlock(tx, actor, String(req.params.userId)));
+  if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+  return res.json(result.value);
+});
+
+app.post("/api/v1/admin/users/:userId/roles", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  const body = req.body as { event_id?: string; role?: string; grant?: boolean };
+  if (!body.event_id || !body.role) {
+    return res.status(400).json({ code: "request.invalid", message: "`event_id` and `role` are required." });
+  }
+  const input = {
+    userId: String(req.params.userId),
+    eventId: body.event_id,
+    role: body.role as EventRole,
+  };
+  const result = await withScope(scopeFor(req), async (tx) =>
+    body.grant === false
+      ? ((await revokeRole(tx, actor, input)) as Result<{ granted?: true; revoked?: true }, DomainError>)
+      : ((await grantRole(tx, actor, input)) as Result<{ granted?: true; revoked?: true }, DomainError>),
   );
   if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
   return res.json(result.value);

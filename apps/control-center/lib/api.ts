@@ -672,3 +672,61 @@ export const sendBatch = (eventId: string, templateId: string, missingOnly: bool
     `/events/${eventId}/comms/send`,
     { method: "POST", body: JSON.stringify({ template_id: templateId, missing_only: missingOnly }) },
   );
+
+/* ── account administration ───────────────────────────────────────────────── */
+
+export type StaffRow = {
+  id: string;
+  email: string;
+  display_name: string;
+  is_active: boolean;
+  mfa_enrolled: boolean;
+  must_change_password: boolean;
+  locked_until: string | null;
+  roles: { event_id: string; event_name: string; role: string }[];
+  last_sign_in: string | null;
+  recovery_codes_left: number;
+};
+
+export const EVENT_ROLE_NAMES = [
+  "platform_admin",
+  "project_manager",
+  "presentation_manager",
+  "srr_technician",
+  "room_technician",
+  "content_reviewer",
+  "client_event_admin",
+  "scoped_reviewer",
+] as const;
+
+export const listStaff = () => request<{ items: StaffRow[] }>("/admin/users");
+
+export const createStaff = (email: string, displayName: string) =>
+  request<{ user_id: string; temporary_password: string | null }>("/admin/users", {
+    method: "POST",
+    body: JSON.stringify({ email, display_name: displayName }),
+  });
+
+export const resetStaffPassword = (userId: string) =>
+  request<{ temporary_password: string }>(`/admin/users/${userId}/reset-password`, { method: "POST" });
+
+export const resetStaffMfa = (userId: string, reason: string) =>
+  request<{ reset: true }>(`/admin/users/${userId}/reset-mfa`, {
+    method: "POST",
+    body: JSON.stringify({ reason }),
+  });
+
+export const setStaffActive = (userId: string, active: boolean) =>
+  request<{ is_active: boolean }>(`/admin/users/${userId}/active`, {
+    method: "POST",
+    body: JSON.stringify({ active }),
+  });
+
+export const unlockStaff = (userId: string) =>
+  request<{ unlocked: true }>(`/admin/users/${userId}/unlock`, { method: "POST" });
+
+export const setStaffRole = (userId: string, eventId: string, role: string, grant: boolean) =>
+  request<{ granted?: true; revoked?: true }>(`/admin/users/${userId}/roles`, {
+    method: "POST",
+    body: JSON.stringify({ event_id: eventId, role, grant }),
+  });

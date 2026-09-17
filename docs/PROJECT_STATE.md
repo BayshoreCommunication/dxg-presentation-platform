@@ -309,3 +309,20 @@ code thereafter; and because the counter is per account, test files that run in 
 need separate accounts. The suite now passes twice in a row with no flakes (21 tests).
 
 This closes the D-015 deviation. NFR-SEC-02 is met.
+
+## 2026-09-17 (twelfth) — staff account administration
+
+`/admin/users`, restricted to platform admins and project managers. Creating an account issues a
+temporary password shown once; resetting a password or an authenticator revokes that account's
+sessions; roles are granted and removed per event.
+
+Guards, each covered by a test: a content reviewer is refused the screen and the create endpoint;
+an admin cannot deactivate themselves; the last platform admin role on an event cannot be revoked;
+resetting someone's authenticator requires a written reason, because it turns a lost phone back
+into an open door and is the strongest thing one account can do to another. A new account is
+refused the staff surface twice over — first for holding no role, then for not having enrolled.
+
+**A gap this surfaced: the seed had no platform admin at all**, so nobody could administer
+accounts. `admin@example.invalid` (A. Whitfield, platform_admin) is now seeded.
+
+Eighteen screens; 139 unit tests, 29 auth/MFA/admin tests, lint and type-check green.
