@@ -352,7 +352,9 @@ export async function acknowledge(
   return ok({ sync_state: activated.value });
 }
 
-export type LaunchOutcome = { launched: true; at: string } | { launched: false; reason: string };
+export type LaunchOutcome =
+  | { launched: true; at: string; version_number: number | null }
+  | { launched: false; reason: string };
 
 /**
  * The launch guard (BUILD_SPEC §6.9): a room may only play its `active`,
@@ -373,17 +375,19 @@ export async function launch(
     agent_id: string | null;
     event_id: string;
     client_id: string;
+    version_number: number | null;
   }>(
     // One room may hold several copies of the same talk (the active one plus a
     // newer one waiting to be acknowledged). Pick the active copy first, then a
     // delivered-but-unacknowledged one, so the refusal can explain which it is.
     `SELECT rf.id AS room_file_id, rf.file_version_id, rf.sync_state,
             (rf.acknowledged_at IS NOT NULL) AS acknowledged,
-            ra.id AS agent_id, r.event_id, r.client_id
+            ra.id AS agent_id, r.event_id, r.client_id, rf.version_number
        FROM pmp.rooms r
        LEFT JOIN pmp.room_agents ra ON ra.room_id = r.id AND ra.revoked_at IS NULL
        LEFT JOIN LATERAL (
-         SELECT rf2.id, rf2.file_version_id, rf2.sync_state, rf2.acknowledged_at
+         SELECT rf2.id, rf2.file_version_id, rf2.sync_state, rf2.acknowledged_at,
+                fv2.version_number
            FROM pmp.room_files rf2
            JOIN pmp.file_versions fv2 ON fv2.id = rf2.file_version_id
            JOIN pmp.files f2 ON f2.id = fv2.file_id
@@ -442,5 +446,5 @@ export async function launch(
     });
   }
 
-  return ok({ launched: true, at: new Date().toISOString() });
+  return ok({ launched: true, at: new Date().toISOString(), version_number: row.version_number });
 }

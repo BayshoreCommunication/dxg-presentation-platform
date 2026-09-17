@@ -237,9 +237,14 @@ export function CheckinView({ eventId, initial }: { eventId: string; initial: Ch
 
       <div className="card">
         <div className="chd">
-          <h3>2 · Comparison vs the approved version</h3>
+          <h3>
+            2 · Comparison vs the {usb?.compared_with?.basis ?? "approved"} version
+          </h3>
           {usb?.scan_result === "clean" ? (
-            <Chip status="submitted" label={`v${usb.version_number} vs v${detail.approved?.version_number ?? "—"}`} />
+            <Chip
+              status="submitted"
+              label={`v${usb.version_number} vs v${usb.compared_with?.version_number ?? "—"}`}
+            />
           ) : (
             <Chip status="canceled" label="Awaiting scan" />
           )}
@@ -250,7 +255,7 @@ export function CheckinView({ eventId, initial }: { eventId: string; initial: Ch
               <thead>
                 <tr>
                   <th />
-                  <th>v{detail.approved?.version_number ?? "—"}</th>
+                  <th>v{usb.compared_with?.version_number ?? "—"}</th>
                   <th>v{usb.version_number}</th>
                   <th>Δ</th>
                 </tr>

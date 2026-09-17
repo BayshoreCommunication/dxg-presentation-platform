@@ -223,6 +223,7 @@ export type UsbResult = {
   file_version_id: string | null;
   version_number: number | null;
   inspection_state: string | null;
+  compared_with: { version_number: number; basis: "approved" | "previous" } | null;
   comparison: { field: string; approved: string; incoming: string; delta: string }[];
   message: string;
 };

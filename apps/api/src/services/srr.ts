@@ -298,6 +298,8 @@ export type UsbResult = {
   file_version_id: string | null;
   version_number: number | null;
   inspection_state: string | null;
+  /** What the incoming file is being compared against, and why. */
+  compared_with: { version_number: number; basis: "approved" | "previous" } | null;
   comparison: { field: string; approved: string; incoming: string; delta: string }[];
   message: string;
 };
@@ -369,6 +371,7 @@ export async function usbIngest(
       file_version_id: ingested.value.file_version_id,
       version_number: ingested.value.version_number,
       inspection_state: null,
+      compared_with: null,
       comparison: [],
       message:
         "Scan failed — the file is quarantined and did not enter the library. The approved version is untouched and still plays in the room.",
@@ -376,7 +379,18 @@ export async function usbIngest(
   }
 
   const incoming = await versionFacts(tx, ingested.value.file_version_id);
-  const comparison = compare(detail.approved, incoming);
+
+  // Compare against the approved version when there is one; otherwise against
+  // whatever the speaker last submitted, so the technician always sees what
+  // changed rather than an empty panel.
+  const baseline = detail.approved ?? detail.latest;
+  const comparedWith = baseline
+    ? {
+        version_number: baseline.version_number,
+        basis: (detail.approved ? "approved" : "previous") as "approved" | "previous",
+      }
+    : null;
+  const comparison = compare(baseline, incoming);
 
   return ok({
     ingestion_id: ingestionRows[0]!.id,
@@ -384,6 +398,7 @@ export async function usbIngest(
     file_version_id: ingested.value.file_version_id,
     version_number: ingested.value.version_number,
     inspection_state: ingested.value.inspection_state,
+    compared_with: comparedWith,
     comparison,
     message: `Scan clean · imported as v${ingested.value.version_number} · sent to re-approval. The room keeps the approved version until this one is approved and re-synced.`,
   });
