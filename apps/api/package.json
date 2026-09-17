@@ -12,6 +12,7 @@
     "@pmp/auth": "*",
     "@pmp/db": "*",
     "@pmp/domain": "*",
+    "@pmp/email": "*",
     "@pmp/files": "*",
     "express": "^5.1.0"
   },

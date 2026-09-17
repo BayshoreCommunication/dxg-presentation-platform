@@ -319,11 +319,25 @@ workflow transition and a hash-chained audit record are written — all in one t
   agent's sync engine will — read, verify checksum, then make visible — minus the network.
 - **Launching does not drive PowerPoint yet** (M5-3, gated on G0-1). The launch guard, the
   holding-screen fallback and the launch log are real; the COM call is not there.
-- **Email is delivered by the outbox dispatcher**, which writes to `.data/mail/` in development.
-  The SES transport is deliberately unimplemented and throws rather than silently succeeding, so
-  production cannot look like working email while nobody receives anything (M3-5). Webhook
-  signature verification is also M3-5; delivery events can be posted by hand, which is how the
-  bounce path is exercised.
+- **Email is delivered by the outbox dispatcher.** In development it writes to `.data/mail/`; in
+  production it sends through SES. The transport is chosen by `MAIL_TRANSPORT` (default: `file`
+  outside production, `ses` in it).
+- **SES configuration** — the transport refuses to start without it rather than failing at the
+  first send:
+
+  | Variable | Required | Purpose |
+  |---|---|---|
+  | `AWS_REGION` (or `SES_REGION`) | yes | SES endpoint region |
+  | `MAIL_FROM` | yes | verified sender identity |
+  | `SES_CONFIGURATION_SET` | strongly recommended | **without it SES publishes no delivery, bounce or complaint events** — the platform would never learn a speaker's address is dead |
+  | `MAIL_REPLY_TO` | no | reply-to address |
+  | `SNS_TOPIC_ARNS` | recommended | comma-separated allowlist of topics whose events are accepted |
+
+  Credentials come from the standard AWS chain (instance role in production), never from the repo.
+- **Delivery events arrive from SES via SNS and are signature-verified** before anything is
+  recorded. A forged bounce would suppress future mail to that speaker, so an unverified message is
+  refused, not ignored. The platform's own event shape still works in development; in production it
+  is refused unless `ALLOW_DIRECT_EMAIL_EVENTS=on`.
 - **Asset upload** (event header, slide template) is not built (M1-4).
 - **MFA is enforced** for every staff account (D-017). The development accounts are pre-enrolled
   with a known secret so local work uses a real second factor rather than a bypass:

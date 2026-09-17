@@ -328,6 +328,27 @@ export async function deliveryStats(tx: pg.PoolClient, eventId: string): Promise
   };
 }
 
+/** Correlates an SES event to the communication it belongs to. */
+export async function findCommunication(
+  tx: pg.PoolClient,
+  input: { communicationId: string | null; messageId: string | null },
+): Promise<string | null> {
+  if (input.communicationId) {
+    const { rows } = await tx.query<{ id: string }>(`SELECT id FROM pmp.communications WHERE id = $1`, [
+      input.communicationId,
+    ]);
+    if (rows[0]) return rows[0].id;
+  }
+  if (input.messageId) {
+    const { rows } = await tx.query<{ id: string }>(
+      `SELECT id FROM pmp.communications WHERE provider_message_id = $1`,
+      [input.messageId],
+    );
+    if (rows[0]) return rows[0].id;
+  }
+  return null;
+}
+
 /** Provider webhook (SES via SNS in production): delivery, open, click, bounce. */
 export async function recordDeliveryEvent(
   tx: pg.PoolClient,

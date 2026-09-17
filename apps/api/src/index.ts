@@ -67,7 +67,10 @@ import {
   deliveryLog,
   deliveryStats,
   recordDeliveryEvent,
+  findCommunication,
 } from "./services/comms.ts";
+import { verifySnsMessage, parseSesEvent } from "@pmp/email";
+import type { SnsMessage } from "@pmp/email";
 import {
   scopePreview,
   buildPackage,
@@ -1255,20 +1258,95 @@ app.post("/api/v1/events/:eventId/comms/send", async (req, res) => {
 });
 
 /** Provider callback (SES via SNS in production); signature verification is M3-5. */
+/**
+ * SES delivery events, delivered by SNS. The signature is verified before
+ * anything is recorded: a forged bounce would suppress future mail to that
+ * speaker, so an unverified message is not merely ignored, it is refused.
+ *
+ * Accepts the platform's own shape too, which is how the bounce path is
+ * exercised in development without an AWS account.
+ */
+const snsCertificates = new Map<string, string>();
+
+async function fetchSnsCertificate(url: string): Promise<string> {
+  const cached = snsCertificates.get(url);
+  if (cached) return cached;
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`certificate fetch failed: ${response.status}`);
+  const pem = await response.text();
+  snsCertificates.set(url, pem);
+  return pem;
+}
+
 app.post("/api/v1/webhooks/email", async (req, res) => {
-  const body = req.body as { communication_id?: string; event_type?: string; payload?: Record<string, unknown> };
-  if (!body.communication_id || !body.event_type) {
-    return res.status(400).json({ code: "request.invalid", message: "`communication_id` and `event_type` are required." });
+  const body = req.body as Record<string, unknown>;
+
+  // The platform's own shape — used by the development mail path and by tests.
+  if (typeof body.communication_id === "string" && typeof body.event_type === "string") {
+    if (process.env.NODE_ENV === "production" && process.env.ALLOW_DIRECT_EMAIL_EVENTS !== "on") {
+      return res.status(403).json({
+        code: "webhooks.signature_required",
+        message: "Delivery events must arrive signed, through SNS.",
+      });
+    }
+    const result = await withSystemScope((tx) =>
+      recordDeliveryEvent(tx, {
+        communicationId: body.communication_id as string,
+        eventType: body.event_type as string,
+        payload: (body.payload as Record<string, unknown>) ?? {},
+      }),
+    );
+    if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+    return res.json(result.value);
   }
-  const result = await withSystemScope((tx) =>
-    recordDeliveryEvent(tx, {
-      communicationId: body.communication_id as string,
-      eventType: body.event_type as string,
-      payload: body.payload ?? {},
-    }),
-  );
-  if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
-  return res.json(result.value);
+
+  if (typeof body.Type !== "string") {
+    return res.status(400).json({ code: "request.invalid", message: "Unrecognised delivery event." });
+  }
+
+  const message = body as unknown as SnsMessage;
+  const allowed = (process.env.SNS_TOPIC_ARNS ?? "")
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+
+  const verdict = await verifySnsMessage(message, {
+    fetchCertificate: fetchSnsCertificate,
+    ...(allowed.length > 0 ? { allowedTopicArns: allowed } : {}),
+  });
+  if (!verdict.valid) {
+    console.error(`[webhook] rejected SNS message: ${verdict.reason}`);
+    return res.status(403).json({ code: "webhooks.invalid_signature", message: "Signature check failed." });
+  }
+
+  // SNS confirms a subscription by asking the endpoint to visit a URL it signs.
+  if (message.Type === "SubscriptionConfirmation" && message.SubscribeURL) {
+    await fetch(message.SubscribeURL).catch((error: unknown) =>
+      console.error("[webhook] subscription confirmation failed:", error),
+    );
+    return res.status(200).json({ confirmed: true });
+  }
+
+  const event = parseSesEvent(message.Message);
+  if (!event) return res.status(200).json({ ignored: true });
+
+  const recorded = await withSystemScope(async (tx) => {
+    const communicationId = await findCommunication(tx, {
+      communicationId: event.communicationId,
+      messageId: event.messageId,
+    });
+    if (!communicationId) return null;
+    return recordDeliveryEvent(tx, {
+      communicationId,
+      eventType: event.status,
+      payload: { ...event.detail, sns_message_id: message.MessageId },
+    });
+  });
+
+  // An event for something we never sent is acknowledged, not retried forever.
+  if (!recorded) return res.status(200).json({ ignored: true, reason: "no matching communication" });
+  if (!recorded.ok) return res.status(statusFor(recorded.error)).json(recorded.error);
+  return res.json(recorded.value);
 });
 
 /* ── authentication (two principals: DXG staff and presenters) ───────────── */

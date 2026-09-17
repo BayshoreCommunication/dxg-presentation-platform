@@ -1,0 +1,8 @@
+{
+  "to": "a.fontaine@example.invalid",
+  "subject": "MedTech Forward 2026: please upload your presentation by the published deadline",
+  "body": "Hi Fontaine,\n\nYou're presenting at MedTech Forward 2026 — CardioNext Trial Results in Room 212 on 2026-03-11 15:15.\n\nPlease upload your presentation by the published deadline using your personal secure link. No account is needed.\n\nhttp://localhost:3001/t/21e22913-5fde-41ec-8285-66205adbf48c\n\nRequirements: 16:9 widescreen, PowerPoint (.pptx) preferred, PDF accepted. Embed all fonts and use H.264 .mp4 for video.\n\nThe DXG presentation team",
+  "kind": "email.send",
+  "ref": "dda4c27c-95c4-4cf3-8d87-3c3479123912",
+  "written_at": "2026-09-17T10:03:45.399Z"
+}

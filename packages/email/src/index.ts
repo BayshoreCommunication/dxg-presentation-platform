@@ -1,5 +1,8 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+// Type-only: erased at build time, so the SDK is loaded lazily and only when
+// the SES transport is actually used.
+import type { SESv2Client } from "@aws-sdk/client-sesv2";
 
 export type Message = {
   to: string;
@@ -40,18 +43,91 @@ export class FileSender implements EmailSender {
   }
 }
 
+export type SesConfig = {
+  region: string;
+  from: string;
+  /** Required for delivery events: SES only publishes them for a configuration set. */
+  configurationSet?: string | undefined;
+  replyTo?: string | undefined;
+};
+
 /**
- * Production sender. Deliberately unimplemented rather than silently succeeding:
- * a no-op here would look like working email while every speaker heard nothing.
- * Wiring SES is M3-5.
+ * Reads SES configuration from the environment, refusing to start on anything
+ * missing. Failing at boot is better than discovering at the first send that
+ * nobody has been receiving anything.
+ */
+export function sesConfigFromEnv(): SesConfig {
+  const region = process.env.AWS_REGION ?? process.env.SES_REGION;
+  const from = process.env.MAIL_FROM;
+  const missing = [!region && "AWS_REGION (or SES_REGION)", !from && "MAIL_FROM"].filter(Boolean);
+  if (missing.length > 0) {
+    throw new Error(`SES transport is missing required configuration: ${missing.join(", ")}`);
+  }
+  if (!process.env.SES_CONFIGURATION_SET) {
+    console.error(
+      "[mail] SES_CONFIGURATION_SET is not set — mail will send, but SES will publish no delivery, bounce or complaint events.",
+    );
+  }
+  return {
+    region: region!,
+    from: from!,
+    configurationSet: process.env.SES_CONFIGURATION_SET,
+    replyTo: process.env.MAIL_REPLY_TO,
+  };
+}
+
+/**
+ * Production sender. Every message is tagged with the communication it belongs
+ * to, so the delivery events SES publishes can be matched back to a speaker
+ * without relying on the message id alone.
  */
 export class SesSender implements EmailSender {
   readonly name = "ses";
+  private readonly config: SesConfig;
+  private client: SESv2Client | undefined;
 
-  async send(): Promise<Delivery> {
-    throw new Error(
-      "The SES sender is not implemented yet (M3-5). Set MAIL_TRANSPORT=file for local development.",
+  constructor(config: SesConfig = sesConfigFromEnv()) {
+    this.config = config;
+  }
+
+  private async clientFor(): Promise<SESv2Client> {
+    if (!this.client) {
+      const { SESv2Client } = await import("@aws-sdk/client-sesv2");
+      this.client = new SESv2Client({ region: this.config.region });
+    }
+    return this.client;
+  }
+
+  async send(message: Message): Promise<Delivery> {
+    const { SendEmailCommand } = await import("@aws-sdk/client-sesv2");
+    const client = await this.clientFor();
+
+    // SES tag values allow only letters, digits, underscores and dashes.
+    const tags = [
+      { Name: "kind", Value: message.kind.replace(/[^A-Za-z0-9_-]/g, "_") },
+      ...(message.ref ? [{ Name: "communication_id", Value: message.ref }] : []),
+    ];
+
+    const response = await client.send(
+      new SendEmailCommand({
+        FromEmailAddress: this.config.from,
+        Destination: { ToAddresses: [message.to] },
+        ...(this.config.replyTo ? { ReplyToAddresses: [this.config.replyTo] } : {}),
+        ...(this.config.configurationSet ? { ConfigurationSetName: this.config.configurationSet } : {}),
+        EmailTags: tags,
+        Content: {
+          Simple: {
+            Subject: { Data: message.subject, Charset: "UTF-8" },
+            Body: { Text: { Data: message.body, Charset: "UTF-8" } },
+          },
+        },
+      }),
     );
+
+    if (!response.MessageId) {
+      throw new Error("SES accepted the request but returned no MessageId");
+    }
+    return { id: response.MessageId, accepted: true, detail: { transport: "ses" } };
   }
 }
 
@@ -59,3 +135,5 @@ export function senderFromEnv(): EmailSender {
   const transport = process.env.MAIL_TRANSPORT ?? (process.env.NODE_ENV === "production" ? "ses" : "file");
   return transport === "ses" ? new SesSender() : new FileSender();
 }
+
+export * from "./sns.ts";

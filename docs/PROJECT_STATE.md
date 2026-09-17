@@ -351,3 +351,27 @@ marker and addressed to the right recipient); and a password-policy failure retu
 every other policy refusal returns 422 — the API was made consistent.
 
 139 unit tests, 34 auth/MFA/admin/reset tests, green twice in a row.
+
+## 2026-09-17 (fourteenth) — SES wired, with signed delivery events
+
+`SesSender` sends through SESv2 (`@aws-sdk/client-sesv2`, loaded lazily so development never
+touches it), tagging every message with the communication it belongs to so events can be matched
+back to a speaker without relying on the message id alone. Configuration is validated at
+construction: the transport refuses to start without `AWS_REGION` and `MAIL_FROM`, and warns
+loudly when `SES_CONFIGURATION_SET` is missing — without one, SES publishes no delivery, bounce or
+complaint events and the platform would believe every message landed.
+
+Delivery events arrive via SNS and are signature-verified before anything is recorded. That is a
+real control, not ceremony: a forged bounce suppresses future mail to that speaker, so it is a way
+to silently cut a presenter off from their upload link. The verifier checks the signature, that the
+certificate URL is genuinely an SNS HTTPS `.pem` — **checked before fetching, so a forged URL is
+never requested** — that the topic is allowlisted, and that the timestamp is recent. Subscription
+confirmations are handled, and events for messages we never sent are acknowledged rather than
+retried forever.
+
+15 tests cover it, including a message signed with a different key, a tampered payload, a lookalike
+certificate host, an unexpected topic and a replayed timestamp. Verified end to end in development:
+a 3-recipient batch went queued → dispatched → `sent`, with per-speaker status.
+
+Remaining before SES is live: a verified sender identity and configuration set in AWS, the SNS
+topic and subscription, and production-out-of-sandbox. Those are account actions, not code.

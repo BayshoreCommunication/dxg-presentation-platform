@@ -1,0 +1,8 @@
+{
+  "to": "k.osei@example.invalid",
+  "subject": "MedTech Forward 2026: please upload your presentation by the published deadline",
+  "body": "Hi Osei,\n\nYou're presenting at MedTech Forward 2026 — Sensor Talk — linked video in Room 210 on 2026-03-11 17:00.\n\nPlease upload your presentation by the published deadline using your personal secure link. No account is needed.\n\nhttp://localhost:3001/t/7264eb8c-7aa1-4b70-a54c-ccae0e701f3e\n\nRequirements: 16:9 widescreen, PowerPoint (.pptx) preferred, PDF accepted. Embed all fonts and use H.264 .mp4 for video.\n\nThe DXG presentation team",
+  "kind": "email.send",
+  "ref": "8dbbf886-8e27-41cd-b7e9-0a9bfb01f1a4",
+  "written_at": "2026-09-17T10:03:45.452Z"
+}
