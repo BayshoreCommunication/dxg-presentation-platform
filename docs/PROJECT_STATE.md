@@ -550,3 +550,40 @@ is now written into ENVIRONMENTS.md §5 alongside it: tag values carry no person
 because ownership is the team's and a tag outlives whoever set it. Confirmed via `cdk synth` that
 every resource carries `owner=dxg-pmp`. Nothing is deployed, so no live resource needed retagging.
 
+## 2026-09-20 (twenty-second) — Cloudflare Quick Tunnel, and two bugs it exposed
+
+Travis's call: no deployment yet, work locally. A Cloudflare Quick Tunnel
+(`cloudflared tunnel --url http://localhost:4000`, no account, no DNS) gives the local API a public
+HTTPS URL, which is the only thing the SNS subscription was ever waiting for. Local stack up:
+postgres/redis/clamav in compose, API on :4000, `.env` created (gitignored) pointing at real SES.
+
+**The tunnel immediately exposed why the subscription would never have worked.**
+
+**1. SNS posts `Content-Type: text/plain; charset=UTF-8`, not `application/json`.** The global
+`express.json()` therefore never parsed an SNS body, so `req.body` arrived `undefined` and the route
+crashed on its first property access. Every real SNS message would have failed — *including the
+SubscriptionConfirmation*, so the subscription could never have activated. The failure mode is
+especially nasty because it looks like "SNS never called us" rather than a bug on our side. Fixed with
+a route-scoped `express.json({ type: () => true })`: the signature check is what establishes trust,
+not the Content-Type header.
+
+**2. No global error handler existed**, so Express's default served a full stack trace — absolute
+filesystem paths and internals — from `/api/v1/webhooks/email`, which is unauthenticated by necessity
+and was about to be exposed to the public internet. Added a last-resort handler returning JSON, 4xx
+for body-parser rejections and an opaque 500 otherwise.
+
+**Verified live, not assumed.** Subscription confirmed (`…:38e39ff0-…`); a real SES send produced
+SNS metrics of 3 notifications delivered, **0 failed**, meaning the webhook returned 2xx through the
+tunnel. Rejection paths still behave: unsigned → 403, wrong topic ARN → 403, empty body → 400,
+malformed JSON → 400 with no stack.
+
+**What is NOT yet proven, stated plainly.** The chain is confirmed as far as the webhook returning
+2xx. The last link — `recordDeliveryEvent` writing a `communication_events` row — was not exercised,
+because the seed creates no `communication_templates`, so `POST /events/:id/comms/send` cannot run,
+and the CLI-sent test message carried no `communication_id` tag to attach events to. `parseSesEvent`
+and `SES_EVENT_STATUS` are unit-tested; `recordDeliveryEvent` has **no test coverage at all**. So the
+transport is proven and the recording is not.
+
+The tunnel URL is ephemeral and changes on restart; the subscription has to be recreated each time.
+Fine for testing, not a standing arrangement.
+

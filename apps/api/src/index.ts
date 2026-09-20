@@ -1278,8 +1278,19 @@ async function fetchSnsCertificate(url: string): Promise<string> {
   return pem;
 }
 
-app.post("/api/v1/webhooks/email", async (req, res) => {
-  const body = req.body as Record<string, unknown>;
+/**
+ * SNS posts notifications with `Content-Type: text/plain; charset=UTF-8`, not
+ * `application/json`, so the global `express.json()` never parses them and the
+ * body arrives undefined. That silently breaks the whole delivery-event pipeline
+ * — including the SubscriptionConfirmation that activates the subscription in the
+ * first place, so the failure looks like "SNS never called us" rather than a bug
+ * here. Parse regardless of the declared type; the signature check below is what
+ * actually establishes trust, not the Content-Type header.
+ */
+const snsBody = express.json({ type: () => true, limit: "256kb" });
+
+app.post("/api/v1/webhooks/email", snsBody, async (req, res) => {
+  const body = (req.body ?? {}) as Record<string, unknown>;
 
   // The platform's own shape — used by the development mail path and by tests.
   if (typeof body.communication_id === "string" && typeof body.event_type === "string") {
@@ -1656,6 +1667,27 @@ app.post("/api/v1/auth/password-reset/confirm", async (req, res) => {
   if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
   res.clearCookie(SESSION_COOKIE, { path: "/" });
   return res.json(result.value);
+});
+
+/**
+ * Last-resort error handler. Express's default writes the stack trace into the
+ * response body, and `/api/v1/webhooks/email` is unauthenticated by necessity —
+ * so without this, absolute paths and internals are served to anyone who posts a
+ * malformed body. Registered after every route so it catches what they throw.
+ */
+app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  const status =
+    typeof err === "object" && err !== null && typeof (err as { status?: unknown }).status === "number"
+      ? (err as { status: number }).status
+      : 500;
+
+  // Body-parser rejections are the client's fault and safe to name.
+  if (status >= 400 && status < 500) {
+    return res.status(status).json({ code: "request.invalid", message: "Malformed request." });
+  }
+
+  console.error("[api] unhandled error:", err);
+  return res.status(500).json({ code: "server.error", message: "Unexpected server error." });
 });
 
 const port = Number(process.env.PORT ?? 4000);
