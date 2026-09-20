@@ -115,6 +115,17 @@ export function ResetPassword({ token }: { token: string }) {
         <button className="btn pri" style={{ width: "100%", padding: 9 }} disabled={busy} type="submit">
           {busy ? "Saving…" : "Set new password"}
         </button>
+
+        {/*
+          Reached from an emailed link with no session, so sign-in is the only place
+          to go back to. Worth offering: someone who has since remembered their
+          password should not have to burn the reset token to get out of here.
+        */}
+        <div style={{ marginTop: 12, textAlign: "center" }}>
+          <a href="/login" style={{ color: "var(--blue)", fontSize: 13 }}>
+            ← Back to sign in
+          </a>
+        </div>
       </form>
     </div>
   );

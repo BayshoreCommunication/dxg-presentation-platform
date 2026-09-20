@@ -898,3 +898,33 @@ its only honest destination with no session.
 Side effect worth recording: the live policy check changed `admin@example.invalid`'s password and,
 correctly, revoked every session for it. Restored to the seeded password and re-verified sign-in.
 
+## 2026-09-20 (thirty-fifth) — the reset screen, checked rather than assumed
+
+Walked the emailed-link reset end to end with the file transport, so nothing was actually sent:
+requested a reset, took the link out of `.data/mail`, opened it, and exercised the screen.
+
+**The back link I said I had added was not there.** The previous change matched on
+`"Set password"` while that button reads `"Set new password"`, and I had written the edit as a
+conditional replace with no assertion — so it silently did nothing and reported success. The copy
+change in the same file did land, which is what made it look done. Added properly, with an assert this
+time. The lesson is the edit style, not the missed string: a replace that cannot fail is a replace
+that cannot tell you it failed.
+
+Everything else behaved:
+
+| Case | Result |
+|---|---|
+| `12345` | 422 `auth.too_short` — the new 6 minimum |
+| `qwerty` | 422 `auth.too_common` — the widened dictionary, on this path too |
+| the account's current password | 422 `auth.same_as_old` |
+| a genuine new password | 200, `mfa_still_required: true` |
+| the same token a second time | 422 `auth.reset_invalid` |
+
+Worth noting the failed attempts did **not** consume the token — someone who fumbles the policy three
+times still has their link. And `mfa_still_required` stays true, so a reset remains no substitute for
+the second factor: a hijacked mailbox alone still opens nothing. Both are existing properties this
+confirmed rather than added.
+
+`test@example.com`'s password is now `reset-worked-2026` as a result of the walkthrough.
+`npm run ci` green at 171 tests; the reset invariant suite green separately.
+
