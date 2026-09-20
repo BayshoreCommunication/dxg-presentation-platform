@@ -49,10 +49,15 @@ entry when the API would refuse that account, so two entries are conditional:
 
 | Entry | Shown to | Mirrors |
 |---|---|---|
+| Control Center / Onsite / Device groups | `STAFF_ROLES` | the deny-by-default staff gate in `index.ts` |
 | Staff accounts | `platform_admin`, `project_manager` | `ADMIN_ROLES` in `services/admin.ts` |
-| Client portal | `client_event_admin`, `scoped_reviewer` | `clientRoles` on `/client/events/:eventId` |
+| Client portal | everyone signed in | clients by right, staff as a preview |
 
 A group with nothing left visible is dropped rather than left as a bare heading.
+
+Not everyone signed in is staff: a `client_event_admin` uses the same login and is refused on every
+control-centre, onsite and device route. Before this change such an account saw sixteen links of
+which exactly one worked.
 
 **Reason.** The baseline is a static prototype with no notion of who is signed in, so it could not
 express this. Offering a door that only ever answers "you are not allowed" wastes the click and reads
@@ -63,11 +68,27 @@ account with full access the sidebar is byte-for-byte the approved baseline, whi
 §3 screenshot gate compares. The screenshot sheet should continue to be produced as
 `platform_admin`; a narrower role legitimately shows fewer rows.
 
-**Worth flagging to DXG:** Client portal is now hidden from *all* staff, including platform admins,
-because the API refuses staff there by design — it is a client surface, not a staff view of one. If
-DXG expect staff to preview what a client sees, that is an API decision, not a sidebar one, and this
-change makes the existing behaviour visible rather than creating it.
+**Superseded the same day:** Client portal was briefly hidden from staff, because the API refused
+them. Travis's call is that staff *should* be able to preview it, so the API now allows staff and the
+screen bands itself — see the entry below.
 
 **Not a security control.** The API refuses these routes regardless of what the sidebar renders;
 typing `/admin/users` as a presentation manager still returns 403. Verified after the change.
+
+### 2026-09-20 — staff may preview the client portal, banded as a preview
+
+**Deviation.** Screen 17 gains a banner when a staff account opens it: *"Preview — this is what
+&lt;client&gt; sees. Restricted talks are excluded from every figure here, so these counts are lower
+than the command centre's. Nothing on this page can be changed."* Clients see the screen exactly as
+the baseline shows it, with no banner.
+
+**Reason.** Staff could not check what they were about to show a client. This is not a widening of
+what staff may know — the client view is a strict subset of the control centre they already have,
+with restricted talks filtered out (FR-ARCH-001). The filtering is identical for both viewers; only
+the banner differs.
+
+**Why band it at all.** The counts here are deliberately narrower. A staff member reading "3 of 3
+collected" without knowing restricted talks were excluded would draw a false conclusion about their
+own event, and might repeat it to the client. The banner names the client, so it is also obvious
+*whose* view is being previewed.
 

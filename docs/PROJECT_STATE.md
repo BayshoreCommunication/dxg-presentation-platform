@@ -813,3 +813,35 @@ staff to preview the client view, that is an API decision this change merely mak
 
 CI green, 169 tests.
 
+## 2026-09-20 (thirty-second) — staff can preview the client portal, and clients stop seeing a broken sidebar
+
+Travis's call: staff should be able to see what their client sees. `/client/events/:eventId` now
+accepts staff as well as client roles and returns `viewed_as`, and the screen bands itself
+**"Preview — this is what &lt;client&gt; sees"** when staff are looking.
+
+**This widens nothing.** The client view is a strict subset of the control centre staff already have,
+with restricted talks filtered out (FR-ARCH-001). The filtering is identical for both viewers; only
+the banner differs. What the refusal actually prevented was staff checking what they were about to
+show someone.
+
+**The banner is not decoration.** These counts are deliberately narrower than the command centre's. A
+staff member reading "3 of 3 collected" without knowing restricted talks were excluded would draw a
+false conclusion about their own event and might repeat it to the client. It names the client too, so
+it is obvious whose view is being previewed.
+
+**A real gap in yesterday's sidebar work surfaced while testing this.** I had gated two entries on the
+assumption that everyone signed in is staff. They are not: a `client_event_admin` uses the same login
+and is refused by the deny-by-default gate on **every** control-centre, onsite and device route.
+Probed all of them as J. Ellis — 403 on eight, 200 on one. So a client was being handed sixteen links
+of which exactly one worked. Those groups are now gated to `STAFF_ROLES`, and such an account sees
+only EXTERNAL. Worth recording that this was found by testing the *other* role rather than by
+re-reading the change.
+
+**Still poor and not fixed:** a client signing in lands on `/` , is refused, and gets
+"You're signed in, but this area isn't open to your account" before finding their portal. Sending
+client-role accounts to their own event instead needs a rule for choosing which event, so it is a
+decision rather than a tidy-up. Flagged, not guessed at.
+
+CI green, 169 tests. Deviation log in `VISUAL_ACCEPTANCE.md` §5 updated — the earlier "hidden from all
+staff" entry is superseded.
+

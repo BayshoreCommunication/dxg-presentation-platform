@@ -1073,7 +1073,17 @@ app.get("/api/v1/client/events/:eventId", async (req, res) => {
   const actor = actorFrom(req);
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   const clientRoles = ["client_event_admin", "scoped_reviewer"];
-  if (!actor.roles.some((role) => clientRoles.includes(role))) {
+  const isClient = actor.roles.some((role) => clientRoles.includes(role));
+  // Staff may look at this, as a preview of what their client sees.
+  //
+  // It is not a widening of what staff know: this view is a strict *subset* of the
+  // control centre they already have, with restricted talks filtered out
+  // (FR-ARCH-001). Refusing it only meant staff could not check what they were
+  // about to show someone. The response says which kind of viewer asked, so the
+  // screen can mark itself a preview rather than letting a staff member mistake a
+  // deliberately narrowed view for the whole picture.
+  const isStaff = actor.roles.some((role) => STAFF_ROLES.includes(role));
+  if (!isClient && !isStaff) {
     return res.status(403).json({
       code: "auth.not_a_client_role",
       message: "The client portal is for client event admins and scoped reviewers.",
@@ -1119,7 +1129,10 @@ app.get("/api/v1/client/events/:eventId", async (req, res) => {
     return { event: eventRows[0], totals: totals[0], tracks, package: await latestPackage(tx, eventId) };
   });
 
-  return res.json(data);
+  // `viewed_as` is presentation, not permission — the filtering above already
+  // happened, identically for both. It exists so the screen can say whose eyes
+  // this is through.
+  return res.json({ ...data, viewed_as: isClient ? "client" : "staff_preview" });
 });
 
 /* ── create event (screen 2) ─────────────────────────────────────────────── */

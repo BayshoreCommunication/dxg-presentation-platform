@@ -13,19 +13,36 @@ import type { Principal } from "@/lib/api";
  * `roles` is the exception, and a different thing entirely: a destination the
  * signed-in account is *refused* is not shown, because offering a door that only
  * produces "you are not allowed" wastes the click and reads as a fault in the
- * product. Items without `roles` are open to any staff role.
+ * product.
+ *
+ * Not everyone signed in here is staff. A `client_event_admin` uses the same login
+ * and is refused by the deny-by-default staff gate on **every** control-centre,
+ * onsite and device route — so those groups are staff-only, and such an account is
+ * left with the one surface that is genuinely theirs. Getting this wrong is not a
+ * small cosmetic miss: it hands a client a sidebar where all but one link fails.
  *
  * **This is presentation, not protection.** The API refuses these routes on its own
  * and keeps doing so whatever the sidebar renders — typing the URL still gets a 403.
  * Hiding a link nobody can use is a courtesy; it is never the reason the thing is
  * safe. The lists below therefore mirror the server's own gates rather than
  * inventing a second, quietly divergent permission model:
+ *   · staff groups  → `STAFF_ROLES` in index.ts, via the deny-by-default gate
  *   · Staff accounts → `ADMIN_ROLES` in services/admin.ts
- *   · Client portal  → `clientRoles` in index.ts, on /client/events/:eventId
+ *   · Client portal  → open: clients by right, staff as a preview
  */
-const GROUPS: { group: string; items: { label: string; href?: string; roles?: string[] }[] }[] = [
+const STAFF_ROLES = [
+  "platform_admin",
+  "project_manager",
+  "presentation_manager",
+  "srr_technician",
+  "room_technician",
+  "content_reviewer",
+];
+const ADMIN_ROLES = ["platform_admin", "project_manager"];
+const GROUPS: { group: string; roles?: string[]; items: { label: string; href?: string; roles?: string[] }[] }[] = [
   {
     group: "CONTROL CENTER",
+    roles: STAFF_ROLES,
     items: [
       { label: "Portfolio", href: "/" },
       { label: "Create event", href: "/events/new" },
@@ -41,6 +58,7 @@ const GROUPS: { group: string; items: { label: string; href?: string; roles?: st
   },
   {
     group: "ONSITE",
+    roles: STAFF_ROLES,
     items: [
       { label: "Speaker Ready Room", href: "/events/:id/srr" },
       { label: "Check-in" },
@@ -48,17 +66,18 @@ const GROUPS: { group: string; items: { label: string; href?: string; roles?: st
       { label: "Room sync", href: "/events/:id/sync" },
     ],
   },
-  { group: "DEVICE", items: [{ label: "Room Agent", href: "/events/:id/agent" }] },
+  { group: "DEVICE", roles: STAFF_ROLES, items: [{ label: "Room Agent", href: "/events/:id/agent" }] },
   {
     group: "ADMIN",
-    items: [{ label: "Staff accounts", href: "/admin/users", roles: ["platform_admin", "project_manager"] }],
+    items: [{ label: "Staff accounts", href: "/admin/users", roles: ADMIN_ROLES }],
   },
   {
     group: "EXTERNAL",
     items: [
       { label: "Speaker portal" },
-      // A client surface, not a staff view of one — staff are refused by design.
-      { label: "Client portal", href: "/client/:id", roles: ["client_event_admin", "scoped_reviewer"] },
+      // Open to clients, and to staff as a preview of what their client sees — the
+      // screen bands itself accordingly. No `roles`, because nobody signed in is refused.
+      { label: "Client portal", href: "/client/:id" },
     ],
   },
 ];
@@ -76,9 +95,11 @@ export function Sidebar({ principal }: { principal: Principal | null }) {
       </div>
       <div className="evtctx">MedTech Fwd 26 · Day 2</div>
       <nav>
-        {GROUPS.map(({ group, items }) => {
+        {GROUPS.map(({ group, roles, items }) => {
           const held = principal?.roles ?? [];
-          const visible = items.filter((item) => !item.roles || item.roles.some((role) => held.includes(role)));
+          const allowed = (needed?: string[]) => !needed || needed.some((role) => held.includes(role));
+          // A whole group can be out of reach, and an item within a reachable one.
+          const visible = allowed(roles) ? items.filter((item) => allowed(item.roles)) : [];
           // A group whose every entry is hidden would otherwise leave a stray heading.
           if (visible.length === 0) return null;
           return (

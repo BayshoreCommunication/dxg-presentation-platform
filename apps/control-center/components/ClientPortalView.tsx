@@ -8,8 +8,15 @@ const pct = (part: number, total: number) => (total === 0 ? 0 : Math.round((part
 /**
  * Screen 17 — the client's own surface. Read-only, no staff chrome, restricted
  * talks excluded from every count as well as from the package.
+ *
+ * Staff may open this to check what their client is being shown. When they do it is
+ * banded as a preview, because the numbers here are deliberately narrower than the
+ * control centre's — a staff member reading "18 collected" without knowing that
+ * restricted talks were filtered out would draw a false conclusion about their own
+ * event, and might repeat it to the client.
  */
 export function ClientPortalView({ data }: { data: ClientView }) {
+  const isPreview = data.viewed_as === "staff_preview";
   const total = Number(data.totals.total);
   const collected = Number(data.totals.collected);
   const approved = Number(data.totals.approved);
@@ -18,6 +25,23 @@ export function ClientPortalView({ data }: { data: ClientView }) {
 
   return (
     <>
+      {isPreview && (
+        <div
+          className="card"
+          style={{
+            marginBottom: 12,
+            borderLeft: "3px solid var(--warn)",
+          }}
+        >
+          <div className="cbd" style={{ paddingTop: 10, paddingBottom: 10 }}>
+            <strong>Preview — this is what {data.event.client_name} sees.</strong>{" "}
+            <span className="note">
+              Restricted talks are excluded from every figure here, so these counts are lower than
+              the command centre&rsquo;s. Nothing on this page can be changed.
+            </span>
+          </div>
+        </div>
+      )}
       <div
         className="darkpane"
         style={{

@@ -593,6 +593,8 @@ export type ClientView = {
   totals: { total: string; collected: string; approved: string };
   tracks: { track: string; total: string; collected: string }[];
   package: ArchivePackageRow | null;
+  /** Whose eyes this is through. Staff see the same filtered data, marked as a preview. */
+  viewed_as: "client" | "staff_preview";
 };
 
 export const getClientView = (eventId: string) =>
