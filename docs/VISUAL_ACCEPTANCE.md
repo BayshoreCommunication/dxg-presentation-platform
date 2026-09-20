@@ -36,3 +36,38 @@ Deviations are allowed only for: real-data constraints, accessibility fixes (WCA
 - Three comment lanes with enforced audience labels on Review & approval.
 - Never-silently-replace: new SRR version shows "Update pending ack" in Room sync while the room keeps the approved copy.
 - Keyboard decisions (A/R) in the review queue.
+
+## 5. Deviation changelog
+
+§2 allows deviations for real-data constraints, accessibility, and behaviours the baseline lacks, each
+logged here with a reason.
+
+### 2026-09-20 — sidebar hides destinations the signed-in account is refused
+
+**Deviation.** §2.1 fixes the sidebar's structure, grouping, order and names. The sidebar now omits an
+entry when the API would refuse that account, so two entries are conditional:
+
+| Entry | Shown to | Mirrors |
+|---|---|---|
+| Staff accounts | `platform_admin`, `project_manager` | `ADMIN_ROLES` in `services/admin.ts` |
+| Client portal | `client_event_admin`, `scoped_reviewer` | `clientRoles` on `/client/events/:eventId` |
+
+A group with nothing left visible is dropped rather than left as a bare heading.
+
+**Reason.** The baseline is a static prototype with no notion of who is signed in, so it could not
+express this. Offering a door that only ever answers "you are not allowed" wastes the click and reads
+as a fault in the product rather than a boundary in it — which is exactly how it was reported.
+
+**Why this is not a renaming or reordering.** Nothing is renamed, reordered or regrouped. For an
+account with full access the sidebar is byte-for-byte the approved baseline, which is the state the
+§3 screenshot gate compares. The screenshot sheet should continue to be produced as
+`platform_admin`; a narrower role legitimately shows fewer rows.
+
+**Worth flagging to DXG:** Client portal is now hidden from *all* staff, including platform admins,
+because the API refuses staff there by design — it is a client surface, not a staff view of one. If
+DXG expect staff to preview what a client sees, that is an API decision, not a sidebar one, and this
+change makes the existing behaviour visible rather than creating it.
+
+**Not a security control.** The API refuses these routes regardless of what the sidebar renders;
+typing `/admin/users` as a presentation manager still returns 403. Verified after the change.
+

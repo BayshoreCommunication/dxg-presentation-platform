@@ -784,3 +784,32 @@ re-running: **3 of 5 fail without it, 5 of 5 pass with it.** The most telling fa
 refusal itself but the follow-up — without the check, the reuse succeeded *and* cleared the
 forced-change flag. Full CI green, 169 tests.
 
+## 2026-09-20 (thirty-first) — the sidebar stops offering doors that are locked
+
+A presentation manager saw **Staff accounts**, clicked it, and got "Viewing accounts requires a
+platform admin or project manager." The refusal was right; offering the link was not.
+
+The sidebar now omits an entry the signed-in account would be refused, and drops a group left with
+nothing in it. Only two entries are actually conditional, because only two are gated at view level:
+Staff accounts (`platform_admin`, `project_manager`) and Client portal (`client_event_admin`,
+`scoped_reviewer`). Everything else is open to any staff role — the restrictions elsewhere are on
+specific *actions* within a screen, not on reaching it, so hiding those screens would have been
+wrong.
+
+**The lists mirror the server's gates rather than restating them.** A second permission model in the
+frontend is one that drifts; the comment in `Sidebar.tsx` names the server-side constant each list
+tracks, so a change there has an obvious counterpart here.
+
+**This is presentation, not protection, and the code says so.** Verified after the change: signed in
+as a presentation manager with no Staff accounts link rendered, `GET /api/v1/admin/users` still
+returns 403, and the page itself still shows its own refusal. Hiding a link nobody can use is a
+courtesy; it is never why the thing is safe.
+
+Logged in `VISUAL_ACCEPTANCE.md` §5 as the first deviation, since §2.1 fixes sidebar structure. It is
+not a renaming or reordering — for a full-access account the sidebar is exactly the approved baseline,
+which is the state the screenshot gate compares. Flagged there for DXG that Client portal is now
+hidden from *all* staff including admins, because the API refuses staff by design; if they expect
+staff to preview the client view, that is an API decision this change merely makes visible.
+
+CI green, 169 tests.
+

@@ -9,8 +9,21 @@ import type { Principal } from "@/lib/api";
  * Navigation structure, grouping and screen names are fixed by the client
  * baseline (VISUAL_ACCEPTANCE §2.1/§2.2). Screens not yet built are shown but
  * marked, rather than hidden — the information architecture is the contract.
+ *
+ * `roles` is the exception, and a different thing entirely: a destination the
+ * signed-in account is *refused* is not shown, because offering a door that only
+ * produces "you are not allowed" wastes the click and reads as a fault in the
+ * product. Items without `roles` are open to any staff role.
+ *
+ * **This is presentation, not protection.** The API refuses these routes on its own
+ * and keeps doing so whatever the sidebar renders — typing the URL still gets a 403.
+ * Hiding a link nobody can use is a courtesy; it is never the reason the thing is
+ * safe. The lists below therefore mirror the server's own gates rather than
+ * inventing a second, quietly divergent permission model:
+ *   · Staff accounts → `ADMIN_ROLES` in services/admin.ts
+ *   · Client portal  → `clientRoles` in index.ts, on /client/events/:eventId
  */
-const GROUPS: { group: string; items: { label: string; href?: string }[] }[] = [
+const GROUPS: { group: string; items: { label: string; href?: string; roles?: string[] }[] }[] = [
   {
     group: "CONTROL CENTER",
     items: [
@@ -36,10 +49,17 @@ const GROUPS: { group: string; items: { label: string; href?: string }[] }[] = [
     ],
   },
   { group: "DEVICE", items: [{ label: "Room Agent", href: "/events/:id/agent" }] },
-  { group: "ADMIN", items: [{ label: "Staff accounts", href: "/admin/users" }] },
+  {
+    group: "ADMIN",
+    items: [{ label: "Staff accounts", href: "/admin/users", roles: ["platform_admin", "project_manager"] }],
+  },
   {
     group: "EXTERNAL",
-    items: [{ label: "Speaker portal" }, { label: "Client portal", href: "/client/:id" }],
+    items: [
+      { label: "Speaker portal" },
+      // A client surface, not a staff view of one — staff are refused by design.
+      { label: "Client portal", href: "/client/:id", roles: ["client_event_admin", "scoped_reviewer"] },
+    ],
   },
 ];
 
@@ -56,10 +76,15 @@ export function Sidebar({ principal }: { principal: Principal | null }) {
       </div>
       <div className="evtctx">MedTech Fwd 26 · Day 2</div>
       <nav>
-        {GROUPS.map(({ group, items }) => (
+        {GROUPS.map(({ group, items }) => {
+          const held = principal?.roles ?? [];
+          const visible = items.filter((item) => !item.roles || item.roles.some((role) => held.includes(role)));
+          // A group whose every entry is hidden would otherwise leave a stray heading.
+          if (visible.length === 0) return null;
+          return (
           <div key={group}>
             <div className="grp">{group}</div>
-            {items.map((item) => {
+            {visible.map((item) => {
               const href = item.href?.replace(":id", eventId);
               if (!href) {
                 return (
@@ -75,7 +100,8 @@ export function Sidebar({ principal }: { principal: Principal | null }) {
               );
             })}
           </div>
-        ))}
+          );
+        })}
       </nav>
       {principal && (
         <div
