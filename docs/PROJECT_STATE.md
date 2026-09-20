@@ -741,3 +741,26 @@ screen and matched the rendered SVG exactly — 49 modules, viewBox `0 0 57 57`,
 then enrolment was completed with a code derived from that secret, recovery codes issued, and
 `mfa_enrolled_at` confirmed set. CI green, 169 tests.
 
+## 2026-09-20 (twenty-ninth) — the already-enrolled screen was a dead end
+
+Pressing **Start setup** on an account that already has an authenticator showed
+"This account already has an authenticator. Remove it first to enrol a new one." — and then offered
+nothing but the same button, which would fail again. Correct refusal, unusable screen.
+
+**The refusal itself stays.** Letting a signed-in session silently swap its own second factor would
+mean anyone who borrowed an unlocked screen could replace it with their own, which is precisely the
+attack the second factor exists to stop. What was missing was telling the person who *can* unblock
+them: an administrator, via Staff accounts → reset 2FA. The screen now says so, and the button that
+cannot succeed is disabled rather than left inviting.
+
+This surfaced because I enrolled the test account during the previous task using a secret generated
+in my own verification script — a secret that exists nowhere Travis could reach, so the account was
+effectively locked. Cleared it through the real admin path rather than with SQL, which exercised the
+flow properly: the reset prompts for *who asked and how they were verified*, and that reason is now
+in the audit chain as `admin.mfa_reset` — "Enrolled during testing with a secret the owner does not
+hold". Worth noting the prompt exists at all; a 2FA reset is a social-engineering target, and
+recording the justification at the moment of the act is the point.
+
+`test@example.com` is now back to unenrolled and can be set up with a real authenticator app.
+CI green, 169 tests.
+

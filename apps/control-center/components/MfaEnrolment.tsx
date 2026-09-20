@@ -18,14 +18,17 @@ export function MfaEnrolment() {
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errorCode, setErrorCode] = useState<string | null>(null);
 
   async function begin() {
     setBusy(true);
     setError(null);
+    setErrorCode(null);
     try {
       setEnrolment(await startMfaEnrolment());
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : "Could not start enrolment.");
+      setErrorCode(caught instanceof ApiError ? caught.code : null);
     } finally {
       setBusy(false);
     }
@@ -100,11 +103,26 @@ export function MfaEnrolment() {
           </div>
         )}
 
+        {/*
+          Refusing to replace a working second factor is correct — otherwise anyone
+          who borrowed a signed-in screen could quietly swap it for their own. But
+          the refusal alone is a dead end: the only button on this screen is the one
+          that just failed. Say who can unblock them instead.
+        */}
+        {errorCode === "mfa.already_enrolled" && (
+          <div className="note" style={{ marginBottom: 14, lineHeight: 1.6, color: "var(--dim)" }}>
+            Your account is already protected, so there is nothing to do here. If you have lost the
+            device that holds it, ask a DXG administrator to open <strong>Staff accounts</strong>,
+            find your name and choose <strong>reset 2FA</strong>. That clears the old authenticator
+            and lets you set up a new one — it cannot be done from this screen, by design.
+          </div>
+        )}
+
         {!enrolment ? (
           <button
             className="btn pri"
             style={{ width: "100%", padding: 9 }}
-            disabled={busy}
+            disabled={busy || errorCode === "mfa.already_enrolled"}
             onClick={() => void begin()}
           >
             {busy ? "Preparing…" : "Start setup"}
