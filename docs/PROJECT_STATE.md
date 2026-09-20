@@ -1168,3 +1168,30 @@ allows `pmp_dev` and `pmp_test_ci`.
 Verified end to end: 5 accounts before, full suite run (51 tests, 48 pass, 0 fail), 5 accounts after —
 the same five, all still active. CI green.
 
+## 2026-09-20 (forty-sixth) — test events clean up too
+
+The account cleanup left a gap I had claimed closed: `event-scope.test.ts` creates an "Event Scope
+Probe" event to prove a role on one event is not a role on another, and that event stayed — sitting in
+every portfolio and every switcher. `removeTestEvents` now takes it away on the same terms as the
+accounts.
+
+**The first attempt archived it instead of deleting it, and the fallback is why that was visible
+rather than silent.** Something still referenced the row, so the helper rolled back to its savepoint
+and archived. Chasing it down: `communication_templates`, two rows — "Upload invitation" and
+"Reminder — file still missing" — copied onto every new event at creation. That is configuration, not
+history: mail actually sent lives in `communications` and `communication_events`, which the helper
+does not touch. Added to the structural list, and the event now deletes cleanly.
+
+Worth keeping the distinction in mind, because the table name invites the opposite conclusion. An
+event that really did write to a speaker still fails the delete and gets archived, which is the
+intended outcome.
+
+Verified across a full run: 3 events and 5 accounts before, 3 and 5 after, all still active.
+
+**Unrelated flake seen while testing, recorded not fixed.** One run reported 15 skipped where the next
+reported 3. The suites skip themselves wholesale when sign-in fails in `before()`, and they share one
+development TOTP secret — the server refuses a replayed code, so concurrent suites can starve each
+other of a usable one. `pass 36 / fail 0 / skipped 15` reads as success and is not: a skipped suite
+tested nothing. The `freshCode` helper already waits for a step boundary; it evidently is not enough
+under full parallelism.
+

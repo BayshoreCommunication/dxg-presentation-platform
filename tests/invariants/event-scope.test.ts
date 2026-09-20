@@ -1,7 +1,8 @@
-import { test, describe, before } from "node:test";
+import { test, describe, before, after } from "node:test";
 import assert from "node:assert/strict";
 import type { TestContext } from "node:test";
 import { signInStaff } from "../helpers/signIn.ts";
+import { removeTestEvents } from "../helpers/cleanup.ts";
 
 /**
  * SRS §5: "Access shall be event-scoped and least-privilege. Client and event
@@ -111,4 +112,14 @@ describe("a role on one event is not a role on another", () => {
       assert.notEqual(response.status, 403, `platform admin should not be refused ${label}`);
     }
   });
+});
+
+/*
+ * This suite needs a second event to prove a role on one is not a role on another, so
+ * it makes one — and takes it away again. Left behind it sat in every portfolio and
+ * every switcher, and the only way to clear it was wiping the database.
+ */
+after(async () => {
+  if (!up) return;
+  await removeTestEvents(["Event Scope Probe"]);
 });

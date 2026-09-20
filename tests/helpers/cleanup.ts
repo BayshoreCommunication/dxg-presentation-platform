@@ -74,3 +74,72 @@ export async function removeTestAccounts(emailPrefixes: readonly string[]): Prom
 
   return { deleted, deactivated };
 }
+
+/**
+ * Removes events a test suite created, on the same terms as the accounts above.
+ *
+ * Thirty-four tables reference `pmp.events`, and the same division applies: rooms,
+ * tracks, days and role grants are the event's *structure* and go with it; comments,
+ * workflow transitions, sign-offs, receipts and launch logs are the record of what
+ * happened on it. A test event has none of the second kind — it is created bare and
+ * never run — so the delete normally succeeds. If one has somehow acquired a history,
+ * the event is archived rather than forced away, for the same reason: tidying a list
+ * is not a good enough reason to erase what an event did.
+ */
+export async function removeTestEvents(namePrefixes: readonly string[]): Promise<{
+  deleted: string[];
+  archived: string[];
+}> {
+  const database = process.env.PGDATABASE ?? "pmp_dev";
+  if (!/^pmp_(dev|test)/.test(database)) {
+    throw new Error(
+      `refusing to delete events from "${database}" — cleanup only runs against a development database`,
+    );
+  }
+
+  const deleted: string[] = [];
+  const archived: string[] = [];
+
+  await withSystemScope(async (tx) => {
+    const { rows } = await tx.query<{ id: string; name: string }>(
+      `SELECT id, name FROM pmp.events
+        WHERE ${namePrefixes.map((_, i) => `name LIKE $${i + 1}`).join(" OR ")}`,
+      namePrefixes.map((prefix) => `${prefix}%`),
+    );
+
+    for (const event of rows) {
+      /*
+       * The event's own structure, which means nothing without it.
+       *
+       * `communication_templates` belongs here and is easy to mistake for history:
+       * two boilerplate templates ("Upload invitation", "Reminder — file still
+       * missing") are copied onto every new event at creation. Mail that was actually
+       * sent lives in `communications` and `communication_events`, which are not
+       * touched — an event that wrote to a speaker keeps that record and gets
+       * archived instead.
+       */
+      for (const table of [
+        "event_roles",
+        "rooms",
+        "tracks",
+        "event_days",
+        "communication_templates",
+      ]) {
+        await tx.query(`DELETE FROM pmp.${table} WHERE event_id = $1`, [event.id]);
+      }
+
+      try {
+        await tx.query("SAVEPOINT drop_event");
+        await tx.query(`DELETE FROM pmp.events WHERE id = $1`, [event.id]);
+        await tx.query("RELEASE SAVEPOINT drop_event");
+        deleted.push(event.name);
+      } catch {
+        await tx.query("ROLLBACK TO SAVEPOINT drop_event");
+        await tx.query(`UPDATE pmp.events SET status = 'archived' WHERE id = $1`, [event.id]);
+        archived.push(event.name);
+      }
+    }
+  });
+
+  return { deleted, archived };
+}
