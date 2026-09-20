@@ -1091,3 +1091,25 @@ Verified through the UI: picking a person reveals eight checkboxes, ticking SRR 
 technician and pressing assign gives C. Delgado both on OrthoWorld in one action, the form resets, and
 re-opening the row shows both ticked and locked. CI green; admin invariants 8 pass.
 
+## 2026-09-20 (forty-second) — Admin becomes two pages
+
+`/admin/assignments` and `/admin/users`, one job each, both in the sidebar under ADMIN and both gated
+to `platform_admin` / `project_manager`.
+
+Splitting by the question rather than by the data: placement is asked while staffing an event,
+account administration is asked about a person. Carrying both on one screen put controls for the
+first onto every row of the second.
+
+`StaffAdmin.tsx` became `StaffAccounts.tsx` and `EventAssignments.tsx`. The panels were carved out on
+exact string anchors rather than line numbers so no JSX was retyped in the move — and **lint proved
+the split was clean**: it immediately reported `setStaffRole`, `EVENT_ROLE_NAMES` and the `events`
+prop as unused in the accounts half, which is precisely what should fall away when the assignment work
+leaves. The accounts page no longer fetches `listEvents` at all.
+
+Cross-links both ways — "‹ event assignments" from the accounts header, "change assignments" on each
+account row. Verified in the browser: 8 links across, 0 assignment controls remaining on the accounts
+page, both pages 200.
+
+Logged in `VISUAL_ACCEPTANCE.md` §5, since §2.1 fixes the sidebar's screen list and ADMIN now has two
+entries. CI green, 171 tests.
+

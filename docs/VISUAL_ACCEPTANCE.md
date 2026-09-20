@@ -111,3 +111,17 @@ the URL had none. That was harmless while one event existed and became a trap un
 staff member not on that event got a sidebar where every link refused. Those links are now inert
 until an event is chosen, which is the state the baseline never had to depict.
 
+### 2026-09-20 — ADMIN gains a second entry, Event assignments
+
+**Deviation.** §2.1 fixes the sidebar's grouping and screen list. The ADMIN group had one entry,
+Staff accounts; it now has two, with **Event assignments** above it. Both are gated to
+`platform_admin` and `project_manager`, so the group is invisible to everyone else exactly as before.
+
+**Reason.** They are two jobs, and one screen was making each one harder. Placement — who works which
+event, and as what — is asked while staffing an event. Account administration — passwords,
+authenticators, whether someone can sign in at all — is asked about a person. Holding both meant every
+account row carried controls for a question nobody was asking at that moment.
+
+The baseline has no equivalent to weigh this against: it is a single-event prototype with no roles, so
+neither screen exists in it. Nothing else is renamed, reordered or regrouped.
+

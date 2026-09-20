@@ -69,7 +69,10 @@ const GROUPS: { group: string; roles?: string[]; items: { label: string; href?: 
   { group: "DEVICE", roles: STAFF_ROLES, items: [{ label: "Room Agent", href: "/events/:id/agent" }] },
   {
     group: "ADMIN",
-    items: [{ label: "Staff accounts", href: "/admin/users", roles: ADMIN_ROLES }],
+    items: [
+      { label: "Event assignments", href: "/admin/assignments", roles: ADMIN_ROLES },
+      { label: "Staff accounts", href: "/admin/users", roles: ADMIN_ROLES },
+    ],
   },
   {
     group: "EXTERNAL",
