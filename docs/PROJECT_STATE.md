@@ -989,3 +989,34 @@ Dev-database noise worth knowing: two probe events remain (`Cross-Event Probe 20
 plain delete because of `event_days` foreign keys, and writing cascade-delete logic for dev noise was
 not worth the risk. `npm run db:reset` clears both.
 
+## 2026-09-20 (thirty-eighth) — an event switcher, and the end of the hardcoded event
+
+Travis asked how staff work once there are five events. The honest answer was "badly", for three
+reasons, all now fixed.
+
+**The event-context line was a literal string** — `MedTech Fwd 26 · Day 2` in the JSX. With five
+events the one element whose job is to say where you are would have been wrong on four of them. It is
+now a switcher listing the events this account works on, with the day computed from today against the
+event's dates — and the date range shown instead when today falls outside the run, because "Day -14"
+is a confident lie.
+
+**The sidebar fell back to the seeded event's id** when the URL had none. Harmless while one event
+existed; a trap after D-025, because a staff member not on that event got a sidebar where every link
+refused. Event-scoped links are now inert until an event is chosen.
+
+**There was no switcher at all** — the only way to change event was back through the portfolio.
+
+The switcher's list comes from `GET /events`, which D-025 already scoped: every event for a platform
+admin, only their own for anyone else. Reusing that rather than adding a second query is the point —
+one rule, one place to change it.
+
+**Role granting per event already worked.** `POST /admin/users/:id/roles` has always taken an
+`event_id`, and Staff accounts already had an event picker beside the role picker; with a single
+seeded event it rendered as a one-option select and looked like nothing. Nothing needed building.
+
+Verified against a real five-event installation with M. Vega holding `presentation_manager` on
+MedTech Forward and `content_reviewer` on NeuroSummit: the portfolio shows her two events and not the
+other three, the switcher offers exactly those two, choosing one lights all twelve event-scoped links,
+and before choosing only Portfolio and Create event — the two that need no event — are live. The
+platform admin sees all five. CI green; invariants 48 pass, 0 fail.
+

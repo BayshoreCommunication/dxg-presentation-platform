@@ -92,3 +92,22 @@ collected" without knowing restricted talks were excluded would draw a false con
 own event, and might repeat it to the client. The banner names the client, so it is also obvious
 *whose* view is being previewed.
 
+### 2026-09-20 — the event-context slot becomes an event switcher
+
+**Deviation.** §2.1 fixes the sidebar's structure and §2.3 the event-context header
+("event name · day"). That slot rendered a hardcoded string, `MedTech Fwd 26 · Day 2`. It is now a
+control: a select listing the events this account works on, with the current event's day beneath it.
+
+**Reason.** The baseline is a single-event prototype, so the slot could only ever be a label. With
+more than one event a fixed string is not merely unhelpful, it is wrong on every event but one — the
+single element whose job is to say where you are would be lying. Grouping, order and names are
+untouched; the slot keeps the same position and still shows event name and day.
+
+**Day, honestly.** "Day 2" is computed from today against the event's dates. Outside the event's run
+it would produce a confident lie like "Day -14", so the date range is shown instead.
+
+**A related fix, not a deviation.** Event-scoped links used to fall back to the seeded event's id when
+the URL had none. That was harmless while one event existed and became a trap under D-025, since a
+staff member not on that event got a sidebar where every link refused. Those links are now inert
+until an event is chosen, which is the state the baseline never had to depict.
+

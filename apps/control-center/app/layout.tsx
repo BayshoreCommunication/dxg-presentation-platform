@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { Shell } from "@/components/Shell";
-import { getSession } from "@/lib/api";
-import type { Principal } from "@/lib/api";
+import { getSession, listEvents } from "@/lib/api";
+import type { Principal, EventRow } from "@/lib/api";
 
 export const metadata: Metadata = {
   title: "DXG·PM — Presentation Management Platform",
@@ -22,10 +22,25 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     principal = null;
   }
 
+  /*
+   * The switcher needs the events this account may actually work on. `GET /events` is
+   * already scoped to exactly that — every event for a platform admin, only their own
+   * for anyone else — so asking it here reuses one rule rather than inventing a second
+   * that could drift from it.
+   */
+  let events: EventRow[] = [];
+  if (principal) {
+    try {
+      events = (await listEvents()).items;
+    } catch {
+      events = [];
+    }
+  }
+
   return (
     <html lang="en">
       <body>
-        <Shell principal={principal}>{children}</Shell>
+        <Shell principal={principal} events={events}>{children}</Shell>
       </body>
     </html>
   );

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useParams, useRouter } from "next/navigation";
 import { logout } from "@/lib/api";
-import type { Principal } from "@/lib/api";
+import type { Principal, EventRow } from "@/lib/api";
 
 /**
  * Navigation structure, grouping and screen names are fixed by the client
@@ -82,18 +82,92 @@ const GROUPS: { group: string; roles?: string[]; items: { label: string; href?: 
   },
 ];
 
-export function Sidebar({ principal }: { principal: Principal | null }) {
+/**
+ * Which day of the event today is — the baseline's "Day 2".
+ *
+ * Only meaningful while the event is running. Outside it, counting days produces a
+ * confident lie ("Day -14"), so the dates are shown instead.
+ */
+function dayLabel(event: EventRow | undefined): string {
+  if (!event) return "";
+  const day = 86_400_000;
+  const startsAt = new Date(`${event.starts_on}T00:00:00`).getTime();
+  const endsAt = new Date(`${event.ends_on}T00:00:00`).getTime();
+  const today = new Date(new Date().toDateString()).getTime();
+  if (today < startsAt || today > endsAt) {
+    const fmt = (iso: string) =>
+      new Date(`${iso}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    return `${fmt(event.starts_on)}–${fmt(event.ends_on)}`;
+  }
+  return `Day ${Math.round((today - startsAt) / day) + 1}`;
+}
+
+export function Sidebar({ principal, events }: { principal: Principal | null; events: EventRow[] }) {
   const pathname = usePathname();
   const params = useParams<{ id?: string }>();
   const router = useRouter();
-  const eventId = params?.id ?? "22222222-2222-4222-8222-222222222222";
+
+  /*
+   * No fallback event. This used to default to the seeded event's id when the URL had
+   * none, which was harmless while that was the only event — and became a trap once
+   * roles were scoped per event (D-025), because a staff member who is not on it got
+   * a sidebar of links that all refuse. When no event is chosen, the event-scoped
+   * links are inert and say so.
+   */
+  const eventId = params?.id;
+  const current = events.find((event) => event.id === eventId);
 
   return (
     <aside>
       <div className="logo">
         <b>DXG·PM</b>
       </div>
-      <div className="evtctx">MedTech Fwd 26 · Day 2</div>
+      {/*
+        The event context slot from the baseline (VISUAL_ACCEPTANCE §2.1), which used
+        to be a hardcoded string naming the seeded event — correct exactly once, and a
+        lie on every other event. It now names the event you are actually in and lets
+        you change it, which is the only way five events are workable without going
+        back to the portfolio each time.
+      */}
+      <div className="evtctx">
+        {events.length === 0 ? (
+          <span className="note">No events yet</span>
+        ) : (
+          <>
+            <select
+              aria-label="Switch event"
+              value={eventId ?? ""}
+              onChange={(event) => {
+                const chosen = event.target.value;
+                if (chosen) router.push(`/events/${chosen}`);
+              }}
+              style={{
+                width: "100%",
+                background: "transparent",
+                color: "var(--white)",
+                border: "1px solid #22303A",
+                borderRadius: 4,
+                padding: "3px 6px",
+                fontSize: 12,
+              }}
+            >
+              <option value="" disabled>
+                Choose an event…
+              </option>
+              {events.map((event) => (
+                <option key={event.id} value={event.id}>
+                  {event.name}
+                </option>
+              ))}
+            </select>
+            {current && (
+              <div className="note" style={{ marginTop: 3, fontSize: 11 }}>
+                {dayLabel(current)}
+              </div>
+            )}
+          </>
+        )}
+      </div>
       <nav>
         {GROUPS.map(({ group, roles, items }) => {
           const held = principal?.roles ?? [];
@@ -106,7 +180,9 @@ export function Sidebar({ principal }: { principal: Principal | null }) {
           <div key={group}>
             <div className="grp">{group}</div>
             {visible.map((item) => {
-              const href = item.href?.replace(":id", eventId);
+              // An ":id" link has nowhere to go until an event is chosen.
+              const needsEvent = item.href?.includes(":id") ?? false;
+              const href = needsEvent && !eventId ? undefined : item.href?.replace(":id", eventId ?? "");
               if (!href) {
                 return (
                   <a key={item.label} className="" style={{ opacity: 0.38, cursor: "default" }}>

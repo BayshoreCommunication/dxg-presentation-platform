@@ -2,7 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import { Sidebar } from "@/components/Sidebar";
-import type { Principal } from "@/lib/api";
+import type { Principal, EventRow } from "@/lib/api";
 
 /**
  * The client portal is a distinct user-facing surface (SPEC §2): same Next.js
@@ -11,9 +11,11 @@ import type { Principal } from "@/lib/api";
  */
 export function Shell({
   principal,
+  events,
   children,
 }: {
   principal: Principal | null;
+  events: EventRow[];
   children: React.ReactNode;
 }) {
   const pathname = usePathname() ?? "";
@@ -34,7 +36,7 @@ export function Shell({
 
   return (
     <div className="shell" style={{ display: "flex" }}>
-      <Sidebar principal={principal} />
+      <Sidebar principal={principal} events={events} />
       <main style={{ flex: 1, minWidth: 0, overflowY: "auto", padding: 24 }}>{children}</main>
     </div>
   );
