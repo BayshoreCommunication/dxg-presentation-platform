@@ -21,12 +21,15 @@ import { Chip } from "@/components/Chip";
 function byEvent(staff: StaffRow[], events: EventRow[]) {
   return events.map((event) => ({
     event,
+    // One entry per person, carrying every hat they wear here. Pairing (person, role)
+    // instead would repeat the same name down the column — three lines for someone
+    // holding three roles, which reads as three people at a glance.
     people: staff
-      .flatMap((person) =>
-        person.roles
-          .filter((held) => held.event_id === event.id)
-          .map((held) => ({ person, role: held.role })),
-      )
+      .map((person) => ({
+        person,
+        roles: person.roles.filter((held) => held.event_id === event.id).map((held) => held.role),
+      }))
+      .filter((entry) => entry.roles.length > 0)
       .sort((a, b) => a.person.display_name.localeCompare(b.person.display_name)),
   }));
 }
@@ -118,28 +121,50 @@ export function EventAssignments({ initial, events }: { initial: StaffRow[]; eve
                          */
                         <span className="chip c-warn">nobody assigned yet</span>
                       ) : (
-                        people.map(({ person, role }) => (
-                          <div key={`${person.id}-${role}`} style={{ marginBottom: 3 }}>
+                        people.map(({ person, roles }) => (
+                          <div
+                            key={person.id}
+                            style={{
+                              display: "flex",
+                              alignItems: "baseline",
+                              gap: 6,
+                              flexWrap: "wrap",
+                              marginBottom: 4,
+                            }}
+                          >
                             <span style={{ display: "inline-block", minWidth: 150 }}>
                               {person.display_name}
                             </span>
-                            <span className="chip c-mut">{role.replace(/_/g, " ")}</span>{" "}
                             {!person.is_active && <Chip status="attention" label="deactivated" />}
                             {person.is_active && !person.mfa_enrolled && (
                               <Chip status="needs_revision" label="2FA not set up" />
-                            )}{" "}
-                            <button
-                              className="btn"
-                              style={{ padding: "1px 7px", fontSize: 11 }}
-                              disabled={busy}
-                              onClick={() =>
-                                void run(async () => {
-                                  await setStaffRole(person.id, event.id, role, false);
-                                })
-                              }
-                            >
-                              remove
-                            </button>
+                            )}
+                            {/*
+                              Each hat keeps its own remove, because they are removed one
+                              at a time — taking someone off room sync should not also
+                              take them off review.
+                            */}
+                            {roles.map((role) => (
+                              <span
+                                key={role}
+                                style={{ display: "inline-flex", alignItems: "center", gap: 3 }}
+                              >
+                                <span className="chip c-mut">{role.replace(/_/g, " ")}</span>
+                                <button
+                                  className="btn"
+                                  title={`Remove ${role.replace(/_/g, " ")}`}
+                                  style={{ padding: "0 5px", fontSize: 11, lineHeight: 1.5 }}
+                                  disabled={busy}
+                                  onClick={() =>
+                                    void run(async () => {
+                                      await setStaffRole(person.id, event.id, role, false);
+                                    })
+                                  }
+                                >
+                                  ×
+                                </button>
+                              </span>
+                            ))}
                           </div>
                         ))
                       )}
@@ -180,7 +205,7 @@ export function EventAssignments({ initial, events }: { initial: StaffRow[]; eve
                             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 6 }}>
                               {EVENT_ROLE_NAMES.map((role) => {
                                 const already = people.some(
-                                  (p) => p.person.id === draft[event.id]?.who && p.role === role,
+                                  (p) => p.person.id === draft[event.id]?.who && p.roles.includes(role),
                                 );
                                 return (
                                   <label

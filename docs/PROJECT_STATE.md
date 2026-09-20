@@ -1125,3 +1125,20 @@ where an administrator starts.
 
 CI green, 171 tests.
 
+## 2026-09-20 (forty-fourth) — one line per person, roles side by side
+
+`byEvent` paired (person, role), so someone holding three roles occupied three rows and read as three
+people at a glance — A. Whitfield appeared three times under MedTech Forward. It now groups by person
+and carries every role they hold on that event. MedTech went from nine rows to six.
+
+**Each role keeps its own remove**, as a `×` beside its chip rather than one button at the end of the
+line. They are removed one at a time, and taking someone off room sync should not also take them off
+review. Verified rather than assumed: removing `project manager` from A. Whitfield left
+`platform admin` and `presentation manager` untouched.
+
+The already-held check behind the assign checkboxes was updated with it — it asked whether a paired
+entry matched the role, and now asks whether the person's role list contains it. Missing that would
+have left roles wrongly unticked and re-grantable, which is harmless but confusing.
+
+CI green, 171 tests; admin invariants 8 pass.
+
