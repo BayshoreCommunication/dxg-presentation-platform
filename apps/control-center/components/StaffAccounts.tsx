@@ -159,7 +159,7 @@ export function StaffAccounts({ initial }: { initial: StaffRow[] }) {
               className="btn"
               style={{ padding: "2px 8px", fontSize: 12, marginLeft: 10 }}
             >
-              ‹ event assignments
+              event assignments ›
             </Link>
           </span>
         </div>
@@ -168,7 +168,6 @@ export function StaffAccounts({ initial }: { initial: StaffRow[] }) {
             <thead>
               <tr>
                 <th>Account</th>
-                <th>Roles</th>
                 <th>Status</th>
                 <th>Last sign-in</th>
                 <th />
@@ -181,34 +180,6 @@ export function StaffAccounts({ initial }: { initial: StaffRow[] }) {
                     <b>{user.display_name}</b>
                     <br />
                     <span className="note mono">{user.email}</span>
-                  </td>
-                  {/*
-                    Read-only here, on purpose. Assigning someone to an event is a
-                    different job from administering their account, and cramming both
-                    into one cell put two dropdowns and a button on every row — the
-                    editing controls outnumbered the facts they were editing. The
-                    assignment work now lives in the event view above, where the
-                    question "who is on this event?" is actually being asked.
-                  */}
-                  <td>
-                    {user.roles.length === 0 ? (
-                      <span className="chip c-warn">no event — cannot use the platform</span>
-                    ) : (
-                      <>
-                        {user.roles.map((role) => (
-                          <div key={`${role.event_id}-${role.role}`} className="note">
-                            {role.event_name} · <strong>{role.role.replace(/_/g, " ")}</strong>
-                          </div>
-                        ))}
-                        <Link
-                          href="/admin/assignments"
-                          className="btn"
-                          style={{ padding: "1px 7px", fontSize: 11, marginTop: 4, display: "inline-block" }}
-                        >
-                          change assignments
-                        </Link>
-                      </>
-                    )}
                   </td>
                   <td style={{ whiteSpace: "nowrap" }}>
                     {!user.is_active && <Chip status="attention" label="deactivated" />}

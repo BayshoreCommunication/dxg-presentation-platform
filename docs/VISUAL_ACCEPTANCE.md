@@ -114,7 +114,7 @@ until an event is chosen, which is the state the baseline never had to depict.
 ### 2026-09-20 — ADMIN gains a second entry, Event assignments
 
 **Deviation.** §2.1 fixes the sidebar's grouping and screen list. The ADMIN group had one entry,
-Staff accounts; it now has two, with **Event assignments** above it. Both are gated to
+Staff accounts; it now has two, with **Event assignments** beneath it. Both are gated to
 `platform_admin` and `project_manager`, so the group is invisible to everyone else exactly as before.
 
 **Reason.** They are two jobs, and one screen was making each one harder. Placement — who works which

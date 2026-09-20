@@ -70,8 +70,8 @@ const GROUPS: { group: string; roles?: string[]; items: { label: string; href?: 
   {
     group: "ADMIN",
     items: [
-      { label: "Event assignments", href: "/admin/assignments", roles: ADMIN_ROLES },
       { label: "Staff accounts", href: "/admin/users", roles: ADMIN_ROLES },
+      { label: "Event assignments", href: "/admin/assignments", roles: ADMIN_ROLES },
     ],
   },
   {

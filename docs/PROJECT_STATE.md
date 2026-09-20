@@ -1113,3 +1113,15 @@ page, both pages 200.
 Logged in `VISUAL_ACCEPTANCE.md` §5, since §2.1 fixes the sidebar's screen list and ADMIN now has two
 entries. CI green, 171 tests.
 
+## 2026-09-20 (forty-third) — Staff accounts drops the roles column
+
+The column that started this thread is gone. Staff accounts is now Account · Status · Last sign-in ·
+actions, and every row fits a single line — seven accounts read at a glance where they previously
+needed scrolling past stacked assignment lists.
+
+Nothing is lost: the same facts live on Event assignments, grouped the way the question is asked, and
+the header carries a link across. Sidebar order is now Staff accounts then Event assignments, matching
+where an administrator starts.
+
+CI green, 171 tests.
+
