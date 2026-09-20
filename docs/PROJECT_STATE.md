@@ -1020,3 +1020,24 @@ other three, the switcher offers exactly those two, choosing one lights all twel
 and before choosing only Portfolio and Create event — the two that need no event — are live. The
 platform admin sees all five. CI green; invariants 48 pass, 0 fail.
 
+## 2026-09-20 (thirty-ninth) — creating events through the wizard, and a stale switcher
+
+Created two events through the Create event wizard rather than by script, which is what found the
+bug: **the event you had just made was missing from the switcher you were standing in.**
+
+`CreateEventWizard` called `router.push()` and nothing else. The switcher's list comes from the
+server layout, and Next caches that across a client navigation — so the new event was active, the URL
+pointed at it, and the switcher still listed only the old ones until a full reload. Not a bug the
+wizard had before: it had no event list to keep current until yesterday's switcher landed. Fixed with
+`router.refresh()` alongside the push, and confirmed by creating a third event and watching it appear
+already selected.
+
+The wizard itself behaved well. It refuses to let invitations go out before the event has a day and a
+room — "a speaker link would point at nothing" — and says plainly that a draft sends nothing to
+anyone, which is the right reassurance at the moment someone is filling in real speaker-facing
+details for the first time.
+
+Three events now in the development database: MedTech Forward 2026 (5 rooms), NeuroSummit Spring 2026
+and OrthoWorld Congress 2026 (3 rooms each, the latter on America/Chicago so a non-default timezone is
+exercised). CI green.
+

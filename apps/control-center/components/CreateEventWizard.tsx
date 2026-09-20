@@ -251,6 +251,11 @@ export function CreateEventWizard({ timezones }: { timezones: string[] }) {
                     const activated = await activateEvent(draft!.id);
                     setDraft(activated);
                     router.push(`/events/${activated.id}`);
+                    // The sidebar's event list is fetched by the server layout, which
+                    // Next caches across a client navigation — so without this the
+                    // event you just created is missing from the switcher you are
+                    // standing in, until a full reload.
+                    router.refresh();
                     return "Event activated";
                   })
                 }
