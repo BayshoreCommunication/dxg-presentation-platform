@@ -87,3 +87,12 @@ The dependency is `qrcode-generator` (MIT, **zero dependencies**, single module,
 
 Verified end to end rather than by eye: the QR was rebuilt independently from the secret displayed on screen, and matched the rendered SVG exactly — 49 modules, viewBox `0 0 57 57`, 1258 dark modules — then enrolment was completed with a code derived from that secret and the account confirmed enrolled. Owner: Travis.
 
+## D-022 (2026-09-20): A password change must actually change the password — Status: ACCEPTED (Travis's finding)
+`changeOwnPassword` and `completePasswordReset` both enforced length and a common-password list, and neither checked that the new password *differed from the current one*. So the forced first-use change could be satisfied by re-entering the temporary password.
+
+That is worse than it looks, and worse on this path than on any other. The temporary password is **chosen by an administrator, handed over out of band, and left sitting in whatever chat or email carried it** — it is the one password on the system that is known to at least two people and has crossed an untrusted channel. The whole purpose of forcing a change is to retire it. Re-entering it cleared `must_change_password`, so the account was recorded as resolved while remaining exactly as exposed as the day it was created; nothing in the platform would ever flag it again.
+
+Both paths now compare the candidate against the stored hash with `verifyPassword` — not against the supplied plaintext, so the reset-by-token route is covered too, where no current password is submitted at all. The refusal is `auth.same_as_old`, mapped to 422 alongside the other policy refusals. The wording differs by case: on a forced first-use change it names the temporary password and says why it is not private; afterwards it is the ordinary "different from your current one", because by then it is the person's own.
+
+Proved rather than asserted: `tests/invariants/password-reuse.test.ts` fails 3 of its 5 cases with the fix reverted and passes all 5 with it in place. One of those three is the one that matters most — with the check absent, reusing the temporary password *succeeded* and cleared the forced-change flag. Owner: Travis.
+

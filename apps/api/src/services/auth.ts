@@ -453,8 +453,8 @@ export async function changeOwnPassword(
   userId: string,
   input: { currentPassword: string; newPassword: string },
 ): Promise<Result<{ changed: true }, DomainError>> {
-  const { rows } = await tx.query<{ password_hash: string | null }>(
-    `SELECT password_hash FROM pmp.users WHERE id = $1`,
+  const { rows } = await tx.query<{ password_hash: string | null; must_change_password: boolean }>(
+    `SELECT password_hash, must_change_password FROM pmp.users WHERE id = $1`,
     [userId],
   );
   if (!rows[0] || !(await verifyPassword(input.currentPassword, rows[0].password_hash))) {
@@ -462,6 +462,22 @@ export async function changeOwnPassword(
   }
   const problem = checkPassword(input.newPassword);
   if (problem) return err({ code: `auth.${problem.code}`, message: problem.message });
+
+  // Keeping the same password is not a change. It matters most in exactly the case
+  // that reaches here first: an account signing in on a temporary password issued by
+  // an administrator. That password was chosen by someone else, handed over out of
+  // band, and is sitting in whatever chat or email carried it — so re-entering it as
+  // the "new" one leaves the account precisely as exposed as before, while marking it
+  // resolved. Compared against the stored hash rather than the plaintext, so it also
+  // catches a reset link being used to re-set the current password.
+  if (await verifyPassword(input.newPassword, rows[0].password_hash)) {
+    return err({
+      code: "auth.same_as_old",
+      message: rows[0].must_change_password
+        ? "Choose a password different from the temporary one. The temporary password was sent to you by someone else, so it is not private."
+        : "Your new password must be different from your current one.",
+    });
+  }
 
   await tx.query(
     `UPDATE pmp.users

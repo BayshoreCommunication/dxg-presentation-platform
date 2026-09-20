@@ -1,5 +1,5 @@
 import type pg from "pg";
-import { hashPassword, checkPassword, hashSecret, generateSessionToken } from "@pmp/auth";
+import { hashPassword, checkPassword, hashSecret, generateSessionToken, verifyPassword } from "@pmp/auth";
 import type { DomainError, Result } from "@pmp/domain";
 import { err, ok } from "@pmp/domain";
 
@@ -109,6 +109,20 @@ export async function completeReset(
 
   const problem = checkPassword(input.newPassword);
   if (problem) return err({ code: `auth.${problem.code}`, message: problem.message });
+
+  // A reset that lands on the same password is not a reset. Someone who has just been
+  // through "I have lost access" and re-enters what they had leaves the account exactly
+  // where it was, and the reset link is spent for nothing.
+  const { rows: currentRows } = await tx.query<{ password_hash: string | null }>(
+    `SELECT password_hash FROM pmp.users WHERE id = $1`,
+    [reset.user_id],
+  );
+  if (await verifyPassword(input.newPassword, currentRows[0]?.password_hash ?? null)) {
+    return err({
+      code: "auth.same_as_old",
+      message: "Choose a password different from your current one.",
+    });
+  }
 
   await tx.query(
     `UPDATE pmp.users

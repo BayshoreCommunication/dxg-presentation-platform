@@ -257,6 +257,7 @@ const statusFor = (error: DomainError): number => {
     error.code === "auth.too_short" ||
     error.code === "auth.too_long" ||
     error.code === "auth.too_common" ||
+    error.code === "auth.same_as_old" ||
     error.code === "admin.too_short" ||
     error.code === "admin.too_long" ||
     error.code === "admin.too_common"

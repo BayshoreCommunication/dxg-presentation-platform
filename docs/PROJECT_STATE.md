@@ -764,3 +764,23 @@ recording the justification at the moment of the act is the point.
 `test@example.com` is now back to unenrolled and can be set up with a real authenticator app.
 CI green, 169 tests.
 
+## 2026-09-20 (thirtieth) — a password change that changed nothing
+
+Travis spotted that the forced first-use change accepted the temporary password as the new password.
+Confirmed: neither `changeOwnPassword` nor `completePasswordReset` compared the candidate with the
+current one. Length and the common-password list were enforced; sameness was not (D-022).
+
+The temporary password is the single worst one to keep, being the only one on the system chosen by
+someone else and carried over an untrusted channel. Keeping it cleared `must_change_password`, so the
+account was filed as resolved while unchanged — the platform would never raise it again.
+
+Both paths now compare against the stored hash via `verifyPassword`, which also covers reset-by-token
+where no current password is submitted. `auth.same_as_old` returns 422, consistent with the other
+policy refusals. The message names the temporary password on a first-use change and drops that
+wording afterwards, once it is the person's own.
+
+`tests/invariants/password-reuse.test.ts` — five live-API cases. Verified by reverting the fix and
+re-running: **3 of 5 fail without it, 5 of 5 pass with it.** The most telling failure is not the
+refusal itself but the follow-up — without the check, the reuse succeeded *and* cleared the
+forced-change flag. Full CI green, 169 tests.
+
