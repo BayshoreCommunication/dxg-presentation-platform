@@ -1,162 +1,180 @@
 # EMAIL.md — SES setup
 
-Status: **live in the dev/shared account** (295229565954, us-east-2) as of 2026-09-17.
+Status: **live in the dev/shared account** (295229565954, us-east-2) as of 2026-09-20.
 Code: `deploy/aws/lib/email-stack.ts`. Application side: D-018, `packages/email`.
 
 ## What exists in AWS
 
 | Resource | Value | Notes |
 |---|---|---|
-| Sending domain | `dxg-agency.com` | Already verified before this work, DKIM `SUCCESS`, signing enabled (Easy DKIM) |
+| Sending identity | `av-rfpilot.com` | Verified, DKIM `SUCCESS`, signing enabled. DNS at GoDaddy |
+| Sending address | `noreply@av-rfpilot.com` | Shared with RFPilot — see below |
 | Configuration set | `pmp-email` | TLS `REQUIRE`, reputation metrics on, suppression on `BOUNCE` + `COMPLAINT` |
 | Event destination | `sns-events` | SEND, DELIVERY, BOUNCE, COMPLAINT, REJECT, RENDERING_FAILURE, DELIVERY_DELAY |
-| SNS topic | `arn:aws:sns:us-east-2:295229565954:pmp-email-events` | No subscription yet — see below |
-| MAIL FROM domain | `mail.dxg-agency.com` | Configured, **`PENDING`** — waiting on two DNS records, see below |
+| SNS topic | `arn:aws:sns:us-east-2:295229565954:pmp-email-events` | No subscription yet — see Outstanding |
 | Account | Production access **enabled**, 50,000/day, 14/sec | Not in the SES sandbox |
 
-Verified by sending a real message through the configuration set on 2026-09-17
-(`MessageId 010f01a0aed9d5f1-…`), addressed to the DXG service address.
+Verified on 2026-09-20 by sending as `noreply@av-rfpilot.com` through the `pmp-email` configuration
+set (`MessageId 010f01a0bd30a596-…`).
 
-## Why the configuration set matters
+## Sender decision
 
-**Without a configuration set, SES publishes no delivery, bounce or complaint events at all.** The
-platform would record every message as `sent` and never learn that a speaker's address is dead —
-so the one speaker who never got their upload link would look identical to the ones who did. The
-application warns at startup when `SES_CONFIGURATION_SET` is unset for exactly this reason.
+**This platform sends as `noreply@av-rfpilot.com`** — the same address RFPilot production uses.
+Decided by the user on 2026-09-20, superseding the earlier `presentations@dxg-agency.com`.
 
-Note: RFPilot in this same account has **no** configuration set, so it currently receives no
-delivery telemetry. Not our decision to change, but worth knowing.
+Two consequences are worth having written down, because neither is visible from the code:
 
-## Application configuration
+1. **Speakers receive event mail from a vendor domain, not their event agency's.** A DXG speaker
+   getting "upload your presentation" from `av-rfpilot.com` has no prior relationship with that
+   name. Setting `MAIL_REPLY_TO` to a real DXG address is worth doing to soften this — the platform
+   already supports it and it is currently unset.
+2. **The identity is shared with another product.** Anything done to the `av-rfpilot.com` identity —
+   MAIL FROM attributes, DKIM rotation, a suppression-list entry, a reputation problem caused by
+   either product — lands on both. Bounces from a bad speaker list can affect RFPilot's
+   deliverability and vice versa. The `pmp-email` configuration set keeps the *telemetry* separate,
+   but reputation is per-identity, not per-configuration-set.
 
-```bash
-MAIL_TRANSPORT=ses
-AWS_REGION=us-east-2
-MAIL_FROM=presentations@dxg-agency.com      # any address at the verified domain
-SES_CONFIGURATION_SET=pmp-email
-SNS_TOPIC_ARNS=arn:aws:sns:us-east-2:295229565954:pmp-email-events
+## Action required: the SPF record does not authorize SES
+
+```
+av-rfpilot.com. TXT "v=spf1 include:spf.em.secureserver.net ?all"
 ```
 
-Credentials come from the standard AWS chain — an instance role in production, never the repo.
-The sending principal needs `ses:SendEmail` scoped to the identity and configuration set.
+**`amazonses.com` is not in there.** Mail this platform sends therefore does not pass SPF for its own
+From domain. It authenticates today only because DKIM signs as `av-rfpilot.com` and aligns — a single
+path with no fallback. (The previous sending domain, `dxg-agency.com`, already published
+`include:amazonses.com`, so this is a step backwards that came with the switch.)
+
+Add `include:amazonses.com` to the apex TXT record at GoDaddy — **edit the existing record, do not
+add a second one**, as two SPF records are as broken as none:
+
+```
+v=spf1 include:spf.em.secureserver.net include:amazonses.com ~all
+```
+
+Changing `?all` to `~all` is the other half of it. `?all` is "neutral" — it tells receivers nothing
+about unauthorized senders, which is close to having no SPF policy at all.
+
+Verify with:
+
+```bash
+dig +short av-rfpilot.com TXT | grep spf
+```
+
+### Related, and currently broken
+
+`_dmarc.av-rfpilot.com` publishes **two** DMARC records:
+
+```
+"v=DMARC1; p=quarantine; adkim=r; aspf=r; rua=mailto:dmarc_rua@onsecureserver.net;"
+"v=DMARC1; p=none;"
+```
+
+Per [RFC 7489 §6.6.3](https://datatracker.ietf.org/doc/html/rfc7489#section-6.6.3), a receiver that
+finds more than one DMARC record **must not apply DMARC at all**. So this domain has *no* effective
+DMARC policy despite one record asking for `p=quarantine`. Confirmed against two resolvers on
+2026-09-20. Delete the redundant `p=none` record.
+
+Do the SPF fix *before* DMARC starts being enforced. Once exactly one record remains and
+`p=quarantine` takes effect, DKIM becomes the only thing standing between this platform's mail and
+the spam folder.
 
 ## Custom MAIL FROM domain
 
-Configured on 2026-09-17:
+**Not currently set on `av-rfpilot.com`.** Unlike the previous domain, this one is now possible
+without waiting on anyone — GoDaddy DNS is ours, `mail.av-rfpilot.com` is unused, and SES's rule
+(the MAIL FROM domain must be a subdomain of the parent domain of the verified identity) is
+satisfied.
 
-```bash
-aws sesv2 put-email-identity-mail-from-attributes --region us-east-2 --profile rfpilot \
-  --email-identity dxg-agency.com \
-  --mail-from-domain mail.dxg-agency.com \
-  --behavior-on-mx-failure USE_DEFAULT_VALUE
-```
+It is deliberately **not** done yet, because it is an attribute of an identity RFPilot also sends
+from, so it changes another product's production envelope sender. That needs RFPilot's agreement,
+not just this project's.
 
-**Someone with access to the `dxg-agency.com` DNS zone must add these two records.** That zone is
-hosted at **Namecheap** (`dns1.registrar-servers.com`), not Route 53 — there is no hosted zone for
-it in this AWS account, so it cannot be done from here.
+When it is agreed, publish these at GoDaddy **first**:
 
 | Host | Type | Priority | Value |
 |---|---|---|---|
 | `mail` | MX | `10` | `feedback-smtp.us-east-2.amazonses.com` |
 | `mail` | TXT | — | `v=spf1 include:amazonses.com ~all` |
 
-Namecheap's *Host* field takes the subdomain only — `mail`, not `mail.dxg-agency.com`. Namecheap
-adds the priority in its own column; do not put `10` inside the MX value. Enter the TXT value
-without surrounding quotes. **Exactly one MX record** may exist on the MAIL FROM subdomain — SES
-fails the setup outright if it finds more than one.
-
-**These records can only come from the `dxg-agency.com` zone.** SES requires the MAIL FROM domain to
-be a subdomain of the parent domain of the verified identity, so a domain we *do* control cannot
-stand in for it — see "Why `av-rfpilot.com` cannot be used for this" below.
-
-**Status as of 2026-09-20: still `PENDING`, records never published.** That is the 72-hour edge, so
-this has almost certainly lapsed to `Failed` by the time anyone reads this. Re-run the configure
-command *after* the records are live rather than before.
-
-**The 72-hour window runs from when the MAIL FROM was configured, not from when the records
-appear.** SES looks for the MX record for 72 hours; if it has not found it by then the status goes
-to `Failed`, SES stops checking, and the setup has to be re-run with the same
-`put-email-identity-mail-from-attributes` command. Publishing the records after that point does
-nothing on its own. Check the status with:
-
-```bash
-aws sesv2 get-email-identity --email-identity dxg-agency.com --region us-east-2 --profile rfpilot \
-  --query 'MailFromAttributes'
-```
-
-### Why `USE_DEFAULT_VALUE` and not `REJECT_MESSAGE`
-
-`REJECT_MESSAGE` is the stricter setting, and it is the wrong one here. The DNS records do not
-exist yet, so it would reject **every outgoing message** — upload links, reminders, password
-resets — from the moment it was set until someone else did work in a system we do not control.
-`USE_DEFAULT_VALUE` falls back to `amazonses.com` as the MAIL FROM, which is exactly the behaviour
-in place before this change: mail keeps flowing, DKIM still signs, and the only thing missing is
-the stronger SPF alignment we are trying to add.
-
-Once the records are verified and the identity reads `SUCCESS`, switching to `REJECT_MESSAGE` is
-worth doing — at that point a failed MX lookup means the DNS actually broke, which is worth failing
-loudly over:
+Exactly one MX record on that subdomain — SES fails the setup outright if it finds more than one.
+Then configure:
 
 ```bash
 aws sesv2 put-email-identity-mail-from-attributes --region us-east-2 --profile rfpilot \
-  --email-identity dxg-agency.com --mail-from-domain mail.dxg-agency.com \
-  --behavior-on-mx-failure REJECT_MESSAGE
+  --email-identity av-rfpilot.com \
+  --mail-from-domain mail.av-rfpilot.com \
+  --behavior-on-mx-failure USE_DEFAULT_VALUE
 ```
 
-Verified on 2026-09-17 that sending is unaffected while `PENDING`: a message through the `pmp-email`
-configuration set was accepted (`MessageId 010f01a0aee21e1f-…`).
+**Records first, then configure — the order matters.** SES looks for the MX record for 72 hours
+*from when the MAIL FROM was configured*, not from when the records appear. If it has not found it
+by then the status goes to `Failed`, SES stops checking, and publishing the records afterwards does
+nothing until the command above is re-run. Check with:
 
-## Why `av-rfpilot.com` cannot be used for this
+```bash
+aws sesv2 get-email-identity --email-identity av-rfpilot.com --region us-east-2 --profile rfpilot \
+  --query 'MailFromAttributes'
+```
 
-We do control `av-rfpilot.com` (GoDaddy, `ns35/36.domaincontrol.com`), it is already a verified SES
-identity in this same account with DKIM `SUCCESS`, and `mail.av-rfpilot.com` is unused. It still
-cannot solve the `dxg-agency.com` problem, for two separate reasons.
+Start with `USE_DEFAULT_VALUE`, which falls back to `amazonses.com` if the MX lookup fails. Switch to
+the stricter `REJECT_MESSAGE` only once the status reads `SUCCESS` — before that it would reject
+every outgoing message, and on a shared identity it would take RFPilot's mail down too.
 
-**1. SES forbids it.** The MAIL FROM domain "has to be a subdomain of the parent domain of a
-verified identity" ([AWS docs](https://docs.aws.amazon.com/ses/latest/dg/mail-from.html)). A MAIL
-FROM of `mail.av-rfpilot.com` cannot serve the `dxg-agency.com` identity. The two are coupled by
-design — the whole point is proving common ownership.
+## The abandoned `dxg-agency.com` setup
 
-**2. Even if it were allowed, it would be the wrong thing.** Speakers at a DXG event receiving
-"upload your presentation" from a domain that is not their event agency's is worse for trust and
-for deliverability than the SPF alignment is worth. And `av-rfpilot.com` is **RFPilot production's
-live sending identity** (`noreply@av-rfpilot.com`, per that repo's `deploy/aws/STATE.md`), so
-changing its MAIL FROM attribute would alter a different product's production email.
+Kept here so the leftover state in AWS is not a mystery to whoever finds it.
 
-If a fully self-controlled pipeline is ever needed for testing, verify a *separate* identity such as
-`pmp.av-rfpilot.com` with its own DKIM and its own `mail.pmp.av-rfpilot.com`. That keeps RFPilot's
-identity untouched. It is still vendor-branded, so it is a testing tool, not the production answer.
+`dxg-agency.com` is verified with DKIM `SUCCESS` and has `mail.dxg-agency.com` configured as a custom
+MAIL FROM, stuck in `PENDING` since 2026-09-17 — the required records were never published, because
+that zone is at **Namecheap** and outside our control. It has since passed SES's 72-hour window and
+will read `Failed`.
 
-## This is an improvement, not a blocker
+**This is harmless and needs no cleanup.** `BehaviorOnMxFailure` is `USE_DEFAULT_VALUE`, and nothing
+sends as `dxg-agency.com` any more. Note the API is still served at `api.dxg-agency.com`, so the
+domain itself is still in use — do not delete the identity on the assumption that it is dead.
 
-Worth stating plainly so nobody treats the `PENDING` status as broken:
+## Why the configuration set matters
 
-| Check | Status for `presentations@dxg-agency.com` today |
-|---|---|
-| DKIM | Signs as `dxg-agency.com` → **aligned** |
-| SPF | Authenticates `amazonses.com` (the fallback MAIL FROM) → not aligned |
-| DMARC | **Passes**, via DKIM alignment. Policy on the domain is `p=none` |
+**Without a configuration set, SES publishes no delivery, bounce or complaint events at all.** The
+platform would record every message as `sent` and never learn that a speaker's address is dead — so
+the one speaker who never got their upload link would look identical to the ones who did. The
+application warns at startup when `SES_CONFIGURATION_SET` is unset for exactly this reason.
 
-DMARC needs SPF *or* DKIM to align, not both. DKIM already aligns, so mail authenticates correctly
-right now. The custom MAIL FROM adds SPF alignment as a second independent path — genuine defence in
-depth, and worth finishing, but not a reason to compromise on the sending domain.
+Note RFPilot has **no** configuration set of its own, so it receives no delivery telemetry. Now that
+both products share a sending identity, that gap is worth closing on their side too.
 
-Note `dxg-agency.com` also already publishes `v=spf1 include:amazonses.com ~all` at the apex.
+## Application configuration
+
+```bash
+MAIL_TRANSPORT=ses
+AWS_REGION=us-east-2
+MAIL_FROM=noreply@av-rfpilot.com
+SES_CONFIGURATION_SET=pmp-email
+SNS_TOPIC_ARNS=arn:aws:sns:us-east-2:295229565954:pmp-email-events
+# MAIL_REPLY_TO=<a real DXG address>   # recommended, see "Sender decision"
+```
+
+Credentials come from the standard AWS chain — an instance role in production, never the repo.
+The sending principal needs `ses:SendEmail` scoped to the identity and configuration set.
 
 ## Outstanding
 
-1. **No SNS subscription yet.** Events are published to the topic and go nowhere, because the API
-   has no public URL. When it is deployed, subscribe `POST https://<api>/api/v1/webhooks/email` —
-   the endpoint already verifies SNS signatures and handles the subscription confirmation.
-2. **Open and click tracking are off.** SES rewrites every link through `awstrack.me` unless a
-   custom tracking domain exists, and a speaker being asked to click an unfamiliar redirect is
-   worse than the metric is worth. Add `TrackingOptions` once a subdomain is available.
-3. **MAIL FROM domain is `PENDING`.** The SES side is done; it stays pending until the two DNS
-   records below exist. Nothing is broken in the meantime — see "Custom MAIL FROM domain".
-4. **The live resources were created with the CLI, not CloudFormation.** `deploy/aws/lib/email-stack.ts`
+1. **SPF does not include `amazonses.com`.** See above — one record edit at GoDaddy, and the
+   highest-value item here.
+2. **Duplicate DMARC record** on `av-rfpilot.com` means DMARC is not applied at all. See above.
+3. **No SNS subscription yet.** Events publish to the topic and go nowhere, because the API has no
+   public URL. When it is deployed, subscribe `POST https://<api>/api/v1/webhooks/email` — the
+   endpoint already verifies SNS signatures and handles subscription confirmation.
+4. **`MAIL_REPLY_TO` is unset.** Worth pointing at a real DXG address now that the From domain is a
+   vendor one.
+5. **Open and click tracking are off.** SES rewrites every link through `awstrack.me` unless a custom
+   tracking domain exists, and a speaker being asked to click an unfamiliar redirect is worse than
+   the metric is worth. Add `TrackingOptions` once a subdomain is available.
+6. **Custom MAIL FROM** — possible now, needs RFPilot's agreement first. See above.
+7. **The live resources were created with the CLI, not CloudFormation.** `deploy/aws/lib/email-stack.ts`
    describes them exactly, but a first `cdk deploy` would fail on the existing names. Either
-   `cdk import` them into the stack, or delete and let CDK create them. Until that is done, this is
-   known drift.
+   `cdk import` them into the stack, or delete and let CDK create them. Until then this is known drift.
 
 ## Reconciling the drift
 

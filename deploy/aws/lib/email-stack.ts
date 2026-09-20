@@ -15,12 +15,11 @@ export type EmailStackProps = cdk.StackProps & {
  * Email infrastructure for the platform: a configuration set and the SNS topic
  * its delivery events publish to.
  *
- * The sending identity is intentionally NOT created here. `dxg-agency.com` is
- * already verified in the account, and a CDK-managed identity would try to own
- * DNS records the client controls. Its custom MAIL FROM domain
- * (`mail.dxg-agency.com`) is set on that identity for the same reason — it is an
- * identity attribute, and adopting the identity to manage it would put CDK in
- * charge of DNS it cannot reach. See `docs/infra/EMAIL.md`.
+ * The sending identity is intentionally NOT created here. `av-rfpilot.com` is
+ * already verified in the account, and it is **shared with RFPilot production**
+ * (`noreply@av-rfpilot.com`) — a CDK-managed identity here would claim ownership
+ * of another product's sender and of DNS records held at GoDaddy. Its MAIL FROM
+ * attributes are left off the stack for the same reason. See `docs/infra/EMAIL.md`.
  *
  * The configuration set is the piece that matters: **without one, SES publishes
  * no delivery, bounce or complaint events at all**, and the platform would

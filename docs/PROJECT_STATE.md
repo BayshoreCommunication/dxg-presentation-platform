@@ -455,3 +455,34 @@ than one record is present, so RFPilot currently has *no* effective DMARC policy
 `p=quarantine`. Confirmed against two resolvers. Not fixed here — it is RFPilot's zone and not this
 project's call.
 
+## 2026-09-20 (eighteenth) — sending address switched to `noreply@av-rfpilot.com`
+
+Travis's call (D-019): the platform now sends as `noreply@av-rfpilot.com`, the address RFPilot
+production already uses, replacing `presentations@dxg-agency.com`. The reason is control — that
+domain's DNS is ours at GoDaddy, where `dxg-agency.com` sits at Namecheap and the custom MAIL FROM
+there lapsed after 72 hours without the records ever being published.
+
+The change was pure configuration; no address was ever hardcoded. `.env.example` and
+`docs/infra/EMAIL.md` now carry the new sender, `deploy/aws/bin/pmp.ts` passes
+`sendingDomain: 'av-rfpilot.com'`, and the stack comment explains why the identity is still not
+CDK-managed — it is now shared with another product's production sender, which is a stronger reason
+than before, not a weaker one. Verified by sending as the new address through the `pmp-email`
+configuration set (`MessageId 010f01a0bd30a596-…`). 154 tests pass, lint and CDK typecheck clean.
+
+**One regression came with the switch, and it needs a DNS edit we can actually make.**
+`av-rfpilot.com`'s apex SPF is `v=spf1 include:spf.em.secureserver.net ?all` — it does **not**
+authorize SES, where `dxg-agency.com` already published `include:amazonses.com`. So outgoing mail now
+authenticates on DKIM alone, with no second path. Fix is one record edit at GoDaddy:
+`v=spf1 include:spf.em.secureserver.net include:amazonses.com ~all` (edit the existing record — two
+SPF records are as broken as none; `?all` → `~all` is the other half).
+
+That compounds with the duplicate `_dmarc.av-rfpilot.com` records already noted: DMARC is currently
+not applied at all, so the weak SPF is not yet being punished. When someone deletes the stray
+`p=none` record and `p=quarantine` starts taking effect, DKIM becomes the only thing between this
+platform's mail and the spam folder. **Do the SPF fix first.** Both now affect two products, not one.
+
+Recorded but not mitigated: speakers will receive event mail from a vendor domain rather than DXG's,
+and sender reputation is now shared with RFPilot — a bad speaker list can hurt their deliverability
+and vice versa. `MAIL_REPLY_TO` pointing at a real DXG address is the cheap mitigation for the first
+and is still unset.
+

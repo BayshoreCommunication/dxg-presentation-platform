@@ -26,7 +26,7 @@ new EmailStack(app, 'Pmp-Email', {
     account: '295229565954',
     region: 'us-east-2',
   },
-  sendingDomain: 'dxg-agency.com',
+  sendingDomain: 'av-rfpilot.com',
   description: 'DXG Presentation Platform email: SES configuration set + delivery event topic',
 });
 
