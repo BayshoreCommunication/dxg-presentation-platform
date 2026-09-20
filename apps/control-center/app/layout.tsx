@@ -14,7 +14,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // here rather than an error.
   let principal: Principal | null = null;
   try {
-    principal = (await getSession()).principal;
+    const resolved = (await getSession()).principal;
+    // Belt and braces with the API's own check: never render the staff shell
+    // around a principal that is not staff.
+    principal = resolved?.kind === "staff" ? resolved : null;
   } catch {
     principal = null;
   }

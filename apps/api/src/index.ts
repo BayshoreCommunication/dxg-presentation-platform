@@ -1498,7 +1498,15 @@ app.post("/api/v1/auth/logout", async (req, res) => {
 
 app.get("/api/v1/auth/session", (req, res) => {
   const principal = (req as express.Request & { principal?: Principal }).principal;
-  if (!principal) return res.status(401).json({ code: "auth.no_session", message: "Not signed in." });
+  // Staff and presenters share this API origin, so one browser holds one session
+  // cookie for both apps and signing into the portal replaces a staff session.
+  // This endpoint answers "who is the signed-in *staff member*", so a presenter
+  // here is not a staff member — it is no session at all. Returning the presenter
+  // instead let the staff app render someone who cannot use it, and crash on the
+  // roles a presenter does not have.
+  if (!principal || principal.kind !== "staff") {
+    return res.status(401).json({ code: "auth.no_session", message: "Not signed in." });
+  }
   return res.json({ principal });
 });
 

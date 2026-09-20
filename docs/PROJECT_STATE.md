@@ -636,3 +636,30 @@ better design anyway — two frontends should not compile the lifecycle engine t
 
 `npm run ci` green at 169 tests.
 
+## 2026-09-20 (twenty-fifth) — sizes verified across the staff surface; a session bug found on the way
+
+Swept every staff view that renders a size, after the `@pmp/format` change. All correct, no `0 MB`
+anywhere: Presentation detail `68.9 KB` and `155 MB` on one page, Inspection `68.9 KB`, Review
+`155 MB`, Archive `504 MB`. Room Agent shows `0 files · 0 bytes local`, which is a genuine zero — an
+empty room library — not a null coerced to a number; the formatter returns `—` for absent values, so
+the two cases stay distinguishable. Room sync, SRR and Client portal render no sizes without data.
+
+**A real bug surfaced while getting there: the staff app crashed with a presenter signed in.**
+`/api/v1/auth/session` returned whatever principal held the session cookie, regardless of kind. Both
+apps share the API origin, so one browser holds one cookie for both and signing into the speaker
+portal *replaces* a staff session. The control centre then rendered a presenter through the staff
+shell and died on `principal.roles.join()` — a field presenters do not have.
+
+Not privilege escalation: the deny-by-default staff gate still refused every staff route, which is
+why this surfaced as a crash rather than as access. But the staff app was rendering a principal it
+should never have accepted. Fixed at the API boundary — `/auth/session` answers "who is the signed-in
+*staff member*", so a presenter there is no session at all — and narrowed again in the control centre
+layout, so a future shape change cannot 500 the app. The portal side was already correct via
+`withPortalSession`.
+
+**Found and not fixed:** 20 of 22 staff pages throw on a 401 instead of redirecting to the login
+screen, so an expired session shows a crash page. Only `admin/users` and `client/[eventId]` redirect.
+The middleware comment claims "a 401 from there sends the user back here too" — it does not. The fix
+cannot go in `lib/api.ts`, which is shared with client components where `LoginForm` needs to *display*
+a 401 rather than redirect, so it is a per-page change. Tracked separately.
+
