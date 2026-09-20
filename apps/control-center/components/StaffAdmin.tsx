@@ -31,6 +31,30 @@ const when = (iso: string | null) =>
  * comes into existence — and the only way back in for someone who has lost their
  * phone or their password.
  */
+/**
+ * Who is on each event, inverted from the per-account list.
+ *
+ * The same facts either way, but the questions are different. "What can this person
+ * reach?" is answered by the account rows; "who is working NeuroSummit, and as what?"
+ * is not, and that is the question an administrator has while staffing an event.
+ *
+ * Events with nobody on them are kept in the list rather than filtered out — an event
+ * with no staff is the thing most worth seeing here, and it is invisible in a view
+ * organised by person, because the absence has no row to appear on.
+ */
+function byEvent(staff: StaffRow[], events: EventRow[]) {
+  return events.map((event) => ({
+    event,
+    people: staff
+      .flatMap((person) =>
+        person.roles
+          .filter((held) => held.event_id === event.id)
+          .map((held) => ({ person, role: held.role })),
+      )
+      .sort((a, b) => a.person.display_name.localeCompare(b.person.display_name)),
+  }));
+}
+
 export function StaffAdmin({ initial, events }: { initial: StaffRow[]; events: EventRow[] }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -38,7 +62,14 @@ export function StaffAdmin({ initial, events }: { initial: StaffRow[]; events: E
   const [secret, setSecret] = useState<{ title: string; value: string; note: string } | null>(null);
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
-  const [eventId, setEventId] = useState(events[0]?.id ?? "");
+  const [view, setView] = useState<"person" | "event">("event");
+  /*
+   * Deliberately blank rather than defaulting to an event. It used to default to
+   * whichever event happened to be first, so the quickest path — pick a role, press
+   * grant — silently assigned it on an event the administrator never chose, and on a
+   * screen where the mistake shows up as someone reading another client's material.
+   */
+  const [eventId, setEventId] = useState("");
 
   async function run(work: () => Promise<void>) {
     setBusy(true);
@@ -145,10 +176,100 @@ export function StaffAdmin({ initial, events }: { initial: StaffRow[]; events: E
         </div>
       </div>
 
+      {/*
+        Assignments, read the way an administrator staffing an event asks for them.
+        The account rows below answer the other question — what one person can reach.
+      */}
+      {view === "event" && (
+        <div className="card">
+          <div className="chd">
+            <h3>Who is on each event</h3>
+            <span className="m">
+              <button
+                className="btn"
+                style={{ padding: "2px 8px", fontSize: 12 }}
+                onClick={() => setView("person")}
+              >
+                view by person ›
+              </button>
+            </span>
+          </div>
+          <div className="cbd" style={{ padding: "0 0 4px" }}>
+            <table>
+              <thead>
+                <tr>
+                  <th>Event</th>
+                  <th>Staff assigned</th>
+                </tr>
+              </thead>
+              <tbody>
+                {byEvent(initial, events).map(({ event, people }) => (
+                  <tr key={event.id}>
+                    <td style={{ verticalAlign: "top", whiteSpace: "nowrap" }}>
+                      <div style={{ fontWeight: 600 }}>{event.name}</div>
+                      <span className="note mono">
+                        {event.starts_on}–{event.ends_on}
+                      </span>
+                    </td>
+                    <td>
+                      {people.length === 0 ? (
+                        /*
+                         * The point of this view. An event nobody can work on looks
+                         * exactly like a healthy one from the account list, because
+                         * an absence has no row of its own to appear on.
+                         */
+                        <span className="chip c-warn">nobody assigned yet</span>
+                      ) : (
+                        people.map(({ person, role }) => (
+                          <div key={`${person.id}-${role}`} style={{ marginBottom: 3 }}>
+                            <span style={{ display: "inline-block", minWidth: 150 }}>
+                              {person.display_name}
+                            </span>
+                            <span className="chip c-mut">{role.replace(/_/g, " ")}</span>{" "}
+                            {!person.is_active && <Chip status="attention" label="deactivated" />}
+                            {person.is_active && !person.mfa_enrolled && (
+                              <Chip status="needs_revision" label="2FA not set up" />
+                            )}{" "}
+                            <button
+                              className="btn"
+                              style={{ padding: "1px 7px", fontSize: 11 }}
+                              disabled={busy}
+                              onClick={() =>
+                                void run(async () => {
+                                  await setStaffRole(person.id, event.id, role, false);
+                                })
+                              }
+                            >
+                              remove
+                            </button>
+                          </div>
+                        ))
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       <div className="card">
         <div className="chd">
           <h3>Accounts · {initial.length}</h3>
-          <span className="m">grant roles per event</span>
+          <span className="m">
+            {view === "person" ? (
+              <button
+                className="btn"
+                style={{ padding: "2px 8px", fontSize: 12 }}
+                onClick={() => setView("event")}
+              >
+                ‹ view by event
+              </button>
+            ) : (
+              "grant roles per event"
+            )}
+          </span>
         </div>
         <div className="cbd" style={{ padding: "0 0 4px" }}>
           <table>
@@ -171,12 +292,19 @@ export function StaffAdmin({ initial, events }: { initial: StaffRow[]; events: E
                   </td>
                   <td>
                     {user.roles.length === 0 ? (
-                      <span className="note">no roles</span>
+                      /*
+                       * Not merely "none": an account with no role is refused every
+                       * screen in the product, so saying so here saves the admin
+                       * discovering it from the person's confusion later.
+                       */
+                      <span className="chip c-warn">no event — cannot use the platform</span>
                     ) : (
                       user.roles.map((role) => (
-                        <div key={`${role.event_id}-${role.role}`} style={{ marginBottom: 2 }}>
+                        <div key={`${role.event_id}-${role.role}`} style={{ marginBottom: 3 }}>
+                          <span style={{ display: "inline-block", minWidth: 170 }}>
+                            {role.event_name}
+                          </span>
                           <span className="chip c-mut">{role.role.replace(/_/g, " ")}</span>{" "}
-                          <span className="note">{role.event_name}</span>{" "}
                           <button
                             className="btn"
                             style={{ padding: "1px 7px", fontSize: 11 }}
@@ -207,6 +335,7 @@ export function StaffAdmin({ initial, events }: { initial: StaffRow[]; events: E
                         onChange={(event) => setEventId(event.target.value)}
                         style={{ fontSize: 12, padding: "3px 6px" }}
                       >
+                        <option value="">on which event…</option>
                         {events.map((event) => (
                           <option key={event.id} value={event.id}>
                             {event.name}
@@ -223,6 +352,11 @@ export function StaffAdmin({ initial, events }: { initial: StaffRow[]; events: E
                             const chosenEvent = (document.getElementById(`event-${user.id}`) as HTMLSelectElement)
                               .value;
                             if (!role) throw new ApiError("request", "Pick a role first.", 400);
+                            // Refuse rather than assume: granting on the wrong event is
+                            // the mistake this screen must not make quietly.
+                            if (!chosenEvent) {
+                              throw new ApiError("request", "Pick which event this role is on.", 400);
+                            }
                             await setStaffRole(user.id, chosenEvent, role, true);
                           })
                         }

@@ -1041,3 +1041,29 @@ Three events now in the development database: MedTech Forward 2026 (5 rooms), Ne
 and OrthoWorld Congress 2026 (3 rooms each, the latter on America/Chicago so a non-default timezone is
 exercised). CI green.
 
+## 2026-09-20 (fortieth) — Staff accounts answers "who is on this event?"
+
+The screen could only answer one question — what can this person reach — and an administrator
+staffing an event has the opposite one. Added a **Who is on each event** view, which is the default,
+with the account list still a click away.
+
+**The reason it is the default is what it shows when nothing is there.** With three events in the
+database, two came up `nobody assigned yet`. That state was previously invisible: an event nobody can
+work on looks exactly like a healthy one from a list organised by person, because an absence has no
+row of its own to appear on. An administrator could create an event, move on, and find out from the
+silence.
+
+No API change — `listStaff` already returned each assignment with its event id and name, so this is
+the same facts read the other way round.
+
+**Two smaller fixes in the same screen, both about avoiding a quiet mistake.** The event select on
+each row defaulted to whichever event happened to be first, so the quickest path — pick a role, press
+grant — assigned it on an event nobody chose; on this screen that mistake surfaces later as someone
+reading another client's material. It now starts blank and refuses with "Pick which event this role
+is on." And an account with no roles said "no roles", which understates it: such an account is
+refused every screen in the product, so it now says so.
+
+Verified through the UI: the guard refuses, a real grant of `content_reviewer` on NeuroSummit
+succeeds, and both views update together — M. Vega shows two events with different roles in the
+account list, and appears under NeuroSummit in the event view. CI green; admin invariants pass.
+
