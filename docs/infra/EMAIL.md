@@ -34,50 +34,52 @@ Two consequences are worth having written down, because neither is visible from 
    deliverability and vice versa. The `pmp-email` configuration set keeps the *telemetry* separate,
    but reputation is per-identity, not per-configuration-set.
 
-## Action required: the SPF record does not authorize SES
+## Authentication posture
 
-```
-av-rfpilot.com. TXT "v=spf1 include:spf.em.secureserver.net ?all"
-```
+Both DNS fixes were made at GoDaddy on 2026-09-20, in that order deliberately.
 
-**`amazonses.com` is not in there.** Mail this platform sends therefore does not pass SPF for its own
-From domain. It authenticates today only because DKIM signs as `av-rfpilot.com` and aligns — a single
-path with no fallback. (The previous sending domain, `dxg-agency.com`, already published
-`include:amazonses.com`, so this is a step backwards that came with the switch.)
-
-Add `include:amazonses.com` to the apex TXT record at GoDaddy — **edit the existing record, do not
-add a second one**, as two SPF records are as broken as none:
+**SPF — done and verified.** The record was `v=spf1 include:spf.em.secureserver.net ?all`, which did
+not authorize SES at all; mail authenticated on DKIM alone with no fallback. (The previous sending
+domain, `dxg-agency.com`, already published `include:amazonses.com`, so the switch to this domain had
+quietly been a step backwards.) Now:
 
 ```
 v=spf1 include:spf.em.secureserver.net include:amazonses.com ~all
 ```
 
-Changing `?all` to `~all` is the other half of it. `?all` is "neutral" — it tells receivers nothing
-about unauthorized senders, which is close to having no SPF policy at all.
+Confirmed identical on the authoritative nameservers and on 1.1.1.1 / 8.8.8.8 / 9.9.9.9: exactly one
+SPF record, `amazonses.com` authorized, `~all` rather than the old neutral `?all`, and 2 of the
+permitted 10 DNS lookups used.
 
-Verify with:
+**DMARC — duplicate removed.** `_dmarc` carried two records (`p=none` and `p=quarantine`), and per
+[RFC 7489 §6.6.3](https://datatracker.ietf.org/doc/html/rfc7489#section-6.6.3) a receiver finding more
+than one **must not apply DMARC at all** — so the domain had no effective policy despite asking for
+`p=quarantine`. The stray `p=none` record was deleted; the surviving policy is:
+
+```
+v=DMARC1; p=quarantine; adkim=r; aspf=r; rua=mailto:dmarc_rua@onsecureserver.net;
+```
+
+**Order mattered and should be preserved if this is ever redone.** While DMARC was unenforced, the
+weak SPF cost nothing. Deleting the duplicate is what switches enforcement on — had that been done
+first, DKIM would have been the only thing between both products' mail and the spam folder.
+
+`adkim=r; aspf=r` is relaxed alignment and mail now passes on both paths, so enforcement should be
+uneventful. The `rua=` aggregate reports are the place to check for forgotten senders before anyone
+considers `p=reject`.
+
+### Verifying
 
 ```bash
-dig +short av-rfpilot.com TXT | grep spf
+dig +short av-rfpilot.com TXT | grep spf              # expect exactly 1 record
+dig +short _dmarc.av-rfpilot.com TXT                  # expect exactly 1 record
 ```
 
-### Related, and currently broken
-
-`_dmarc.av-rfpilot.com` publishes **two** DMARC records:
-
-```
-"v=DMARC1; p=quarantine; adkim=r; aspf=r; rua=mailto:dmarc_rua@onsecureserver.net;"
-"v=DMARC1; p=none;"
-```
-
-Per [RFC 7489 §6.6.3](https://datatracker.ietf.org/doc/html/rfc7489#section-6.6.3), a receiver that
-finds more than one DMARC record **must not apply DMARC at all**. So this domain has *no* effective
-DMARC policy despite one record asking for `p=quarantine`. Confirmed against two resolvers on
-2026-09-20. Delete the redundant `p=none` record.
-
-Do the SPF fix *before* DMARC starts being enforced. Once exactly one record remains and
-`p=quarantine` takes effect, DKIM becomes the only thing standing between this platform's mail and
-the spam folder.
+Query the authoritative nameservers (`@ns35.domaincontrol.com`, `@ns36.domaincontrol.com`) when
+checking a recent change. GoDaddy's anycast nodes converge unevenly — during the DMARC edit `ns36`
+returned the new answer while `ns35` alternated between old and new for several minutes. A single
+`dig` during that window is not evidence either way; query both nameservers and a public resolver,
+more than once.
 
 ## Custom MAIL FROM domain
 
@@ -160,9 +162,8 @@ The sending principal needs `ses:SendEmail` scoped to the identity and configura
 
 ## Outstanding
 
-1. **SPF does not include `amazonses.com`.** See above — one record edit at GoDaddy, and the
-   highest-value item here.
-2. **Duplicate DMARC record** on `av-rfpilot.com` means DMARC is not applied at all. See above.
+1. ~~SPF does not include `amazonses.com`~~ — **done 2026-09-20**, see "Authentication posture".
+2. ~~Duplicate DMARC record~~ — **done 2026-09-20**, see "Authentication posture".
 3. **No SNS subscription yet.** Events publish to the topic and go nowhere, because the API has no
    public URL. When it is deployed, subscribe `POST https://<api>/api/v1/webhooks/email` — the
    endpoint already verifies SNS signatures and handles subscription confirmation.

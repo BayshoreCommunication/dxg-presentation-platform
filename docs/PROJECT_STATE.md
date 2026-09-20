@@ -486,3 +486,30 @@ and sender reputation is now shared with RFPilot — a bad speaker list can hurt
 and vice versa. `MAIL_REPLY_TO` pointing at a real DXG address is the cheap mitigation for the first
 and is still unset.
 
+## 2026-09-20 (nineteenth) — email authentication actually fixed
+
+Both DNS gaps on `av-rfpilot.com` are closed. Travis made the edits at GoDaddy; I verified them.
+
+**SPF** now reads `v=spf1 include:spf.em.secureserver.net include:amazonses.com ~all`. Exactly one
+record, SES authorized, `~all` instead of the old neutral `?all`, 2 of 10 permitted DNS lookups used,
+identical on both authoritative nameservers and on 1.1.1.1 / 8.8.8.8 / 9.9.9.9.
+
+**DMARC**'s duplicate `p=none` record is deleted, leaving
+`v=DMARC1; p=quarantine; adkim=r; aspf=r; rua=mailto:dmarc_rua@onsecureserver.net;`. Until now two
+records meant receivers ignored DMARC entirely (RFC 7489 §6.6.3), so a policy that looked like
+`p=quarantine` was doing nothing. It is now genuinely in force — for RFPilot as well as this platform.
+
+The ordering was deliberate and is recorded in `docs/infra/EMAIL.md` in case this is ever redone:
+while DMARC was unenforced the weak SPF cost nothing, so SPF had to be fixed *first*. Removing the
+duplicate is the act that switches enforcement on.
+
+**A verification note worth keeping.** My first check after the DMARC delete reported success and
+then printed two records in the same breath — GoDaddy's anycast nodes converge unevenly, and `ns36`
+was serving the new zone while `ns35` alternated for several minutes. A single `dig` inside that
+window is not evidence in either direction. The runbook now says to query both nameservers plus a
+public resolver, repeatedly, when checking a recent change.
+
+Net effect: outgoing mail from `noreply@av-rfpilot.com` now authenticates on two independent paths
+(SPF and DKIM, both aligned) under an enforced DMARC policy, where a week ago it had one unenforced
+path. Items 1 and 2 of the email Outstanding list are closed.
+
