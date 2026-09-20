@@ -513,3 +513,23 @@ Net effect: outgoing mail from `noreply@av-rfpilot.com` now authenticates on two
 (SPF and DKIM, both aligned) under an enforced DMARC policy, where a week ago it had one unenforced
 path. Items 1 and 2 of the email Outstanding list are closed.
 
+## 2026-09-20 (twentieth) — `MAIL_REPLY_TO` set
+
+`MAIL_REPLY_TO=dxgrfptool@gmail.com` (D-020). Speakers replying to an upload link now reach a real
+inbox instead of `noreply@`.
+
+**The finding that decided it: `dxg-agency.com` publishes no MX records and cannot receive mail at
+all.** The natural choice — a DXG-branded reply-to — would have bounced every speaker reply silently.
+Worth knowing beyond this one setting: nothing can be delivered to that domain, so no future feature
+should assume otherwise. `av-rfpilot.com` does have MX (GoDaddy mailboxes), but inventing an address
+there carries the same silent-bounce risk unless the mailbox is confirmed to exist.
+
+Chosen knowing the cost: external speakers see a gmail address. It is a stopgap and a one-line change
+when DXG provides a branded monitored mailbox.
+
+No code change was needed — `SesSender` already passes `ReplyToAddresses` when configured. Verified
+through the platform's own sender rather than the CLI, so the whole path from env to SES is proven
+(`MessageId 010f01a0bd42259b-…`). Added `packages/email/src/config.test.ts`: six tests over
+`sesConfigFromEnv()`, including that `replyTo` survives and that it stays `undefined` rather than an
+empty string when unset. `npm run ci` green, 160 tests.
+

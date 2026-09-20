@@ -154,7 +154,7 @@ AWS_REGION=us-east-2
 MAIL_FROM=noreply@av-rfpilot.com
 SES_CONFIGURATION_SET=pmp-email
 SNS_TOPIC_ARNS=arn:aws:sns:us-east-2:295229565954:pmp-email-events
-# MAIL_REPLY_TO=<a real DXG address>   # recommended, see "Sender decision"
+MAIL_REPLY_TO=dxgrfptool@gmail.com          # see "Sender decision"
 ```
 
 Credentials come from the standard AWS chain — an instance role in production, never the repo.
@@ -167,8 +167,8 @@ The sending principal needs `ses:SendEmail` scoped to the identity and configura
 3. **No SNS subscription yet.** Events publish to the topic and go nowhere, because the API has no
    public URL. When it is deployed, subscribe `POST https://<api>/api/v1/webhooks/email` — the
    endpoint already verifies SNS signatures and handles subscription confirmation.
-4. **`MAIL_REPLY_TO` is unset.** Worth pointing at a real DXG address now that the From domain is a
-   vendor one.
+4. ~~`MAIL_REPLY_TO` is unset~~ — **set 2026-09-20** to `dxgrfptool@gmail.com` (D-020). Worth
+   revisiting when DXG provides a branded, monitored mailbox; it is one env change.
 5. **Open and click tracking are off.** SES rewrites every link through `awstrack.me` unless a custom
    tracking domain exists, and a speaker being asked to click an unfamiliar redirect is worse than
    the metric is worth. Add `TrackingOptions` once a subdomain is available.
