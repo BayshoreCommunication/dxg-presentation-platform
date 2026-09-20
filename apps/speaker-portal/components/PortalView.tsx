@@ -5,8 +5,8 @@ import { useRouter } from "next/navigation";
 import { presenterLogout } from "@/lib/api";
 import type { CompleteResult, PortalSession, PortalTalk } from "@/lib/api";
 import { UploadPanel } from "./UploadPanel";
+import { formatBytes } from "@pmp/format";
 
-const mb = (bytes: string | number) => `${Math.round(Number(bytes) / 1_000_000)} MB`;
 
 export function PortalView({
   session,
@@ -141,7 +141,7 @@ function TalkCard({
         {latest && !result && (
           <div className="lane spk" style={{ marginTop: 10 }}>
             <b>v{latest.version_number} received.</b> Checksum verified — earlier versions are kept
-            safe. {mb(latest.size_bytes)}.
+            safe. {formatBytes(latest.size_bytes)}.
           </div>
         )}
 
@@ -205,7 +205,7 @@ function describe(finding: { check_code: string; detail: Record<string, unknown>
     case "metadata":
       if (detail.slides !== undefined) return `${String(detail.slides)} slides.`;
       if (detail.embedded_media !== undefined) return `${String(detail.embedded_media)} embedded media file(s).`;
-      return `${mb(String(detail.bytes ?? 0))} — within the 10 GB limit.`;
+      return `${formatBytes(detail.bytes as number)} — within the 10 GB limit.`;
     default:
       return JSON.stringify(detail);
   }

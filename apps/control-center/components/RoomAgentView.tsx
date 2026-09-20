@@ -4,12 +4,10 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { AgentView } from "@/lib/api";
 import { getAgentView, syncRoom, acknowledgeRoomFile, launchInRoom, ApiError } from "@/lib/api";
+import { formatBytes } from "@pmp/format";
 
 const size = (bytes: string): string => {
-  const value = Number(bytes);
-  return value >= 1_000_000_000
-    ? `${(value / 1_000_000_000).toFixed(1)} GB`
-    : `${Math.round(value / 1_000_000)} MB`;
+  return formatBytes(bytes);
 };
 
 const time = (iso: string) =>

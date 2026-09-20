@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { FindingRow, PresentationDetail, VersionRow } from "@/lib/api";
 import { waiveFinding, requestRevision, ApiError } from "@/lib/api";
+import { formatBytes } from "@pmp/format";
 
 const when = (iso: string) =>
   new Date(iso).toLocaleString("en-US", {
@@ -75,7 +76,7 @@ function explain(finding: FindingRow): { title: string; body: string; fix?: stri
         return { title: "Embedded media", body: `${String(detail.embedded_media)} embedded media file(s).` };
       return {
         title: "File size",
-        body: `${Math.round(Number(detail.bytes ?? 0) / 1_000_000)} MB — within the 10 GB limit.`,
+        body: `${formatBytes(detail.bytes as number)} — within the 10 GB limit.`,
       };
     default:
       return { title: finding.check_code.replace("_", " "), body: JSON.stringify(detail) };

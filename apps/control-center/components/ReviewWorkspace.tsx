@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { QueueItem } from "@/lib/api";
 import { transitionVersion, ApiError } from "@/lib/api";
 import { Chip, SeverityChip } from "@/components/Chip";
+import { formatBytes } from "@pmp/format";
 
 const FINDING_COPY: Record<string, (detail: Record<string, unknown>) => string> = {
   codec: (detail) =>
@@ -14,7 +15,6 @@ const FINDING_COPY: Record<string, (detail: Record<string, unknown>) => string> 
     `Linked (not embedded) media on slide ${(detail.slide_refs as number[] | undefined)?.join(", ") ?? "?"}.`,
 };
 
-const mb = (bytes: string) => `${Math.round(Number(bytes) / 1_000_000)} MB`;
 
 export function ReviewWorkspace({ initialQueue }: { initialQueue: QueueItem[] }) {
   const router = useRouter();
@@ -161,7 +161,7 @@ export function ReviewWorkspace({ initialQueue }: { initialQueue: QueueItem[] })
           <div className="chd">
             <h3>Review workspace · {selected.speaker}</h3>
             <span className="m">
-              v{selected.version_number} · {mb(selected.size_bytes)} · {selected.room}
+              v{selected.version_number} · {formatBytes(selected.size_bytes)} · {selected.room}
             </span>
           </div>
           <div className="cbd">

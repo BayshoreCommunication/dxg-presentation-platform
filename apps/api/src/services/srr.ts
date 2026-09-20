@@ -3,6 +3,7 @@ import { appendAudit } from "@pmp/db";
 import { deriveTalkStatus, TALK_STATUS_LABEL } from "@pmp/domain";
 import type { Actor, DomainError, Result } from "@pmp/domain";
 import { err, ok } from "@pmp/domain";
+import { formatBytes, formatBytesDelta } from "@pmp/format";
 import { ingestVersion, versionFacts } from "./ingest.ts";
 import type { VersionFacts } from "./ingest.ts";
 
@@ -406,7 +407,6 @@ export async function usbIngest(
 
 function compare(approved: VersionFacts | null, incoming: VersionFacts | null) {
   if (!approved || !incoming) return [];
-  const mb = (bytes: string) => `${Math.round(Number(bytes) / 1_000_000)} MB`;
   const delta = (a: number | null, b: number | null) =>
     a === null || b === null ? "—" : b === a ? "unchanged" : `${b > a ? "+" : ""}${b - a}`;
   return [
@@ -430,9 +430,9 @@ function compare(approved: VersionFacts | null, incoming: VersionFacts | null) {
     },
     {
       field: "Size",
-      approved: mb(approved.size_bytes),
-      incoming: mb(incoming.size_bytes),
-      delta: `${Number(incoming.size_bytes) >= Number(approved.size_bytes) ? "+" : ""}${Math.round((Number(incoming.size_bytes) - Number(approved.size_bytes)) / 1_000_000)} MB`,
+      approved: formatBytes(approved.size_bytes),
+      incoming: formatBytes(incoming.size_bytes),
+      delta: formatBytesDelta(approved.size_bytes, incoming.size_bytes),
     },
   ];
 }

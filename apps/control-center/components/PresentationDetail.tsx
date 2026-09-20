@@ -6,8 +6,8 @@ import { useRouter } from "next/navigation";
 import type { CommentRow, PresentationDetail } from "@/lib/api";
 import { rollBackTalk, ApiError } from "@/lib/api";
 import { Chip } from "@/components/Chip";
+import { formatBytes } from "@pmp/format";
 
-const mb = (bytes: string) => `${Math.round(Number(bytes) / 1_000_000)} MB`;
 const short = (sha: string | null) => (sha ? `${sha.slice(0, 4)}…${sha.slice(-4)}` : "—");
 const when = (iso: string) =>
   new Date(iso).toLocaleString("en-US", {
@@ -99,7 +99,7 @@ export function PresentationDetailView({
 
           {latest && (
             <div className="mono note" style={{ marginBottom: 6 }}>
-              v{latest.version_number} · {mb(latest.size_bytes)} · sha256 {short(latest.sha256)} ·{" "}
+              v{latest.version_number} · {formatBytes(latest.size_bytes)} · sha256 {short(latest.sha256)} ·{" "}
               {SOURCE_LABEL[latest.source] ?? latest.source}
             </div>
           )}
@@ -163,7 +163,7 @@ export function PresentationDetailView({
                 <tr key={row.file_version_id}>
                   <td className="mono">v{row.version_number}</td>
                   <td className="note">{when(row.created_at)}</td>
-                  <td className="num">{mb(row.size_bytes)}</td>
+                  <td className="num">{formatBytes(row.size_bytes)}</td>
                   <td className="mono">{short(row.sha256)}</td>
                   <td className="note">{SOURCE_LABEL[row.source] ?? row.source}</td>
                   <td>

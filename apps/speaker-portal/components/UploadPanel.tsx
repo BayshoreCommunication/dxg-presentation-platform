@@ -10,6 +10,7 @@ import {
   PortalError,
 } from "@/lib/api";
 import type { CompleteResult, UploadSession } from "@/lib/api";
+import { formatBytes } from "@pmp/format";
 
 type Phase = "idle" | "hashing" | "uploading" | "paused" | "completing" | "done" | "failed";
 
@@ -208,7 +209,3 @@ export function UploadPanel({
   );
 }
 
-const formatBytes = (bytes: number): string =>
-  bytes >= 1_000_000_000
-    ? `${(bytes / 1_000_000_000).toFixed(1)} GB`
-    : `${Math.round(bytes / 1_000_000)} MB`;

@@ -5,9 +5,8 @@ import { useRouter } from "next/navigation";
 import type { ArchiveScope } from "@/lib/api";
 import { buildArchive, deliverArchive, archiveDownloadUrl, ApiError } from "@/lib/api";
 import { Chip } from "@/components/Chip";
+import { formatBytes } from "@pmp/format";
 
-const gb = (bytes: number) =>
-  bytes >= 1_000_000_000 ? `${(bytes / 1_000_000_000).toFixed(1)} GB` : `${Math.round(bytes / 1_000_000)} MB`;
 
 const STATE_TONE: Record<string, string> = {
   draft: "canceled",
@@ -69,7 +68,7 @@ export function ArchiveView({ eventId, initial }: { eventId: string; initial: Ar
                 <td>Included</td>
                 <td>
                   <b className="num">{initial.included.length}</b> files ·{" "}
-                  <span className="mono">{gb(initial.total_bytes)}</span>
+                  <span className="mono">{formatBytes(initial.total_bytes)}</span>
                 </td>
               </tr>
               <tr>
@@ -152,7 +151,7 @@ export function ArchiveView({ eventId, initial }: { eventId: string; initial: Ar
               onClick={() =>
                 void run(async () => {
                   const result = await buildArchive(eventId);
-                  return `Built · ${result.file_count} files · ${gb(result.size_bytes)} · ${result.excluded} excluded`;
+                  return `Built · ${result.file_count} files · ${formatBytes(result.size_bytes)} · ${result.excluded} excluded`;
                 })
               }
             >

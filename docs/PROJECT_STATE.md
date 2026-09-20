@@ -609,3 +609,30 @@ staff path from event creation through onsite to archive, written for someone op
 the first time with no technical background. Grounded in the flows as they actually behave, having
 just walked them, rather than in what the screens are intended to do.
 
+## 2026-09-20 (twenty-fourth) — one byte formatter, `@pmp/format`
+
+Fixed the "0 MB" display. The speaker's upload confirmation now reads
+**"v2 received. Checksum verified — earlier versions are kept safe. 68.9 KB."**, verified in the
+running UI rather than only in tests.
+
+**It was not one bug, it was eight.** Every size string in the product was formatted at its own call
+site — `PortalView`, `UploadPanel`, `ArchiveView`, `ReviewWorkspace`, `PresentationDetail`,
+`InspectionView`, `RoomAgentView` and the API's `srr.ts` — each with a slightly different local
+helper, and all of them flooring to whole megabytes. Fixing only the reported screen would have left
+seven others to be rediscovered one at a time.
+
+New zero-dependency package `@pmp/format` (`formatBytes`, `formatBytesDelta`), imported by all eight.
+It picks a unit by magnitude, never renders a real file as `0`, keeps one decimal below 100 and drops
+it above, returns `—` for absent values rather than inventing `0 bytes`, and handles the negatives
+that deltas produce. 9 tests, including the regression itself: 68,912 bytes must render `68.9 KB` and
+must not render `0 MB`.
+
+**Two things worth recording from doing it.** `Number(null)` is `0`, not `NaN`, so a missing size was
+being reported as a real empty file until an explicit guard went in — caught by the test, not by
+reading the code. And the formatter first lived in `@pmp/domain`, which failed: the Next apps then had
+to typecheck the whole domain package, which uses `.ts` extension imports and `findLast`, neither
+compatible with their tsconfig. A single-file package with no internal imports was the fix, and is
+better design anyway — two frontends should not compile the lifecycle engine to print a file size.
+
+`npm run ci` green at 169 tests.
+
