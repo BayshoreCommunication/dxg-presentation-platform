@@ -137,6 +137,29 @@ function actorFrom(req: express.Request): Actor | undefined {
  * a client-side account is pinned to the clients it actually holds a role on,
  * so RLS — not a hardcoded id — decides what it can see.
  */
+/**
+ * Thrown by `scopeFor` when an account reaches for an event it holds no role on.
+ * Carries its own status and code so the handler at the foot of this file can render
+ * it faithfully rather than flattening it into a generic failure.
+ */
+class ScopeError extends Error {
+  readonly status = 403;
+  readonly code = "auth.not_on_this_event";
+  constructor(message: string) {
+    super(message);
+    this.name = "ScopeError";
+  }
+}
+
+/**
+ * `platform_admin` is the one role that is genuinely platform-wide, and the exception
+ * is deliberate rather than convenient. Someone has to be able to create the first
+ * event and grant roles on it, which is by definition a thing done from outside any
+ * event; `scripts/bootstrapAdmin.ts` depends on it. Every other role — project
+ * manager included — is held on an event or not at all.
+ */
+const PLATFORM_WIDE_ROLES: EventRole[] = ["platform_admin"];
+
 function scopeFor(req: express.Request, eventId?: string): {
   userId: string;
   clientId?: string;
@@ -145,6 +168,24 @@ function scopeFor(req: express.Request, eventId?: string): {
 } {
   const principal = (req as express.Request & { principal?: Principal }).principal;
   if (principal?.kind !== "staff") throw new Error("scopeFor requires a staff principal");
+
+  /*
+   * SRS §5: "Access shall be event-scoped and least-privilege. Client and event
+   * isolation is mandatory."
+   *
+   * Until now `rolesFor` flattened every role across every event, so holding any role
+   * on any one event granted that role's powers on all of them — a content reviewer
+   * on one conference could read another's speakers. Checking here rather than in each
+   * service is deliberate: this is the single place every event-scoped route passes
+   * through, so a route added tomorrow inherits the rule instead of having to remember
+   * it.
+   */
+  if (eventId && !principal.roles.some((role) => PLATFORM_WIDE_ROLES.includes(role))) {
+    const onThisEvent = principal.event_roles.some((held) => held.event_id === eventId);
+    if (!onThisEvent) {
+      throw new ScopeError("Your account has no role on this event.");
+    }
+  }
 
   const isStaff = principal.roles.some((role) => STAFF_ROLES.includes(role));
   return {
@@ -298,10 +339,33 @@ app.get("/ops/health", async (_req, res) => {
 app.get("/api/v1/events", async (req, res) => {
   const actor = actorFrom(req);
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+
+  /*
+   * The portfolio lists the events this account works on, not every event in the
+   * system. That is the same least-privilege rule `scopeFor` applies per event (SRS
+   * §5) — a list of things you cannot open is not useful, and naming other clients'
+   * events to someone with no role on them is itself a small disclosure.
+   *
+   * `platform_admin` sees everything, for the same reason it may cross events at all.
+   */
+  const principal = (req as express.Request & { principal?: Principal }).principal;
+  const seesAll =
+    principal?.kind === "staff" && principal.roles.some((role) => PLATFORM_WIDE_ROLES.includes(role));
+  const own = principal?.kind === "staff" ? [...new Set(principal.event_roles.map((held) => held.event_id))] : [];
+
   const items = await withScope(scopeFor(req), async (tx) => {
+    if (seesAll) {
+      const { rows } = await tx.query(
+        `SELECT id, name, starts_on::text, ends_on::text, timezone, status
+           FROM pmp.events ORDER BY starts_on DESC`,
+      );
+      return rows;
+    }
+    if (own.length === 0) return [];
     const { rows } = await tx.query(
       `SELECT id, name, starts_on::text, ends_on::text, timezone, status
-         FROM pmp.events ORDER BY starts_on DESC`,
+         FROM pmp.events WHERE id = ANY($1::uuid[]) ORDER BY starts_on DESC`,
+      [own],
     );
     return rows;
   });
@@ -1703,8 +1767,14 @@ app.use((err: unknown, _req: express.Request, res: express.Response, _next: expr
       ? (err as { status: number }).status
       : 500;
 
-  // Body-parser rejections are the client's fault and safe to name.
+  // An error that carries its own code and message said what it meant; pass it through
+  // rather than replacing it with something vaguer.
   if (status >= 400 && status < 500) {
+    const typed = err as { code?: unknown; message?: unknown };
+    if (typeof typed.code === "string" && typeof typed.message === "string") {
+      return res.status(status).json({ code: typed.code, message: typed.message });
+    }
+    // Body-parser rejections are the client's fault and safe to name, but say no more.
     return res.status(status).json({ code: "request.invalid", message: "Malformed request." });
   }
 

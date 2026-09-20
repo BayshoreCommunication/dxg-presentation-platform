@@ -28,6 +28,13 @@ export type Principal =
       email: string;
       display_name: string;
       roles: EventRole[];
+      /**
+       * Which roles are held on which event. The flattened `roles` above says what
+       * this account can ever do; this says where, and it is the difference between
+       * the two that SRS §5 requires: "Access shall be event-scoped and
+       * least-privilege. Client and event isolation is mandatory."
+       */
+      event_roles: { event_id: string; role: EventRole }[];
       /** Clients this account has any role on — empty for DXG staff, who work across all. */
       client_ids: string[];
       /**
@@ -227,6 +234,7 @@ export async function principalFor(tx: pg.PoolClient, userId: string): Promise<P
     email: user.email,
     display_name: user.display_name,
     roles,
+    event_roles: await eventRolesFor(tx, user.id),
     client_ids: await clientsFor(tx, user.id),
     client_events: clientOnly ? await clientEventsFor(tx, user.id) : [],
     must_change_password: user.must_change_password,
@@ -258,6 +266,18 @@ async function rolesFor(tx: pg.PoolClient, userId: string): Promise<EventRole[]>
     [userId],
   );
   return rows.map((row) => row.role);
+}
+
+/** Every (event, role) pair this account holds — the basis for event scoping. */
+async function eventRolesFor(
+  tx: pg.PoolClient,
+  userId: string,
+): Promise<{ event_id: string; role: EventRole }[]> {
+  const { rows } = await tx.query<{ event_id: string; role: EventRole }>(
+    `SELECT event_id, role FROM pmp.event_roles WHERE user_id = $1`,
+    [userId],
+  );
+  return rows;
 }
 
 /** The roles that make an account a client's, not DXG's. */

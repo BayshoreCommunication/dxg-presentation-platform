@@ -118,3 +118,16 @@ A deployed installation starts with no accounts and no way to make one: Staff ac
 
 The account is produced exactly as every other account is: a temporary password printed once, `must_change_password` set, no authenticator. Verified on a throwaway database with migrations and no seed — the account signs in, reports `must_change_password: true` and `mfa_enrolled: false`, and is refused everything with `auth.mfa_required` until it enrols. The creation is written to the hash-chained audit as `admin.bootstrapped` with a null actor, because there was no one to act. Owner: Travis.
 
+## D-025 (2026-09-20): Roles are enforced per event, not flattened across all of them — Status: ACCEPTED
+`rolesFor` read `SELECT DISTINCT role FROM event_roles WHERE user_id = $1` with no event filter, so the principal carried a flat set of roles and every authorisation check asked only *what* the account could do, never *where*. Holding any role on any one event therefore granted that role's powers on every event in the installation.
+
+**This was a live cross-event hole, not a tidiness problem.** Demonstrated before the fix: `c.delgado`, a content reviewer on one conference and nothing else, read a second conference's summary and speaker list — a different client's material, separated by nothing but the absence of a link to it. SRS §5 is explicit: "Access shall be event-scoped and least-privilege. Client and event isolation is mandatory." So this contradicted a stated requirement rather than an assumption.
+
+**Enforced at `scopeFor`, deliberately, rather than in each service.** That function is the single point every event-scoped route already passes through on its way to the database, so a route added tomorrow inherits the rule instead of having to remember it. Eighteen routes were fixed by one check. It throws a typed `ScopeError` carrying its own status and code; the error handler was widened to render a typed 4xx faithfully instead of flattening everything into "Malformed request".
+
+**`platform_admin` remains platform-wide, and the exception is necessary rather than convenient.** Someone has to create the first event and grant roles on it, which is by definition done from outside any event — `scripts/bootstrapAdmin.ts` depends on exactly this. Every other role, project manager included, is now held on an event or not at all.
+
+**The event list had to follow.** The portfolio listed every event and then fetched a summary for each, so once per-event scoping landed, a manager on one event got a page of refusals. `GET /events` now returns only the events the account holds a role on. That is the same requirement applied one level up: a list of things you cannot open is useless, and naming another client's event to someone with no role on it is itself a small disclosure.
+
+Twelve cases in `tests/invariants/event-scope.test.ts` across nine surfaces. Verified by reverting the check and re-running: **10 of 12 fail without it, 12 of 12 pass with it.** Owner: Travis.
+

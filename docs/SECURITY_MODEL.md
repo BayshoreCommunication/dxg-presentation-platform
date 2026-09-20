@@ -6,6 +6,7 @@ Status: Draft v0.1 (2026-08-30). The G0-5 threat-model workshop refines this; SR
 
 - Every domain row carries `client_id` and (where applicable) `event_id`. PostgreSQL **RLS policies** enforce isolation; the API sets session context (`SET LOCAL app.client_id / app.event_id / app.user_id`) per request inside a transaction — following RFPilot's tenant-RLS pattern. No query path bypasses RLS except migration/admin tooling with a distinct role.
 - Access is event-scoped and least-privilege (SRS §5). Client grants give client-admins visibility into only their own events.
+- **Enforced 2026-09-20 (D-025).** Until then roles were flattened across every event, so any role on any one event granted that role's powers on all of them. `scopeFor` now refuses an event the account holds no role on (`auth.not_on_this_event`, 403), and the event list returns only the account's own events. `platform_admin` is the single deliberate exception, because creating the first event and granting roles on it cannot be done from inside an event.
 - **Cross-event attempts**: RLS denials on explicitly-addressed foreign resources are logged with actor + target and raise an alert (NFR-SEC-06); repeated attempts flag the account.
 
 ## 2. Authentication

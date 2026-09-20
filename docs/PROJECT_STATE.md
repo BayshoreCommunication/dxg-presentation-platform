@@ -958,3 +958,34 @@ that is a migration and a grant-UI change, and belongs in its own decision.
 
 CI green, 171 tests.
 
+## 2026-09-20 (thirty-seventh) — roles are finally event-scoped
+
+Fixed the inconsistency recorded in D-024 — and it was worse than "inconsistent". Roles were flattened
+across events, so **any role on any one event granted that role's powers on every event**. Proved it
+before touching anything: a content reviewer on one conference read a second conference's summary and
+speakers. Different client, no link, no barrier. SRS §5 says isolation is mandatory, so this
+contradicted the spec rather than an assumption of mine.
+
+Enforced at `scopeFor` — the one place all eighteen event-scoped routes already pass through — so a
+route written tomorrow inherits the rule rather than having to remember it. Refusal is
+`auth.not_on_this_event`, 403. The global error handler was widened to render a typed 4xx faithfully;
+it had been flattening everything into "Malformed request".
+
+`platform_admin` stays platform-wide. That exception is necessary, not convenient: creating the first
+event and granting roles on it cannot be done from inside an event, and `bootstrapAdmin.ts` relies on
+it.
+
+**A consequence the browser caught that the API probe had not.** With per-event scoping live, M. Vega
+landed on `/no-access` — the portfolio lists every event and then fetches a summary for each, so a
+manager on one event got a page of refusals. `GET /events` now returns only the account's own events.
+Verified per role: admin sees 3, the two event-scoped accounts see 1 each.
+
+`tests/invariants/event-scope.test.ts`, twelve cases over nine surfaces. Reverted the check and
+re-ran to be sure they bite: **10 of 12 fail without it, 12 of 12 pass with it.** Full CI green;
+invariants 48 pass, 0 fail.
+
+Dev-database noise worth knowing: two probe events remain (`Cross-Event Probe 2026`,
+`Event Scope Probe`). The second is the new suite's own fixture and should stay; the first resisted a
+plain delete because of `event_days` foreign keys, and writing cascade-delete logic for dev noise was
+not worth the risk. `npm run db:reset` clears both.
+
