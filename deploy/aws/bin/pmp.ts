@@ -12,7 +12,7 @@ new DevBootstrapStack(app, 'Pmp-dev-Bootstrap', {
     account: '295229565954', // RFPilot account, fixed by D-008 — deploy with the `rfpilot` CLI profile
     region: 'us-east-2',
   },
-  alertEmail: app.node.tryGetContext('pmpAlertEmail') ?? 'travis@swopme.co',
+  alertEmail: app.node.tryGetContext('pmpAlertEmail') ?? 'dxgrfptool@gmail.com',
   description: 'DXG Presentation Platform dev bootstrap: single EC2 + S3 (docs/infra/DEV_BOOTSTRAP.md)',
 });
 

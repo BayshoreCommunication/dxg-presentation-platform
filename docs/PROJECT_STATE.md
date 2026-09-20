@@ -533,3 +533,18 @@ through the platform's own sender rather than the CLI, so the whole path from en
 `sesConfigFromEnv()`, including that `replyTo` survives and that it stays `undefined` rather than an
 empty string when unset. `npm run ci` green, 160 tests.
 
+## 2026-09-20 (twenty-first) — project contact address is the service address
+
+`deploy/aws/bin/pmp.ts` defaulted `alertEmail` to a personal address. On deploy that creates two real
+AWS Budgets email subscriptions ($80 and $100 thresholds), so it was inert only because nothing is
+deployed yet. Now `dxgrfptool@gmail.com`, matching `MAIL_REPLY_TO` (D-020) — this project uses the
+service address, not personal contact details. The `pmpAlertEmail` CDK context key still overrides it.
+
+Swept the rest of the project: no personal address remains anywhere. The other non-fixture addresses
+are `m.vega@dxg.live` in a TOTP test fixture and `name@dxg.live` as a UI placeholder in
+`StaffAdmin.tsx` — neither is ever sent to. Everything else is `*@example.invalid`.
+
+Left alone deliberately: the mandatory `owner` tag (ENVIRONMENTS.md §5) still has the value `travis`.
+That is cost-allocation attribution rather than a contact address, and the tagging scheme is
+documented, so changing it is a spec decision rather than a cleanup.
+
