@@ -1195,3 +1195,27 @@ other of a usable one. `pass 36 / fail 0 / skipped 15` reads as success and is n
 tested nothing. The `freshCode` helper already waits for a step boundary; it evidently is not enough
 under full parallelism.
 
+## 2026-09-20 (forty-seventh) — the invariant suites stop skipping themselves
+
+Two problems, and the second was the dangerous one.
+
+**The contention.** `freshCode` serialises TOTP steps in module-level state, which only holds within
+one process — and Node runs each test file in its own. `mfa_last_counter` is per account, and
+`admin@example.invalid` is signed in from four call sites across the suites, so two files starting in
+the same 30-second step collided and the loser got its code refused. `signInStaff` now waits out the
+step and retries, up to three attempts.
+
+**The silence.** A failed sign-in set `up = false`, so the suite skipped every test in the file and
+the run reported `fail 0`. That is worse than a failure: a green summary while nothing was tested. A
+skip is right when the API is not running; it is wrong when the API answered its health check and
+sign-in failed anyway. `signInStaff` now throws with the status and code, distinguishing a rejected
+password — which will not improve with waiting — from a refused second factor, which will.
+
+**Proved by forcing the race**, not by re-running and hoping: four concurrent sign-ins as the same
+account, launched together, all succeeded — staggered at 0s, 12s, 42s and 72s as each took the next
+step. Before this, three of the four returned empty and would have skipped their suites.
+
+Two consecutive full runs: 48 pass, 0 fail, 3 skipped both times. The three remaining skips are
+honest — those tests read the password-reset link out of `.data/mail`, which only the file transport
+writes, and the dispatcher is currently on SES. They cannot verify a link they cannot read, and say so.
+

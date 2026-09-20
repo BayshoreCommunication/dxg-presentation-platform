@@ -46,12 +46,10 @@ before(async () => {
   }
   if (!up) return;
 
-  admin = (await signInStaff(API, "admin@example.invalid", PASSWORD)) ?? "";
-  reviewer = (await signInStaff(API, "c.delgado@example.invalid", PASSWORD)) ?? "";
-  if (!admin || !reviewer) {
-    up = false;
-    return;
-  }
+  // No `?? ""` and no skip-on-failure: the API answered its health check, so a
+  // sign-in that fails here is a real failure and should be seen as one.
+  admin = await signInStaff(API, "admin@example.invalid", PASSWORD);
+  reviewer = await signInStaff(API, "c.delgado@example.invalid", PASSWORD);
 
   // A second event the reviewer holds no role on. Reused if a previous run made it.
   const { items } = (await (await fetch(`${API}/events`, { headers: { cookie: admin } })).json()) as {

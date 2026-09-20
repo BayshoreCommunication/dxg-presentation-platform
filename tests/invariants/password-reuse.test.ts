@@ -32,10 +32,6 @@ before(async () => {
   // Its own account, created the way DXG creates one, so this suite cannot break
   // whichever other suite signs in as a shared fixture.
   const admin = await signInStaff(API, "admin@example.invalid", "dxg-development-password");
-  if (!admin) {
-    up = false;
-    return;
-  }
   TARGET = `reuse-probe-${Date.now()}@example.invalid`;
   const created = (await (
     await fetch(`${API}/admin/users`, {

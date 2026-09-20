@@ -16,6 +16,13 @@ let startedAtStep: number | null = null;
  * Hands back a code from a step this helper has not used before. The server
  * refuses a replayed code — correctly — so sequential tests signing in within
  * the same 30-second window would otherwise fail each other.
+ *
+ * **This only serialises within one process.** Node runs each test file in its own,
+ * so two files signing in as the same account in the same 30-second step still
+ * collide — and `mfa_last_counter` is per account, so sharing
+ * `admin@example.invalid` across four call sites is exactly the case that collides.
+ * `signInStaff` handles the loser of that race by waiting for the next step and
+ * trying again; this function alone cannot, because it cannot see the other process.
  */
 export async function freshCode(secret = DEV_MFA_SECRET): Promise<string> {
   const step = () => Math.floor(Date.now() / 1000 / 30);
@@ -48,20 +55,51 @@ export async function signInStaff(
   email: string,
   password: string,
 ): Promise<string> {
-  const first = await fetch(`${api}/auth/login`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ email, password }),
-  });
-  if (!first.ok) return "";
+  // Three attempts spans a little over a minute of steps, which is far more than any
+  // realistic pile-up of suites contending for the same account.
+  const attempts = 3;
+  let lastReason = "";
 
-  const body = (await first.json()) as { step?: string };
-  if (body.step === "signed_in") return cookieFrom(first);
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    const first = await fetch(`${api}/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
+    if (!first.ok) {
+      // A rejected password is not a race and will not improve with waiting.
+      const detail = (await first.json().catch(() => ({}))) as { code?: string };
+      throw new Error(
+        `sign-in failed for ${email}: ${first.status} ${detail.code ?? "unknown"} — password step`,
+      );
+    }
 
-  const second = await fetch(`${api}/auth/mfa/verify`, {
-    method: "POST",
-    headers: { "content-type": "application/json", cookie: cookieFrom(first) },
-    body: JSON.stringify({ code: await freshCode() }),
-  });
-  return second.ok ? cookieFrom(second) : "";
+    const body = (await first.json()) as { step?: string };
+    if (body.step === "signed_in") return cookieFrom(first);
+
+    const second = await fetch(`${api}/auth/mfa/verify`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: cookieFrom(first) },
+      body: JSON.stringify({ code: await freshCode() }),
+    });
+    if (second.ok) return cookieFrom(second);
+
+    const detail = (await second.json().catch(() => ({}))) as { code?: string; message?: string };
+    lastReason = `${second.status} ${detail.code ?? "unknown"}`;
+
+    /*
+     * Another test file got this account's counter first. Wait out the step and take
+     * the next one — the loser of the race retries rather than reporting a failure
+     * that says nothing about the code under test.
+     */
+    if (attempt < attempts) {
+      await new Promise((resolve) =>
+        setTimeout(resolve, (30 - ((Date.now() / 1000) % 30)) * 1000 + 250),
+      );
+    }
+  }
+
+  throw new Error(
+    `sign-in failed for ${email} after ${attempts} attempts: ${lastReason} — second factor`,
+  );
 }
