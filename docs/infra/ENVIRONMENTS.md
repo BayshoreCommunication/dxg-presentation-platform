@@ -50,6 +50,7 @@ Deploy order: Network → Data → App/Agent → Observability. Known RFPilot le
 
 - Stacks/resources: `pmp-<env>-<component>`; hyphens only (no em dashes per workspace convention).
 - Mandatory tags: `product=pmp`, `env`, `stack`, `owner`, `costcenter` — cost separation from RFPilot is a hard requirement if sharing an account.
+- Tag **values** carry no personal contact details: `owner=dxg-pmp`, not an individual's name or address. Ownership is the team's, and a tag outlives whoever set it. The same rule applies to alert destinations — `deploy/aws/bin/pmp.ts` defaults `alertEmail` to the project service address.
 
 ## 6. Open items for G0-8 review
 

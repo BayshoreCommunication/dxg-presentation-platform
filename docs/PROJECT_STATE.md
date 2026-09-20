@@ -544,7 +544,9 @@ Swept the rest of the project: no personal address remains anywhere. The other n
 are `m.vega@dxg.live` in a TOTP test fixture and `name@dxg.live` as a UI placeholder in
 `StaffAdmin.tsx` — neither is ever sent to. Everything else is `*@example.invalid`.
 
-Left alone deliberately: the mandatory `owner` tag (ENVIRONMENTS.md §5) still has the value `travis`.
-That is cost-allocation attribution rather than a contact address, and the tagging scheme is
-documented, so changing it is a spec decision rather than a cleanup.
+The mandatory `owner` tag (ENVIRONMENTS.md §5) is now `dxg-pmp` rather than a personal name —
+Travis's call. Because the tagging scheme is documented rather than incidental, the *value* convention
+is now written into ENVIRONMENTS.md §5 alongside it: tag values carry no personal contact details,
+because ownership is the team's and a tag outlives whoever set it. Confirmed via `cdk synth` that
+every resource carries `owner=dxg-pmp`. Nothing is deployed, so no live resource needed retagging.
 

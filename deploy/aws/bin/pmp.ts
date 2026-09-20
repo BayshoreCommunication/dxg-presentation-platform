@@ -33,5 +33,5 @@ new EmailStack(app, 'Pmp-Email', {
 // Cost separation from RFPilot (mandatory — D-008/DEV_BOOTSTRAP §2).
 cdk.Tags.of(app).add('product', 'pmp');
 cdk.Tags.of(app).add('env', 'dev');
-cdk.Tags.of(app).add('owner', 'travis');
+cdk.Tags.of(app).add('owner', 'dxg-pmp');
 cdk.Tags.of(app).add('costcenter', 'pmp-dev');
