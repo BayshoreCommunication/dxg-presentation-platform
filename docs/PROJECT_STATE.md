@@ -717,3 +717,27 @@ Verified by signing in as an administrator, rendering `/no-access` with the real
 granting `presentation_manager` on MedTech Forward 2026 to the test account through the UI and
 confirming the row in `event_roles`.
 
+## 2026-09-20 (twenty-eighth) — QR code on authenticator enrolment
+
+Enrolment now leads with a scannable QR, typed secret kept underneath (D-021, superseding the D-017
+clause that declined QR codes). The API had been returning `otpauth_uri` all along and the UI was
+discarding it, so most of this was already built.
+
+Rendered in the browser via `qrcode-generator` (MIT, zero dependencies, types included) — chosen over
+`qrcode`, which pulls three transitive packages including a CLI argument parser. D-017's real
+objection was handing a secret to a third-party image service; that still stands and is honoured, as
+nothing leaves the page.
+
+**A second bug surfaced while testing, worth more than the QR itself.** Signing in as the new account
+landed on `/no-access` saying "what's missing is a role on an event" while the actual message read
+"Set up your authenticator app before using the platform" — the page assumed every 403 meant a
+missing role. Two different refusals were being flattened into one. `guard()` now reads the error
+code: `auth.mfa_required` routes to `/account/mfa`, because not having enrolled yet is a **step to
+finish, not a door being closed**; every other 403 still goes to `/no-access`. Without that, a new
+staff member was told to ask an administrator for a role they already had.
+
+Verified end to end rather than by eye: the QR was rebuilt independently from the secret shown on
+screen and matched the rendered SVG exactly — 49 modules, viewBox `0 0 57 57`, 1258 dark modules —
+then enrolment was completed with a code derived from that secret, recovery codes issued, and
+`mfa_enrolled_at` confirmed set. CI green, 169 tests.
+

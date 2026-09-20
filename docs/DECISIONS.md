@@ -53,7 +53,7 @@ NFR-SEC-02 requires MFA for DXG staff. Implemented as TOTP (RFC 6238, HMAC-SHA1,
 
 Details worth keeping: a code is accepted once (the step counter is recorded, so replaying a code inside its 30-second window is refused); ten single-use recovery codes are issued at enrolment, stored hashed and shown once; removing MFA needs both the password and a live code; the challenge expires in five minutes and dies after five wrong codes.
 
-**QR codes are not offered** — rendering one needs a dependency, and sending the secret to a third-party image service would defeat the point. Enrolment shows the secret grouped for typing, which every authenticator app accepts via "enter a setup key". Revisit if staff onboarding volume makes manual entry painful. Owner: Travis.
+~~**QR codes are not offered**~~ — **superseded 2026-09-20 by D-021.** The original reasoning: rendering one needs a dependency, and sending the secret to a third-party image service would defeat the point. Enrolment showed the secret grouped for typing, which every authenticator app accepts via "enter a setup key". Owner: Travis.
 
 ## D-018 (2026-09-17): SES via the AWS SDK, events via signed SNS — Status: ACCEPTED
 Email sends through Amazon SES (SESv2) using `@aws-sdk/client-sesv2` — the first runtime AWS dependency in this repo, and consistent with D-001 (RFPilot uses `@aws-sdk/*`). The alternative, hand-rolling SigV4 against the SES HTTP API, would mean writing request-signing code by hand for a security-critical path; not worth the saved dependency. The SDK is imported lazily so development, which uses the file transport, never loads it.
@@ -77,3 +77,13 @@ The obvious choice was an address at `dxg-agency.com`, and it is not available: 
 `dxgrfptool@gmail.com` is the documented service address for this project and is verified to receive mail. The cost, accepted knowingly, is that external speakers see a gmail address on an otherwise professional communication. **This is a stopgap.** When DXG provides a branded, monitored mailbox it is a one-line env change; `docs/infra/EMAIL.md` carries the note. An address at `av-rfpilot.com` would also work — that domain does have MX — but only if the mailbox genuinely exists, and inventing one has the same silent-bounce failure as `dxg-agency.com`.
 
 Verified by sending through the platform's own `SesSender`, not the CLI, so the whole path `MAIL_REPLY_TO` → `sesConfigFromEnv()` → `ReplyToAddresses` is known to work (`MessageId 010f01a0bd42259b-…`). `packages/email/src/config.test.ts` now covers the env-to-config half so a refactor cannot drop it unnoticed. Owner: Travis.
+
+## D-021 (2026-09-20): Enrolment shows a QR code, rendered locally — Status: ACCEPTED (Travis's call, supersedes the D-017 QR clause)
+The authenticator enrolment screen now leads with a scannable QR code, with the typed secret kept underneath as the fallback. This reverses the D-017 clause, at the owner's request, on the condition D-017 itself named — manual entry of a 32-character base32 secret is the most error-prone step in the flow, and it is the step a brand-new colleague meets first.
+
+**The security half of the original reasoning is preserved, not overridden.** D-017 objected to QR codes on two grounds: that rendering needs a dependency, and that a third-party image service would mean handing someone else the secret. The second was the real objection and still stands — the code is generated **in the browser**, from an `otpauth_uri` the API already returned and the UI was discarding. Nothing is sent anywhere; no image service is involved.
+
+The dependency is `qrcode-generator` (MIT, **zero dependencies**, single module, types included), chosen over the more popular `qrcode` which pulls in three transitive packages including a CLI argument parser. Hand-rolling a QR encoder was considered and rejected: unlike the ZIP reader and TOTP this repo does hand-roll, a subtly wrong QR fails silently at the scanner rather than in a test, and correctness could not be established without a reference implementation to compare against. A library that is scanned millions of times a day is the safer choice here.
+
+Verified end to end rather than by eye: the QR was rebuilt independently from the secret displayed on screen, and matched the rendered SVG exactly — 49 modules, viewBox `0 0 57 57`, 1258 dark modules — then enrolment was completed with a code derived from that secret and the account confirmed enrolled. Owner: Travis.
+

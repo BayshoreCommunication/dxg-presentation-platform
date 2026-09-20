@@ -9,10 +9,11 @@
     "type-check": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
+    "@pmp/format": "*",
     "next": "^15.5.4",
+    "qrcode-generator": "^2.0.4",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0",
-    "@pmp/format": "*"
+    "react-dom": "^19.1.0"
   },
   "devDependencies": {
     "@types/react": "^19.1.0",

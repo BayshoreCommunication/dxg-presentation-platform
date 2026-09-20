@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { startMfaEnrolment, confirmMfaEnrolment, ApiError } from "@/lib/api";
 import type { Enrolment } from "@/lib/api";
+import { QrCode } from "./QrCode";
 
 /**
  * Enrolment in three visible steps: take the secret, prove the app works, keep
@@ -111,23 +112,40 @@ export function MfaEnrolment() {
         ) : (
           <form onSubmit={confirm}>
             <div className="field">
-              <label>1 · Add this secret to your app</label>
-              <div
-                className="mono"
-                style={{
-                  background: "var(--ink)",
-                  border: "1px solid #2A3B46",
-                  borderRadius: 6,
-                  padding: "10px 12px",
-                  color: "var(--white)",
-                  wordBreak: "break-all",
-                }}
-              >
-                {enrolment.secret_grouped}
+              <label>1 · Add this account to your authenticator app</label>
+
+              <div style={{ display: "flex", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
+                <div style={{ padding: 8, background: "#FFFFFF", borderRadius: 8, lineHeight: 0 }}>
+                  <QrCode value={enrolment.otpauth_uri} />
+                </div>
+
+                <div style={{ flex: "1 1 200px", minWidth: 200 }}>
+                  <div className="note" style={{ color: "var(--dim)", marginBottom: 8 }}>
+                    Scan this with 1Password, Authy, Google Authenticator or similar.
+                  </div>
+
+                  <div className="note" style={{ color: "var(--dim)", marginBottom: 4 }}>
+                    No camera to hand? Choose &ldquo;enter a setup key&rdquo; and type this instead:
+                  </div>
+                  <div
+                    className="mono"
+                    style={{
+                      background: "var(--ink)",
+                      border: "1px solid #2A3B46",
+                      borderRadius: 6,
+                      padding: "10px 12px",
+                      color: "var(--white)",
+                      wordBreak: "break-all",
+                      fontSize: 12.5,
+                    }}
+                  >
+                    {enrolment.secret_grouped}
+                  </div>
+                </div>
               </div>
-              <div className="note" style={{ marginTop: 6, color: "var(--dim)" }}>
-                Account: {enrolment.account} · type SHA1, 6 digits, 30 seconds. Most apps offer
-                &ldquo;enter a setup key&rdquo; for this.
+
+              <div className="note" style={{ marginTop: 8, color: "var(--dim)" }}>
+                Account: {enrolment.account} · SHA1, 6 digits, 30 seconds.
               </div>
             </div>
 
