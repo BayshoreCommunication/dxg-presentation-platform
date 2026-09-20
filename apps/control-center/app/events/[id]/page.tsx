@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getSummary, getRiskList, getFleet } from "@/lib/api";
 import { Chip } from "@/components/Chip";
 import { AutoRefresh } from "@/components/AutoRefresh";
+import { guard } from "@/lib/guard";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +17,10 @@ const time = (iso: string, timeZone: string) =>
 
 export default async function CommandCenterPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [summary, risk, fleet] = await Promise.all([getSummary(id), getRiskList(id), getFleet(id)]);
+  const [summary, risk, fleet] = await guard(
+    Promise.all([getSummary(id), getRiskList(id), getFleet(id)]),
+    `/events/${id}`,
+  );
 
   const kpis = [
     { label: "Collected", value: `${summary.collected} / ${summary.total}`, note: `${summary.total === 0 ? 0 : Math.round((summary.collected / summary.total) * 100)}% of talks` },

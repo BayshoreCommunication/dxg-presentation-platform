@@ -663,3 +663,32 @@ The middleware comment claims "a 401 from there sends the user back here too" �
 cannot go in `lib/api.ts`, which is shared with client components where `LoginForm` needs to *display*
 a 401 rather than redirect, so it is a per-page change. Tracked separately.
 
+## 2026-09-20 (twenty-sixth) — an expired session now lands on the login screen
+
+All 16 staff pages that call the API route a 401 back to `/login?next=<where they were>&reason=required`
+instead of rendering a crash page. Previously only `admin/users` and `client/[eventId]` did.
+
+`lib/guard.ts` wraps the fetch rather than restructuring each page:
+`const { items } = await guard(listEvents(), "/")`. One line per call site, and the `next` parameter
+means the user resumes where they were rather than landing on the portfolio.
+
+**Only 401 redirects, deliberately.** A 403 means the session is perfectly valid and the role is not
+sufficient; bouncing that person to a login screen they are already past sends them round a loop with
+nothing explained. Those stay with the caller, as the two already-correct pages do.
+
+**It could not be centralised in `lib/api.ts`**, which was the obvious place. That module is imported
+by client components too, and `LoginForm` needs to render a 401 as "that email and password don't
+match an account" rather than navigate away from the form being typed into. A blanket redirect inside
+`request()` would have broken sign-in — the failure being silently converted into a redirect back to
+the same form. Verified after the change that a wrong password still shows its message and stays put.
+
+Verified by deleting every `auth_sessions` row while keeping the browser cookie — the real expired
+session case — then requesting all 14 reachable staff paths: every one landed on `/login` with its
+own path preserved, none errored.
+
+Corrected the `middleware.ts` comment, which claimed "a 401 from there sends the user back here too".
+That was not true when written; it is now, and the comment says which code makes it so.
+
+Also fixed while in there: `events/[id]/agent/[roomId]` destructured only `roomId`, so the return path
+had no event id to build from — caught by typecheck, not by reading.
+

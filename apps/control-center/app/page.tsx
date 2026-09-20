@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { listEvents, getSummary } from "@/lib/api";
 import { Chip } from "@/components/Chip";
+import { guard } from "@/lib/guard";
 
 export const dynamic = "force-dynamic";
 
@@ -19,8 +20,8 @@ const formatRange = (from: string, to: string) => {
 };
 
 export default async function PortfolioPage() {
-  const { items } = await listEvents();
-  const summaries = await Promise.all(items.map((event) => getSummary(event.id)));
+  const { items } = await guard(listEvents(), "/");
+  const summaries = await guard(Promise.all(items.map((event) => getSummary(event.id))), "/");
 
   return (
     <>

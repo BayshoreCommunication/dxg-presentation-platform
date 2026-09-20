@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { getFleet } from "@/lib/api";
+import { guard } from "@/lib/guard";
 
 export const dynamic = "force-dynamic";
 
 export default async function PickRoomPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { items } = await getFleet(id);
+  const { items } = await guard(getFleet(id), `/events/${id}/agent`);
   return (
     <>
       <h1 className="htitle">Room Agent</h1>

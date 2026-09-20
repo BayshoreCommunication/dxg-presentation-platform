@@ -1,6 +1,7 @@
 import { getFleet } from "@/lib/api";
 import { Chip } from "@/components/Chip";
 import { AutoRefresh } from "@/components/AutoRefresh";
+import { guard } from "@/lib/guard";
 
 export const dynamic = "force-dynamic";
 
@@ -8,7 +9,7 @@ const LABEL = { ready: "Ready", attention: "Attention", agent_offline: "Agent of
 
 export default async function RoomSyncPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { items } = await getFleet(id);
+  const { items } = await guard(getFleet(id), `/events/${id}/sync`);
   const ready = items.filter((room) => room.readiness === "ready").length;
 
   return (
