@@ -587,3 +587,25 @@ transport is proven and the recording is not.
 The tunnel URL is ephemeral and changes on restart; the subscription has to be recreated each time.
 Fine for testing, not a standing arrangement.
 
+## 2026-09-20 (twenty-third) — speaker upload exercised for real, and a user guide
+
+Uploaded a genuine presentation through the speaker portal UI as Alicia Fontaine, signed in with an
+access code alone. Not a stub: the file was built with the project's own `writeZip` into a valid
+PPTX — 5 slides, 16:9 slide size, an embedded .mp4 — so the inspector had real structure to read.
+
+The whole chain held. Server-side afterwards: version 2, `processing_state=stored`,
+`inspection_state=passed`, `review_state=awaiting_review`, sha256 `123e81e0…672e` matching what the
+speaker was shown, the bytes content-addressed on disk under client/event prefixes, and four
+inspection findings recorded (5 slides, 16:9 against the room profile, 1 embedded media) — identical
+to what the same inspector produced locally beforehand. v1 kept, not overwritten; the button becomes
+"Replace file".
+
+**One display bug found:** a 68,912-byte file renders as "**0 MB** — within the 10 GB limit". The
+size is rounded to whole megabytes, so anything under ~500 KB reads as zero, which looks like a
+failed upload at the exact moment the speaker most needs reassurance. Not fixed here.
+
+Added `docs/USER_JOURNEY.md` — a plain-language guide covering both the speaker's three steps and the
+staff path from event creation through onsite to archive, written for someone opening the platform for
+the first time with no technical background. Grounded in the flows as they actually behave, having
+just walked them, rather than in what the screens are intended to do.
+
