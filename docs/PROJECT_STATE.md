@@ -1067,3 +1067,27 @@ Verified through the UI: the guard refuses, a real grant of `content_reviewer` o
 succeeds, and both views update together — M. Vega shows two events with different roles in the
 account list, and appears under NeuroSummit in the event view. CI green; admin invariants pass.
 
+## 2026-09-20 (forty-first) — assigning several roles at once
+
+Travis asked for multiple roles per person per event. **Checked first: it already worked.**
+`event_roles` is keyed on (user, event, role), `grantRole` inserts one of those, and granting twice
+with different roles was already accepted — verified against the API, including that re-granting a
+role already held is idempotent rather than an error. What was missing was doing it in one go, and a
+single-choice dropdown implying it was one or nothing.
+
+The role picker in Event assignments is now checkboxes: tick every hat someone wears on that event
+and assign once. The button counts what it is about to do ("assign 2 roles"), so there is no doubt
+before pressing it.
+
+**Roles already held come back ticked and disabled**, captioned "Already holds this role here". Worth
+the extra state: without it an administrator re-opening the row cannot tell what is already true from
+what they are about to add, and the obvious reading — an empty box means they do not have it — would
+be wrong.
+
+Grants run sequentially rather than in parallel, so a failure part-way names the role it failed on
+instead of losing it in a race.
+
+Verified through the UI: picking a person reveals eight checkboxes, ticking SRR technician and room
+technician and pressing assign gives C. Delgado both on OrthoWorld in one action, the form resets, and
+re-opening the row shows both ticked and locked. CI green; admin invariants 8 pass.
+

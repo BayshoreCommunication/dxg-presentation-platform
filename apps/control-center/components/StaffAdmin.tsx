@@ -63,6 +63,20 @@ export function StaffAdmin({ initial, events }: { initial: StaffRow[]; events: E
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [view, setView] = useState<"person" | "event">("event");
+  /** Who is being assigned to which event, and with which roles, before pressing assign. */
+  const [draft, setDraft] = useState<Record<string, { who: string; roles: string[] }>>({});
+
+  const setWho = (eventId: string, who: string) =>
+    setDraft((current) => ({ ...current, [eventId]: { who, roles: [] } }));
+
+  const toggleRole = (eventId: string, role: string) =>
+    setDraft((current) => {
+      const entry = current[eventId] ?? { who: "", roles: [] };
+      const roles = entry.roles.includes(role)
+        ? entry.roles.filter((held) => held !== role)
+        : [...entry.roles, role];
+      return { ...current, [eventId]: { ...entry, roles } };
+    });
 
   async function run(work: () => Promise<void>) {
     setBusy(true);
@@ -245,11 +259,17 @@ export function StaffAdmin({ initial, events }: { initial: StaffRow[]; events: E
                         where the question is being asked, and the event is already
                         decided by which row you are on — so it cannot be got wrong by
                         leaving a dropdown on its default.
+
+                        Roles are checkboxes, not a single choice, because one person
+                        routinely wears two hats on an event — the SRR technician who
+                        also runs a room, the presentation manager who reviews content.
+                        The data model always allowed it; making it one role at a time
+                        implied otherwise and cost a round trip per hat.
                       */}
-                      <div style={{ display: "flex", gap: 4, marginTop: 8, flexWrap: "wrap" }}>
+                      <div style={{ marginTop: 8 }}>
                         <select
-                          id={`who-${event.id}`}
-                          defaultValue=""
+                          value={draft[event.id]?.who ?? ""}
+                          onChange={(e) => setWho(event.id, e.target.value)}
                           style={{ fontSize: 12, padding: "3px 6px" }}
                         >
                           <option value="">assign someone…</option>
@@ -261,36 +281,67 @@ export function StaffAdmin({ initial, events }: { initial: StaffRow[]; events: E
                               </option>
                             ))}
                         </select>
-                        <select
-                          id={`as-${event.id}`}
-                          defaultValue=""
-                          style={{ fontSize: 12, padding: "3px 6px" }}
-                        >
-                          <option value="">as…</option>
-                          {EVENT_ROLE_NAMES.map((role) => (
-                            <option key={role} value={role}>
-                              {role.replace(/_/g, " ")}
-                            </option>
-                          ))}
-                        </select>
-                        <button
-                          className="btn"
-                          style={{ padding: "2px 8px", fontSize: 12 }}
-                          disabled={busy}
-                          onClick={() =>
-                            void run(async () => {
-                              const who = (document.getElementById(`who-${event.id}`) as HTMLSelectElement)
-                                .value;
-                              const as = (document.getElementById(`as-${event.id}`) as HTMLSelectElement)
-                                .value;
-                              if (!who) throw new ApiError("request", "Pick who to assign.", 400);
-                              if (!as) throw new ApiError("request", "Pick which role they hold.", 400);
-                              await setStaffRole(who, event.id, as, true);
-                            })
-                          }
-                        >
-                          assign
-                        </button>
+
+                        {draft[event.id]?.who && (
+                          <div style={{ marginTop: 6 }}>
+                            <div className="note" style={{ marginBottom: 4 }}>
+                              as — tick every role they hold on this event:
+                            </div>
+                            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 6 }}>
+                              {EVENT_ROLE_NAMES.map((role) => {
+                                const already = people.some(
+                                  (p) => p.person.id === draft[event.id]?.who && p.role === role,
+                                );
+                                return (
+                                  <label
+                                    key={role}
+                                    className="note"
+                                    style={{
+                                      display: "inline-flex",
+                                      alignItems: "center",
+                                      gap: 4,
+                                      opacity: already ? 0.45 : 1,
+                                    }}
+                                    /* Held already, so there is nothing to add. */
+                                    title={already ? "Already holds this role here" : undefined}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      disabled={already || busy}
+                                      checked={already || (draft[event.id]?.roles ?? []).includes(role)}
+                                      onChange={() => toggleRole(event.id, role)}
+                                    />
+                                    {role.replace(/_/g, " ")}
+                                  </label>
+                                );
+                              })}
+                            </div>
+                            <button
+                              className="btn"
+                              style={{ padding: "2px 8px", fontSize: 12 }}
+                              disabled={busy}
+                              onClick={() =>
+                                void run(async () => {
+                                  const chosen = draft[event.id];
+                                  if (!chosen?.who) throw new ApiError("request", "Pick who to assign.", 400);
+                                  if (!chosen.roles.length) {
+                                    throw new ApiError("request", "Tick at least one role.", 400);
+                                  }
+                                  // Sequential, so a failure part-way names the role it
+                                  // failed on rather than losing it in a race.
+                                  for (const role of chosen.roles) {
+                                    await setStaffRole(chosen.who, event.id, role, true);
+                                  }
+                                  setDraft((current) => ({ ...current, [event.id]: { who: "", roles: [] } }));
+                                })
+                              }
+                            >
+                              assign{" "}
+                              {(draft[event.id]?.roles.length ?? 0) > 0 &&
+                                `${draft[event.id]!.roles.length} role${draft[event.id]!.roles.length > 1 ? "s" : ""}`}
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </td>
                   </tr>
