@@ -96,3 +96,12 @@ Both paths now compare the candidate against the stored hash with `verifyPasswor
 
 Proved rather than asserted: `tests/invariants/password-reuse.test.ts` fails 3 of its 5 cases with the fix reverted and passes all 5 with it in place. One of those three is the one that matters most — with the check absent, reusing the temporary password *succeeded* and cleared the forced-change flag. Owner: Travis.
 
+## D-023 (2026-09-20): Password minimum lowered to 6, dictionary widened to match — Status: ACCEPTED (Travis's call)
+`checkPassword` required 12 characters; it now requires 6, at Travis's request. The 12 was a choice in code rather than a stated requirement — no SRS or NFR names a length — so this contradicts nothing written down.
+
+**Stated plainly because it is a real reduction:** six is below the 8 that NIST SP 800-63B gives as a floor for user-chosen secrets, and these are staff accounts that can read and change every speaker's material for an entire event. Two existing controls carry the weight that length no longer does. TOTP is enforced for every staff account with no development bypass (D-017), so a guessed password alone buys a five-minute challenge and nothing else. Sign-in locks after five failed attempts with a growing window, which makes online guessing expensive. Neither helps against an offline attack on a stolen hash, where length is what matters — scrypt's cost parameters are the only defence there, and they are stored with each hash so they can be raised without a migration. Raising the minimum later is a single constant, `MINIMUM_LENGTH`.
+
+**The dictionary had to widen, and this is the part that would have been easy to miss.** The common-password list was written under a 12-character minimum, so nothing shorter could ever reach it. At six, `123456`, `qwerty` and `abc123` — the most-guessed passwords in every breach corpus — are suddenly long enough to pass the length rule, and the list is the only thing left refusing them. Lowering the floor without widening the dictionary would have been strictly worse than either change alone. Thirty short entries added.
+
+**An existing test was passing for the wrong reason,** which this exposed: "common passwords are rejected however long" asserted `too_short` against two eleven-character entries, so the old length rule caught them before the dictionary was ever consulted. At six they reach the dictionary and the assertion is now `too_common` — the test finally checks what its name claims. Owner: Travis.
+

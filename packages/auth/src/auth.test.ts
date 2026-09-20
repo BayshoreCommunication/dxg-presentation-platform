@@ -55,14 +55,36 @@ describe("password hashing", () => {
 
 describe("password policy", () => {
   test("length is the rule, not character classes", () => {
-    assert.equal(checkPassword("Sh0rt!")?.code, "too_short");
+    assert.equal(checkPassword("Sh0rt")?.code, "too_short", "five characters is under the minimum");
+    assert.equal(checkPassword("Sh0rt!"), null, "six is the minimum, so six passes");
     assert.equal(checkPassword("all lowercase and long enough"), null);
   });
 
+  /*
+   * These two used to assert `too_short`, which meant the dictionary was never
+   * actually exercised — both are eleven characters and the old twelve-character
+   * minimum caught them first. The test passed for the wrong reason. At a minimum of
+   * six they reach the dictionary, which is what its name always claimed to check.
+   */
   test("common passwords are rejected however long", () => {
-    assert.equal(checkPassword("password123")?.code, "too_short");
-    assert.equal(checkPassword("dxgpassword")?.code, "too_short");
-    assert.equal(checkPassword("passwordpassword"), null);
+    assert.equal(checkPassword("password123")?.code, "too_common");
+    assert.equal(checkPassword("dxgpassword")?.code, "too_common");
+    assert.equal(checkPassword("passwordpassword"), null, "not on the list, however guessable it looks");
+  });
+
+  /*
+   * Lowering the minimum to six is what makes these reachable at all: every one of
+   * them is long enough now, so the dictionary is the only thing refusing them.
+   */
+  test("the most-guessed short passwords are refused", () => {
+    for (const guess of ["123456", "qwerty", "abc123", "letmein", "monkey", "111111", "secret"]) {
+      assert.equal(checkPassword(guess)?.code, "too_common", `${guess} should be refused`);
+    }
+  });
+
+  test("case and spacing do not smuggle a common password past the list", () => {
+    assert.equal(checkPassword("QWERTY")?.code, "too_common");
+    assert.equal(checkPassword("Abc123")?.code, "too_common");
   });
 
   test("an absurdly long password is refused rather than hashed", () => {

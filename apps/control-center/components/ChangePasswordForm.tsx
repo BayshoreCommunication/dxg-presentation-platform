@@ -2,9 +2,18 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { changePassword, ApiError } from "@/lib/api";
+import Link from "next/link";
+import { changePassword, logout, ApiError } from "@/lib/api";
 
-/** Changing a password ends every other session, so it returns you to sign-in. */
+/**
+ * Changing a password ends every other session, so it returns you to sign-in.
+ *
+ * The way out differs by how you got here. A voluntary change can simply be
+ * abandoned. A forced first-use change cannot — the account is refused everywhere
+ * else until it is done — so offering "back" there would be a button that returns
+ * you to this same screen. Signing out is the honest escape, and the one someone
+ * handed the wrong temporary password actually needs.
+ */
 export function ChangePasswordForm({ firstUse }: { firstUse: boolean }) {
   const router = useRouter();
   const [current, setCurrent] = useState("");
@@ -71,7 +80,7 @@ export function ChangePasswordForm({ firstUse }: { firstUse: boolean }) {
             onChange={(event) => setNext(event.target.value)}
           />
           <div className="note" style={{ marginTop: 4 }}>
-            At least 12 characters. Length matters more than symbols — a short phrase works well.
+            At least 6 characters. Length matters more than symbols — a short phrase works well.
           </div>
         </div>
         <div className="field">
@@ -89,6 +98,23 @@ export function ChangePasswordForm({ firstUse }: { firstUse: boolean }) {
         <button className="btn pri" style={{ width: "100%", padding: 9 }} disabled={busy} type="submit">
           {busy ? "Saving…" : "Set password"}
         </button>
+
+        <div style={{ marginTop: 12, textAlign: "center" }}>
+          {firstUse ? (
+            <button
+              type="button"
+              className="linkish"
+              style={{ background: "none", border: 0, color: "var(--blue)", cursor: "pointer", fontSize: 13 }}
+              onClick={() => void logout().then(() => router.replace("/login"))}
+            >
+              Sign out instead
+            </button>
+          ) : (
+            <Link href="/" style={{ color: "var(--blue)", fontSize: 13 }}>
+              ← Back without changing it
+            </Link>
+          )}
+        </div>
       </form>
     </div>
   );

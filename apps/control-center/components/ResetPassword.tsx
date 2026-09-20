@@ -97,7 +97,7 @@ export function ResetPassword({ token }: { token: string }) {
             onChange={(event) => setPassword(event.target.value)}
           />
           <div className="note" style={{ marginTop: 4, color: "var(--dim)" }}>
-            At least 12 characters. A short phrase beats a clever substitution.
+            At least 6 characters. A short phrase beats a clever substitution.
           </div>
         </div>
         <div className="field">

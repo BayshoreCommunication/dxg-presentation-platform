@@ -868,3 +868,33 @@ same place twice.
 
 CI green, 169 tests.
 
+## 2026-09-20 (thirty-fourth) — password minimum 6, and a way off the change-password screen
+
+Two changes Travis asked for on the forced-change screen.
+
+**Minimum length 12 → 6** (D-023). Not contradicting anything documented — no SRS or NFR names a
+length. Flagged rather than waved through: six is below NIST's floor of 8, and these accounts can
+read and change every speaker's material. Enforced TOTP and five-attempt lockout are what now carry
+the weight; against an offline attack on a stolen hash neither helps and only scrypt's cost
+parameters do. `MINIMUM_LENGTH` is one constant if it should go back up.
+
+**The dictionary had to widen with it.** The common-password list was written under a 12-character
+minimum, so nothing shorter could reach it. At six, `123456`, `qwerty` and `abc123` were suddenly
+long enough to pass the length rule with nothing else refusing them — lowering the floor alone would
+have been worse than either change. Thirty short entries added, verified live: five characters is
+`too_short`, `abcdef` is accepted, `qwerty` is `too_common`.
+
+**A test was passing for the wrong reason.** "common passwords are rejected however long" asserted
+`too_short` against two eleven-character entries — the old length rule caught them before the
+dictionary was consulted. It now asserts `too_common`, and finally tests what its name says. Two new
+cases cover the newly-reachable short guesses and their casing variants. 171 tests.
+
+**A way out of the screen**, which is what prompted this. The route differs by how you arrived: a
+voluntary change offers "← Back without changing it"; a forced first-use change cannot, since the
+account is refused everywhere else, so it offers **"Sign out instead"** — the escape someone handed
+the wrong temporary password actually needs. The emailed-link reset screen gets "← Back to sign in",
+its only honest destination with no session.
+
+Side effect worth recording: the live policy check changed `admin@example.invalid`'s password and,
+correctly, revoked every session for it. Restored to the seeded password and re-verified sign-in.
+
