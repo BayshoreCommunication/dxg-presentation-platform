@@ -63,13 +63,6 @@ export function StaffAdmin({ initial, events }: { initial: StaffRow[]; events: E
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [view, setView] = useState<"person" | "event">("event");
-  /*
-   * Deliberately blank rather than defaulting to an event. It used to default to
-   * whichever event happened to be first, so the quickest path — pick a role, press
-   * grant — silently assigned it on an event the administrator never chose, and on a
-   * screen where the mistake shows up as someone reading another client's material.
-   */
-  const [eventId, setEventId] = useState("");
 
   async function run(work: () => Promise<void>) {
     setBusy(true);
@@ -183,14 +176,15 @@ export function StaffAdmin({ initial, events }: { initial: StaffRow[]; events: E
       {view === "event" && (
         <div className="card">
           <div className="chd">
-            <h3>Who is on each event</h3>
+            <h3>Event assignments</h3>
             <span className="m">
+              who works which event, and as what
               <button
                 className="btn"
-                style={{ padding: "2px 8px", fontSize: 12 }}
+                style={{ padding: "2px 8px", fontSize: 12, marginLeft: 10 }}
                 onClick={() => setView("person")}
               >
-                view by person ›
+                manage accounts ›
               </button>
             </span>
           </div>
@@ -245,6 +239,59 @@ export function StaffAdmin({ initial, events }: { initial: StaffRow[]; events: E
                           </div>
                         ))
                       )}
+
+                      {/*
+                        Assigning happens here rather than on the account rows: this is
+                        where the question is being asked, and the event is already
+                        decided by which row you are on — so it cannot be got wrong by
+                        leaving a dropdown on its default.
+                      */}
+                      <div style={{ display: "flex", gap: 4, marginTop: 8, flexWrap: "wrap" }}>
+                        <select
+                          id={`who-${event.id}`}
+                          defaultValue=""
+                          style={{ fontSize: 12, padding: "3px 6px" }}
+                        >
+                          <option value="">assign someone…</option>
+                          {initial
+                            .filter((person) => person.is_active)
+                            .map((person) => (
+                              <option key={person.id} value={person.id}>
+                                {person.display_name}
+                              </option>
+                            ))}
+                        </select>
+                        <select
+                          id={`as-${event.id}`}
+                          defaultValue=""
+                          style={{ fontSize: 12, padding: "3px 6px" }}
+                        >
+                          <option value="">as…</option>
+                          {EVENT_ROLE_NAMES.map((role) => (
+                            <option key={role} value={role}>
+                              {role.replace(/_/g, " ")}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          className="btn"
+                          style={{ padding: "2px 8px", fontSize: 12 }}
+                          disabled={busy}
+                          onClick={() =>
+                            void run(async () => {
+                              const who = (document.getElementById(`who-${event.id}`) as HTMLSelectElement)
+                                .value;
+                              const as = (document.getElementById(`as-${event.id}`) as HTMLSelectElement)
+                                .value;
+                              if (!who) throw new ApiError("request", "Pick who to assign.", 400);
+                              if (!as) throw new ApiError("request", "Pick which role they hold.", 400);
+                              await setStaffRole(who, event.id, as, true);
+                            })
+                          }
+                        >
+                          assign
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -259,15 +306,18 @@ export function StaffAdmin({ initial, events }: { initial: StaffRow[]; events: E
           <h3>Accounts · {initial.length}</h3>
           <span className="m">
             {view === "person" ? (
-              <button
-                className="btn"
-                style={{ padding: "2px 8px", fontSize: 12 }}
-                onClick={() => setView("event")}
-              >
-                ‹ view by event
-              </button>
+              <>
+                passwords, authenticators, access
+                <button
+                  className="btn"
+                  style={{ padding: "2px 8px", fontSize: 12, marginLeft: 10 }}
+                  onClick={() => setView("event")}
+                >
+                  ‹ event assignments
+                </button>
+              </>
             ) : (
-              "grant roles per event"
+              "passwords, authenticators, access"
             )}
           </span>
         </div>
@@ -290,80 +340,33 @@ export function StaffAdmin({ initial, events }: { initial: StaffRow[]; events: E
                     <br />
                     <span className="note mono">{user.email}</span>
                   </td>
+                  {/*
+                    Read-only here, on purpose. Assigning someone to an event is a
+                    different job from administering their account, and cramming both
+                    into one cell put two dropdowns and a button on every row — the
+                    editing controls outnumbered the facts they were editing. The
+                    assignment work now lives in the event view above, where the
+                    question "who is on this event?" is actually being asked.
+                  */}
                   <td>
                     {user.roles.length === 0 ? (
-                      /*
-                       * Not merely "none": an account with no role is refused every
-                       * screen in the product, so saying so here saves the admin
-                       * discovering it from the person's confusion later.
-                       */
                       <span className="chip c-warn">no event — cannot use the platform</span>
                     ) : (
-                      user.roles.map((role) => (
-                        <div key={`${role.event_id}-${role.role}`} style={{ marginBottom: 3 }}>
-                          <span style={{ display: "inline-block", minWidth: 170 }}>
-                            {role.event_name}
-                          </span>
-                          <span className="chip c-mut">{role.role.replace(/_/g, " ")}</span>{" "}
-                          <button
-                            className="btn"
-                            style={{ padding: "1px 7px", fontSize: 11 }}
-                            disabled={busy}
-                            onClick={() =>
-                              void run(async () => {
-                                await setStaffRole(user.id, role.event_id, role.role, false);
-                              })
-                            }
-                          >
-                            remove
-                          </button>
-                        </div>
-                      ))
+                      <>
+                        {user.roles.map((role) => (
+                          <div key={`${role.event_id}-${role.role}`} className="note">
+                            {role.event_name} · <strong>{role.role.replace(/_/g, " ")}</strong>
+                          </div>
+                        ))}
+                        <button
+                          className="btn"
+                          style={{ padding: "1px 7px", fontSize: 11, marginTop: 4 }}
+                          onClick={() => setView("event")}
+                        >
+                          change assignments
+                        </button>
+                      </>
                     )}
-                    <div style={{ display: "flex", gap: 4, marginTop: 4, flexWrap: "wrap" }}>
-                      <select id={`role-${user.id}`} defaultValue="" style={{ fontSize: 12, padding: "3px 6px" }}>
-                        <option value="">add role…</option>
-                        {EVENT_ROLE_NAMES.map((role) => (
-                          <option key={role} value={role}>
-                            {role.replace(/_/g, " ")}
-                          </option>
-                        ))}
-                      </select>
-                      <select
-                        id={`event-${user.id}`}
-                        defaultValue={eventId}
-                        onChange={(event) => setEventId(event.target.value)}
-                        style={{ fontSize: 12, padding: "3px 6px" }}
-                      >
-                        <option value="">on which event…</option>
-                        {events.map((event) => (
-                          <option key={event.id} value={event.id}>
-                            {event.name}
-                          </option>
-                        ))}
-                      </select>
-                      <button
-                        className="btn"
-                        style={{ padding: "2px 8px", fontSize: 12 }}
-                        disabled={busy}
-                        onClick={() =>
-                          void run(async () => {
-                            const role = (document.getElementById(`role-${user.id}`) as HTMLSelectElement).value;
-                            const chosenEvent = (document.getElementById(`event-${user.id}`) as HTMLSelectElement)
-                              .value;
-                            if (!role) throw new ApiError("request", "Pick a role first.", 400);
-                            // Refuse rather than assume: granting on the wrong event is
-                            // the mistake this screen must not make quietly.
-                            if (!chosenEvent) {
-                              throw new ApiError("request", "Pick which event this role is on.", 400);
-                            }
-                            await setStaffRole(user.id, chosenEvent, role, true);
-                          })
-                        }
-                      >
-                        grant
-                      </button>
-                    </div>
                   </td>
                   <td style={{ whiteSpace: "nowrap" }}>
                     {!user.is_active && <Chip status="attention" label="deactivated" />}
