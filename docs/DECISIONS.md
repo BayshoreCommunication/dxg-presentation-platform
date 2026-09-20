@@ -105,3 +105,16 @@ Proved rather than asserted: `tests/invariants/password-reuse.test.ts` fails 3 o
 
 **An existing test was passing for the wrong reason,** which this exposed: "common passwords are rejected however long" asserted `too_short` against two eleven-character entries, so the old length rule caught them before the dictionary was ever consulted. At six they reach the dictionary and the assertion is now `too_common` — the test finally checks what its name claims. Owner: Travis.
 
+## D-024 (2026-09-20): The first platform admin is created by a script, not an endpoint — Status: ACCEPTED
+A deployed installation starts with no accounts and no way to make one: Staff accounts requires a platform admin, and there is none. `scripts/bootstrapAdmin.ts` closes that gap.
+
+**Why not an endpoint.** A bootstrap route cannot authenticate its caller — there is nobody to authenticate against yet — so it would be a URL that mints an administrator, guarded at best by a shared secret in configuration. The script requires database credentials, which is a higher bar than anything HTTP could check, and it leaves no route to forget to remove afterwards.
+
+**Why it is not a back door.** It refuses outright the moment any `platform_admin` exists, naming the account that already holds it. Running it twice cannot mint a second administrator, so it is safe to leave in the repository and in the image.
+
+**Why it asks for a client and an event.** `event_roles.event_id` is NOT NULL with a foreign key to `events`, so on an empty database there is nowhere to hang a role. Rather than invent a placeholder event that would then appear in every listing forever, the script creates the first real one from details supplied on the command line — which is what the first administrator was going to do first anyway. An existing event of the same name is reused rather than duplicated.
+
+**An inconsistency this exposes, recorded rather than fixed.** `rolesFor` reads `SELECT DISTINCT role FROM event_roles WHERE user_id = $1` with no event filter, so a `platform_admin` on any one event is a platform admin everywhere. The storage is per-event; the effect is global. That is why granting the role on the first event is sufficient, and it is also a latent trap: revoking the role on one event does not revoke it. Making `event_id` nullable for platform-wide roles would be the principled fix — `event_roles` appears in no RLS policy, so it is contained — but it is a migration and a change to the grant UI, and belongs in its own decision rather than smuggled into a bootstrap script.
+
+The account is produced exactly as every other account is: a temporary password printed once, `must_change_password` set, no authenticator. Verified on a throwaway database with migrations and no seed — the account signs in, reports `must_change_password: true` and `mfa_enrolled: false`, and is refused everything with `auth.mfa_required` until it enrols. The creation is written to the hash-chained audit as `admin.bootstrapped` with a null actor, because there was no one to act. Owner: Travis.
+

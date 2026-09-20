@@ -928,3 +928,33 @@ confirmed rather than added.
 `test@example.com`'s password is now `reset-worked-2026` as a result of the walkthrough.
 `npm run ci` green at 171 tests; the reset invariant suite green separately.
 
+## 2026-09-20 (thirty-sixth) — how the first admin comes to exist
+
+`scripts/bootstrapAdmin.ts` (D-024). A deployed installation had no way to make its first account:
+Staff accounts requires a platform admin and there is none.
+
+A script rather than an endpoint, because a bootstrap route cannot authenticate its caller — there is
+nobody to authenticate against — so it would be a URL that mints an administrator. Database
+credentials are a higher bar than anything HTTP could check, and there is no route left behind to
+forget to remove. It refuses the moment any `platform_admin` exists, naming the one that does, so it
+is safe to ship.
+
+It takes a client and an event because `event_roles.event_id` is NOT NULL with a foreign key: on an
+empty database there is nowhere to hang a role. It creates the first real event from the arguments
+rather than inventing a placeholder that would haunt every listing.
+
+**Verified on a throwaway database** — a fresh postgres with migrations and no seed, not the
+development one. That is what caught the bug: `ON CONFLICT (name)` on `pmp.clients`, which carries no
+unique constraint, failed with `42P10`. Reading the script would not have found it. After the fix:
+the account is created with the role, the audit chain gets `admin.bootstrapped` with a null actor,
+signing in reports `must_change_password: true` and `mfa_enrolled: false`, and every route is refused
+with `auth.mfa_required` until enrolment. A second run refuses.
+
+**An inconsistency this surfaced, recorded not fixed.** `rolesFor` selects roles with no event filter,
+so a `platform_admin` on one event is a platform admin everywhere — storage is per-event, effect is
+global. It is why granting on the first event suffices, and a trap: revoking on one event does not
+revoke it. `event_roles` appears in no RLS policy so a nullable `event_id` would be contained, but
+that is a migration and a grant-UI change, and belongs in its own decision.
+
+CI green, 171 tests.
+
