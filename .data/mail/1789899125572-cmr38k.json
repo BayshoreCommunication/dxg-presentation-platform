@@ -1,7 +1,0 @@
-{
-  "to": "test@example.com",
-  "subject": "Reset your DXG·PM password",
-  "body": "Hi Test,\n\nSomeone asked to reset the password on your DXG·PM account. If that was you, use this link:\n\nhttp://localhost:3000/reset-password?token=nWzN_l6D20MpkMZ_ZqXXQtOKtRLy7VIs38hj6HSR4Dw\n\nIt stops working in 30 minutes, and only once.\n\nIf it wasn't you, nothing has changed and you can ignore this email — but tell a platform admin,\nbecause it means someone knows your address.\n\nThe DXG presentation team",
-  "kind": "email.send",
-  "written_at": "2026-09-20T10:12:05.572Z"
-}

@@ -1,7 +1,0 @@
-{
-  "to": "reset-probe-1789899180334@example.invalid",
-  "subject": "Reset your DXG·PM password",
-  "body": "Hi Reset Probe,\n\nSomeone asked to reset the password on your DXG·PM account. If that was you, use this link:\n\nhttp://localhost:3000/reset-password?token=ORCVfbWfPr9zNeBe5zFkqiz6-G_OoQaUS7BMzdSX8RQ\n\nIt stops working in 30 minutes, and only once.\n\nIf it wasn't you, nothing has changed and you can ignore this email — but tell a platform admin,\nbecause it means someone knows your address.\n\nThe DXG presentation team",
-  "kind": "email.send",
-  "written_at": "2026-09-20T10:13:00.629Z"
-}

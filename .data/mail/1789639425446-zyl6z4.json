@@ -1,8 +1,0 @@
-{
-  "to": "p.raman@example.invalid",
-  "subject": "MedTech Forward 2026: please upload your presentation by the published deadline",
-  "body": "Hi Raman,\n\nYou're presenting at MedTech Forward 2026 — Robotic Surgery Outcomes: Five-Year Data in Ballroom A on 2026-03-11 14:30.\n\nPlease upload your presentation by the published deadline using your personal secure link. No account is needed.\n\nhttp://localhost:3001/t/faa8ee79-f2d2-4c5e-b28f-74c86a8fdc59\n\nRequirements: 16:9 widescreen, PowerPoint (.pptx) preferred, PDF accepted. Embed all fonts and use H.264 .mp4 for video.\n\nThe DXG presentation team",
-  "kind": "email.send",
-  "ref": "f4369540-2485-4fd0-a724-a8b25896258d",
-  "written_at": "2026-09-17T10:03:45.446Z"
-}
