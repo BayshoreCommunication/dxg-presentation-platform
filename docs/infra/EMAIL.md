@@ -62,10 +62,22 @@ it in this AWS account, so it cannot be done from here.
 
 Namecheap's *Host* field takes the subdomain only — `mail`, not `mail.dxg-agency.com`. Namecheap
 adds the priority in its own column; do not put `10` inside the MX value. Enter the TXT value
-without surrounding quotes.
+without surrounding quotes. **Exactly one MX record** may exist on the MAIL FROM subdomain — SES
+fails the setup outright if it finds more than one.
 
-SES re-checks periodically and flips the identity to `SUCCESS` within about 72 hours of the records
-propagating. Check it with:
+**These records can only come from the `dxg-agency.com` zone.** SES requires the MAIL FROM domain to
+be a subdomain of the parent domain of the verified identity, so a domain we *do* control cannot
+stand in for it — see "Why `av-rfpilot.com` cannot be used for this" below.
+
+**Status as of 2026-09-20: still `PENDING`, records never published.** That is the 72-hour edge, so
+this has almost certainly lapsed to `Failed` by the time anyone reads this. Re-run the configure
+command *after* the records are live rather than before.
+
+**The 72-hour window runs from when the MAIL FROM was configured, not from when the records
+appear.** SES looks for the MX record for 72 hours; if it has not found it by then the status goes
+to `Failed`, SES stops checking, and the setup has to be re-run with the same
+`put-email-identity-mail-from-attributes` command. Publishing the records after that point does
+nothing on its own. Check the status with:
 
 ```bash
 aws sesv2 get-email-identity --email-identity dxg-agency.com --region us-east-2 --profile rfpilot \
@@ -93,6 +105,43 @@ aws sesv2 put-email-identity-mail-from-attributes --region us-east-2 --profile r
 
 Verified on 2026-09-17 that sending is unaffected while `PENDING`: a message through the `pmp-email`
 configuration set was accepted (`MessageId 010f01a0aee21e1f-…`).
+
+## Why `av-rfpilot.com` cannot be used for this
+
+We do control `av-rfpilot.com` (GoDaddy, `ns35/36.domaincontrol.com`), it is already a verified SES
+identity in this same account with DKIM `SUCCESS`, and `mail.av-rfpilot.com` is unused. It still
+cannot solve the `dxg-agency.com` problem, for two separate reasons.
+
+**1. SES forbids it.** The MAIL FROM domain "has to be a subdomain of the parent domain of a
+verified identity" ([AWS docs](https://docs.aws.amazon.com/ses/latest/dg/mail-from.html)). A MAIL
+FROM of `mail.av-rfpilot.com` cannot serve the `dxg-agency.com` identity. The two are coupled by
+design — the whole point is proving common ownership.
+
+**2. Even if it were allowed, it would be the wrong thing.** Speakers at a DXG event receiving
+"upload your presentation" from a domain that is not their event agency's is worse for trust and
+for deliverability than the SPF alignment is worth. And `av-rfpilot.com` is **RFPilot production's
+live sending identity** (`noreply@av-rfpilot.com`, per that repo's `deploy/aws/STATE.md`), so
+changing its MAIL FROM attribute would alter a different product's production email.
+
+If a fully self-controlled pipeline is ever needed for testing, verify a *separate* identity such as
+`pmp.av-rfpilot.com` with its own DKIM and its own `mail.pmp.av-rfpilot.com`. That keeps RFPilot's
+identity untouched. It is still vendor-branded, so it is a testing tool, not the production answer.
+
+## This is an improvement, not a blocker
+
+Worth stating plainly so nobody treats the `PENDING` status as broken:
+
+| Check | Status for `presentations@dxg-agency.com` today |
+|---|---|
+| DKIM | Signs as `dxg-agency.com` → **aligned** |
+| SPF | Authenticates `amazonses.com` (the fallback MAIL FROM) → not aligned |
+| DMARC | **Passes**, via DKIM alignment. Policy on the domain is `p=none` |
+
+DMARC needs SPF *or* DKIM to align, not both. DKIM already aligns, so mail authenticates correctly
+right now. The custom MAIL FROM adds SPF alignment as a second independent path — genuine defence in
+depth, and worth finishing, but not a reason to compromise on the sending domain.
+
+Note `dxg-agency.com` also already publishes `v=spf1 include:amazonses.com ~all` at the apex.
 
 ## Outstanding
 

@@ -423,3 +423,35 @@ that was already in place, so nothing regresses. Once the identity reads `SUCCES
 Confirmed rather than assumed: a real message was sent through the `pmp-email` configuration set
 while the identity was `PENDING` and was accepted (`MessageId 010f01a0aee21e1f-…`), DKIM still
 `SUCCESS`. Sending is unaffected.
+
+## 2026-09-20 (seventeenth) — MAIL FROM lapsed; `av-rfpilot.com` evaluated and rejected
+
+Three days on, `mail.dxg-agency.com` is still `PENDING` and the Namecheap records were never
+published, so the setup is at or past SES's 72-hour cutoff and has effectively lapsed to `Failed`.
+
+**I had this wrong in the last entry and have corrected the runbook.** I wrote that SES flips to
+`SUCCESS` "within about 72 hours of the records propagating". The window actually runs from *when
+the MAIL FROM was configured*; at the end of it SES stops checking and sets `Failed`, and publishing
+the records afterwards does nothing until the configure command is re-run. The order matters:
+publish the records first, then configure.
+
+**`av-rfpilot.com` cannot substitute.** It is ours (GoDaddy), already SES-verified with DKIM
+`SUCCESS`, and `mail.av-rfpilot.com` is free — but SES requires the MAIL FROM domain to be a
+subdomain of the parent domain of the verified identity, so it cannot serve `dxg-agency.com`. Even
+if it could, it is the wrong answer twice over: speakers would receive event mail from a domain that
+is not their agency's, and `av-rfpilot.com` is RFPilot production's live sending identity
+(`noreply@av-rfpilot.com`), so changing its attributes would reach into another product's
+production email.
+
+**None of this is blocking.** DMARC needs SPF *or* DKIM to align. DKIM already signs as
+`dxg-agency.com` and aligns, so mail from `presentations@dxg-agency.com` authenticates correctly
+today; the apex also already publishes `v=spf1 include:amazonses.com ~all`. The custom MAIL FROM
+adds SPF alignment as a second, independent path — worth finishing, not worth changing the sending
+domain for.
+
+**Separate finding, different product:** `_dmarc.av-rfpilot.com` publishes **two** DMARC TXT records
+(`p=quarantine` and `p=none`). Per RFC 7489 §6.6.3 receivers must ignore DMARC entirely when more
+than one record is present, so RFPilot currently has *no* effective DMARC policy despite intending
+`p=quarantine`. Confirmed against two resolvers. Not fixed here — it is RFPilot's zone and not this
+project's call.
+
