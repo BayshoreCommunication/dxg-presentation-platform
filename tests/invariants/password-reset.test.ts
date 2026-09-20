@@ -1,10 +1,11 @@
-import { test, describe, before } from "node:test";
+import { test, describe, before, after } from "node:test";
 import assert from "node:assert/strict";
 import type { TestContext } from "node:test";
 import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { totp } from "@pmp/auth";
 import { signInStaff, cookieFrom } from "../helpers/signIn.ts";
+import { removeTestAccounts } from "../helpers/cleanup.ts";
 
 /**
  * Self-service reset. The properties that matter: it cannot be used to find out
@@ -193,4 +194,14 @@ describe("a reset link is single use and does not defeat MFA", () => {
     assert.equal(response.status, 422);
     assert.equal((await json(response)).code, "auth.too_short");
   });
+});
+
+/*
+ * The accounts this suite created are its own, so it takes them away again. Without
+ * this every run left another `probe-…` row in Staff accounts, and the only way to
+ * clear them was wiping the database — which took real work with it.
+ */
+after(async () => {
+  if (!up) return;
+  await removeTestAccounts(["reset-probe-"]);
 });

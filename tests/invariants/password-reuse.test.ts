@@ -1,7 +1,8 @@
-import { test, describe, before } from "node:test";
+import { test, describe, before, after } from "node:test";
 import assert from "node:assert/strict";
 import type { TestContext } from "node:test";
 import { signInStaff, cookieFrom } from "../helpers/signIn.ts";
+import { removeTestAccounts } from "../helpers/cleanup.ts";
 
 /**
  * A password change that lands on the same password is not a change.
@@ -128,4 +129,14 @@ describe("a forced password change must actually change it", () => {
     assert.equal(response.status, 422);
     assert.equal(body.code, "auth.too_short", "reuse must not mask an ordinary policy failure");
   });
+});
+
+/*
+ * The accounts this suite created are its own, so it takes them away again. Without
+ * this every run left another `probe-…` row in Staff accounts, and the only way to
+ * clear them was wiping the database — which took real work with it.
+ */
+after(async () => {
+  if (!up) return;
+  await removeTestAccounts(["reuse-probe-"]);
 });

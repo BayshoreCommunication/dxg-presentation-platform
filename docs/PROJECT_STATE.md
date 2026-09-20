@@ -1142,3 +1142,29 @@ have left roles wrongly unticked and re-grantable, which is harmless but confusi
 
 CI green, 171 tests; admin invariants 8 pass.
 
+## 2026-09-20 (forty-fifth) — the invariant suites take their accounts away again
+
+Three resets in a session were all for the same reason: `npm run test:invariants` left `probe-…`,
+`roleless-…`, `reuse-probe-…` and `reset-probe-…` accounts behind, and the only way to clear them was
+wiping the database — which took the events and assignments with it every time.
+
+The suites create their own accounts deliberately, and should keep doing so: a test that changes
+`m.vega`'s password breaks whichever other suite signs in as her. Only the removing was missing.
+`tests/helpers/cleanup.ts` plus an `after()` hook in each of the three suites that creates accounts.
+
+**Not every referencing row is alike, and the helper says so.** Twenty-one tables have a foreign key
+to `pmp.users`. Sessions, MFA challenges, recovery codes, reset tokens, role grants and client grants
+are *state about* an account and go with it. Audit records, comments and workflow transitions are
+*records of what happened* — deleting those to tidy a list would be erasing history to make a screen
+look neater. So the helper removes the first kind, and if anything of the second kind still holds the
+row it rolls back to a savepoint and **deactivates instead of forcing the delete**. An account that
+did real work stays, visibly retired.
+
+**A guard, not a formality:** cleanup refuses unless `PGDATABASE` matches `pmp_dev` or `pmp_test*`.
+This deletes user rows, and the only thing between a test run and someone's real data is which
+database the environment points at. Verified it refuses `pmp_production`, `pmp` and `rfpilot`, and
+allows `pmp_dev` and `pmp_test_ci`.
+
+Verified end to end: 5 accounts before, full suite run (51 tests, 48 pass, 0 fail), 5 accounts after —
+the same five, all still active. CI green.
+

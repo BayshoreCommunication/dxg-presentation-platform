@@ -1,7 +1,8 @@
-import { test, describe, before } from "node:test";
+import { test, describe, before, after } from "node:test";
 import assert from "node:assert/strict";
 import type { TestContext } from "node:test";
 import { signInStaff } from "../helpers/signIn.ts";
+import { removeTestAccounts } from "../helpers/cleanup.ts";
 
 /**
  * Account administration is the one place an account can be created or handed
@@ -162,4 +163,14 @@ describe("a created account starts locked down", () => {
     assert.equal(blocked.status, 403, "an unenrolled account should reach nothing but enrolment");
     assert.equal((await json(blocked)).code, "auth.mfa_required");
   });
+});
+
+/*
+ * The accounts this suite created are its own, so it takes them away again. Without
+ * this every run left another `probe-…` row in Staff accounts, and the only way to
+ * clear them was wiping the database — which took real work with it.
+ */
+after(async () => {
+  if (!up) return;
+  await removeTestAccounts(["roleless-", "probe-"]);
 });
