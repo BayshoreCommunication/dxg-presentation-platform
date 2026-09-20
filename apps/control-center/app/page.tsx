@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { listEvents, getSummary } from "@/lib/api";
+import { redirect } from "next/navigation";
+import { listEvents, getSummary, getSession } from "@/lib/api";
 import { Chip } from "@/components/Chip";
 import { guard } from "@/lib/guard";
 
@@ -20,6 +21,13 @@ const formatRange = (from: string, to: string) => {
 };
 
 export default async function PortfolioPage() {
+  // A client account is refused on every staff route, so the portfolio is not its
+  // front door. Send it where it belongs before it is bounced off this one.
+  const { principal } = await getSession().catch(() => ({ principal: null }));
+  if (principal && principal.client_events.length > 0) {
+    redirect(principal.client_events.length === 1 ? `/client/${principal.client_events[0]!.id}` : "/client");
+  }
+
   const { items } = await guard(listEvents(), "/");
   const summaries = await guard(Promise.all(items.map((event) => getSummary(event.id))), "/");
 

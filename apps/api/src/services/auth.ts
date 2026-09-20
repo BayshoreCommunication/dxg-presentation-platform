@@ -30,6 +30,14 @@ export type Principal =
       roles: EventRole[];
       /** Clients this account has any role on — empty for DXG staff, who work across all. */
       client_ids: string[];
+      /**
+       * Events this account can open as a *client*. Populated only for accounts with
+       * no staff role: a client signs in to look at their own event and has nowhere
+       * else to go, so the app needs to know where that is without guessing. Left
+       * empty for DXG staff, whose landing place is the portfolio and for whom this
+       * would be every event in the system.
+       */
+      client_events: { id: string; name: string }[];
       must_change_password: boolean;
       mfa_enrolled: boolean;
     }
@@ -208,13 +216,19 @@ export async function principalFor(tx: pg.PoolClient, userId: string): Promise<P
     [userId],
   );
   const user = rows[0]!;
+  const roles = await rolesFor(tx, user.id);
+  // Only an account with no staff role at all needs somewhere to be sent: staff land
+  // on the portfolio. Asking the question this way also means a future hybrid account
+  // is treated as staff, which is the safer of the two guesses.
+  const clientOnly = roles.length > 0 && roles.every((role) => CLIENT_ROLES.includes(role));
   return {
     kind: "staff",
     user_id: user.id,
     email: user.email,
     display_name: user.display_name,
-    roles: await rolesFor(tx, user.id),
+    roles,
     client_ids: await clientsFor(tx, user.id),
+    client_events: clientOnly ? await clientEventsFor(tx, user.id) : [],
     must_change_password: user.must_change_password,
     mfa_enrolled: user.mfa_enrolled,
   };
@@ -244,6 +258,24 @@ async function rolesFor(tx: pg.PoolClient, userId: string): Promise<EventRole[]>
     [userId],
   );
   return rows.map((row) => row.role);
+}
+
+/** The roles that make an account a client's, not DXG's. */
+const CLIENT_ROLES: EventRole[] = ["client_event_admin", "scoped_reviewer"];
+
+/**
+ * The events this account holds a *client* role on. Only asked for when the account
+ * has no staff role, so the query stays small and DXG staff never carry it.
+ */
+async function clientEventsFor(tx: pg.PoolClient, userId: string): Promise<{ id: string; name: string }[]> {
+  const { rows } = await tx.query<{ id: string; name: string }>(
+    `SELECT DISTINCT e.id, e.name
+       FROM pmp.event_roles er JOIN pmp.events e ON e.id = er.event_id
+      WHERE er.user_id = $1 AND er.role IN ('client_event_admin', 'scoped_reviewer')
+      ORDER BY e.name`,
+    [userId],
+  );
+  return rows;
 }
 
 /** Which clients this account touches, used to scope client-side accounts. */

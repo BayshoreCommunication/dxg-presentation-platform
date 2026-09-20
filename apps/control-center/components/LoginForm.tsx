@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { login, verifyMfa, ApiError } from "@/lib/api";
+import { landingFor } from "@/lib/landing";
 
 const REASONS: Record<string, string> = {
   expired: "Your session expired. Please sign in again.",
@@ -33,10 +34,10 @@ export function LoginForm({ next, reason }: { next: string; reason: string | nul
           setBusy(false);
           return;
         }
-        router.replace(result.principal.must_change_password ? "/account/password?first=1" : next);
+        router.replace(landingFor(result.principal, next));
       } else {
         const result = await verifyMfa(code);
-        router.replace(result.principal.must_change_password ? "/account/password?first=1" : next);
+        router.replace(landingFor(result.principal, next));
       }
       router.refresh();
     } catch (caught) {

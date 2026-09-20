@@ -845,3 +845,26 @@ decision rather than a tidy-up. Flagged, not guessed at.
 CI green, 169 tests. Deviation log in `VISUAL_ACCEPTANCE.md` §5 updated — the earlier "hidden from all
 staff" entry is superseded.
 
+## 2026-09-20 (thirty-third) — a client signs in and arrives somewhere useful
+
+Client accounts now land on their own event instead of being bounced off the portfolio. Verified both
+ways in: signing in goes straight to `/client/<event>`, and visiting `/` later does the same. Staff
+are untouched — `admin@example.invalid` still gets the portfolio at `/`.
+
+The principal carries `client_events` (id and name) — populated **only** when every role the account
+holds is a client role, so DXG staff never carry what would be every event in the system. A hybrid
+account, if one ever exists, is treated as staff: that is the safer of the two guesses, since it lands
+somewhere with more rather than less.
+
+**The multi-event case is asked, not guessed.** One event goes straight through; more than one shows
+`/client` to choose from. Picking on their behalf could open the wrong client's event, which is the
+single mistake this surface must not make — it is the one place two clients' data could be confused.
+No event is not a choice at all but a missing role, so that still goes to `/no-access`.
+
+The rule lives in `lib/landing.ts` rather than inside the login form, because three callers need the
+same answer — sign-in, MFA completion, and `/`. It also honours an explicit destination: a client who
+followed a link to a specific `/client/...` page still gets it rather than being redirected to the
+same place twice.
+
+CI green, 169 tests.
+

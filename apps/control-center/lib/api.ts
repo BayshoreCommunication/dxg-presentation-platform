@@ -63,6 +63,8 @@ export type Principal = {
   display_name: string;
   roles: string[];
   client_ids: string[];
+  /** Events a client-only account may open. Empty for DXG staff. */
+  client_events: { id: string; name: string }[];
   must_change_password: boolean;
   mfa_enrolled: boolean;
 };
