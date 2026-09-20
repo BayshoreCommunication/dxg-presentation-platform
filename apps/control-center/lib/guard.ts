@@ -2,14 +2,22 @@ import { redirect } from "next/navigation";
 import { ApiError } from "./api";
 
 /**
- * Turns an expired or missing session into the login screen instead of a crash page.
+ * Turns an authentication or authorisation failure into a page that explains itself,
+ * instead of a crash.
  *
  *     const { items } = await guard(listEvents(), "/");
  *
- * **Only 401 redirects.** A 403 means the session is perfectly valid and the role is
- * not sufficient — bouncing that person to a login screen they are already past sends
- * them round a loop with nothing explained. Those are left for the caller to render,
- * as `admin/users` and `client/[eventId]` already do.
+ * The two cases are genuinely different and must not be conflated:
+ *
+ * - **401** — no usable session. Send them to sign in, remembering where they were.
+ * - **403** — the session is perfectly valid; the *role* is not sufficient. Sending
+ *   this person to a login screen they are already past would loop them: they sign in
+ *   successfully and bounce straight back. They need telling what is actually wrong,
+ *   which `/no-access` does.
+ *
+ * A newly created staff account meets the 403 path on its very first sign-in, because
+ * an account exists before it has a role on any event. That is the ordinary case, not
+ * an edge case, so it gets a real page rather than a stack trace.
  *
  * This deliberately does **not** live in `lib/api.ts`. That module is imported by
  * client components too, and `LoginForm` needs to render a 401 as "that password is
@@ -22,6 +30,9 @@ export async function guard<T>(work: Promise<T>, returnTo: string): Promise<T> {
   } catch (caught) {
     if (caught instanceof ApiError && caught.status === 401) {
       redirect(`/login?next=${encodeURIComponent(returnTo)}&reason=required`);
+    }
+    if (caught instanceof ApiError && caught.status === 403) {
+      redirect(`/no-access?reason=${encodeURIComponent(caught.message)}`);
     }
     throw caught;
   }

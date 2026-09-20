@@ -692,3 +692,28 @@ That was not true when written; it is now, and the comment says which code makes
 Also fixed while in there: `events/[id]/agent/[roomId]` destructured only `roomId`, so the return path
 had no event id to build from — caught by typecheck, not by reading.
 
+## 2026-09-20 (twenty-seventh) — a 403 now explains itself
+
+Creating a staff account through the admin screen and signing in as it produced a Next.js runtime
+error reading "This is a DXG staff area. Your account does not have a staff role on this event."
+
+Two separate things, and only one of them is a bug in the strict sense.
+
+**The 403 was correct.** `Staff accounts` creates the account; it does not grant access. A new account
+therefore has no role on any event and the API refuses it, exactly as designed. The role is added
+afterwards from the same screen, through the per-user `add role…` dropdown and `grant`.
+
+**Rendering that refusal as a stack trace was mine**, from the previous entry. I routed 401 to the
+login screen and deliberately left 403 to propagate, reasoning that bouncing a signed-in person to a
+login screen would loop them. That reasoning holds; leaving them at a crash page instead does not.
+`guard()` now sends a 403 to `/no-access`, which states that sign-in worked, that what is missing is a
+role on an event, and that an administrator adds it from Staff accounts.
+
+Worth noting this is the *ordinary* first-run path for every new staff member, not an edge case — the
+account necessarily exists before anyone gives it a role — so it was always going to be the first
+thing a new colleague saw.
+
+Verified by signing in as an administrator, rendering `/no-access` with the real message, then
+granting `presentation_manager` on MedTech Forward 2026 to the test account through the UI and
+confirming the row in `event_roles`.
+
