@@ -6,7 +6,13 @@ import type { EventDraft } from "@/lib/api";
 import { createEvent, configureEvent, activateEvent, getDraft, ApiError } from "@/lib/api";
 import { ImportView } from "@/components/ImportView";
 
-const STEPS = ["Basics", "Schedule import", "Deadlines & workflow", "Branding & template"] as const;
+/*
+ * Step 2 is called "Agenda", not "Schedule import": inside the wizard it is the thing
+ * being described, not the act of loading it — the other three steps are named for
+ * what they set up, and this one was named for a mechanism. The standalone screen
+ * keeps its own name, since there the import *is* what you came to do.
+ */
+const STEPS = ["Basics", "Agenda", "Deadlines & workflow", "Branding & template"] as const;
 
 /**
  * Screen 2 — the four-step wizard. Step 1 commits a draft; a draft sends nothing.

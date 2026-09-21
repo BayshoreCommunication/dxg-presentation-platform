@@ -1767,5 +1767,19 @@ Logged as a deviation in `VISUAL_ACCEPTANCE.md` — §2.1 fixes the sidebar's na
 baseline lists Schedule import third. The screen inventory is unchanged; this is a navigation change,
 not the removal of a screen.
 
-Verified: sidebar reads Portfolio → Create event → Command center, and the command centre's
-`Re-import agenda` points at `/events/{id}/import`. CI green, 208 unit tests; invariants 76 pass.
+**Step 2 of the wizard is renamed `Agenda`** (same request, immediately after). Inside the wizard the
+step is the thing being set up, not the act of loading it — `Basics`, `Deadlines & workflow` and
+`Branding & template` are all named for what they configure, and this one was named for a mechanism.
+The standalone screen keeps `Schedule import`, because there the import is what you came to do.
+
+Verified: sidebar reads Portfolio → Create event → Command center, the wizard reads
+`1. Basics · 2. Agenda · 3. Deadlines & workflow · 4. Branding & template`, and the command centre's
+`Re-import agenda` points at `/events/{id}/import`. CI green, 208 unit tests.
+
+**A flake seen and chased, not papered over.** One invariants run reported 5 failures in
+`password-reuse.test.ts`; in isolation that suite passes 5 of 5, and three consecutive full runs
+afterwards were 76/76. It is the TOTP contention recorded in the forty-seventh entry — the suites share
+`admin@example.invalid`'s counter, and the new `cross-event.test.ts` adds a fifth call site competing
+for it. `signInStaff` retries, but the retry budget is finite and the pile-up is now larger. Not
+introduced by this change and not fixed here; recorded because a green run after a red one is not
+evidence the red one was nothing.

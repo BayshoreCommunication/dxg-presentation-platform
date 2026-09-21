@@ -142,5 +142,10 @@ case it still serves: agendas are revised constantly before an event, and re-imp
 (room, start, title) and updates rather than duplicating. A capability with no way in is a capability
 nobody has — and the sidebar was, until now, the only link to it anywhere in the app.
 
+**The wizard's step 2 is also renamed**, from `Schedule import` to `Agenda`. Inside the wizard the step
+is the thing being set up, not the act of loading it — `Basics`, `Deadlines & workflow` and
+`Branding & template` are all named for what they configure, and this one was named for a mechanism.
+The standalone screen keeps the name `Schedule import`, because there the import is what you came to do.
+
 Nothing else is renamed, reordered or regrouped. The baseline's screen inventory is unchanged: this is
 a navigation change, not the removal of a screen.
