@@ -1441,7 +1441,9 @@ read and not used.
 wrong label in a template *we* hand out would invite organisers to put the second presenter's surname
 in the first presenter's column — a fault we would be manufacturing rather than inheriting. Ours reads
 `Presenter 1 Last Name`, and a test asserts DXG's original label maps identically so files already in
-circulation cannot regress.
+circulation cannot regress. **Confirmed by Travis** when the byte-identical alternative was offered as
+a one-word change — so the one-cell difference from Preseria's sheet is a decision, not drift, and
+should not be tidied away by whoever next notices it.
 
 **Dropped:** `Track` and `Presenter Organization` are no longer offered, because DXG's sheet has
 neither. The importer still reads both if a file supplies them.
