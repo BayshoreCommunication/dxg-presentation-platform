@@ -480,6 +480,12 @@ export type StagedRow = {
   row: number;
   title: string;
   room: string;
+  /** The raw cells, so an incomplete row can be re-edited as what the sheet said. */
+  date_cell: string;
+  start_cell: string;
+  end_cell: string;
+  /** Which required fields this row still has no usable value for. */
+  missing: string[];
   starts_at: string | null;
   ends_at: string | null;
   speaker_name: string;
@@ -493,6 +499,9 @@ export type ImportPreview = {
   import_id: string;
   upload_id: string;
   file_name: string;
+  /** The event's timezone — times are rendered in it, never the browser's. */
+  timezone: string;
+  required_fields: string[];
   headers: string[];
   mapping: (ImportField | null)[];
   total_rows: number;
@@ -530,6 +539,39 @@ export const uploadImport = async (eventId: string, file: File) =>
       headers: { "content-type": "application/octet-stream", "x-file-name": file.name },
     },
   );
+
+/**
+ * A cell the operator typed for a row the file left incomplete. Sent as the value the
+ * spreadsheet should have carried, so the server re-parses and re-validates it through
+ * the same path the file took — no date parsing or timezone maths happens here.
+ */
+export const setImportCell = (uploadId: string, row: number, field: string, value: string) =>
+  request<ImportPreview>(`/imports/${uploadId}/cells`, {
+    method: "POST",
+    body: JSON.stringify({ row, field, value }),
+  });
+
+/** Downloads a blank agenda template generated from the importer's own field list. */
+export const downloadAgendaTemplate = async (eventId: string, eventName?: string) => {
+  const response = await fetch(`${BASE}/events/${eventId}/agenda-template`, {
+    credentials: "include",
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new ApiError("template.failed", "Could not download the template.", response.status);
+  }
+  saveBlob(await response.blob(), `agenda-template${eventName ? ` — ${eventName}` : ""}.csv`);
+};
+
+/** Hands a generated file to the browser's downloader. */
+export const saveBlob = (blob: Blob, filename: string): void => {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
+};
 
 export const remapImport = (uploadId: string, mapping: (ImportField | null)[]) =>
   request<ImportPreview>(

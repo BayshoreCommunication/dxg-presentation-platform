@@ -39,6 +39,17 @@ export function CreateEventWizard({ timezones }: { timezones: string[] }) {
   const [reminders, setReminders] = useState("T-14 · T-7 · T-2 · missing-file only");
   const [accent, setAccent] = useState("#44C7F4");
 
+  /*
+   * Steps 3 and 4 are unreachable until an agenda is in (Travis's call, D-026 amended).
+   * The chips are a navigation control, so the rule has to live here as well as on the
+   * button — otherwise the button is a suggestion and the chip is the way round it.
+   */
+  const reachable = (target: number): boolean => {
+    if (target === 1) return true;
+    if (!draft) return false;
+    return target === 2 || imported !== null;
+  };
+
   async function run(work: () => Promise<string | null>) {
     setBusy(true);
     setError(null);
@@ -64,8 +75,9 @@ export function CreateEventWizard({ timezones }: { timezones: string[] }) {
             <span
               key={label}
               className={`chip ${index + 1 === step ? "c-info" : index + 1 < step ? "c-ok" : "c-mut"}`}
-              style={{ cursor: draft || index === 0 ? "pointer" : "default" }}
-              onClick={() => (draft || index === 0) && setStep(index + 1)}
+              style={{ cursor: reachable(index + 1) ? "pointer" : "not-allowed" }}
+              title={reachable(index + 1) ? undefined : "Import the schedule first"}
+              onClick={() => reachable(index + 1) && setStep(index + 1)}
             >
               {index + 1}. {label}
             </span>
@@ -144,9 +156,9 @@ export function CreateEventWizard({ timezones }: { timezones: string[] }) {
 
               {!imported && (
                 <div className="note">
-                  ⚠ Invitations can&rsquo;t be sent until the event has at least one day and one room —
-                  a speaker link would point at nothing. You can skip this and import later from
-                  <b> Import schedule</b>, but nothing goes out to speakers until you do.
+                  ⚠ The event&rsquo;s rooms, days and sessions all come from this file, so the
+                  remaining steps stay locked until it is imported. The draft is saved — you can
+                  leave and come back to it.
                 </div>
               )}
             </>
@@ -216,7 +228,12 @@ export function CreateEventWizard({ timezones }: { timezones: string[] }) {
             {step > 1 && step < 4 && (
               <button
                 className="btn pri"
-                disabled={busy || !draft}
+                disabled={busy || !draft || (step === 2 && !imported)}
+                title={
+                  step === 2 && !imported
+                    ? "Import the schedule to continue — rooms, days and sessions all come from it"
+                    : undefined
+                }
                 onClick={() =>
                   void run(async () => {
                     if (step === 2) {
@@ -237,7 +254,7 @@ export function CreateEventWizard({ timezones }: { timezones: string[] }) {
                   })
                 }
               >
-                {step === 2 && !imported ? "Skip for now ›" : "Save & continue ›"}
+                Save &amp; continue ›
               </button>
             )}
 

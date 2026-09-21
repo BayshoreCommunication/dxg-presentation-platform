@@ -3,10 +3,25 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { ImportPreview, StagedRow } from "@/lib/api";
-import { uploadImport, remapImport, commitImport, IMPORT_FIELDS, ApiError } from "@/lib/api";
+import {
+  uploadImport,
+  remapImport,
+  commitImport,
+  setImportCell,
+  downloadAgendaTemplate,
+  saveBlob,
+  IMPORT_FIELDS,
+  ApiError,
+} from "@/lib/api";
 import { Chip } from "@/components/Chip";
 
-const time = (iso: string | null) =>
+/**
+ * Session times belong to the venue, so they render in the event's timezone — which
+ * was hardcoded to America/New_York here, quietly showing New York clock times for an
+ * event in Berlin (SCREEN_SPECS §2: "no browser-local drift", and no other city's
+ * either).
+ */
+const time = (iso: string | null, timeZone: string) =>
   iso
     ? new Date(iso).toLocaleString("en-US", {
         month: "short",
@@ -14,9 +29,55 @@ const time = (iso: string | null) =>
         hour: "2-digit",
         minute: "2-digit",
         hour12: false,
-        timeZone: "America/New_York",
+        timeZone,
       })
     : "—";
+
+/**
+ * An input that appears only where the file left a required value out.
+ *
+ * Defined at module scope on purpose. Declared inside `ImportView` it was a new
+ * component *type* on every render, so React unmounted and remounted the input each
+ * time the preview changed — discarding whatever had been typed into it before the
+ * blur that was supposed to send it. The call site keys it on the server's value, so a
+ * confirmed correction refreshes the field and nothing else does.
+ */
+function Fix({
+  row,
+  field,
+  value,
+  placeholder,
+  onCommit,
+}: {
+  row: number;
+  field: string;
+  value: string;
+  placeholder: string;
+  onCommit: (row: number, field: string, next: string) => void;
+}) {
+  return (
+    <input
+      defaultValue={value}
+      placeholder={placeholder}
+      aria-label={`${field} for row ${row}`}
+      style={{
+        width: "100%",
+        minWidth: 90,
+        font: "inherit",
+        padding: "3px 6px",
+        borderRadius: 5,
+        border: "1px solid var(--block)",
+        background: "var(--bg)",
+      }}
+      onBlur={(event) => {
+        if (event.target.value.trim() !== value.trim()) onCommit(row, field, event.target.value);
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") (event.target as HTMLInputElement).blur();
+      }}
+    />
+  );
+}
 
 /**
  * Screen 3 — upload, map, validate, then commit all at once or not at all.
@@ -73,7 +134,18 @@ export function ImportView({
     setTimeout(() => setToast(null), 3500);
   }
 
-  const blockingRows = rows.filter((row) => !row.title || !row.room || !row.starts_at);
+  const blockingRows = rows.filter((row) => row.missing.length > 0);
+
+  /**
+   * Sends one corrected cell and replaces the preview with the server's re-validation.
+   * On blur rather than on change: a round trip per keystroke would be unusable, and
+   * the value is not worth validating until the operator has finished typing it.
+   */
+  const editCell = (rowNumber: number, field: string, value: string): void => {
+    void run(async () => apply(await setImportCell(preview!.upload_id, rowNumber, field, value)));
+  };
+
+
 
   return (
     <>
@@ -112,9 +184,22 @@ export function ImportView({
                   if (file) void run(async () => apply(await uploadImport(eventId, file)));
                 }}
               />
-              <button className="btn pri" disabled={busy} onClick={() => inputRef.current?.click()}>
-                Choose file…
-              </button>
+              <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
+                <button className="btn pri" disabled={busy} onClick={() => inputRef.current?.click()}>
+                  Choose file…
+                </button>
+                <button
+                  className="btn"
+                  disabled={busy}
+                  onClick={() => void run(async () => downloadAgendaTemplate(eventId))}
+                >
+                  ↓ Download blank template
+                </button>
+              </div>
+              <div className="note" style={{ marginTop: 10 }}>
+                No agenda yet? Download the template, fill it in and upload it here. Required columns
+                are marked in the file.
+              </div>
             </div>
           </div>
         </div>
@@ -122,13 +207,24 @@ export function ImportView({
 
       {preview && (
         <>
+          {blockingRows.length > 0 && (
+            <div className="err" style={{ marginBottom: 12 }}>
+              <b>
+                {blockingRows.length} of {rows.length} row{rows.length === 1 ? "" : "s"} still
+                {blockingRows.length === 1 ? " needs" : " need"} a required value.
+              </b>{" "}
+              Fill the highlighted boxes in the table below — each one is checked as you leave it.
+              Import stays unavailable until every row is complete, because it is all-or-nothing.
+            </div>
+          )}
+
           <div className="krow">
             <div className="kpi">
               <div className="kl">Rows</div>
               <div className="kv num">{preview.total_rows}</div>
             </div>
             <div className="kpi">
-              <div className="kl">Blocking errors</div>
+              <div className="kl">Incomplete rows</div>
               <div className="kv num" style={{ color: blockingRows.length ? "var(--block)" : "var(--ok)" }}>
                 {blockingRows.length}
               </div>
@@ -244,9 +340,58 @@ export function ImportView({
                   {rows.map((row) => (
                     <tr key={row.row}>
                       <td className="mono">{row.row}</td>
-                      <td>{row.title || <span className="chip c-bad">missing</span>}</td>
-                      <td>{row.room || <span className="chip c-bad">missing</span>}</td>
-                      <td className="note">{time(row.starts_at)}</td>
+                      <td>
+                        {row.missing.includes("session.title") ? (
+                          <Fix
+                            key={`${row.row}-title-${row.title}`}
+                            row={row.row}
+                            field="session.title"
+                            value={row.title}
+                            placeholder="Session title"
+                            onCommit={editCell}
+                          />
+                        ) : (
+                          row.title
+                        )}
+                      </td>
+                      <td>
+                        {row.missing.includes("room.name") ? (
+                          <Fix
+                            key={`${row.row}-room-${row.room}`}
+                            row={row.row}
+                            field="room.name"
+                            value={row.room}
+                            placeholder="Room"
+                            onCommit={editCell}
+                          />
+                        ) : (
+                          row.room
+                        )}
+                      </td>
+                      <td className="note">
+                        {row.missing.includes("session.date") ? (
+                          <div style={{ display: "flex", gap: 4 }}>
+                            <Fix
+                              key={`${row.row}-date-${row.date_cell}`}
+                              row={row.row}
+                              field="session.date"
+                              value={row.date_cell}
+                              placeholder="mm/dd/yyyy"
+                              onCommit={editCell}
+                            />
+                            <Fix
+                              key={`${row.row}-start-${row.start_cell}`}
+                              row={row.row}
+                              field="session.start"
+                              value={row.start_cell}
+                              placeholder="9:00 AM"
+                              onCommit={editCell}
+                            />
+                          </div>
+                        ) : (
+                          time(row.starts_at, preview.timezone)
+                        )}
+                      </td>
                       <td className="note">{row.speaker_name || "—"}</td>
                       <td>
                         <Chip
@@ -308,12 +453,28 @@ export function ImportView({
               </button>
               <button
                 className="btn"
-                disabled={busy}
-                onClick={() =>
-                  setToast("Error report: " + preview.issues.map((issue) => `row ${issue.row}`).join(", "))
-                }
+                disabled={busy || preview.issues.length === 0}
+                onClick={() => {
+                  // This used to raise a toast listing row numbers. SCREEN_SPECS §3
+                  // calls for a CSV the operator can take back to whoever produced the
+                  // agenda, which a toast cannot be.
+                  const escape = (value: string) =>
+                    /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+                  const csv = [
+                    ["Row", "Column", "Severity", "Problem"],
+                    ...preview.issues.map((issue) => [
+                      String(issue.row),
+                      issue.column,
+                      issue.severity,
+                      issue.message,
+                    ]),
+                  ]
+                    .map((row) => row.map(escape).join(","))
+                    .join("\r\n");
+                  saveBlob(new Blob([csv], { type: "text/csv" }), `import errors — ${preview.file_name}.csv`);
+                }}
               >
-                Download error report
+                ↓ Download error report
               </button>
               {blockingRows.length > 0 && (
                 <span className="note" style={{ alignSelf: "center" }}>

@@ -50,6 +50,12 @@ const DECISIVE: [RegExp, ImportField][] = [
   [/\b(e\s*mail|email)\b/, "speaker.email"],
   [/\b(first|given)\s*name\b|\bforename\b/, "speaker.first_name"],
   [/\b(last|family)\s*name\b|\bsurname\b/, "speaker.last_name"],
+  // Our own template's "Presenter Organization" mapped to `speaker.name`, because the
+  // substring pass tries `speaker.name` first and the header contains "presenter".
+  // The organization then became the speaker's display name and the first/last name
+  // columns were discarded — mapped, but beaten by the `speaker.name ||` precedence.
+  // A column that says organization is an organization column, whose it may be.
+  [/\b(organisation|organization|company|affiliation)\b/, "speaker.organization"],
 ];
 
 /**
@@ -112,6 +118,72 @@ export function autoMap(headers: string[]): (ImportField | null)[] {
   return result;
 }
 
+/* ── the blank template we hand out ────────────────────────────────── */
+
+/**
+ * Column headings, in the order the template writes them, each with the format hint
+ * and whether it is required. Built from the same field list the mapper uses, so a
+ * template can never offer a column the importer does not understand, or omit one it
+ * needs.
+ */
+const TEMPLATE_COLUMNS: { heading: string; field: ImportField; hint: string; required: boolean }[] = [
+  { heading: "Session Title", field: "session.title", hint: "max 255 chars.", required: true },
+  { heading: "Session Location", field: "room.name", hint: "room or venue name", required: true },
+  { heading: "Session Date", field: "session.date", hint: "mm/dd/yyyy", required: true },
+  { heading: "Session Start", field: "session.start", hint: "h:mm AM/PM", required: true },
+  { heading: "Session End", field: "session.end", hint: "h:mm AM/PM", required: false },
+  { heading: "Track", field: "track.name", hint: "max 80 chars.", required: false },
+  { heading: "Presenter Email", field: "speaker.email", hint: "name@example.com", required: false },
+  { heading: "Presenter First Name", field: "speaker.first_name", hint: "max 80 chars.", required: false },
+  { heading: "Presenter Last Name", field: "speaker.last_name", hint: "max 80 chars.", required: false },
+  { heading: "Presenter Organization", field: "speaker.organization", hint: "max 120 chars.", required: false },
+];
+
+const csvCell = (value: string): string =>
+  /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+
+/**
+ * The agenda template, as CSV.
+ *
+ * It deliberately mirrors the vendor template's shape — a banner row, then headings,
+ * then a format-hint row and a REQUIRED/OPTIONAL row — because that is the layout DXG
+ * already works in, and because `findHeaderRow` has to cope with exactly this shape
+ * anyway. Handing out a template the importer reads by a different path than the files
+ * it actually receives would mean testing the easy case forever.
+ *
+ * The example row is annotation too, and is dropped on import for the same reason the
+ * hint rows are: it is marked EXAMPLE in the first cell.
+ */
+export function agendaTemplateCsv(eventName?: string): string {
+  const banner = [
+    `DXG AGENDA TEMPLATE${eventName ? ` — ${eventName}` : ""}`,
+    "Version: 1",
+    "Date Format: mm/dd/yyyy",
+    "Time Format: h:mm AM/PM",
+    "Delete the three grey rows before uploading, or leave them — they are ignored either way",
+  ];
+  const rows = [
+    // Pad the banner to the column count so the file is rectangular.
+    [...banner, ...Array(Math.max(0, TEMPLATE_COLUMNS.length - banner.length)).fill("")],
+    TEMPLATE_COLUMNS.map((column) => column.heading),
+    TEMPLATE_COLUMNS.map((column) => column.hint),
+    TEMPLATE_COLUMNS.map((column) => (column.required ? "REQUIRED" : "OPTIONAL")),
+    [
+      "EXAMPLE — delete this row",
+      "Ballroom A",
+      "03/14/2027",
+      "9:00 AM",
+      "10:00 AM",
+      "Clinical Practice",
+      "presenter@example.com",
+      "Alex",
+      "Okonkwo",
+      "Example Health Group",
+    ],
+  ];
+  return rows.map((row) => row.map(csvCell).join(",")).join("\r\n") + "\r\n";
+}
+
 /* ── finding the header row ───────────────────────────────────────────────── */
 
 /**
@@ -121,15 +193,27 @@ export function autoMap(headers: string[]): (ImportField | null)[] {
  */
 const ANNOTATION = [
   /^(required|optional)$/i,
+  /^(room or venue name|name@example\.com|max \d+ chars\.?)$/i,
   /^max \d+ chars\.?$/i,
   /^(mm\/dd\/yyyy|dd\/mm\/yyyy|yyyy-mm-dd)$/i,
   /^h?h:mm(\s*(am\/pm))?$/i,
   /^number\s*\(/i,
 ];
 
+/**
+ * Our own template's sample row, so someone who fills the file in underneath it
+ * without deleting it does not import a session called "EXAMPLE — delete this row".
+ *
+ * Keyed on the first cell alone, because the ratio rule below cannot see it: a
+ * demonstration row is *made of* plausible session data, and only its title gives it
+ * away — two of its ten cells look like annotation, which is nowhere near a majority.
+ */
+const isExampleRow = (row: string[]): boolean => /^example\b/i.test((row[0] ?? "").trim());
+
 const isAnnotationRow = (row: string[]): boolean => {
   const filled = row.map((cell) => cell.trim()).filter(Boolean);
   if (filled.length === 0) return false;
+  if (isExampleRow(row)) return true;
   const marked = filled.filter((cell) => ANNOTATION.some((pattern) => pattern.test(cell))).length;
   // A clear majority, not merely one cell: a real session whose title happens to read
   // like a format hint must still reach validation and be seen.
@@ -209,6 +293,12 @@ export type StagedRow = {
   row: number;
   title: string;
   room: string;
+  /** The raw date and clock cells, so the screen can show and re-edit what was written. */
+  date_cell: string;
+  start_cell: string;
+  end_cell: string;
+  /** Which of REQUIRED_FIELDS this row still has no usable value for. */
+  missing: string[];
   starts_at: string | null;
   ends_at: string | null;
   speaker_name: string;
@@ -218,9 +308,26 @@ export type StagedRow = {
   action: "create" | "update" | "unchanged";
 };
 
+/**
+ * Cells the operator typed on the review screen, keyed by the row number they see.
+ *
+ * They are expressed as *cell values* — exactly what the spreadsheet would have said —
+ * rather than as finished domain values, so a correction re-enters `buildPreview` at
+ * the same point the file did. Nothing about parsing dates, resolving the venue's
+ * timezone or recomputing the (room, start, title) match key has to be repeated in the
+ * browser, and a fixed row is validated by the same code that rejected it.
+ */
+export type RowOverrides = Record<number, Partial<Record<ImportField, string>>>;
+
+/** Without these a row cannot become a session, so the commit refuses it. */
+export const REQUIRED_FIELDS = ["session.title", "room.name", "session.date", "session.start"] as const;
+
 export type ImportPreview = {
   import_id: string;
   file_name: string;
+  /** The event's timezone, so the screen renders and edits times in it, not the browser's. */
+  timezone: string;
+  required_fields: readonly string[];
   headers: string[];
   mapping: (ImportField | null)[];
   total_rows: number;
@@ -339,6 +446,7 @@ export async function buildPreview(
     actorId: string;
     s3Key: string;
     mapping?: (ImportField | null)[];
+    overrides?: RowOverrides;
   },
 ): Promise<Result<ImportPreview, DomainError>> {
   let sheet: string[][];
@@ -399,19 +507,28 @@ export async function buildPreview(
     // The row number the operator sees in their spreadsheet, so an error names a row
     // they can actually go and look at.
     const rowNumber = firstDataRow + index + 1;
-    const title = cell(row, mapping, "session.title");
-    const room = cell(row, mapping, "room.name");
-    const date = cell(row, mapping, "session.date");
-    const start = cell(row, mapping, "session.start");
-    const end = cell(row, mapping, "session.end");
+
+    /*
+     * A cell the operator typed on the review screen wins over the file's. Read here,
+     * at the single point every field is pulled from the row, so an override is
+     * indistinguishable from the file having said it — including for the match key and
+     * the timezone conversion below.
+     */
+    const patch = input.overrides?.[rowNumber];
+    const at = (field: ImportField): string =>
+      (patch?.[field] ?? cell(row, mapping, field)).trim();
+
+    const title = at("session.title");
+    const room = at("room.name");
+    const date = at("session.date");
+    const start = at("session.start");
+    const end = at("session.end");
     // A sheet either carries one name column or splits it. DXG's template splits it,
     // so first and last are joined here rather than in the mapping layer.
     const speakerName =
-      cell(row, mapping, "speaker.name") ||
-      [cell(row, mapping, "speaker.first_name"), cell(row, mapping, "speaker.last_name")]
-        .filter(Boolean)
-        .join(" ");
-    const speakerEmail = cell(row, mapping, "speaker.email");
+      at("speaker.name") ||
+      [at("speaker.first_name"), at("speaker.last_name")].filter(Boolean).join(" ");
+    const speakerEmail = at("speaker.email");
 
     if (!title) {
       issues.push({ row: rowNumber, column: "session.title", severity: "blocking", message: "Session title is empty." });
@@ -464,18 +581,36 @@ export async function buildPreview(
     const key = `${normalise(room)}|${startsAt ? zonedToUtc(startsAt, timeZone).toISOString() : ""}|${normalise(title)}`;
     const match = existingKeys.get(key);
 
+    /*
+     * Named per field rather than as one "incomplete" flag, so the screen can put an
+     * input exactly where the value is missing instead of making the operator hunt
+     * through a row for what is wrong. A date that could not be parsed counts as
+     * missing: the cell is there, but nothing usable came out of it.
+     */
+    const missing: string[] = [];
+    if (!title) missing.push("session.title");
+    if (!room) missing.push("room.name");
+    // One check, two fields: a start instant needs both cells, and neither is usable
+    // on its own. An unparseable date counts as missing — the cell is there, but
+    // nothing came out of it.
+    if (!startsAt) missing.push("session.date", "session.start");
+
     staged.push({
       row: rowNumber,
       title,
       room,
+      date_cell: date,
+      start_cell: start,
+      end_cell: end,
+      missing,
       // Stored as an absolute instant; the spreadsheet's wall-clock time is
       // interpreted in the event's timezone.
       starts_at: startsAt ? zonedToUtc(startsAt, timeZone).toISOString() : null,
       ends_at: endsAt ? zonedToUtc(endsAt, timeZone).toISOString() : null,
       speaker_name: speakerName,
       speaker_email: speakerEmail,
-      organization: cell(row, mapping, "speaker.organization"),
-      track: cell(row, mapping, "track.name"),
+      organization: at("speaker.organization"),
+      track: at("track.name"),
       // Re-import matches on (room, start, title) and updates instead of
       // duplicating (FR-IMP-002).
       action: match ? "unchanged" : "create",
@@ -508,6 +643,8 @@ export async function buildPreview(
   return ok({
     import_id: importRows[0]?.id ?? "",
     file_name: input.fileName,
+    timezone: timeZone,
+    required_fields: REQUIRED_FIELDS,
     headers,
     mapping,
     total_rows: staged.length,

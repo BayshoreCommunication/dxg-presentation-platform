@@ -1300,3 +1300,74 @@ eleventh column is labelled `Presenter 2 Last Name` but sits between `Presenter 
 `Presenter 2 Email` and is marked REQUIRED — it is presenter 1's surname, mislabelled. The mapper
 lands on the right field by first-occurrence, so the file imports correctly, but the label is wrong at
 source and should be fixed there.
+
+## 2026-09-21 (forty-ninth) — an incomplete agenda is finished on the screen, and the import becomes mandatory
+
+Travis imported a schedule, found mandatory fields missing, and asked for three things: let the user
+fill them in, refuse to let the event proceed on a half-imported schedule, and hand out a template
+they can fill in and upload. D-027, which supersedes D-026's skippable clause.
+
+**Step 2 now blocks steps 3 and 4.** D-026 made it skippable and I flagged the cost; Travis reversed
+it, and the replacement reasoning is better: the rooms, days and sessions of an event *are* the
+agenda, so an event without one is not partly configured, it is empty. The rule is enforced on the
+forward button **and** on the step chips — a chip is a navigation control, and a rule on only the
+button is a suggestion with a way round it. The "opened the wizard before the spreadsheet existed"
+case is answered by the draft persisting and by the template.
+
+**Missing values are filled in the preview table.** Each staged row now reports which of
+`session.title`, `room.name`, `session.date`/`session.start` it has no usable value for, and an input
+appears in exactly those cells — nothing else becomes editable, so there is no hunting through a row
+for what is wrong. An unreadable date counts as missing: the cell is there, nothing usable came out.
+
+**Corrections are cell values re-validated on the server**, via `POST /imports/{uploadId}/cells`. The
+obvious alternative — patch the staged row in the browser — would have meant a second implementation
+of the date parsing and the venue-timezone conversion in client code, which is precisely what was
+silently a day out until yesterday. It would also have left the diff wrong: changing a room or a time
+changes the `(room, start, title)` match key, so `create` vs `unchanged` has to be recomputed, and only
+the server can. An override is read at the one point every field is pulled from the row, so a typed
+cell is indistinguishable from the file having said it.
+
+**The blank template is generated from the importer's own field list**, not stored as a file, so it
+cannot offer a column we do not read or omit one we now require. It deliberately mirrors the vendor
+template's shape — banner, headings, format hints, REQUIRED/OPTIONAL, one example row — because that
+is the layout DXG works in, and because it then exercises the same `findHeaderRow` path as the files
+we actually receive rather than testing an easy case forever. The example row is marked `EXAMPLE` and
+dropped on import, so filling the sheet in underneath it does not create a session called
+"EXAMPLE — delete this row".
+
+**Our own template caught a mapping bug of yesterday's family.** `Presenter Organization` mapped to
+`speaker.name` — the substring pass tries `speaker.name` first and the header contains "presenter" —
+so the organization became the display name and the correctly-mapped first/last name columns were
+discarded by the `speaker.name ||` precedence. "Dana Reyes" imported as "Example Institute". **The
+round-trip test I wrote an hour earlier did not catch it, because it asserted only the required
+columns and the email.** It now asserts every column against the field its heading names, and
+`organization` joined the decisive-keyword list.
+
+**Two more on the same screen, fixed in passing.** The preview rendered every session time in a
+hardcoded `America/New_York`, so an event in Berlin showed New York clock times — the preview now
+carries the event's timezone. And `Download error report` raised a toast listing row numbers; it now
+downloads the CSV `SCREEN_SPECS` §3 describes.
+
+**A React defect of my own, found by driving the page.** `Fix` was declared inside `ImportView`, so it
+was a new component *type* on every render and React remounted the input each time the preview
+changed, discarding what had been typed. Moved to module scope and keyed on the server's value.
+
+**One thing I got wrong twice before getting it right.** The first two attempts to verify the edit in
+the browser failed and I twice suspected my own code. It was the harness: the `computer` type action
+left the field without focus, so `.blur()` was a no-op and the handler never fired. A genuine
+`focus()` + `blur()` committed immediately, and a real user's click does the same. Worth recording
+because the conclusion "the feature is broken" was wrong both times, and the thing that settled it was
+calling React's own `onBlur` prop directly to separate my logic from the event plumbing.
+
+Verified end to end: a file with one good row and three broken ones reports `missing` per row,
+refuses to commit naming rows 3/4/5, accepts three typed corrections that accumulate, converts a
+corrected `03/14/2027 3:00 PM` to `2027-03-14T19:00:00Z` (EDT), and then commits 4 sessions. In the
+browser: steps 3 and 4 show `not-allowed` with "Import the schedule first", the forward button is
+disabled with a reason, two values typed into the table persisted to the database as
+`Typed On The Screen` / `Ballroom C`, and once complete the import committed and every chip unlocked.
+The template round-trips: downloaded, filled, re-uploaded, 0 missing, 0 columns mapped by hand,
+`Dana Reyes` intact.
+
+`tests/invariants/schedule-import.test.ts` (8 cases) proved by reverting the override application:
+**3 of 8 fail without it, 8 of 8 with it.** CI green, 194 unit tests; invariants 61 pass, 0 skipped.
+Probe events removed, no orphans.

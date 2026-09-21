@@ -2,7 +2,7 @@ import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { parseSheet } from "@pmp/files";
-import { autoMap, closestRoom, editDistance, zonedToUtc, findHeaderRow, provisionalName, toDateTime } from "./scheduleImport.ts";
+import { autoMap, closestRoom, editDistance, zonedToUtc, findHeaderRow, provisionalName, toDateTime, agendaTemplateCsv, REQUIRED_FIELDS } from "./scheduleImport.ts";
 
 describe("column auto-mapping (FR-IMP-001)", () => {
   test("maps a typical DXG header row exactly", () => {
@@ -224,5 +224,78 @@ describe("a calendar date survives the server's own timezone", () => {
     // 8am on 16 May is EDT, UTC-4.
     const local = toDateTime("05/16/2023", "8:00 AM")!;
     assert.equal(zonedToUtc(local, "America/New_York").toISOString(), "2023-05-16T12:00:00.000Z");
+  });
+});
+
+/*
+ * A template we hand out and cannot read back is worse than no template: the operator
+ * has done as they were told and still cannot import. These assert the round trip
+ * against the real parser rather than against a description of it.
+ */
+describe("the agenda template we hand out is one we can read", () => {
+  const sheet = parseSheet(Buffer.from(agendaTemplateCsv("MedTech Forward 2027"), "utf8"), "template.csv");
+
+  test("the header row is found under the banner", () => {
+    const { headers, index } = findHeaderRow(sheet);
+    assert.equal(index, 1);
+    assert.equal(headers[0], "Session Title");
+  });
+
+  test("every required field maps with no manual intervention", () => {
+    const { headers } = findHeaderRow(sheet);
+    const mapped = autoMap(headers).filter(Boolean);
+    for (const field of REQUIRED_FIELDS) {
+      assert.ok(mapped.includes(field), `${field} is not mapped by the template's own headings`);
+    }
+  });
+
+  /*
+   * Every column, not just the required ones. The weaker version of this test passed
+   * while `Presenter Organization` was mapping to `speaker.name` — so the organization
+   * became the speaker's display name and the first/last name columns, though mapped,
+   * were discarded by the `speaker.name ||` precedence in buildPreview. Our own
+   * template demonstrated the bug and the test could not see it.
+   */
+  test("every column maps to the field its heading names", () => {
+    const { headers } = findHeaderRow(sheet);
+    const mapping = autoMap(headers);
+    const expected: Record<string, string> = {
+      "Session Title": "session.title",
+      "Session Location": "room.name",
+      "Session Date": "session.date",
+      "Session Start": "session.start",
+      "Session End": "session.end",
+      Track: "track.name",
+      "Presenter Email": "speaker.email",
+      "Presenter First Name": "speaker.first_name",
+      "Presenter Last Name": "speaker.last_name",
+      "Presenter Organization": "speaker.organization",
+    };
+    for (const [heading, field] of Object.entries(expected)) {
+      assert.equal(mapping[headers.indexOf(heading)], field, `"${heading}" should map to ${field}`);
+    }
+  });
+
+  test("a column about the presenter is not a column of their name", () => {
+    // "presenter" appears in all of these; only one of them is a name.
+    const mapping = autoMap(["Presenter Email", "Presenter Organization", "Presenter First Name"]);
+    assert.deepEqual(mapping, ["speaker.email", "speaker.organization", "speaker.first_name"]);
+  });
+
+  test("the hint, REQUIRED and EXAMPLE rows are all annotation, so a blank template has no sessions", () => {
+    const { firstDataRow } = findHeaderRow(sheet);
+    assert.equal(sheet.length - firstDataRow, 0, "a blank template must import zero rows, not an example");
+  });
+
+  test("the example row's own date format is the one the template asks for", () => {
+    // The row is dropped on import, but it is what a human copies. If it demonstrated
+    // a format the parser could not read, the template would be teaching the mistake.
+    const example = sheet.find((row) => /^EXAMPLE/.test(row[0] ?? ""))!;
+    assert.equal(toDateTime(example[2]!, example[3]!), "2027-03-14T09:00:00");
+  });
+
+  test("names the event when it knows it, and copes when it does not", () => {
+    assert.match(agendaTemplateCsv("MedTech Forward 2027"), /MedTech Forward 2027/);
+    assert.ok(agendaTemplateCsv().startsWith("DXG AGENDA TEMPLATE,"));
   });
 });

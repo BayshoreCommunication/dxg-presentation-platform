@@ -51,7 +51,13 @@ import {
   rollBack,
 } from "./services/presentation.ts";
 import type { Lane } from "./services/presentation.ts";
-import { buildPreview, commitImport, autoMap } from "./services/scheduleImport.ts";
+import {
+  buildPreview,
+  commitImport,
+  autoMap,
+  agendaTemplateCsv,
+  IMPORT_FIELDS,
+} from "./services/scheduleImport.ts";
 import {
   createEvent,
   configureEvent,
@@ -78,7 +84,7 @@ import {
   downloadPackage,
   latestPackage,
 } from "./services/archive.ts";
-import type { ImportField, StagedRow } from "./services/scheduleImport.ts";
+import type { ImportField, StagedRow, RowOverrides } from "./services/scheduleImport.ts";
 import type { PortalSession } from "./services/portal.ts";
 import { decide } from "./services/review.ts";
 
@@ -1017,7 +1023,22 @@ app.post("/api/v1/speakers/:speakerId/merge", async (req, res) => {
 
 /* ── schedule import (screen 3) ──────────────────────────────────────────── */
 
-const importCache = new Map<string, { eventId: string; fileName: string; body: Buffer }>();
+/**
+ * The uploaded file plus whatever the operator has since changed about it — the column
+ * mapping and any cells they have typed in. Both are held here so that re-mapping a
+ * column does not discard corrections, and correcting a cell does not discard the
+ * mapping. Every re-validation runs the whole file through `buildPreview` again.
+ */
+const importCache = new Map<
+  string,
+  {
+    eventId: string;
+    fileName: string;
+    body: Buffer;
+    mapping?: (ImportField | null)[];
+    overrides?: RowOverrides;
+  }
+>();
 
 app.post("/api/v1/events/:eventId/imports", async (req, res) => {
   const actor = actorFrom(req);
@@ -1039,6 +1060,22 @@ app.post("/api/v1/events/:eventId/imports", async (req, res) => {
   return res.status(201).json({ ...result.value, upload_id: uploadId });
 });
 
+/** Runs the cached file back through validation with whatever is currently known. */
+function revalidate(req: express.Request, actor: Actor, uploadId: string) {
+  const cached = importCache.get(uploadId)!;
+  return withScope(scopeFor(req, cached.eventId), (tx) =>
+    buildPreview(tx, {
+      eventId: cached.eventId,
+      fileName: cached.fileName,
+      body: cached.body,
+      actorId: actor.id,
+      s3Key: `imports/${uploadId}`,
+      ...(cached.mapping ? { mapping: cached.mapping } : {}),
+      ...(cached.overrides ? { overrides: cached.overrides } : {}),
+    }),
+  );
+}
+
 /** Re-map columns and re-validate without re-uploading the file. */
 app.post("/api/v1/imports/:uploadId/remap", async (req, res) => {
   const actor = actorFrom(req);
@@ -1046,19 +1083,46 @@ app.post("/api/v1/imports/:uploadId/remap", async (req, res) => {
   const cached = importCache.get(String(req.params.uploadId));
   if (!cached) return res.status(404).json({ code: "import.expired", message: "Upload the file again." });
   const body = req.body as { mapping?: (ImportField | null)[] };
+  if (body.mapping) importCache.set(String(req.params.uploadId), { ...cached, mapping: body.mapping });
 
-  const result = await withScope(scopeFor(req, cached.eventId), (tx) =>
-    buildPreview(tx, {
-      eventId: cached.eventId,
-      fileName: cached.fileName,
-      body: cached.body,
-      actorId: actor.id,
-      s3Key: `imports/${String(req.params.uploadId)}`,
-      ...(body.mapping ? { mapping: body.mapping } : {}),
-    }),
-  );
+  const result = await revalidate(req, actor, String(req.params.uploadId));
   if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
   return res.json({ ...result.value, upload_id: String(req.params.uploadId) });
+});
+
+/**
+ * A cell the operator typed on the review screen, for a row the file left incomplete.
+ *
+ * Corrections are sent as cell values and re-enter `buildPreview` where the file's own
+ * cells do, so the date is parsed, the venue timezone applied and the
+ * (room, start, title) match key recomputed by exactly the code that rejected the row.
+ * Doing it in the browser would have meant a second implementation of the timezone
+ * conversion, which is the part most worth having only once.
+ */
+app.post("/api/v1/imports/:uploadId/cells", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  const uploadId = String(req.params.uploadId);
+  const cached = importCache.get(uploadId);
+  if (!cached) return res.status(404).json({ code: "import.expired", message: "Upload the file again." });
+
+  const body = req.body as { row?: number; field?: ImportField; value?: string };
+  if (typeof body.row !== "number" || typeof body.field !== "string") {
+    return res.status(400).json({ code: "request.invalid", message: "`row` and `field` are required." });
+  }
+  if (!IMPORT_FIELDS.includes(body.field)) {
+    return res.status(400).json({ code: "request.invalid", message: `Unknown field ${body.field}.` });
+  }
+
+  const overrides: RowOverrides = {
+    ...cached.overrides,
+    [body.row]: { ...cached.overrides?.[body.row], [body.field]: body.value ?? "" },
+  };
+  importCache.set(uploadId, { ...cached, overrides });
+
+  const result = await revalidate(req, actor, uploadId);
+  if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+  return res.json({ ...result.value, upload_id: uploadId });
 });
 
 app.post("/api/v1/imports/:importId/commit", async (req, res) => {
@@ -1077,6 +1141,25 @@ app.post("/api/v1/imports/:importId/commit", async (req, res) => {
   );
   if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
   return res.json(result.value);
+});
+
+/**
+ * The blank agenda template. Generated from the same field list the mapper uses rather
+ * than served as a static file, so it cannot drift from what the importer understands
+ * — a template offering a column we no longer read, or missing one we now require,
+ * would send an operator away to fill in the wrong thing.
+ */
+app.get("/api/v1/events/:eventId/agenda-template", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  const eventId = String(req.params.eventId);
+  const name = await withScope(scopeFor(req, eventId), async (tx) => {
+    const { rows } = await tx.query<{ name: string }>(`SELECT name FROM pmp.events WHERE id = $1`, [eventId]);
+    return rows[0]?.name;
+  });
+  res.header("content-type", "text/csv; charset=utf-8");
+  res.header("content-disposition", 'attachment; filename="dxg-agenda-template.csv"');
+  return res.send(agendaTemplateCsv(name));
 });
 
 app.get("/api/v1/import-fields", (_req, res) =>
