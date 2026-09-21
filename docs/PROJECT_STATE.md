@@ -1667,3 +1667,20 @@ Verified in the browser: visible labels read `First Name` / `Last Name` / `Email
 six inputs report accessible names `Presenter 1 First Name` … `Presenter 2 Email`.
 
 CI green, 208 unit tests.
+
+## 2026-09-21 (fifty-seventh) — the Presentation box drops its ordinal too
+
+Same as the fifty-sixth, for the Presentation group: it was headed "Presentation" and then said
+"Presentation Start", "Presentation End", "Presentation Duration" inside it. Now `Start` / `End` /
+`Duration`, with the accessible names still fully qualified (`Presentation Start`,
+`Presentation Duration in minutes`).
+
+**The Session box is deliberately not changed**, and the asymmetry is the point: `Session Start` and
+`Presentation Start` are the two fields in this dialog most easily confused, and shortening both would
+leave the box heading as the only thing telling them apart. Left as a choice rather than an oversight,
+so it is not "tidied" later.
+
+Verified: visible labels read `Start` / `End` / `Duration`; the three inputs report
+`Presentation Start`, `Presentation End`, `Presentation Duration in minutes`.
+
+CI green, 208 unit tests.

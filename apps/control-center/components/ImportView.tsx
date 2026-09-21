@@ -54,6 +54,21 @@ const PRESENTER_SHORT_LABELS: Record<string, string> = {
 const shortLabel = (field: string): string | undefined =>
   PRESENTER_SHORT_LABELS[field.split(".")[1] ?? ""];
 
+/**
+ * The same, for the Presentation box: it is headed "Presentation" and then said
+ * "Presentation Start", "Presentation End", "Presentation Duration" inside it.
+ *
+ * The Session box repeats itself the same way and is deliberately left alone: "Session
+ * Start" and "Presentation Start" are the two fields in this dialog most easily
+ * confused, and shortening both would leave the box heading as the only thing telling
+ * them apart.
+ */
+const PRESENTATION_SHORT_LABELS: Record<string, string> = {
+  "slot.start": "Start",
+  "slot.end": "End",
+  "slot.duration": "Duration",
+};
+
 /** Presenter 2 onwards, so a sixth presenter is labelled without listing eighteen keys. */
 ["speaker2", "speaker3", "speaker4", "speaker5", "speaker6"].forEach((prefix, index) => {
   const ordinal = index + 2;
@@ -252,7 +267,7 @@ function RowEditor({
       return (
         <div className="field" key={field}>
           <label htmlFor={`edit-${field}`} style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
-            <span>{FIELD_LABELS[field]}</span>
+            <span>{visible ?? full}</span>
             <span className="note">{minutes === null ? "not set" : `${minutes} min`}</span>
             {/* On the label line, not beside the slider: in a third of the dialog's
                 width the two together left the button clipped off the edge. */}
@@ -274,7 +289,7 @@ function RowEditor({
             step={DURATION_STEP}
             value={minutes !== null && !beyondSlider ? minutes : DURATION_MIN}
             style={{ width: "100%" }}
-            aria-label={`${FIELD_LABELS[field]} in minutes`}
+            aria-label={`${full} in minutes`}
             onChange={(event) => set(field, event.target.value)}
           />
           {beyondSlider && (
@@ -298,6 +313,7 @@ function RowEditor({
               type={isDate ? "date" : "time"}
               style={{ width: "100%", ...border }}
               value={picker}
+              {...(visible && visible !== full ? { "aria-label": full } : {})}
               onChange={(event) => set(field, event.target.value)}
             />
           </div>
@@ -313,6 +329,7 @@ function RowEditor({
             style={{ width: "100%", borderColor: "var(--block)" }}
             value={value}
             placeholder={FIELD_HINTS[field] ?? ""}
+            {...(visible && visible !== full ? { "aria-label": full } : {})}
             onChange={(event) => set(field, event.target.value)}
           />
           <div className="note" style={{ fontSize: 11 }}>
@@ -416,7 +433,7 @@ function RowEditor({
             heading="Presentation"
             note="Its own time inside the session — leave blank if it runs with the session. Duration is only used when there is no end time."
           >
-            {line(PRESENTATION_FIELDS)}
+            {line(PRESENTATION_FIELDS, (field) => PRESENTATION_SHORT_LABELS[field])}
           </Section>
 
           <Section heading="Presenters">
