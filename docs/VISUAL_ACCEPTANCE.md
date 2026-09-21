@@ -170,3 +170,26 @@ screen 4 still exists and is still where an event that is running opens.
 **A related fix, not a deviation.** Screen 4's risk list said "Nothing at risk — every talk is
 synchronized onsite" whenever it had no rows, including when the event has no talks to be at risk.
 With no talks it now says so.
+
+### 2026-09-21 — screen 18: Event details
+
+**Deviation.** §1 fixes the inventory at 17 screens and §2.1 the sidebar. There is now an eighteenth,
+`Event details` at `/events/[id]/details`, and the portfolio card's `Open →` goes there instead of to
+the command centre. It is **not** in the sidebar — it is reached from the portfolio card and from
+`Event details` on the command centre header, the same treatment Schedule import was given.
+
+**Reason.** The baseline is a single-event prototype in which the event's setup is a given, so it has
+nowhere to show one. Everything the create-event wizard writes — the timezone every displayed time in
+the product renders in, the upload deadline that closes the speaker portal, the reminder cadence, the
+accent colour, the rooms and days the agenda created — was visible on no screen at all once the wizard
+closed, and since D-036 the wizard refuses an activated event. Travis's call, chosen over an
+expand-in-place card and over reusing the wizard as a details view (D-037).
+
+**Scope.** No existing screen is renamed, reordered, regrouped or removed; screen 4 keeps its route,
+its name and its place in the sidebar, and remains where an event that is running opens. The status
+words are unchanged — the chip on the new header comes from the same `EVENT_STATUS` map the portfolio
+card uses, so the two cannot drift.
+
+**Consequence for §3.** The screenshot sheet is a 17-row sheet against the baseline. This screen has
+no baseline counterpart to sit beside, so it is an 18th row with the deviation above in place of a
+comparison, not a row that can be approved by matching.

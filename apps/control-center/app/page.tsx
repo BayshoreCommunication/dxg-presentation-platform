@@ -3,15 +3,9 @@ import { redirect } from "next/navigation";
 import { listEvents, getSummary, getSession } from "@/lib/api";
 import { Chip } from "@/components/Chip";
 import { guard } from "@/lib/guard";
+import { eventStatusChip } from "@/lib/eventStatus";
 
 export const dynamic = "force-dynamic";
-
-const STATUS_LABEL: Record<string, { status: string; label: string }> = {
-  active: { status: "submitted", label: "Onsite now" },
-  draft: { status: "canceled", label: "Planning" },
-  closed: { status: "canceled", label: "Closed" },
-  archived: { status: "archived", label: "Archived" },
-};
 
 const formatRange = (from: string, to: string) => {
   const opts: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" };
@@ -47,7 +41,7 @@ export default async function PortfolioPage() {
       {items.map((event, index) => {
         const summary = summaries[index]!;
         const collected = summary.total === 0 ? 0 : Math.round((summary.collected / summary.total) * 100);
-        const chip = STATUS_LABEL[event.status] ?? { status: "canceled", label: event.status };
+        const chip = eventStatusChip(event.status);
         return (
           <div key={event.id} className="card" style={event.status === "active" ? { borderColor: "var(--blue)" } : undefined}>
             <div className="cbd">
@@ -68,13 +62,18 @@ export default async function PortfolioPage() {
                 <span>
                   <span className="mono num">{collected}%</span>{" "}
                   {/*
-                    A draft has no rooms, no sessions and no talks, so its command
-                    centre can only answer in zeroes — and the thing it actually needs,
-                    the rest of its setup, was reachable from nowhere at all. An
-                    unfinished event goes back to the wizard that was making it.
+                    An event opens on what it *is*, not on how it is going: the command
+                    centre is one click further in, from a button that says so. A draft
+                    has no rooms, no sessions and no talks, so it goes back to the
+                    wizard that was making it — its details are those four steps, still
+                    being filled in.
                   */}
                   <Link
-                    href={event.status === "draft" ? `/events/new?event=${event.id}` : `/events/${event.id}`}
+                    href={
+                      event.status === "draft"
+                        ? `/events/new?event=${event.id}`
+                        : `/events/${event.id}/details`
+                    }
                     className="btn"
                   >
                     {event.status === "draft" ? "Continue setup →" : "Open →"}

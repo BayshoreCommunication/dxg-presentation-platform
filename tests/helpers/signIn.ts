@@ -39,7 +39,21 @@ async function withStepLock<T>(account: string, fn: () => Promise<T>): Promise<T
   const lock = `${COORD_DIR}/${key}.lock`;
   const ledger = `${COORD_DIR}/${key}.step`;
 
-  for (let attempt = 0; attempt < 600; attempt += 1) {
+  /*
+   * The ceiling has to clear a *legitimate* queue, which is one 30-second window per
+   * process sharing this account — the holder waits out the spent step while holding
+   * the lock, so N contenders cost N windows. Eight suites now sign in as
+   * `admin@example.invalid`, so the old 600 × 250 ms = 150 s ceiling was under half of
+   * the 240 s that queue can honestly take, and the two suites added on 2026-09-21
+   * tipped it over: "could not claim an authenticator step", which reads like a
+   * deadlock and is simply the queue being longer than the patience.
+   *
+   * A crashed holder is *not* what this bounds — the 60-second staleness check below
+   * is, and it is unaffected by how long we are willing to queue. So the ceiling is
+   * set well clear of any plausible queue rather than trimmed to it.
+   */
+  const deadline = Date.now() + 8 * 60_000;
+  while (Date.now() < deadline) {
     try {
       const handle = await open(lock, "wx");
       await handle.close();

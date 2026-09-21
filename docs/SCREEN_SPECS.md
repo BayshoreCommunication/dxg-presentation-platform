@@ -343,6 +343,46 @@ Reading rules:
 
 ---
 
+## 18. Event details
+
+**Route** `/events/[id]/details` · **Roles** all staff may read; PjM, PM and Admin may change ·
+**Requirements** FR-EVT-001, FR-ADMIN-001, M01
+
+Added 2026-09-21 (D-037) — the one screen not transcribed from the baseline, which has no counterpart
+because it is a single-event prototype. **Reached from** the portfolio card's `Open →` and from
+`Event details` on the command centre header; deliberately not in the sidebar.
+
+**Data** `GET /events/{id}/draft` — the event's own setup regardless of status: name, venue, timezone,
+dates, rooms, tracks, day and session counts, settings, branding. `GET /events/{id}/summary` for the
+collected/total talk count.
+
+**Elements** header (name, venue · dates · timezone, status chip, `Open command center →`) · **Basics**
+(name and venue editable; timezone and dates displayed locked, each with the reason) · **Agenda**
+(days, sessions, talks collected, rooms, tracks, `Re-import agenda`) · **Deadlines & workflow**
+(upload deadline, reminder cadence) · **Branding** (accent colour) · one `Save changes` for the lot.
+
+**Actions** `PATCH /events/{id}` with any of `basics`, `settings`, `branding` — only the groups that
+changed, in one request.
+
+**Rules**
+- A `draft` redirects to `/events/new?event={id}`: a draft's details *are* the wizard's four steps,
+  still being filled in (D-036).
+- After activation `basics` accepts name and venue and refuses timezone, start and end date by name
+  (`events.not_a_draft`, 422). A label may be corrected; what the schedule is set against may not.
+- Every configuration route is gated on presentation manager or above (D-037). The screen hides the
+  editing controls from an account that lacks it and says why; the API refuses regardless.
+- Rooms, tracks and days are read-only here — they come from the agenda, never from typing (D-026).
+
+**Acceptance**
+- Opening an event from the portfolio lands here, not on the command centre; a draft lands in the wizard.
+- Changing the venue on a live event saves and is audited; changing its dates is refused with a message
+  naming the dates, and nothing moves.
+- A room technician on the event sees the screen and cannot save; the API answers `events.forbidden`
+  whatever the screen renders.
+- The timezone is visible on this screen for every event, including one that is running.
+
+---
+
 ## Cross-screen behaviours (verified once, relied on everywhere)
 
 | Behaviour | Screens | Test |

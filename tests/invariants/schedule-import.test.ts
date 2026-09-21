@@ -93,6 +93,10 @@ before(async () => {
       method: "POST",
       headers: json(admin),
       body: JSON.stringify({
+        // Named for the same reason the draft-resume suite names it: `POST /events`
+        // guesses only when one client exists, and `rls-isolation.test.ts` transiently
+        // creates a second.
+        client_id: "11111111-1111-4111-8111-111111111111",
         name: EVENT_NAME,
         venue: "Tampa",
         timezone: "America/New_York",

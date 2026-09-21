@@ -350,3 +350,49 @@ Proved by reverting: `tests/invariants/draft-resume.test.ts` fails **10 of 10** 
 passes 10 of 10 with it. The two most useful failures are the ones that returned `200` — before this,
 `PATCH` accepted a `basics` body on a draft and on an *activated* event alike, and silently ignored
 both. Owner: Travis.
+
+## D-037 (2026-09-21): An event opens on what it is; screen 18 exists — Status: ACCEPTED (Travis's call)
+Travis: clicking an event should show the event's details, not the command centre. There was no such
+screen: the 17-screen inventory (D-010) has *Presentation detail* for a talk and nothing for an event.
+Options weighed with Travis were an expand-in-place card and reusing the wizard as a details view; he
+chose a real screen, so the inventory grows by one and this is the deviation record for it.
+
+**The gap it closes is larger than the click.** Everything the wizard sets was written once and then
+visible nowhere: the **timezone every displayed time in the product renders in**, the upload deadline
+that closes the speaker portal, the reminder cadence, the accent colour, and the rooms, tracks and
+days the agenda created. The command centre answers one question — how is this event going — and
+after D-036 the wizard refuses an activated event, so a wrong timezone on a live event could not be
+found, let alone corrected.
+
+**Two kinds of field, and the difference is stated rather than implied.** A **name** and a **venue**
+are labels: correcting either changes what people read and nothing else, and both are wrong often,
+because an event is created before its venue is confirmed. The **timezone** and the **dates** are
+load-bearing — every session time, deadline and room file is set against them. So D-036's blanket
+`events.not_a_draft` is **narrowed here to exactly those three fields**, and the refusal names them.
+That is not a reversal: it is the rule D-036 gave a reason for, applied to the fields the reason was
+about. Name and venue stay correctable for the life of the event; moving an event remains a re-import,
+not an edit.
+
+**The screen shows the locked fields rather than hiding them.** Leaving the timezone off would hide
+the thing every time in the product depends on; rendering it as an input the endpoint then refuses is
+the D-033 trap again. It is shown, locked, and told why.
+
+**And a live authorisation hole, found by probing the routes this screen was about to put a UI on.**
+`POST /events`, `PATCH /events/{id}`, activate and duplicate took a staff session and an event scope
+and asked nothing further, though SCREEN_SPECS §2 has said PjM/PM/Admin since it was written.
+Demonstrated before the fix: **`t.okafor`, a room technician on MedTech Forward and nothing else
+there, set that event's upload deadline to 1999-01-01 and its accent colour, and was answered 200.**
+The deadline is what closes the speaker portal, so an account whose authority is custody of one room
+could lock every speaker on the event out of submitting — or reopen a closed one — and the accent it
+also rewrote is on every message those speakers receive. Gated on `atLeast("presentation_manager")`,
+which is exactly PjM/PM/Admin; `room_technician` is deliberately not on that ladder, because its
+authority is physical custody rather than seniority.
+
+**Creation asks a flat question, and that is the one place it should.** There is no event yet to scope
+to, so a manager on any event may create a new one — the same exception D-025 makes for
+`platform_admin`, for the same reason: creating an event is done from outside every event and reaches
+into nothing that exists.
+
+Proved by reverting the gate: the four cases naming the technician's writes fail, and the three that
+do not depend on it stay green — which is the signature to want, since a suite that goes all-red on a
+revert is not discriminating between causes. Owner: Travis.

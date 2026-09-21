@@ -1,7 +1,27 @@
 import type pg from "pg";
 import { appendAudit } from "@pmp/db";
 import type { Actor, DomainError, Result } from "@pmp/domain";
-import { err, ok } from "@pmp/domain";
+import { atLeast, err, hasAnyRole, ok } from "@pmp/domain";
+
+/**
+ * Who may set an event up. SCREEN_SPECS §2 says PjM, PM and Admin, and until now
+ * nothing enforced it: `POST /events`, `PATCH /events/{id}`, activate and duplicate
+ * took a staff session and an event scope and asked nothing further. Demonstrated
+ * before this was added — `t.okafor`, a room technician on MedTech Forward and nothing
+ * else there, set that event's upload deadline to 1999-01-01 and its accent colour,
+ * and was answered 200. The deadline is what closes speaker uploads, so that is an
+ * account with custody of one room locking every speaker out of the event.
+ *
+ * `room_technician` is deliberately not on the ladder (packages/domain/roles.ts): its
+ * authority is physical custody of a room, which is not seniority, so a rule that
+ * means to include it has to name it. This one does not mean to.
+ */
+const CONFIGURERS = atLeast("presentation_manager");
+
+const forbidden = (attempt: string): DomainError => ({
+  code: "events.forbidden",
+  message: `${attempt} needs a presentation manager, project manager or administrator.`,
+});
 
 export type CreateEventInput = {
   name: string;
@@ -85,6 +105,15 @@ export async function createEvent(
   clientId: string,
   input: CreateEventInput,
 ): Promise<Result<{ event_id: string }, DomainError>> {
+  /*
+   * The one place this asks a flat question rather than an event-scoped one, because
+   * there is no event yet to scope to: a manager on any event may create a new one.
+   * That is the same exception D-025 makes for `platform_admin`, and for the same
+   * reason — creating an event is by definition done from outside every event. It
+   * reaches into nothing that already exists.
+   */
+  if (!hasAnyRole(actor, CONFIGURERS)) return err(forbidden("Creating an event"));
+
   const invalid = checkBasics(input);
   if (invalid) return err(invalid);
 
@@ -138,11 +167,20 @@ export async function configureEvent(
     branding?: Record<string, unknown>;
   },
 ): Promise<Result<EventDraft, DomainError>> {
-  const { rows: eventRows } = await tx.query<{ client_id: string; status: string; venue_id: string | null }>(
-    `SELECT client_id, status, venue_id FROM pmp.events WHERE id = $1`,
+  const { rows: eventRows } = await tx.query<{
+    client_id: string;
+    status: string;
+    venue_id: string | null;
+    timezone: string;
+    starts_on: string;
+    ends_on: string;
+  }>(
+    `SELECT client_id, status, venue_id, timezone, starts_on::text, ends_on::text
+       FROM pmp.events WHERE id = $1`,
     [eventId],
   );
   if (!eventRows[0]) return err({ code: "events.not_found", message: "No such event." });
+  if (!hasAnyRole(actor, CONFIGURERS)) return err(forbidden("Changing an event's setup"));
   const clientId = eventRows[0].client_id;
 
   /*
@@ -157,11 +195,33 @@ export async function configureEvent(
    * a rescheduling job rather than a correction.
    */
   if (input.basics) {
+    /*
+     * After activation the line runs between what a value *names* and what it
+     * *means*. A name or a venue is a label: correcting either changes what people
+     * read and nothing else, and both are wrong often enough — an event is created
+     * before its venue is confirmed. The timezone and the dates are load-bearing:
+     * every session time, every upload deadline and every room file hangs off them,
+     * and moving them is a rescheduling job rather than a correction. So the refusal
+     * is narrowed to exactly the three fields the reasoning was ever about, and it
+     * names them rather than refusing the whole request generically.
+     */
     if (eventRows[0].status !== "draft") {
-      return err({
-        code: "events.not_a_draft",
-        message: "Only a draft event's basics can be changed here.",
-      });
+      const live = eventRows[0];
+      const locked = (
+        [
+          ["time zone", live.timezone, input.basics.timezone],
+          ["start date", live.starts_on, input.basics.starts_on],
+          ["end date", live.ends_on, input.basics.ends_on],
+        ] as const
+      )
+        .filter(([, current, wanted]) => current !== wanted)
+        .map(([label]) => label);
+      if (locked.length > 0) {
+        return err({
+          code: "events.not_a_draft",
+          message: `The ${locked.join(", ")} of an event that is no longer a draft cannot be changed here — its sessions, deadlines and room files are all set against them.`,
+        });
+      }
     }
     const invalid = checkBasics(input.basics);
     if (invalid) return err(invalid);
@@ -350,6 +410,7 @@ export async function activateEvent(
   actor: Actor,
   eventId: string,
 ): Promise<Result<EventDraft, DomainError>> {
+  if (!hasAnyRole(actor, CONFIGURERS)) return err(forbidden("Activating an event"));
   const draft = await draftOf(tx, eventId);
   if (!draft.ok) return draft;
   if (draft.value.rooms.length === 0 || draft.value.days === 0) {
@@ -386,6 +447,7 @@ export async function duplicateEvent(
   sourceId: string,
   input: { name: string; starts_on: string; ends_on: string },
 ): Promise<Result<{ event_id: string; rooms: number; tracks: number }, DomainError>> {
+  if (!hasAnyRole(actor, CONFIGURERS)) return err(forbidden("Duplicating an event"));
   const { rows: sourceRows } = await tx.query<{
     client_id: string;
     venue_id: string | null;

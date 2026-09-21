@@ -41,7 +41,18 @@ type Draft = {
   branding: Record<string, unknown>;
 };
 
+/**
+ * The seeded tenant, named rather than inferred. `POST /events` guesses the client
+ * only when exactly one exists, and `rls-isolation.test.ts` creates a second while it
+ * runs — so a suite that leaves this out is refused with `events.client_required`
+ * whenever the two happen to overlap, which is a failure with nothing to do with what
+ * it was testing. The sixty-first entry stopped those probe tenants accumulating; it
+ * did not stop them existing for the seconds that suite takes.
+ */
+const CLIENT = "11111111-1111-4111-8111-111111111111";
+
 const BASICS = {
+  client_id: CLIENT,
   name: NAME,
   venue: "Tampa Convention Center",
   timezone: "America/New_York",
@@ -204,16 +215,26 @@ describe("what editing the basics must never do", () => {
     assert.ok(after.sessions > 0, "the agenda is still there");
   });
 
-  test("an event that is no longer a draft is not edited here", async (t: TestContext) => {
+  /*
+   * Narrowed 2026-09-21: after activation this refused every `basics` field, name
+   * included. A name and a venue are labels and stay correctable; the timezone and
+   * the dates are what the schedule is set against. Both halves are covered case by
+   * case in `event-configuration.test.ts`; what this suite keeps is the half that
+   * belongs to the wizard — the point past which its step 1 can no longer move an
+   * event.
+   */
+  test("activation closes the wizard's edit path over the dates", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
     const live = await createDraft({ ...BASICS, name: `${NAME} — activated` });
     await importAgenda(live);
     const activated = await fetch(`${API}/events/${live}/activate`, { method: "POST", headers: json(admin) });
     assert.equal(activated.status, 200, "an imported agenda is enough to activate");
 
-    const response = await patch(live, { basics: { ...BASICS, name: "Renamed After Going Live" } });
+    const response = await patch(live, {
+      basics: { ...BASICS, name: `${NAME} — activated`, starts_on: "2027-04-01", ends_on: "2027-04-03" },
+    });
     assert.equal(response.status, 422);
     assert.equal(((await response.json()) as { code: string }).code, "events.not_a_draft");
-    assert.equal((await getDraft(live)).name, `${NAME} — activated`);
+    assert.equal((await getDraft(live)).starts_on, BASICS.starts_on);
   });
 });

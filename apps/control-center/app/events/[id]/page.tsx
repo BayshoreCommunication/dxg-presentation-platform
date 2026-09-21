@@ -98,6 +98,14 @@ export default async function CommandCenterPage({ params }: { params: Promise<{ 
             matches on (room, start, title) and updates rather than duplicating — a
             capability with no entry point is a capability nobody has.
           */}
+          {/*
+            The way back to what this event is. Without it the details screen is
+            reachable only from the portfolio, so anyone already inside an event would
+            have to leave it to read the timezone their times are rendered in.
+          */}
+          <Link href={`/events/${id}/details`} className="btn">
+            Event details
+          </Link>
           <Link href={`/events/${id}/import`} className="btn">
             Re-import agenda
           </Link>

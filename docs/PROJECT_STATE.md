@@ -1958,3 +1958,72 @@ CI green, 208 unit tests; invariants **98** pass, 0 skipped. Probe events remove
 **Not mine, and changed anyway:** the `Test` draft dated 25–26 Sep is one of the three that were
 already in this database. Verifying the edit path meant editing it — its venue is now
 `Tampa Convention Center` and it ends 28 Sep rather than 26 Sep.
+
+## 2026-09-21 (sixty-third) — an event opens on what it is, and a room technician stops being able to close the portal
+
+Travis: clicking an event should show its details, not the command centre. There was no such screen —
+the inventory has *Presentation detail* for a talk and nothing for an event — so the choice was put to
+him between an expand-in-place card, reusing the wizard, and a real screen. He chose the screen.
+D-037.
+
+**The gap is bigger than the click.** Everything the wizard sets was written once and visible nowhere
+afterwards: the timezone every displayed time in the product renders in, the upload deadline that
+closes the speaker portal, the reminder cadence, the accent colour, the rooms and days the agenda
+created. The command centre answers only "how is this going", and since the sixty-second entry the
+wizard refuses an activated event — so a wrong timezone on a live event could not be found at all.
+
+**Screen 18 shows the load-bearing fields locked, not hidden.** Name and venue are labels and stay
+editable; timezone and dates are what the schedule is set against, so they are displayed with the
+reason they cannot be changed here. Hiding them would conceal the thing every time depends on, and
+rendering them as inputs the endpoint then refuses is the D-033 trap wearing a different hat. The
+sixty-second entry's blanket refusal is **narrowed** to exactly those three fields, which is the rule
+that entry gave a reason for, applied to the fields the reason was about.
+
+**And then the reason this took longer than a screen: the routes it was about to put a UI on were
+ungated.** `POST /events`, `PATCH /events/{id}`, activate and duplicate asked for a staff session and
+an event scope and nothing else, though SCREEN_SPECS §2 has said PjM/PM/Admin since it was written.
+Probed before fixing: **`t.okafor`, a room technician on MedTech Forward and nothing else there, set
+that event's upload deadline to 1999-01-01 and its accent colour, and got 200 for both.** That is an
+account with custody of one room locking every speaker on the event out of uploading. Gated on
+`atLeast("presentation_manager")`.
+
+**Three lessons from the proving, and they cost more than the fix.**
+
+**1. A revert-to-prove run on an authorisation invariant performs the writes it expects to be
+refused.** The first version of the suite asserted the refusals against MedTech Forward, so reverting
+the gate renamed the seeded event, moved its deadline to 1999, turned its accent red and — through the
+new day reconciliation — took it from one event day to three. All four were found and restored, the
+last one only because the new screen displayed `Days 3` for an event the database had said was 1
+earlier the same session. The suite now writes only to a probe event it creates and deletes.
+
+**2. A test of mine passed for the wrong reason, which is the fourth time this project has hit that
+shape.** "A room technician cannot activate" stayed green with the gate reverted, because the
+technician held no role on the probe event and `scopeFor` refused it before any role was consulted. A
+refusal by the scope check proves nothing about the role check. The account is granted
+`room_technician` *on that event* now, so the gate is the only thing left that can refuse it. With the
+fix reverted, four cases fail and three stay green — the discriminating signature, not all-red.
+
+**3. Two new suites broke two old ones, both by contention I introduced.** `admin@example.invalid`
+went from six sign-ins to eight; the step lock holds for up to a full 30-second window per contender,
+so the honest queue became 240s against a 150s ceiling and every suite reported "could not claim an
+authenticator step". The ceiling now clears any plausible queue — a *crashed* holder is caught by the
+60-second staleness check, which is a different question and unaffected. Separately, my suite signed
+in as `t.okafor`, which `mfa.test.ts` reserves with a comment explaining exactly why: it drives the
+raw second factor outside the lock, so another suite spending a code breaks the replay test it is
+about to run on purpose. Moved to `c.delgado`.
+
+**A pre-existing race closed on the way past:** `POST /events` guesses the client only when one
+exists, and `rls-isolation.test.ts` creates a second while it runs — so any suite creating an event
+without naming a client fails with `events.client_required` whenever the two overlap. The sixty-first
+entry stopped those probe tenants accumulating; it did not stop them existing. Three suites now name
+the client.
+
+Verified in the browser end to end on a disposable event: the details screen filled with
+`UI Details Probe` / `Old Venue Name` / `America/Chicago`, editing the venue, deadline and cadence
+saved in one request, and the database held `New Venue Name`, `2027-07-15` and `T-7 only` with the
+dates and timezone untouched and one `events.configured` audit record. MedTech renders its real rooms,
+`3 / 3 collected` and one day.
+
+CI green, 208 unit tests; invariants **105** pass, 0 skipped, **three consecutive full runs**, which is
+what the contention fixes had to demonstrate rather than assert. Probe events removed; MedTech Forward
+restored to its seeded name, settings, branding and single event day.
