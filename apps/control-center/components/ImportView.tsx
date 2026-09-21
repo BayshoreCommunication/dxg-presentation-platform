@@ -36,6 +36,24 @@ const FIELD_LABELS: Record<string, string> = {
   "track.name": "Track",
 };
 
+/**
+ * What a presenter's fields are called when they sit under a "Presenter N" heading.
+ * The heading already says which presenter it is, so the full name is repetition —
+ * "Presenter 2 First Name" three times over, in a block titled "Presenter 2".
+ *
+ * `FIELD_LABELS` keeps the fully-qualified name, which is still what the input's
+ * accessible name uses: a short visible label inside a longer accessible one is what
+ * WCAG 2.5.3 asks for, and it keeps a field unambiguous when read out of context.
+ */
+const PRESENTER_SHORT_LABELS: Record<string, string> = {
+  first_name: "First Name",
+  last_name: "Last Name",
+  email: "Email",
+};
+
+const shortLabel = (field: string): string | undefined =>
+  PRESENTER_SHORT_LABELS[field.split(".")[1] ?? ""];
+
 /** Presenter 2 onwards, so a sixth presenter is labelled without listing eighteen keys. */
 ["speaker2", "speaker3", "speaker4", "speaker5", "speaker6"].forEach((prefix, index) => {
   const ordinal = index + 2;
@@ -212,15 +230,16 @@ function RowEditor({
   const set = (field: string, value: string) => setDraft({ ...draft, [field]: value });
 
   /** One labelled control, picking the input its field deserves. */
-  const renderField = (field: string) => {
+  const renderField = (field: string, visible?: string) => {
     const isMissing = row.missing.includes(field);
     const value = draft[field] ?? "";
     const empty = !value.trim();
     const border = isMissing && empty ? { borderColor: "var(--block)" } : {};
+    const full = FIELD_LABELS[field] ?? field;
 
     const label = (
       <label htmlFor={`edit-${field}`}>
-        {FIELD_LABELS[field] ?? field}
+        {visible ?? full}
         {isMissing && <span style={{ color: "var(--block)" }}> · required</span>}
       </label>
     );
@@ -311,6 +330,7 @@ function RowEditor({
           style={{ width: "100%", ...border }}
           placeholder={FIELD_HINTS[field] ?? ""}
           value={value}
+          {...(visible && visible !== full ? { "aria-label": full } : {})}
           onChange={(event) => set(field, event.target.value)}
         />
       </div>
@@ -323,7 +343,7 @@ function RowEditor({
    * what keeps a three-up row of times on one line at 560px and lets it fall to two
    * on a phone, without a breakpoint to maintain.
    */
-  const line = (fields: string[]) => (
+  const line = (fields: string[], labelFor?: (field: string) => string | undefined) => (
     <div
       style={{
         display: "grid",
@@ -331,7 +351,7 @@ function RowEditor({
         gap: 10,
       }}
     >
-      {fields.map(renderField)}
+      {fields.map((field) => renderField(field, labelFor?.(field)))}
     </div>
   );
 
@@ -431,7 +451,7 @@ function RowEditor({
                     </button>
                   )}
                 </div>
-                {line(presenterFields(prefix))}
+                {line(presenterFields(prefix), shortLabel)}
               </div>
             ))}
 

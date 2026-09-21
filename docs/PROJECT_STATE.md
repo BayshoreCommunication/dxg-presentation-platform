@@ -1650,3 +1650,20 @@ Three` with Dana Reyes + Lee Ng + Sam Ito on one slot; the edited row holds the 
 remove. Adding stops at six and the button disappears.
 
 CI green, 208 unit tests; invariants 63 pass, 0 skipped. Probe events removed.
+
+## 2026-09-21 (fifty-sixth) — presenter fields lose the ordinal they already have
+
+Travis: label them name and email, not "Presenter 1 Name", under each presenter.
+
+The block is titled "Presenter 2" and then said "Presenter 2 First Name", "Presenter 2 Last Name",
+"Presenter 2 Email" inside it. Visible labels are now `First Name` / `Last Name` / `Email`.
+
+**The accessible name stays fully qualified.** A short visible label inside a longer accessible one is
+what WCAG 2.5.3 asks for, and it keeps a field unambiguous when a screen reader reads it out of the
+block's context — `aria-label="Presenter 2 Email"` over a visible `Email`. The session and presentation
+fields are unchanged, since nothing above them repeats their names.
+
+Verified in the browser: visible labels read `First Name` / `Last Name` / `Email` twice over, while the
+six inputs report accessible names `Presenter 1 First Name` … `Presenter 2 Email`.
+
+CI green, 208 unit tests.
