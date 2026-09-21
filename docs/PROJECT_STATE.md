@@ -2445,3 +2445,28 @@ styles that identically to `--selected`. That is the DXG dashboard's own behavio
 alone; distinguishing them (outline versus fill) is a one-rule change if Travis wants it.
 
 CI green, 208 unit tests; invariants 116 pass, 0 skipped. Walkthrough event removed.
+
+## 2026-09-21 (seventy-fourth) — "here" stops looking like "chosen"
+
+Travis, on the observation left at the end of the last entry: use an outline for
+keyboard-selected instead of a fill.
+
+react-datepicker marks a day `--keyboard-selected` to say *this is where the keyboard is*, and with an
+empty field that is today. The ported theme filled it exactly like `--selected`, so an untouched End
+date showed today's cell looking chosen — the screen stating a value the field does not hold, which is
+the defect this project keeps removing, arriving this time through a stylesheet.
+
+An outline now says "here" and a fill says "chosen", and neither says the other. Scoped
+`:not(--selected)`, because a day can carry both classes and a real selection must keep its fill; the
+hover rule is split the same way, so hovering where the keyboard is takes the ordinary pale tint rather
+than painting itself like a selection.
+
+**A deliberate deviation from the dashboard**, which fills both — recorded rather than silently
+diverged. The dashboard's date fields are rarely empty; this product's End date starts empty every
+time, which is exactly when the two readings collide.
+
+Verified by measuring both states: with an empty field today's cell is `rgba(0,0,0,0)` with ink text
+and an inset `rgb(68,199,244)` 1.5px ring; after choosing the 18th that cell is `rgb(23,147,196)` with
+white text, and the two are visibly different in the same calendar.
+
+CI green, 208 unit tests. The invariant suites were not re-run: nothing outside the stylesheet changed.

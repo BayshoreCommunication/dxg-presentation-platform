@@ -292,7 +292,6 @@ aside nav a:not(.on):hover { background: var(--ink2); }
   transform: translateY(-1px);
 }
 
-.dxg-datepicker .react-datepicker__day--keyboard-selected,
 .dxg-datepicker .react-datepicker__day--selected,
 .dxg-datepicker .react-datepicker__time-list-item--selected {
   background: var(--blueDark) !important;
@@ -301,13 +300,37 @@ aside nav a:not(.on):hover { background: var(--ink2); }
   box-shadow: 0 5px 12px rgba(68, 199, 244, .28);
 }
 
+/* Outlined, not filled (Travis's call, deviating from the dashboard here).
+
+   react-datepicker marks a day `--keyboard-selected` to say "this is where the
+   keyboard is", and with an empty field that is today. The dashboard's theme
+   fills it exactly like `--selected`, so an untouched End date showed today's
+   cell looking chosen — the screen stating a value the field does not hold,
+   which is the defect this project keeps removing. An outline says "here" and
+   a fill says "chosen", and now only one of them says either.
+
+   `:not(--selected)` because a day can carry both classes, and a real selection
+   must keep its fill. */
+.dxg-datepicker .react-datepicker__day--keyboard-selected:not(.react-datepicker__day--selected) {
+  background: transparent !important;
+  color: var(--ink) !important;
+  font-weight: 600 !important;
+  box-shadow: inset 0 0 0 1.5px var(--blue);
+}
+
 /* Selected text stays white, so selection must win over the pale hover rule.
    This also covers today's keyboard preselection and selected time options. */
 .dxg-datepicker .react-datepicker__day--selected:is(:hover, :focus-visible),
-.dxg-datepicker .react-datepicker__day--keyboard-selected:is(:hover, :focus-visible),
 .dxg-datepicker .react-datepicker__time-list-item--selected:is(:hover, :focus-visible) {
   background: var(--blueDark) !important;
   color: var(--white) !important;
+}
+
+/* Hovering where the keyboard is should read as "you could pick this", not as a
+   selection already made, so it takes the ordinary hover tint inside its outline. */
+.dxg-datepicker .react-datepicker__day--keyboard-selected:not(.react-datepicker__day--selected):is(:hover, :focus-visible) {
+  background: var(--info-soft) !important;
+  color: var(--ink) !important;
 }
 
 .dxg-datepicker .react-datepicker__day:not(.react-datepicker__day--disabled):focus-visible,
