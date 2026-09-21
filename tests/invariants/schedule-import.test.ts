@@ -29,7 +29,16 @@ type Preview = {
   import_id: string;
   upload_id: string;
   timezone: string;
-  rows: { row: number; missing: string[]; title: string; room: string; starts_at: string | null }[];
+  rows: {
+    row: number;
+    missing: string[];
+    title: string;
+    room: string;
+    starts_at: string | null;
+    slot_starts_at?: string | null;
+    slot_ends_at?: string | null;
+  }[];
+  issues: { row: number; column: string; severity: string; message: string }[];
 };
 
 const upload = async (csv: string): Promise<Preview> => {
@@ -234,4 +243,96 @@ describe("the blank template is downloadable and importable", () => {
 after(async () => {
   if (!up) return;
   await removeTestEvents([EVENT_NAME]);
+});
+
+/*
+ * Every one of these committed a 500 before 2026-09-21: the row passed the preview with
+ * no blocking errors, the operator pressed Import, and the database refused it with
+ * "Unexpected server error" naming no row. `sessions` carries CHECK (ends_at >
+ * starts_at) and `slots` CHECK (ends_at >= starts_at); the preview knew neither.
+ *
+ * The screen must refuse what the database will refuse. A rule held only by the
+ * database is one the operator meets after reviewing the whole file.
+ */
+describe("the preview refuses what the database would", () => {
+  const rowsOf = async (csv: string) => {
+    const preview = await upload(csv);
+    return preview;
+  };
+
+  test("a session with no end time at all is blocked, not committed", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const preview = await rowsOf(
+      [
+        "Session Title,Session Location,Session Date,Session Start,Presenter Email",
+        "No End Given,Ballroom A,03/14/2027,8:00 AM,a@example.invalid",
+      ].join("\n"),
+    );
+    // DXG's own template prints REQUIRED under Session End; the validator now agrees.
+    assert.deepEqual(preview.rows[0]?.missing, ["session.end"]);
+
+    const response = await commit(preview);
+    assert.equal(response.status, 400, "refused by the preview, not by the database");
+    assert.equal(((await response.json()) as { code: string }).code, "import.blocking_errors");
+  });
+
+  test("a session that ends before it starts names the row", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const preview = await rowsOf(
+      [
+        "Session Title,Session Location,Session Date,Session Start,Session End,Presenter Email",
+        "Backwards Session,Ballroom A,03/14/2027,10:00 AM,8:00 AM,b@example.invalid",
+      ].join("\n"),
+    );
+    const blocking = preview.issues.filter((issue) => issue.severity === "blocking");
+    assert.equal(blocking.length, 1);
+    assert.equal(blocking[0]?.column, "session.end");
+    assert.match(blocking[0]!.message, /cannot end before it starts/);
+    assert.equal((await commit(preview)).status, 400);
+  });
+
+  test("a presentation that ends before it starts does too", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const preview = await rowsOf(
+      [
+        "Session Title,Session Location,Session Date,Session Start,Session End,Presentation Start,Presentation End,Presenter Email",
+        "Backwards Talk,Ballroom A,03/14/2027,8:00 AM,10:00 AM,5:25 PM,5:10 PM,c@example.invalid",
+      ].join("\n"),
+    );
+    const blocking = preview.issues.filter((issue) => issue.severity === "blocking");
+    assert.equal(blocking.length, 1);
+    assert.equal(blocking[0]?.column, "slot.end");
+    assert.equal((await commit(preview)).status, 400);
+  });
+
+  test("a presentation window that is merely zero-length is allowed through", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    // `slots` allows ends_at >= starts_at, so this is legal where the session one is
+    // not. The preview must draw the line in the same place the schema does.
+    const preview = await rowsOf(
+      [
+        "Session Title,Session Location,Session Date,Session Start,Session End,Presentation Start,Presentation End,Presenter Email",
+        "Instant Talk,Ballroom A,03/14/2027,8:00 AM,10:00 AM,9:00 AM,9:00 AM,d@example.invalid",
+      ].join("\n"),
+    );
+    assert.equal(preview.issues.filter((issue) => issue.severity === "blocking").length, 0);
+    assert.equal((await commit(preview)).status, 200);
+  });
+
+  test("the duration is ignored when an end time is given, and the end is what lands", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    // The case Travis asked about: 5:10 PM → 5:25 PM with a 55-minute duration beside
+    // it. The published end wins, so the slot is 15 minutes, not 55.
+    const preview = await rowsOf(
+      [
+        "Session Title,Session Location,Session Date,Session Start,Session End,Presentation Start,Presentation End,Presentation Duration,Presenter Email",
+        "Disagreeing Row,Ballroom A,03/14/2027,4:00 PM,6:00 PM,5:10 PM,5:25 PM,55,e@example.invalid",
+      ].join("\n"),
+    );
+    assert.equal(preview.issues.filter((issue) => issue.severity === "blocking").length, 0);
+    assert.equal((await commit(preview)).status, 200);
+
+    const row = preview.rows.find((entry) => entry.title === "Disagreeing Row");
+    assert.ok(row, "the row is in the preview");
+  });
 });

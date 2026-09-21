@@ -2112,3 +2112,67 @@ by swapping the text in place and reading the box back.
 CI green, lint and type-check clean. Probe event removed.
 
 **Still not mine:** the `Test Event` draft from 11:01 UTC is untouched.
+
+## 2026-09-21 (sixty-sixth) — a fair question about a slider, and three 500s behind it
+
+Travis, from the row editor: presentation start 5:10 PM, end 5:25 PM, duration 55 min — does this make
+sense? D-039.
+
+**No, and the data was never in danger.** The importer consults a duration only when no end time was
+given, so the row imports as 17:10–17:25 and the 55 is discarded — the published end wins, because it
+is the one an attendee was told. **The screen simply never said so where it mattered.** The rule was a
+sentence at the top of the box; underneath it a live, draggable slider read `55 min` next to a
+fifteen-minute window. An operator could drag a number that would be thrown away, and a careful one
+stopped to ask whether the product had noticed.
+
+Now: with a readable End present the slider is **disabled** and reads `not used`, and a note gives the
+three facts — what the times come to, what the file said, and that clearing the End makes the duration
+count. The file's number is **not** replaced with the real window; that is what the sheet said, and
+D-032 already refused to rewrite an operator's data to fit this control.
+
+**The first attempt was worse than the problem.** `not used — the times give 15 min` on the label line
+wrapped into a six-line column, because that line shares a third of the dialog's width with the label
+and the Clear button. Short status on the line, sentence in the note below.
+
+**Then the part that was not asked about.** Checking what the importer really does with that pair
+turned up three files that pass the preview with **zero blocking errors** and fail the commit with
+`500 Unexpected server error`, naming no row, after the operator has reviewed everything and pressed
+Import:
+
+1. a presentation ending before it starts — `slots` has `CHECK (ends_at >= starts_at)`;
+2. a session ending before it starts — `sessions` has `CHECK (ends_at > starts_at)`;
+3. **a file with no Session End column at all**, which is the nastiest, because nothing about it looks
+   malformed: `endsAt` falls back to the start, so `ends_at` equals `starts_at` and the strict check
+   refuses it.
+
+**Number three was a split between two lists that each claimed to be the source of truth**, and it is
+the fifty-third entry's finding again: `TEMPLATE_COLUMNS` marks Session End REQUIRED, DXG's sheet
+prints REQUIRED under it, and `REQUIRED_FIELDS` did not have it. Adding it there was still not enough
+— the per-row `missing` list is written field by field rather than derived from the constant, so the
+template changed and the enforcement did not. Fixed in both places, with the comment explaining why
+the duplication exists at all.
+
+**And the commit's idea of "blocking" was a hand-maintained subset of the preview's.** `commitImport`
+asked `!row.title || !row.room || !row.starts_at` and never saw the issues list — reasonably, since it
+takes its rows from the browser and a client is not a place to keep a rule. It now refuses a row whose
+own instants run backwards: the same question the database asks, in the same terms, one layer earlier
+and with the row number attached.
+
+**A useful false start:** the first run of the new tests failed identically after I had edited the
+service, which looked exactly like a stale dev server. It was not — the process had restarted on the
+write, and dumping the API's actual response showed the preview emitting the blocking issue correctly.
+The failures were real and in two different places (`missing`, and the commit-side check), and I would
+have "fixed" a restart that was never broken.
+
+Verified in the browser with Travis's own numbers: row 2 shows `Duration not used` with the slider
+greyed and the note reading "The times above give 15 min. The file says 55."; row 3, which gives a
+duration and no end, is unchanged — `45 min`, slider live. Clearing the End on row 2 re-enables the
+slider and returns the label to `55 min`, which is the advice the note gives, so the advice is known
+to work. The preview table already showed the truth all along: `talk 17:10–17:25` against
+`talk 13:00–13:45`.
+
+Proved by reverting: the three new cases fail without the guards, and the zero-length presentation case
+stays green in both directions — `slots` allows `>=` where `sessions` demands `>`, and the suite draws
+the line where the schema does rather than somewhere rounder.
+
+CI green, 208 unit tests; invariants **112** pass, 0 skipped. Probe events removed.

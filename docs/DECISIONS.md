@@ -439,3 +439,47 @@ sessions. They are fixtures for the portfolio and Room sync screens. Nothing in 
 rewritten.
 
 Proved by reverting: exactly one case fails — the new one — and the other eight stay green. Owner: Travis.
+
+## D-039 (2026-09-21): The preview refuses what the database would, and the duration says when it is ignored — Status: ACCEPTED (Travis's finding)
+Travis, from the row editor: presentation start 5:10 PM, end 5:25 PM, duration 55 min — does that make
+sense? It did not, and checking why turned up three ways to crash the import.
+
+**The duration question first.** The rule is sound and predates this: `Presentation Duration` is
+consulted only when no end time was given, because "a sheet carrying both and disagreeing means the
+published end wins — that is the one an attendee was told". So 5:10–5:25 imports as fifteen minutes
+and the 55 is discarded. **The screen never said so anywhere near the control.** The explanation sat
+in a sentence at the top of the box, and beneath it a live, draggable slider read `55 min` beside a
+fifteen-minute window — an operator could adjust a number that would be thrown away, and a careful
+one stopped to ask whether the product had noticed. The slider is disabled when a readable end time
+is present, reads `not used`, and a note says what the times give, what the file said, and how to
+make the duration count (clear the End). **The file's number is not overwritten with the real
+window** — it is what the sheet said, and rewriting an operator's data to agree with our arithmetic
+is what D-032 refused to do for this same control.
+
+**And the three crashes, found while checking the rule.** Each passed the preview with **zero
+blocking errors** and failed the commit with `500 Unexpected server error`, naming no row, after the
+operator had reviewed the whole file and pressed Import:
+
+1. a presentation ending before it starts (`slots` has `CHECK (ends_at >= starts_at)`);
+2. a session ending before it starts (`sessions` has `CHECK (ends_at > starts_at)`);
+3. **a file with no Session End column at all** — `endsAt` falls back to the start, so `ends_at`
+   equals `starts_at` and the strict check refuses it.
+
+**The third is the one worth pausing on, because it was a split between two lists that both claimed
+to be the source of truth.** `TEMPLATE_COLUMNS` marks Session End `required: true`, DXG's own sheet
+prints REQUIRED under it, and `REQUIRED_FIELDS` — the constant the screen and the row editor consult
+— did not include it. That is the fifty-third entry's finding repeated: `session.start` was "never
+actually required" for the same reason. Adding it to the constant was *still* not enough, because the
+per-row `missing` list is written out field by field rather than derived from it. Both now agree, and
+the comment says why the duplication exists (one date parse covers two fields).
+
+**The commit-side check was a hand-maintained subset of the preview's, and now checks the values it
+is about to insert.** `commitImport` decided "blocking" from `!row.title || !row.room ||
+!row.starts_at` and never saw the issues list at all — it takes rows from the browser, and a client
+is not a place to hold a rule. It now also refuses a row whose own instants run backwards, which is
+the same question the database asks, in the same terms, one layer earlier.
+
+Proved by reverting: the three new cases fail without the guards and pass with them, while the
+zero-length presentation case — legal, since `slots` allows `>=` where `sessions` requires `>` — stays
+green in both directions, so the suite is checking the line the schema actually draws rather than a
+rounder one. Owner: Travis.

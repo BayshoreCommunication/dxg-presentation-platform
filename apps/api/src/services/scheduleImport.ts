@@ -438,7 +438,21 @@ export type StagedRow = {
 export type RowOverrides = Record<number, Partial<Record<ImportField, string>>>;
 
 /** Without these a row cannot become a session, so the commit refuses it. */
-export const REQUIRED_FIELDS = ["session.title", "room.name", "session.date", "session.start"] as const;
+/*
+ * `session.end` was missing from this list while `TEMPLATE_COLUMNS` marked it REQUIRED
+ * and DXG's own sheet prints REQUIRED under it — the same split the fifty-third entry
+ * found for `session.start`, and this one had a database constraint behind it.
+ * `endsAt` falls back to the start when no end is given, `sessions` carries
+ * CHECK (ends_at > starts_at), and so a file with no Session End column passed the
+ * preview with no blocking errors and failed the commit with a 500 naming no row.
+ */
+export const REQUIRED_FIELDS = [
+  "session.title",
+  "room.name",
+  "session.date",
+  "session.start",
+  "session.end",
+] as const;
 
 export type ImportPreview = {
   import_id: string;
@@ -698,6 +712,24 @@ export async function buildPreview(
       });
     }
 
+    /*
+     * A window that runs backwards is refused here because the database refuses it
+     * anyway — `sessions` has CHECK (ends_at > starts_at) and `slots` has
+     * CHECK (ends_at >= starts_at). Without this the row passed the preview with no
+     * blocking errors and the commit failed with "Unexpected server error", naming no
+     * row, after the operator had already reviewed and pressed Import. A rule the
+     * database holds and the screen does not is a rule the operator meets at the worst
+     * possible moment.
+     */
+    if (startsAt && endsAt && new Date(endsAt) <= new Date(startsAt)) {
+      issues.push({
+        row: rowNumber,
+        column: "session.end",
+        severity: "blocking",
+        message: `The session ends at ${end} and starts at ${start} — it cannot end before it starts.`,
+      });
+    }
+
     if (!speakerName && speakerEmail) {
       issues.push({
         row: rowNumber,
@@ -739,6 +771,16 @@ export async function buildPreview(
       const from = zonedToUtc(slotStart, timeZone);
       slotEnd = new Date(from.getTime() + durationMinutes * 60_000).toISOString();
     }
+    // Only when the file gave both: an end derived from a duration cannot precede its
+    // own start, since the slider floor is 5 and the range input cannot go negative.
+    if (slotStart && slotEndText && slotEnd && new Date(slotEnd) < new Date(slotStart)) {
+      issues.push({
+        row: rowNumber,
+        column: "slot.end",
+        severity: "blocking",
+        message: `The presentation ends at ${slotEndText} and starts at ${slotStartText} — it cannot end before it starts.`,
+      });
+    }
     if (at("slot.start") && !slotStart) {
       issues.push({
         row: rowNumber,
@@ -765,6 +807,14 @@ export async function buildPreview(
     // on its own. An unparseable date counts as missing — the cell is there, but
     // nothing came out of it.
     if (!startsAt) missing.push("session.date", "session.start");
+    /*
+     * `missing` is written out field by field rather than derived from
+     * REQUIRED_FIELDS, because one parse covers two of them — and that is exactly how
+     * `session.end` came to be REQUIRED in the template, REQUIRED on DXG's own sheet,
+     * and absent from this list. Adding it to the constant alone changed what the
+     * template prints and nothing about what the screen enforces.
+     */
+    if (!end.trim()) missing.push("session.end");
 
     staged.push({
       row: rowNumber,
@@ -863,7 +913,25 @@ export async function commitImport(
   const clientId = eventRows[0]?.client_id;
   if (!clientId) return err({ code: "import.event_not_found", message: "No such event." });
 
-  const blocking = input.rows.filter((row) => !row.title || !row.room || !row.starts_at);
+  /*
+   * This check is made against the instants about to be inserted rather than against
+   * the preview's issue list, which this function never sees: the rows arrive from the
+   * browser and a client is not a place to hold a rule. `sessions` carries
+   * CHECK (ends_at > starts_at) and `slots` CHECK (ends_at >= starts_at), so a
+   * backwards window — or a session whose end is missing, which makes `ends_at` equal
+   * its own start — used to pass every check here and fail at the INSERT: a 500 and
+   * "Unexpected server error", after the operator had reviewed the file and pressed
+   * Import, naming no row.
+   */
+  const backwards = (row: StagedRow): boolean =>
+    (row.starts_at !== null && row.ends_at !== null && new Date(row.ends_at) <= new Date(row.starts_at)) ||
+    (row.slot_starts_at !== null &&
+      row.slot_ends_at !== null &&
+      new Date(row.slot_ends_at) < new Date(row.slot_starts_at));
+
+  const blocking = input.rows.filter(
+    (row) => !row.title || !row.room || !row.starts_at || backwards(row),
+  );
   if (blocking.length > 0) {
     return err({
       code: "import.blocking_errors",
