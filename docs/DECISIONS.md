@@ -396,3 +396,46 @@ into nothing that exists.
 Proved by reverting the gate: the four cases naming the technician's writes fail, and the three that
 do not depend on it stay green — which is the signature to want, since a suite that goes all-red on a
 revert is not discriminating between causes. Owner: Travis.
+
+## D-038 (2026-09-21): An event cannot be activated without an agenda — the API says so now, not just the browser — Status: ACCEPTED (Travis's call)
+Travis, reading `Sessions 0` on a live event's details screen: is a session required on each event?
+It was, and it was not. Two doors, two answers.
+
+**Through the wizard, yes** — D-027 makes step 2 mandatory and `commitImport` is what writes sessions,
+so the product's own path could not produce an event without them. **At the API, no**: `activateEvent`
+checked `rooms.length > 0 && days > 0` and never counted sessions, so
+`POST /events` → `PATCH {rooms}` → activate produced a live event with no agenda. That path was not
+hypothetical — `tests/invariants/event-configuration.test.ts` used it to get a live event to test
+against, which is how confident the loophole was.
+
+**So the rule was written down and unenforced.** D-027: an event without an agenda "is not a
+partly-configured event, it is an empty one". SCREEN_SPECS §2, as an acceptance criterion: "With no
+agenda committed … an event cannot be activated." Both true of the forward button and the step chips,
+neither true of the one function where activation actually happens. This is the same shape as D-025
+(the rule lived in one layer and the other did not ask) and as migration 005 (written correctly and
+never run).
+
+**What an empty live event costs.** No sessions means no slots, so no talks: nothing to collect,
+review, sync or archive. It reports `0 / 0 collected` for ever and sits on the portfolio
+indistinguishable from an event whose speakers simply have not uploaded yet — the one place a project
+manager looks to see what needs chasing.
+
+**The refusal names the missing piece rather than the rule.** Rooms, days and sessions all come from
+the same commit, so in practice this is one condition stated three ways; it is still listed field by
+field, because "this event needs an agenda" is not something an operator can act on and "it has no
+sessions" is.
+
+**A duplicated event is now refused too, and that is intended rather than collateral.** FR-EVT-002
+copies structure and no content — deliberately, so last year's decks cannot appear in this year's
+event — so a duplicate arrives with rooms, tracks and days and an empty agenda, which is exactly the
+shape this refuses. It has no talks either; activating it would build the same shell by another route.
+Covered by its own case rather than reasoned about.
+
+**The seeded events are untouched and stay inconsistent with this rule**, which is worth stating
+plainly: `packages/db/src/seed.ts` writes `status: 'active'` straight into its INSERT and never calls
+`activateEvent`, so `NeuroSummit Spring 2026` and `OrthoWorld Congress 2026` remain live with zero
+sessions. They are fixtures for the portfolio and Room sync screens. Nothing in the product can now
+*create* that state; the seed is not "in the product" and was left alone rather than quietly
+rewritten.
+
+Proved by reverting: exactly one case fails — the new one — and the other eight stay green. Owner: Travis.

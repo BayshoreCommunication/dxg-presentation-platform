@@ -413,10 +413,31 @@ export async function activateEvent(
   if (!hasAnyRole(actor, CONFIGURERS)) return err(forbidden("Activating an event"));
   const draft = await draftOf(tx, eventId);
   if (!draft.ok) return draft;
-  if (draft.value.rooms.length === 0 || draft.value.days === 0) {
+  /*
+   * D-027 says an event without an agenda "is not a partly-configured event, it is an
+   * empty one", and SCREEN_SPECS §2 carries that as an acceptance criterion: with no
+   * agenda committed, an event cannot be activated. Until now that rule lived only in
+   * the browser — the forward button and the step chips — while this function, the one
+   * place activation actually happens, asked only for a room and a day. `POST /events`
+   * → `PATCH {rooms}` → activate produced a live event with no sessions, so no slots,
+   * no talks, nothing to collect, review, sync or archive: a shell that reports 0 / 0
+   * collected for ever and is indistinguishable on the portfolio from an event whose
+   * speakers have simply not uploaded yet.
+   *
+   * Everything here comes from the same place — `commitImport` writes the rooms, the
+   * days and the sessions in one transaction — so in practice this is one condition
+   * stated three ways. It is listed field by field anyway, because "an event needs an
+   * agenda" is not something an operator can act on, and "no sessions have been
+   * imported" is.
+   */
+  const missing: string[] = [];
+  if (draft.value.days === 0) missing.push("at least one day");
+  if (draft.value.rooms.length === 0) missing.push("at least one room");
+  if (draft.value.sessions === 0) missing.push("an imported agenda — it has no sessions");
+  if (missing.length > 0) {
     return err({
       code: "events.incomplete",
-      message: "An event needs at least one day and one room before it can be activated.",
+      message: `An event needs ${missing.join(", ")} before it can be activated. Rooms, days and sessions all come from the schedule import.`,
     });
   }
   await tx.query(`UPDATE pmp.events SET status = 'active', lock_version = lock_version + 1 WHERE id = $1`, [

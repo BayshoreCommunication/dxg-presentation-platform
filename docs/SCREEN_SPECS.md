@@ -38,7 +38,7 @@ Reading rules:
 
 **API** `POST /events` (step 1 commits a draft), the §3 import endpoints for step 2, `PATCH /events/{id}` for steps 3–4, `POST /events/{id}/holding-media` for template/header uploads. Duplication from an existing event: `POST /events/{id}:duplicate` (structure and settings only — never files or speakers).
 
-**Guards** the prototype's rule is normative: **invitations cannot be sent until the event has at least one day and at least one room**; both arrive with the import, and the comms endpoints enforce it server-side (`comms.event_incomplete`). **Step 2 is mandatory** (D-027): steps 3 and 4 are unreachable until an agenda has been committed, enforced on the forward button *and* on the step chips. The draft persists, so the wizard can be left and resumed.
+**Guards** the prototype's rule is normative: **invitations cannot be sent until the event has at least one day and at least one room**; both arrive with the import, and the comms endpoints enforce it server-side (`comms.event_incomplete`). **Step 2 is mandatory** (D-027): steps 3 and 4 are unreachable until an agenda has been committed, enforced on the forward button, on the step chips *and* in `activateEvent` itself (D-038) — until 2026-09-21 the rule lived only in the browser, and `POST /events` → `PATCH {rooms}` → activate produced a live event with no agenda. The draft persists, so the wizard can be left and resumed.
 
 **Acceptance**
 - A part-completed wizard leaves a `draft` event that can be resumed; nothing is sent to anyone from a draft.

@@ -2027,3 +2027,51 @@ dates and timezone untouched and one `events.configured` audit record. MedTech r
 CI green, 208 unit tests; invariants **105** pass, 0 skipped, **three consecutive full runs**, which is
 what the contention fixes had to demonstrate rather than assert. Probe events removed; MedTech Forward
 restored to its seeded name, settings, branding and single event day.
+
+## 2026-09-21 (sixty-fourth) — "Sessions 0" was a fair question, and the answer was a hole
+
+Travis, reading `Sessions 0` on OrthoWorld's details screen: is a session required on each event?
+
+**Two doors, two answers.** Through the wizard, yes — D-027 makes step 2 mandatory and `commitImport`
+is what writes sessions, so the product's own path cannot produce an event without them. At the API,
+no: `activateEvent` asked for `rooms.length > 0 && days > 0` and never counted sessions. So
+`POST /events` → `PATCH {rooms}` → activate produced a live event with no agenda — **and that is not a
+hypothetical path, it is the one my own `event-configuration.test.ts` used two entries ago to get a
+live event to test against.**
+
+**The rule was written down twice and enforced nowhere that counts.** D-027: an event without an
+agenda "is not a partly-configured event, it is an empty one". SCREEN_SPECS §2, as an acceptance
+criterion: "an event cannot be activated". Both were true of the forward button and the step chips and
+false of the one function where activation happens. Same shape as D-025, where the rule lived in one
+layer and the other never asked, and as migration 005, which was correct and never ran.
+
+**What it produced:** no sessions → no slots → no talks. Nothing to collect, review, sync or archive,
+`0 / 0 collected` for ever, and a card on the portfolio indistinguishable from an event whose speakers
+simply have not uploaded — which is the one screen a project manager scans to see what needs chasing.
+
+Now refused, naming what is missing rather than the rule: rooms, days and sessions all arrive in the
+same commit, so this is one condition stated three ways, but "it has no sessions" is something an
+operator can act on and "this event needs an agenda" is not.
+
+**A duplicate is refused too, by design rather than by accident.** FR-EVT-002 copies structure and no
+content, so a duplicated event has rooms, tracks and days and an empty agenda — exactly the shape this
+refuses. It has no talks either. Given its own case rather than reasoned about.
+
+**Left inconsistent on purpose, and said out loud:** the seed writes `status: 'active'` straight into
+its INSERT and never calls `activateEvent`, so NeuroSummit and OrthoWorld stay live with zero sessions.
+Nothing in the product can create that state any more; the seed is not in the product, and quietly
+rewriting fixtures to fit a new rule would hide exactly the question Travis asked.
+
+**A leftover the duplicate test created, found by counting rows rather than by reading output:** two
+clean runs left four events where there should have been three. `events.duplicated_from` points from a
+copy back at its source, so a cleanup that happened to reach the source first was blocked by that key
+and *archived* it instead — the helper's correct fallback, silently accumulating a probe event per run.
+The copy has its own name prefix now and is removed first, child before parent.
+
+Proved by reverting: exactly one case fails, the new one, and the other eight stay green.
+
+CI green, 208 unit tests; invariants **107** pass, 0 skipped, two consecutive full runs, and the event
+count back to three afterwards.
+
+**Not mine:** a draft called `Test Event` (Tampa, 21–23 Sep 2026) was created from the browser by
+`admin@example.invalid` at 11:01 UTC today. Left alone.

@@ -30,6 +30,13 @@ import { removeTestEvents } from "../helpers/cleanup.ts";
 const API = process.env.API_BASE ?? "http://localhost:4000/api/v1";
 const PASSWORD = "dxg-development-password";
 const NAME = "Event Config Probe";
+/*
+ * A prefix of its own, not `${NAME} duplicate`: `events.duplicated_from` points from the
+ * copy back at its source, so a cleanup that happens to process the source first is
+ * blocked by that key and archives it instead of deleting — leaving a probe event
+ * behind on every run. Two removals in order, child before parent.
+ */
+const DUPLICATE = "Copy Of Config Probe";
 
 let up = false;
 let admin = "";
@@ -71,6 +78,8 @@ const BASICS = {
 const setupOf = async (id: string, cookie: string) =>
   (await (await fetch(`${API}/events/${id}/draft`, { headers: { cookie } })).json()) as {
     name: string;
+    status: string;
+    sessions: number;
     venue: string | null;
     starts_on: string;
     ends_on: string;
@@ -81,6 +90,28 @@ const setupOf = async (id: string, cookie: string) =>
 
 const patch = (id: string, cookie: string, body: unknown) =>
   fetch(`${API}/events/${id}`, { method: "PATCH", headers: json(cookie), body: JSON.stringify(body) });
+
+/** The smallest real agenda, on the event's first day. */
+const AGENDA = [
+  "Session Title,Session Location,Session Date,Session Start,Session End,Presenter Email",
+  "Only Session,Ballroom A,06/01/2027,9:00 AM,10:00 AM,probe@example.invalid",
+].join("\n");
+
+const importAgenda = async (eventId: string): Promise<void> => {
+  const preview = (await (
+    await fetch(`${API}/events/${eventId}/imports`, {
+      method: "POST",
+      headers: { "content-type": "application/octet-stream", "x-file-name": "agenda.csv", cookie: admin },
+      body: Buffer.from(AGENDA, "utf8"),
+    })
+  ).json()) as { import_id: string; rows: unknown[] };
+  const committed = await fetch(`${API}/imports/${preview.import_id}/commit`, {
+    method: "POST",
+    headers: json(admin),
+    body: JSON.stringify({ event_id: eventId, rows: preview.rows }),
+  });
+  assert.equal(committed.status, 200, "the probe agenda commits");
+};
 
 const userId = async (email: string): Promise<string> => {
   const staff = (await (await fetch(`${API}/admin/users`, { headers: { cookie: admin } })).json()) as {
@@ -118,7 +149,9 @@ before(async () => {
 });
 
 after(async () => {
-  if (up) await removeTestEvents([NAME]);
+  if (!up) return;
+  await removeTestEvents([DUPLICATE]);
+  await removeTestEvents([NAME]);
 });
 
 describe("a room technician cannot reconfigure the event they staff", () => {
@@ -171,14 +204,32 @@ describe("a presentation manager on the event still can", () => {
 });
 
 describe("what a live event will and will not accept", () => {
+  test("an event with rooms and days but no agenda cannot be activated", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    // Rooms and days, deliberately without an agenda. This is exactly the shape the
+    // wizard cannot produce — step 2 is mandatory — and the API used to accept.
+    await patch(probeEvent, admin, { rooms: ["Ballroom A"] });
+    const response = await fetch(`${API}/events/${probeEvent}/activate`, {
+      method: "POST",
+      headers: json(admin),
+    });
+    assert.equal(response.status, 422);
+    const body = (await response.json()) as { code: string; message: string };
+    assert.equal(body.code, "events.incomplete");
+    assert.match(body.message, /no sessions/, "the refusal says which of the three is missing");
+
+    const setup = await setupOf(probeEvent, admin);
+    assert.equal(setup.status, "draft", "and it is still a draft");
+  });
+
   test("its name and venue are labels, and stay correctable", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
-    await patch(probeEvent, admin, { rooms: ["Ballroom A"] });
+    await importAgenda(probeEvent);
     const activated = await fetch(`${API}/events/${probeEvent}/activate`, {
       method: "POST",
       headers: json(admin),
     });
-    assert.equal(activated.status, 200);
+    assert.equal(activated.status, 200, "an agenda is what makes it activatable");
 
     const response = await patch(probeEvent, admin, {
       basics: { ...BASICS, name: `${NAME} corrected`, venue: "Orlando Civic Hall" },
@@ -187,6 +238,36 @@ describe("what a live event will and will not accept", () => {
     const setup = await setupOf(probeEvent, admin);
     assert.equal(setup.name, `${NAME} corrected`);
     assert.equal(setup.venue, "Orlando Civic Hall");
+  });
+
+  /*
+   * FR-EVT-002 copies structure and settings and deliberately copies no speakers,
+   * files or sessions — last year's decks must not appear in this year's event. So a
+   * duplicate arrives with rooms, tracks and days and an empty agenda, which is
+   * precisely the shape the new rule refuses. That is the intended consequence rather
+   * than an oversight: a duplicated event has no talks either, and activating it would
+   * produce the same shell by a different route.
+   */
+  test("a duplicate inherits rooms and days, and still needs its own agenda", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const copy = (await (
+      await fetch(`${API}/events/${probeEvent}/duplicate`, {
+        method: "POST",
+        headers: json(admin),
+        body: JSON.stringify({ name: DUPLICATE, starts_on: "2027-09-01", ends_on: "2027-09-02" }),
+      })
+    ).json()) as { event_id: string; rooms: number };
+    assert.ok(copy.rooms > 0, "the rooms did come across");
+
+    const setup = await setupOf(copy.event_id, admin);
+    assert.equal(setup.sessions, 0, "and the agenda did not, by design");
+
+    const response = await fetch(`${API}/events/${copy.event_id}/activate`, {
+      method: "POST",
+      headers: json(admin),
+    });
+    assert.equal(response.status, 422);
+    assert.match(((await response.json()) as { message: string }).message, /no sessions/);
   });
 
   test("its dates and timezone are not, and the refusal names them", async (t: TestContext) => {
