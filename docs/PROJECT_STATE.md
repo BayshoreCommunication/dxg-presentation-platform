@@ -1468,3 +1468,52 @@ CI green, 196 unit tests; invariants 61 pass, 0 skipped. Probe event removed.
 **A note on the run, not the code.** Docker Desktop hung mid-verification and the API went unreachable
 with its ports still listening — `curl` returned 000 and `docker ps` never returned. Nothing to do with
 this change; recorded because "the API is down" looked at first like something the work had broken.
+
+## 2026-09-21 (fifty-second) — the validation list goes; problems move onto the row
+
+Travis, with a screenshot of eleven identical validation paragraphs: show it in the data table, colour
+the bad rows, put an Edit action on them, and open a modal with the whole row in it. D-030.
+
+**The card scaled with the wrong thing.** One paragraph per issue meant eleven sessions with no
+presenter name produced eleven copies of the same sentence, stacked above a table that already had
+eleven rows. The facts were real; the presentation made them worthless — nothing distinguished the rows,
+the list was longer than the data it described, and every row number was a cross-reference the reader
+had to resolve by hand.
+
+Now: a blocked row is filled with the blocking colour, a warned row with the warning colour, and both
+carry **Edit** beside the status chip. **Two colours, not one** — a blocked row stops the import and a
+warned row does not, and colouring them alike would repeat the card's mistake in a different form.
+
+**The modal replaces D-027's inline inputs, and is better for a reason that only showed up in use.**
+An input rendered into the offending cell is direct, but it shows a value with nothing around it: an
+operator typing a room cannot see the session it belongs to or the date beside it, which is exactly the
+context needed to know *which* room it should be. The dialog states the row's problems, marks missing
+fields `· required`, and shows all ten mapped fields as the evidence. `StagedRow` gained `cells` — every
+mapped field's current value — which replaced the ad-hoc `date_cell`/`start_cell`/`end_cell` trio.
+
+**One request per row.** `/cells` now takes `{row, cells}` as well as `{row, field, value}`. Three fields
+as three requests would re-read the file three times and let the responses race — last to arrive winning
+rather than last edit made. Save is refused while any required field is still empty.
+
+**Lint caught a capability I was about to drop silently.** Removing the card left `applySuggestion`
+unused — the "Room 'Ballroon B' … closest match: Ballroom B" one-click fix, which SCREEN_SPECS §3 calls
+for. It moved into the editor as a button next to the box it fills, rather than disappearing with the
+card that happened to host it. A sloppy slice of mine also took `blockingRows` and `unmappedRequired`
+out with it; type-check named all three before anything ran.
+
+Verified in the browser with a file carrying one clean row, one warning-only row and two blocked rows:
+validation card absent, backgrounds `rgba(0,0,0,0)` / amber 12% / red 12% / red 12%, three Edit buttons
+on exactly the three problem rows. Opening row 5 showed all ten fields populated
+(`Bad Date Here` / `Ballroon A` / `not-a-date` / `3:00 PM` / … / `rae@example.invalid`), the message
+"Could not read a date and time from 'not-a-date 3:00 PM'", and `· required` on date and start. Typing
+a date enabled Save; saving closed the dialog, cleared row 5's colour and Edit button, and moved the
+banner from "2 of 4" to "1 of 4".
+
+The multi-cell save is proved by reverting it: **the new test fails without it and passes with it.**
+CI green, 196 unit tests; invariants 63 pass, 0 skipped.
+
+Also fixed: the banner still said "fill the highlighted boxes … each one is checked as you leave it",
+which described the inputs that no longer exist. It now points at Edit.
+
+**Not mine:** an event called "Test Event 1" (draft, created 05:40 UTC today) is in the database and was
+left alone.

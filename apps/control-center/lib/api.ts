@@ -480,10 +480,8 @@ export type StagedRow = {
   row: number;
   title: string;
   room: string;
-  /** The raw cells, so an incomplete row can be re-edited as what the sheet said. */
-  date_cell: string;
-  start_cell: string;
-  end_cell: string;
+  /** Every mapped field's current value — the whole row as the file states it. */
+  cells: Record<string, string>;
   /** Which required fields this row still has no usable value for. */
   missing: string[];
   starts_at: string | null;
@@ -545,10 +543,10 @@ export const uploadImport = async (eventId: string, file: File) =>
  * spreadsheet should have carried, so the server re-parses and re-validates it through
  * the same path the file took — no date parsing or timezone maths happens here.
  */
-export const setImportCell = (uploadId: string, row: number, field: string, value: string) =>
+export const setImportCells = (uploadId: string, row: number, cells: Record<string, string>) =>
   request<ImportPreview>(`/imports/${uploadId}/cells`, {
     method: "POST",
-    body: JSON.stringify({ row, field, value }),
+    body: JSON.stringify({ row, cells }),
   });
 
 /** Downloads a blank agenda template generated from the importer's own field list. */

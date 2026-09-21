@@ -50,6 +50,20 @@ const fixCell = async (uploadId: string, row: number, field: string, value: stri
     })
   ).json()) as Preview;
 
+/** What the row editor sends: several cells of one row, in one request. */
+const fixRow = async (
+  uploadId: string,
+  row: number,
+  cells: Record<string, string>,
+): Promise<Preview> =>
+  (await (
+    await fetch(`${API}/imports/${uploadId}/cells`, {
+      method: "POST",
+      headers: json(admin),
+      body: JSON.stringify({ row, cells }),
+    })
+  ).json()) as Preview;
+
 const commit = (preview: Preview) =>
   fetch(`${API}/imports/${preview.import_id}/commit`, {
     method: "POST",
@@ -136,6 +150,35 @@ describe("an incomplete agenda can be finished on the screen", () => {
     // 3pm on 14 March in New York is EDT, UTC-4. Getting this wrong by a day is what
     // the server-side re-validation exists to prevent.
     assert.equal(preview.rows[3]?.starts_at, "2027-03-14T19:00:00.000Z");
+  });
+
+  test("the row editor saves several cells of a row in one request", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    let preview = await upload(INCOMPLETE);
+    // Row 5's date is unreadable and row 5 is also where the editor would show every
+    // other field; saving them one at a time would re-read the file once per field and
+    // let the responses race.
+    preview = await fixRow(preview.upload_id, 5, {
+      "session.date": "03/14/2027",
+      "session.start": "4:30 PM",
+      "session.title": "Renamed In The Editor",
+    });
+    const fixed = preview.rows[3]!;
+    assert.deepEqual(fixed.missing, []);
+    assert.equal(fixed.title, "Renamed In The Editor");
+    assert.equal(fixed.starts_at, "2027-03-14T20:30:00.000Z", "4:30pm EDT");
+  });
+
+  test("every row carries its whole set of cells, so the editor can show the row", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const preview = await upload(INCOMPLETE);
+    const row = preview.rows[0] as unknown as { cells: Record<string, string> };
+    assert.equal(row.cells["session.title"], "Complete Row");
+    assert.equal(row.cells["room.name"], "Ballroom A");
+    assert.equal(row.cells["session.date"], "03/14/2027");
+    assert.equal(row.cells["speaker.email"], "a@example.invalid");
+    // Present but empty, rather than absent: the editor renders a box for it either way.
+    assert.equal(row.cells["track.name"], "");
   });
 
   test("once every row is complete the commit goes through", async (t: TestContext) => {

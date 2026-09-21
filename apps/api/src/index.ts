@@ -1106,17 +1106,34 @@ app.post("/api/v1/imports/:uploadId/cells", async (req, res) => {
   const cached = importCache.get(uploadId);
   if (!cached) return res.status(404).json({ code: "import.expired", message: "Upload the file again." });
 
-  const body = req.body as { row?: number; field?: ImportField; value?: string };
-  if (typeof body.row !== "number" || typeof body.field !== "string") {
-    return res.status(400).json({ code: "request.invalid", message: "`row` and `field` are required." });
+  const body = req.body as {
+    row?: number;
+    field?: ImportField;
+    value?: string;
+    cells?: Partial<Record<ImportField, string>>;
+  };
+  if (typeof body.row !== "number") {
+    return res.status(400).json({ code: "request.invalid", message: "`row` is required." });
   }
-  if (!IMPORT_FIELDS.includes(body.field)) {
-    return res.status(400).json({ code: "request.invalid", message: `Unknown field ${body.field}.` });
+
+  /*
+   * One field or a whole row. The row editor saves several cells at once, and sending
+   * them one at a time would re-read the file once per field and race its own results
+   * — the last response to arrive would win, not the last edit made.
+   */
+  const patch: Partial<Record<ImportField, string>> =
+    body.cells ?? (typeof body.field === "string" ? { [body.field]: body.value ?? "" } : {});
+  if (Object.keys(patch).length === 0) {
+    return res.status(400).json({ code: "request.invalid", message: "`cells` or `field` is required." });
+  }
+  const unknown = Object.keys(patch).filter((field) => !IMPORT_FIELDS.includes(field as ImportField));
+  if (unknown.length > 0) {
+    return res.status(400).json({ code: "request.invalid", message: `Unknown field ${unknown[0]}.` });
   }
 
   const overrides: RowOverrides = {
     ...cached.overrides,
-    [body.row]: { ...cached.overrides?.[body.row], [body.field]: body.value ?? "" },
+    [body.row]: { ...cached.overrides?.[body.row], ...patch },
   };
   importCache.set(uploadId, { ...cached, overrides });
 

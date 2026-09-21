@@ -325,10 +325,12 @@ export type StagedRow = {
   row: number;
   title: string;
   room: string;
-  /** The raw date and clock cells, so the screen can show and re-edit what was written. */
-  date_cell: string;
-  start_cell: string;
-  end_cell: string;
+  /**
+   * Every mapped field's current cell value, after any correction the operator has
+   * typed. This is what the row editor shows and edits: the whole row as the file
+   * states it, not the handful of derived values the table happens to display.
+   */
+  cells: Partial<Record<ImportField, string>>;
   /** Which of REQUIRED_FIELDS this row still has no usable value for. */
   missing: string[];
   starts_at: string | null;
@@ -631,9 +633,7 @@ export async function buildPreview(
       row: rowNumber,
       title,
       room,
-      date_cell: date,
-      start_cell: start,
-      end_cell: end,
+      cells: Object.fromEntries(IMPORT_FIELDS.map((field) => [field, at(field)])),
       missing,
       // Stored as an absolute instant; the spreadsheet's wall-clock time is
       // interpreted in the event's timezone.
