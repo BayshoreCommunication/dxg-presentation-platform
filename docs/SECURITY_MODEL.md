@@ -9,6 +9,22 @@ Status: Draft v0.1 (2026-08-30). The G0-5 threat-model workshop refines this; SR
 - **Enforced 2026-09-20 (D-025).** Until then roles were flattened across every event, so any role on any one event granted that role's powers on all of them. `scopeFor` now refuses an event the account holds no role on (`auth.not_on_this_event`, 403), and the event list returns only the account's own events. `platform_admin` is the single deliberate exception, because creating the first event and granting roles on it cannot be done from inside an event.
 - **Cross-event attempts**: RLS denials on explicitly-addressed foreign resources are logged with actor + target and raise an alert (NFR-SEC-06); repeated attempts flag the account.
 
+## Database-level isolation (as of 2026-09-21)
+
+The application connects to Postgres as `pmp_app`, a role that owns nothing, cannot log in as the
+schema owner, cannot alter the schema, cannot update or delete the append-only tables, and cannot read
+the migration ledger. Row-level security policies are written `TO pmp_app`, which is the only reason
+they take effect: until D-035 the application connected as the owner — a superuser — and a superuser
+bypasses row security entirely, so every policy in `db/migrations/005_rls.sql` was inert from August to
+September 2026.
+
+Migrations and the seed connect as the owner, through a separate pool. The application's password is
+set by `scripts/ensureAppRole.ts` rather than by a migration: a role is cluster-wide and a migration is
+per-database, so a migration that sets it rotates the credential for every database in the cluster.
+
+`tests/invariants/rls-isolation.test.ts` proves the boundary with two real tenants, and fails entirely
+if the application is ever pointed back at the owner.
+
 ## 2. Authentication
 
 - **Password policy**: minimum **6** characters (lowered from 12 on 2026-09-20, D-023), no character-class rules, plus a dictionary of common passwords widened to cover short entries now that they are long enough to pass the length rule. Six is below NIST SP 800-63B's floor of 8 for user-chosen secrets; enforced TOTP and lockout after five attempts are what carry the weight length no longer does.

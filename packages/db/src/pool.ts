@@ -1,16 +1,29 @@
 import pg from "pg";
-import { dbConfig } from "./config.ts";
+import { dbConfig, ownerConfig } from "./config.ts";
 
 let pool: pg.Pool | undefined;
+let ownerPool: pg.Pool | undefined;
 
 export function getPool(): pg.Pool {
   pool ??= new pg.Pool({ ...dbConfig, max: 10 });
   return pool;
 }
 
+/**
+ * The schema owner's pool, for the two things that genuinely need DDL: applying
+ * migrations and seeding. Everything else goes through `getPool`, which connects as a
+ * role row security applies to.
+ */
+export function getOwnerPool(): pg.Pool {
+  ownerPool ??= new pg.Pool({ ...ownerConfig, max: 4 });
+  return ownerPool;
+}
+
 export async function closePool(): Promise<void> {
   await pool?.end();
   pool = undefined;
+  await ownerPool?.end();
+  ownerPool = undefined;
 }
 
 export type Scope = {

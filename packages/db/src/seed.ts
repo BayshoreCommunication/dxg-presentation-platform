@@ -11,7 +11,7 @@ import {
   groupSecret,
   totp,
 } from "@pmp/auth";
-import { getPool, closePool } from "./pool.ts";
+import { getOwnerPool, closePool } from "./pool.ts";
 
 /** Development credentials only. Real deployments create accounts via the admin API. */
 const DEV_PASSWORD = "dxg-development-password";
@@ -99,7 +99,7 @@ const TALKS = [
 ] as const;
 
 async function seed(): Promise<void> {
-  const pool = getPool();
+  const pool = getOwnerPool();
   const client = await pool.connect();
   try {
     await client.query("BEGIN");

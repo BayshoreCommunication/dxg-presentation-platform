@@ -1837,3 +1837,58 @@ Cost accepted: `test:invariants` goes from ~70s to ~135–180s. Three consecutiv
 fail, 0 skipped, and the count is stable, which it was not before.
 
 CI green, 208 unit tests. Walkthrough events removed.
+
+## 2026-09-21 (sixty-first) — RLS stops being decorative
+
+The last piece of the isolation story, open since the first entry of this session. D-035.
+
+**Migration 005 wrote the whole thing in August and none of it ran.** Row security enabled and FORCEd
+on every tenant table, a policy per table granted `TO pmp_app`, append-only tables revoked — and the
+application connected as `pmp`, the schema owner and a superuser. A superuser bypasses row security, so
+a session scoped to a client id that does not exist read every event, speaker and file version in the
+database. Measured before and after: `{events: 3, speakers: 3, file_versions: 4}` became
+`{0, 0, 0}`, while platform context still sees all six events.
+
+`pmp_app` was created `NOLOGIN`, which is why it was never used. `011_app_role_login.sql` gives it
+LOGIN, re-grants on every table and sequence — 005's one-time `ON ALL TABLES` never covered what
+migrations 006–010 added — sets default privileges so the next migration is covered without anyone
+remembering, and re-applies the append-only REVOKEs **after** the blanket grant, which would otherwise
+hand back exactly what 005 took away. `packages/db` now has two pools: the application's, and the
+owner's for migrations and the seed.
+
+**An hour lost to a credential in the wrong place, and worth writing down.** The migration originally
+ended with `ALTER ROLE pmp_app WITH LOGIN PASSWORD '…'`. A role is cluster-wide and a migration is
+per-database, so migrating a *second* database silently rotated the password the first was using. It
+presented as "password authentication failed" on a database nobody had touched, twice, and I twice
+"fixed" it by re-running the ALTER by hand — which is exactly the kind of patch that hides a cause.
+Reproduced deterministically in the end by measuring the verifier before and after. The credential now
+lives in `scripts/ensureAppRole.ts`, called by `db:migrate` and `db:reset`; the migration expresses
+privileges and nothing else. Verified the real hazard is gone: migrate the primary, migrate a second
+database, and the primary still authenticates.
+
+**`tests/invariants/rls-isolation.test.ts` — the suite BUILD_SPEC I-4 names, finally writable.**
+Isolation between tenants cannot be tested with one tenant and the seed has one client, so it makes a
+second. Twelve cases: each client sees only its own rows through a bare `SELECT` with no `WHERE`
+clause; a scope pointing at nobody sees nothing; a write into the other client is refused by `WITH
+CHECK` rather than by the application; another client's row cannot be touched because it is not there
+to touch; and four that assert what the application can no longer do — `SET ROLE` to the owner, create
+a table, rewrite or delete an audit record, read the migration ledger. **Reverting the connection to
+the owner fails all twelve**, which is the point: the suite is worthless without the fix and says so.
+
+**My own suite then broke two others, which is the more useful lesson.** Its teardown deleted probe
+events and probe clients in *one* transaction, so the clients delete failing on a foreign key rolled
+back the events delete too — and each run left another pair of tenants behind. Nine clients later,
+`POST /events` started refusing to guess which one an event belonged to (`events.client_required`), and
+the cross-event and schedule-import suites failed with a 400 that had nothing to do with them. Two
+transactions now, and events are found by their client rather than by their own name.
+
+Verified: 208 unit tests, **88 invariants** (two consecutive runs, 0 failed, 0 skipped, and the client
+count back to 1 afterwards), the whole staff surface 200 in the browser, and the command centre
+rendering MedTech normally. A fresh database through migrate → ensureAppRole → seed works end to end;
+`db:reset` itself was not run, because it destroys the volume and there are events in this database
+that are not mine.
+
+**Still not closed, and 005 already said so:** `users`, `event_roles`, `venues`, `client_grants` and
+`retention_policies` carry a `USING (true)` policy. RLS is on and the posture is explicit, but those
+tables have no `client_id` and stay app-mediated until the role × permission matrix (P0-E8) is signed
+off.

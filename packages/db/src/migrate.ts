@@ -1,6 +1,6 @@
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
-import { getPool, closePool } from "./pool.ts";
+import { getOwnerPool, closePool } from "./pool.ts";
 
 /**
  * Ordered, forward-only migrations. Idempotent: already-applied files are
@@ -10,7 +10,7 @@ import { getPool, closePool } from "./pool.ts";
 const migrationsDir = path.resolve(import.meta.dirname, "../../../db/migrations");
 
 async function run(): Promise<void> {
-  const pool = getPool();
+  const pool = getOwnerPool();
   await pool.query(`
     CREATE SCHEMA IF NOT EXISTS pmp;
     CREATE TABLE IF NOT EXISTS pmp.schema_migrations (
