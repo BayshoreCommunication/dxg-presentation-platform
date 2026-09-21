@@ -10,9 +10,11 @@
   },
   "dependencies": {
     "@pmp/format": "*",
+    "date-fns": "^4.4.0",
     "next": "^15.5.4",
     "qrcode-generator": "^2.0.4",
     "react": "^19.1.0",
+    "react-datepicker": "^9.1.0",
     "react-dom": "^19.1.0"
   },
   "devDependencies": {

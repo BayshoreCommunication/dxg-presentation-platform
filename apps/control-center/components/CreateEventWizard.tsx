@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { EventDraft } from "@/lib/api";
 import { createEvent, configureEvent, activateEvent, getDraft, ApiError } from "@/lib/api";
 import { ImportView } from "@/components/ImportView";
+import { DateField } from "@/components/DateTimeField";
 
 /*
  * Step 2 is called "Agenda", not "Schedule import": inside the wizard it is the thing
@@ -160,21 +161,25 @@ export function CreateEventWizard({
                 </div>
                 <div />
                 <div className="field">
-                  <label>Start date</label>
-                  <input
-                    type="date"
-                    style={{ width: "100%" }}
+                  <label htmlFor="event-starts-on">Start date</label>
+                  {/* The DXG dashboard's picker (D-044). The end cannot precede the
+                      start, and neither is offered outside that relationship. */}
+                  <DateField
+                    id="event-starts-on"
                     value={basics.starts_on}
-                    onChange={(event) => setBasics({ ...basics, starts_on: event.target.value })}
+                    max={basics.ends_on || undefined}
+                    onChange={(value) => setBasics({ ...basics, starts_on: value })}
+                    ariaLabel="Start date"
                   />
                 </div>
                 <div className="field">
-                  <label>End date</label>
-                  <input
-                    type="date"
-                    style={{ width: "100%" }}
+                  <label htmlFor="event-ends-on">End date</label>
+                  <DateField
+                    id="event-ends-on"
                     value={basics.ends_on}
-                    onChange={(event) => setBasics({ ...basics, ends_on: event.target.value })}
+                    min={basics.starts_on || undefined}
+                    onChange={(value) => setBasics({ ...basics, ends_on: value })}
+                    ariaLabel="End date"
                   />
                 </div>
               </div>

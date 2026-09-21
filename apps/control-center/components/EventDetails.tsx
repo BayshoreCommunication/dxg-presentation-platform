@@ -7,6 +7,7 @@ import type { EventDraft } from "@/lib/api";
 import { configureEvent, ApiError } from "@/lib/api";
 import { Chip } from "@/components/Chip";
 import { eventStatusChip } from "@/lib/eventStatus";
+import { DateField } from "@/components/DateTimeField";
 
 const TIMEZONE_NOTE =
   "Every time in this event — session times, deadlines, reminders — is read in this zone.";
@@ -246,13 +247,18 @@ export function EventDetails({
           <div className="grid2">
             <div className="field">
               <label htmlFor="event-deadline">Upload deadline</label>
-              <input
+              {/*
+                The DXG dashboard's picker (D-044), bounded by the event itself: a
+                deadline after the event has started is not a deadline, and one before
+                the agenda exists cannot be met. The event's own dates are the window.
+              */}
+              <DateField
                 id="event-deadline"
-                type="date"
-                style={{ width: "100%" }}
                 value={deadline}
+                max={setup.starts_on}
                 disabled={readOnly}
-                onChange={(event) => setDeadline(event.target.value)}
+                onChange={setDeadline}
+                ariaLabel="Upload deadline"
               />
               {deadline === "" && <div className="note">Not set — no deadline is enforced.</div>}
             </div>

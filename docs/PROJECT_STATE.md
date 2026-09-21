@@ -2359,3 +2359,46 @@ row with no presentation times shows blank, value `""`, `0 min`; and the option 
 `9:00 AM`, `9:05 AM` with no prose anywhere in the list.
 
 CI green, 208 unit tests; invariants 116 pass, 0 skipped. Probe event removed.
+
+## 2026-09-21 (seventy-second) — the dashboard's picker, ported and re-tinted
+
+Travis: check the DXG dashboard's date and time picker and implement the same style. D-044.
+
+**Found rather than guessed at:** `dxg-rfp-tool-dashboard` uses `react-datepicker` 9.1.0 with
+`date-fns`, ~420 lines of `dxg-datepicker` CSS, a custom month/year header and a 15-minute `Time`
+column. The baseline prototype in this repo has no picker at all — its one "calendar" match is
+Tailwind preflight — so there was nothing here to copy from.
+
+**Two runtime dependencies is a BUILD_SPEC §17 "ask first", so it was asked.** Travis chose the same
+library with this app's colours over a verbatim teal copy and over hand-rolling. Eight packages arrive;
+the control-center had four. The two `npm audit` findings are pre-existing `postcss` via `next` and
+have nothing to do with this.
+
+**Re-tinted, not copied:** every hex in the ported CSS is now a token reference, so the dashboard's
+teal `#1DBFD3` becomes this product's cyan `--blue`. VISUAL_ACCEPTANCE §2.4 wants colours derived from
+the baseline's tokens, and a verbatim copy would have put a second accent on every screen with a date
+on it. The `.dark` block is dropped and `lucide-react`'s chevrons are inline SVG.
+
+**The thing worth recording is what the library cannot do.** `includeTimes`, `filterTime` and
+`minTime`/`maxTime` all feed `isDisabledTime` — they add a `--disabled` class and block the click,
+while the list stays the full ninety-six entries of a day. I tried `filterTime` first and the DOM said
+96 with a screenshot that looked correct, because the list happened to be scrolled to the selected
+time; `includeTimes` behaved identically. Reading `dist/index.js` settled it. The disabled rows are
+hidden in CSS instead, with the selected one exempt so a value the file supplied cannot disappear from
+the field that exists to correct it.
+
+**This retires the hand-rolled `<select>` from the seventieth entry**, which existed only because a
+native time input would not withhold an option. The rule is unchanged and still enforced server-side.
+
+Verified in the browser on a 09:00–11:00 session: the calendar renders the dashboard's shape —
+`September 2027 ⌄` with `‹ ›`, SU–SA, the selected day in this app's cyan — and the time column
+renders 96 rows of which **7 are shown**, 09:30 AM to 11:00 AM, with 10:15 AM selected. A row whose
+file supplied 11:45 AM shows **8**: the seven the window allows plus its own out-of-window value, kept
+and selected. The three-up Presentation row needed `.dxg-field-wrap{display:block;width:100%}` —
+react-datepicker wraps its input in an inline-block div, which collapsed the row and clipped the
+Duration box beside it.
+
+Also applied to the wizard's start and end dates, each bounded by the other, and to the event details
+upload deadline, bounded by the event's own start.
+
+CI green, 208 unit tests; invariants 116 pass, 0 skipped; `next build` clean. Probe event removed.

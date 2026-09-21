@@ -632,3 +632,42 @@ same one check covering both controls.
 
 **The server rules are untouched and still decide.** Nothing in a browser is a rule; what changed is
 that an operator working normally can no longer produce the value the server would refuse. Owner: Travis.
+
+## D-044 (2026-09-21): The DXG dashboard's date and time picker, ported — Status: ACCEPTED (Travis's call)
+Travis: check the DXG dashboard's date and time picker and implement the same style. It is
+`react-datepicker` 9.1.0 + `date-fns` 4.1.0 in `dxg-rfp-tool-dashboard`, themed by ~420 lines of
+`dxg-datepicker` CSS, with a custom month/year header, 15-minute time intervals and a `Time` caption.
+
+**Two new runtime dependencies, which BUILD_SPEC §17 puts in "ask first".** Put to Travis with the
+alternatives; his call was the same library with this app's colours. Eight packages arrive in total —
+react-datepicker, date-fns, clsx and five `@floating-ui`/`tabbable` — against a control-center that had
+four. The two `npm audit` findings are pre-existing `postcss` via `next`, not these.
+
+**Ported, not copied.** Every colour is re-tinted to this app's tokens: the dashboard's accent is teal
+`#1DBFD3` and this product's is cyan `--blue #44C7F4`, and VISUAL_ACCEPTANCE §2.4 requires colours to
+derive from the baseline's tokens. Shape, spacing and behaviour are the dashboard's; the palette is
+ours, so no screen gains a second accent and no deviation is logged. The dashboard's `.dark` variant is
+dropped (this app has no dark scheme) and its `lucide-react` chevrons are inline SVG — four arrows are
+not worth a ninth package.
+
+**The field speaks strings, not `Date`s.** `YYYY-MM-DD` and `HH:MM` are what the importer reads and
+what every cell already holds, so the conversion happens at the edge of the component and the
+calendar's `Date` habit stays out of the row editor. A day is built at noon rather than midnight, since
+a midnight `Date` can slip across a daylight-saving boundary and only the calendar day is ever read
+back.
+
+**The library cannot shorten its time list, and that had to be found in its source rather than assumed.**
+`includeTimes`, `filterTime` and `minTime`/`maxTime` all feed one function, `isDisabledTime`: they add
+a `--disabled` class and refuse the click, while the list stays the full ninety-six entries of a day.
+Scrolling a whole day to reach the twenty minutes a session allows is offered-but-refused, which is
+what D-043 set out to stop — so the disabled entries are hidden in CSS, with the selected one exempt so
+a time the file supplied never vanishes from the field that exists to correct it. **Disabled *dates*
+are deliberately left visible and struck through**, because that is how the dashboard shows them and it
+is what Travis pointed at.
+
+**This replaces the hand-rolled `<select>` of D-043**, which existed only because a native time input
+would not withhold an option. The rule it enforced is unchanged and still enforced server-side.
+
+Applied to every date and time field in the product: the row editor's session date, session clocks and
+presentation clocks; the create-event wizard's start and end dates, each bounded by the other; and the
+event details upload deadline, bounded by the event's own start. Owner: Travis.

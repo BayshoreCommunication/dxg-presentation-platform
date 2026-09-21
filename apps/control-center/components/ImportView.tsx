@@ -13,6 +13,7 @@ import {
   ApiError,
 } from "@/lib/api";
 import { Chip } from "@/components/Chip";
+import { DateField, TimeField } from "@/components/DateTimeField";
 
 /**
  * The headings DXG's own agenda sheet uses (D-029), so a field in this dialog and a
@@ -126,34 +127,6 @@ const toTimeInput = (value: string): string | null => {
   if (meridiem === "am" && hour === 12) hour = 0;
   if (hour > 23) return null;
   return `${String(hour).padStart(2, "0")}:${match[2]}`;
-};
-
-/** `10:25` → `10:25 AM`, the way the sheet and the rest of this screen write a time. */
-const clockLabel = (hhmm: string): string => {
-  const hour = Number(hhmm.slice(0, 2));
-  const suffix = hour < 12 ? "AM" : "PM";
-  const shown = hour % 12 === 0 ? 12 : hour % 12;
-  return `${shown}:${hhmm.slice(3, 5)} ${suffix}`;
-};
-
-/**
- * Every `HH:MM` from `from` to `to` inclusive, on a five-minute grid.
- *
- * Five because a conference agenda is written on it, and because 288 options for a
- * whole day is a list nobody scrolls. A session two hours long yields 25.
- */
-const clockOptions = (from: string, to: string, step = 5): string[] => {
-  const asMinutes = (value: string) => Number(value.slice(0, 2)) * 60 + Number(value.slice(3, 5));
-  const first = asMinutes(from);
-  const last = asMinutes(to);
-  const out: string[] = [];
-  for (let at = Math.ceil(first / step) * step; at <= last; at += step) {
-    out.push(`${String(Math.floor(at / 60)).padStart(2, "0")}:${String(at % 60).padStart(2, "0")}`);
-  }
-  // The bounds themselves are always offerable, even when they are off the grid.
-  if (!out.includes(from)) out.unshift(from);
-  if (!out.includes(to)) out.push(to);
-  return out;
 };
 
 /** Minutes between two `HH:MM` clock values; negative when the second is earlier. */
@@ -376,78 +349,51 @@ function RowEditor({
                 ? { min: sessionFrom }
                 : {};
 
-      /*
-       * A native time input will not withhold an option: Chrome's dropdown lists every
-       * hour of the day whatever `min` and `max` say, and uses them only to mark the
-       * result invalid afterwards. Travis, shown that list: we should not give the user
-       * the option to select a time outside the session. With that control we cannot —
-       * so for the presentation's two clocks it is a list of the times the session
-       * actually allows.
-       *
-       * The session's own clocks stay native inputs. Their only bound is each other,
-       * and enumerating a whole day is 288 options nobody scrolls; there is no window
-       * to choose from there, only a time to state.
-       */
-      const listable = (field === "slot.start" || field === "slot.end") && bounds.min && bounds.max;
-
-      if (picker !== null && listable) {
-        const offered = clockOptions(bounds.min!, bounds.max!);
-        // A value the file supplied that the window does not contain is kept and named
-        // rather than quietly replaced by the first legal option — the row is here to
-        // be corrected, and destroying the evidence is not correcting it.
-        const stranded = picker !== "" && !offered.includes(picker);
-        return (
-          <div className="field" key={field}>
-            {label}
-            <select
-              id={`edit-${field}`}
-              style={{ width: "100%", ...(stranded ? { borderColor: "var(--block)" } : border) }}
-              value={picker}
-              aria-invalid={stranded || undefined}
-              {...(visible && visible !== full ? { "aria-label": full } : {})}
-              onChange={(event) => set(field, event.target.value)}
-            >
-              {/*
-                Times only, at Travis's request — the option that read "— runs with the
-                session" is now blank.
-                
-                It could not be removed outright, and the reason is worth keeping: a
-                `<select>` holding a value no option matches does not render empty, it
-                falls back to the first option. A row with no presentation time of its
-                own therefore displayed "9:00 AM" in both fields while holding neither,
-                and one touch of the field would have written that invention into the
-                row. Blank keeps the list free of prose, keeps an empty row looking
-                empty, and keeps a time already set clearable — a talk that turns out to
-                run with its session has somewhere to go back to.
-              */}
-              <option value="" />
-              {stranded && <option value={picker}>{clockLabel(picker)} — outside the session</option>}
-              {offered.map((option) => (
-                <option key={option} value={option}>
-                  {clockLabel(option)}
-                </option>
-              ))}
-            </select>
-          </div>
-        );
-      }
 
       if (picker !== null) {
+        /*
+         * The DXG dashboard's picker (D-044). For a clock the bounds are handed
+         * to `filterTime`, which removes the times the session does not allow
+         * from the list rather than marking a bad answer afterwards — the point
+         * D-043 made with a hand-rolled `<select>`, now the library's own job.
+         *
+         * A value the file supplied that the window excludes is still displayed,
+         * because the selected time renders whether or not the filter offers it;
+         * the field is marked and Save refuses it, exactly as before.
+         */
+        const stranded =
+          picker !== "" &&
+          !isDate &&
+          ((bounds.min !== undefined && picker < bounds.min) ||
+            (bounds.max !== undefined && picker > bounds.max));
+        const invalid = stranded || (isMissing && empty);
+
         return (
           <div className="field" key={field}>
             {label}
-            <input
-              id={`edit-${field}`}
-              type={isDate ? "date" : "time"}
-              style={{ width: "100%", ...border }}
-              value={picker}
-              {...bounds}
-              {...(visible && visible !== full ? { "aria-label": full } : {})}
-              onChange={(event) => set(field, event.target.value)}
-            />
+            {isDate ? (
+              <DateField
+                id={`edit-${field}`}
+                value={picker}
+                onChange={(next) => set(field, next)}
+                invalid={invalid}
+                {...(visible && visible !== full ? { ariaLabel: full } : {})}
+              />
+            ) : (
+              <TimeField
+                id={`edit-${field}`}
+                value={picker}
+                onChange={(next) => set(field, next)}
+                min={bounds.min}
+                max={bounds.max}
+                invalid={invalid}
+                {...(visible && visible !== full ? { ariaLabel: full } : {})}
+              />
+            )}
           </div>
         );
       }
+
       // Unreadable: a picker cannot show it, and blanking it would hide the very thing
       // the operator was sent here to fix.
       return (

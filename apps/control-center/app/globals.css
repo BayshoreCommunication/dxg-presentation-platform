@@ -109,3 +109,348 @@ aside nav a:not(.on):hover { background: var(--ink2); }
 .kbd { font-family: "IBM Plex Mono", monospace; font-size: 11px; border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; background: var(--mist); }
 .live { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); }
 .live i { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); display: inline-block; }
+
+/* The picker's own input keeps this app's field look; only the popup below is
+   the dashboard's. react-datepicker wraps its input in a div that is inline-block
+   by default, which collapsed the three-up Presentation row and clipped the box
+   beside it. */
+/* react-datepicker always renders the whole day in the time column: includeTimes,
+   filterTime and minTime/maxTime all feed isDisabledTime only, adding a --disabled
+   class and refusing the click, with no prop that shortens the list (checked in
+   dist/index.js). Ninety-six rows to reach the twenty minutes a session allows is
+   offered-but-refused, which is what D-043 set out to stop, so the list is trimmed
+   here. The selected one survives even when disabled — otherwise a time the file
+   supplied would vanish from the field that exists to correct it. Disabled *dates*
+   stay visible and struck through, as the dashboard shows them. */
+.dxg-datepicker .react-datepicker__time-list-item--disabled:not(.react-datepicker__time-list-item--selected){display:none}
+
+.dxg-field-wrap{display:block;width:100%}
+.dxg-field{width:100%}
+.dxg-field--invalid{border-color:var(--block)}
+
+/* ── date and time picker ─────────────────────────────────────────────────────
+   The DXG dashboard's picker theme (dxg-rfp-tool-dashboard/app/globals.css),
+   ported so the two products look like one (D-044). Travis's call.
+
+   Every colour is re-tinted to this app's tokens rather than copied: the
+   dashboard's accent is teal #1DBFD3 and this product's is cyan --blue
+   #44C7F4, and VISUAL_ACCEPTANCE §2.4 says every colour derives from the
+   baseline's tokens. Shape, spacing and behaviour are the dashboard's; the
+   palette is ours, so no screen gains a second accent.
+
+   The dashboard's `.dark` variant is left out — this app has no dark scheme.
+   Selectors are react-datepicker's own, so this block only makes sense
+   alongside that dependency.
+   ───────────────────────────────────────────────────────────────────────────── */
+
+/* Proposal date pickers use the bright cyan from the RFPilot mark throughout. */
+.dxg-datepicker.react-datepicker {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--white);
+  box-shadow:
+    0 22px 50px rgba(20, 24, 27, .14),
+    0 4px 12px rgba(68, 199, 244, .08);
+  font-family: var(--font-sans);
+}
+
+.dxg-datepicker .react-datepicker__header {
+  border-bottom: 1px solid var(--line);
+  background: var(--info-soft);
+  padding: 15px 10px 9px;
+}
+
+.dxg-datepicker .react-datepicker__current-month,
+.dxg-datepicker .react-datepicker-time__header,
+.dxg-datepicker .react-datepicker-year-header {
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+/* Shared MUI-style year browsing, retaining the app's existing calendar theme. */
+.dxg-datepicker .react-datepicker__header--custom {
+  padding: 8px;
+}
+
+.dxg-datepicker__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  min-width: 252px;
+}
+
+.dxg-datepicker__view-toggle,
+.dxg-datepicker__month-arrow,
+.dxg-datepicker__year-option {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  cursor: pointer;
+  color: var(--ink);
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+.dxg-datepicker__view-toggle {
+  gap: 6px;
+  min-height: 40px;
+  padding: 0 8px;
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.dxg-datepicker__month-navigation { display: flex; }
+
+.dxg-datepicker__month-arrow { width: 36px; height: 40px; color: var(--blueDark); }
+
+.dxg-datepicker__month-arrow:disabled { opacity: .35; cursor: not-allowed; }
+
+.dxg-datepicker__view-toggle:hover,
+.dxg-datepicker__month-arrow:not(:disabled):hover,
+.dxg-datepicker__year-option:hover { background: var(--info-soft); }
+
+.dxg-datepicker__view-toggle:focus-visible,
+.dxg-datepicker__month-arrow:focus-visible,
+.dxg-datepicker__year-option:focus-visible {
+  outline: 2px solid var(--blueDark);
+  outline-offset: -2px;
+}
+
+.dxg-datepicker__years {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-content: start;
+  gap: 6px 2px;
+  height: 260px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--blue) transparent;
+  padding: 8px 4px;
+  background: var(--white);
+  border-radius: 10px;
+}
+
+.dxg-datepicker__year-option {
+  min-height: 44px;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 999px;
+}
+
+.dxg-datepicker__year-option[aria-pressed="true"] {
+  background: var(--blueDark);
+  color: var(--white);
+  font-weight: 700;
+}
+
+.dxg-datepicker__year-option[aria-pressed="true"]:is(:hover, :focus-visible) {
+  background: var(--blueDark);
+  color: var(--white);
+}
+
+.dxg-datepicker--choosing-year .react-datepicker__month,
+.dxg-datepicker--choosing-year .react-datepicker__day-names,
+.dxg-datepicker--choosing-year .react-datepicker__today-button { display: none; }
+
+.dxg-datepicker .react-datepicker__day-name {
+  margin-top: 8px;
+  color: var(--slate);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.dxg-datepicker .react-datepicker__month {
+  margin: 10px 12px 12px;
+}
+
+.dxg-datepicker .react-datepicker__day,
+.dxg-datepicker .react-datepicker__time-list-item {
+  border-radius: 9px;
+  color: var(--ink);
+  font-weight: 500;
+  transition:
+    background-color 150ms ease,
+    box-shadow 150ms ease,
+    color 150ms ease,
+    transform 150ms ease;
+}
+
+.dxg-datepicker .react-datepicker__day:hover,
+.dxg-datepicker .react-datepicker__time-list-item:hover {
+  background: var(--info-soft) !important;
+  color: var(--blueDark);
+  transform: translateY(-1px);
+}
+
+.dxg-datepicker .react-datepicker__day--keyboard-selected,
+.dxg-datepicker .react-datepicker__day--selected,
+.dxg-datepicker .react-datepicker__time-list-item--selected {
+  background: var(--blueDark) !important;
+  color: var(--white) !important;
+  font-weight: 600 !important;
+  box-shadow: 0 5px 12px rgba(68, 199, 244, .28);
+}
+
+/* Selected text stays white, so selection must win over the pale hover rule.
+   This also covers today's keyboard preselection and selected time options. */
+.dxg-datepicker .react-datepicker__day--selected:is(:hover, :focus-visible),
+.dxg-datepicker .react-datepicker__day--keyboard-selected:is(:hover, :focus-visible),
+.dxg-datepicker .react-datepicker__time-list-item--selected:is(:hover, :focus-visible) {
+  background: var(--blueDark) !important;
+  color: var(--white) !important;
+}
+
+.dxg-datepicker .react-datepicker__day:not(.react-datepicker__day--disabled):focus-visible,
+.dxg-datepicker .react-datepicker__time-list-item:not(.react-datepicker__time-list-item--disabled):focus-visible {
+  outline: 2px solid var(--blueDark);
+  outline-offset: 2px;
+}
+
+.dxg-datepicker .react-datepicker__day--today:not(.react-datepicker__day--selected) {
+  background: var(--info-soft);
+  box-shadow: inset 0 0 0 1.5px var(--blue);
+  color: var(--blueDark);
+  font-weight: 800;
+}
+
+.dxg-datepicker .react-datepicker__day--outside-month {
+  color: var(--slate);
+  font-weight: 500;
+}
+
+.dxg-datepicker .react-datepicker__day--disabled,
+.dxg-datepicker .react-datepicker__day--disabled.react-datepicker__day--selected,
+.dxg-datepicker .react-datepicker__day--disabled.react-datepicker__day--keyboard-selected {
+  color: var(--dim) !important;
+  background: var(--mist) !important;
+  cursor: not-allowed;
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+  box-shadow: none;
+}
+
+.dxg-datepicker .react-datepicker__day--disabled:hover,
+.dxg-datepicker .react-datepicker__day--disabled.react-datepicker__day--selected:hover,
+.dxg-datepicker .react-datepicker__day--disabled.react-datepicker__day--keyboard-selected:hover {
+  color: var(--dim) !important;
+  background: var(--mist) !important;
+  transform: none;
+}
+
+.dxg-datepicker .react-datepicker__today-button {
+  border-top: 1px solid var(--line);
+  background: var(--info-soft);
+  padding: 10px 12px;
+  color: var(--blueDark);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.dxg-datepicker .react-datepicker__today-button:hover {
+  background: var(--info-soft);
+}
+
+/* Keep date, time, and the Today shortcut inside one compact responsive panel.
+   react-datepicker otherwise positions the Today-time column outside the
+   calendar, which can create a tall overlapping popup in narrow form columns. */
+.dxg-datepicker--with-time.react-datepicker {
+  display: grid;
+  grid-template-columns: minmax(252px, auto) 96px;
+}
+
+.dxg-datepicker--with-time .react-datepicker__month-container {
+  grid-column: 1;
+  grid-row: 1;
+  float: none;
+  min-width: 0;
+}
+
+.dxg-datepicker--with-time .react-datepicker__time-container,
+.dxg-datepicker--with-time
+  .react-datepicker__time-container--with-today-button {
+  position: static;
+  grid-column: 2;
+  grid-row: 1;
+  top: auto;
+  right: auto;
+  float: none;
+  width: 96px;
+  border: 0;
+  border-left: 1px solid var(--line);
+  border-radius: 0;
+}
+
+.dxg-datepicker--with-time .react-datepicker__time,
+.dxg-datepicker--with-time .react-datepicker__time-box {
+  width: 95px;
+}
+
+.dxg-datepicker--with-time .react-datepicker__time-list {
+  height: 252px !important;
+}
+
+.dxg-datepicker--with-time .react-datepicker__today-button {
+  grid-column: 1 / -1;
+  grid-row: 2;
+}
+
+.dxg-datepicker .react-datepicker__navigation {
+  top: 9px;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  transition: background-color 150ms ease;
+}
+
+.dxg-datepicker .react-datepicker__navigation:hover {
+  background: var(--info-soft);
+}
+
+.dxg-datepicker .react-datepicker__navigation-icon::before {
+  border-color: var(--blue);
+  border-width: 2px 2px 0 0;
+}
+
+.dxg-datepicker-popper {
+  z-index: 60 !important;
+  animation: dxg-datepicker-in 120ms ease-out;
+  will-change: opacity;
+}
+
+.dxg-datepicker-popper--contained .dxg-datepicker.react-datepicker {
+  max-height: min(
+    var(--dxg-datepicker-available-height, calc(100dvh - 16px)),
+    calc(100dvh - 16px)
+  );
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+@keyframes dxg-datepicker-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Selected calendar values must win over the later dark hover treatment. */
+.dark .dxg-datepicker :is(
+  .react-datepicker__day--keyboard-selected,
+  .react-datepicker__day--selected,
+  .react-datepicker__time-list-item--selected
+):not(.react-datepicker__day--disabled):not(.react-datepicker__time-list-item--disabled) {
+  background: var(--blueDark) !important;
+  color: var(--white) !important;
+}
