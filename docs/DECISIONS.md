@@ -557,3 +557,45 @@ edge case.
 Proved by reverting: the three bounds cases fail without it and the rest stay green. One older case had
 to be rewritten — the backwards-presentation row's times sat outside its session too, so it was
 tripping two rules at once and asserting it tripped one. Owner: Travis.
+
+## D-042 (2026-09-21): The wrong time is unreachable, not merely refused — Status: ACCEPTED (Travis's call)
+Travis, on being shown *"The presentation ends at 03:15 and starts at 09:30 — it cannot end before it
+starts"*: instead of an error, make the boundary so the operator cannot select a time outside the
+session; and if there is any error, disable Save.
+
+**The error he saw was the system working, and that is the problem.** D-041 bounded the presentation
+pickers by the session, but `min`/`max` on a time input only *marks* a value invalid — stepping past
+the bound is refused, typing past it is not. So the value was accepted, the row was saved, and the
+server explained afterwards what should never have been offered.
+
+**Each clock is now fenced by the ones it must agree with**, not merely by the session:
+
+| Field | min | max |
+|---|---|---|
+| `session.start` | — | session end |
+| `session.end` | session start | — |
+| `slot.start` | session start | the earlier of the slot end and the session end |
+| `slot.end` | the later of the slot start and the session start | session end |
+
+**The bounds are mutual, which is what stops this becoming a trap.** A row arriving 10:25 → 10:10 has
+both fields out of range and no obviously legal move; because each reads the *other's current value*,
+correcting either one puts the other back in range immediately. Verified: fixing only the end moved
+the start's `max` from 10:10 to 10:45 and the untouched start went valid.
+
+**Save is gated on `:invalid`, read from the inputs themselves.** Not on a second copy of the rules —
+the browser's verdict on the `min`/`max` above is the same verdict the red borders show, so the button
+and the borders cannot disagree. Deliberately **not** gated on `problems`, the issues the server
+returned for the row: those are what the operator opened the dialog to fix, and disabling Save on them
+would make a blocking row permanently unfixable.
+
+**The server checks stay, and the reason is worth stating.** A pasted value ignores `min`/`max`
+entirely, and nothing in a browser is a rule. `buildPreview` and `commitImport` keep refusing what
+they refused before; what changed is that an operator working normally will never meet those messages.
+This is the same division as D-027 — the screen makes the correction possible, the server decides
+whether it is correct.
+
+**No automated coverage for the client half**, and this is a real gap rather than an omission: the
+repo has no component-test harness (`npm test` runs `node --test` over `packages/*` and `apps/*/src`,
+and BUILD_SPEC §16's Jest/Testing Library layer does not exist yet). The bounds and the Save gate are
+verified in the browser and recorded in PROJECT_STATE; the rules they mirror are covered by the API
+suites. Owner: Travis.

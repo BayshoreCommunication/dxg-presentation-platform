@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { ImportPreview, StagedRow } from "@/lib/api";
 import {
@@ -233,6 +233,23 @@ function RowEditor({
     return Math.max(1, filled);
   });
 
+  /*
+   * Travis: if there is any error, Save is disabled. Read from the inputs themselves
+   * rather than from a second copy of the rules — `:invalid` is exactly the browser's
+   * verdict on the `min`/`max` above, so the button and the red borders can never
+   * disagree about whether the row is fixable.
+   *
+   * Deliberately *not* driven by `problems`, the issues the server returned for this
+   * row: those are what the operator opened the dialog to fix, and disabling Save on
+   * them would make a blocking row permanently unfixable.
+   */
+  const formRef = useRef<HTMLDivElement>(null);
+  const [outOfRange, setOutOfRange] = useState(false);
+  useEffect(() => {
+    const el = formRef.current;
+    if (el) setOutOfRange(el.querySelectorAll("input:invalid").length > 0);
+  });
+
   const changed = Object.fromEntries(
     Object.entries(draft).filter(([field, value]) => (row.cells[field] ?? "") !== value),
   );
@@ -298,21 +315,35 @@ function RowEditor({
       const picker = isDate ? toDateInput(value) : toTimeInput(value);
 
       /*
-       * A presentation happens inside its session, so its pickers are bounded by the
-       * session's own times. `min`/`max` on a time input is a hint the browser
-       * enforces for typing and stepping, not a guarantee — a pasted value still
-       * lands, and the rule is held server-side in `buildPreview` as a blocking issue.
-       * Both sides read the same two fields on this screen, so the bound moves when
-       * the operator corrects the session above it, and there is no second copy of the
-       * rule to drift: the browser says what is reachable, the server decides.
+       * Each clock is bounded by the ones it has to agree with, so the wrong answer is
+       * never offered rather than merely marked afterwards: a presentation cannot
+       * reach outside its session, and neither end of a pair can cross the other.
+       *
+       * The bounds are mutual, which is what makes an already-broken row fixable: a row
+       * arriving 10:25 → 10:10 shows both fields red, and correcting *either* one puts
+       * the other back in range, because each reads the other's current value.
+       *
+       * Still only what the browser can enforce for typing and stepping — a pasted
+       * value lands regardless — so the same rules are held in `buildPreview` and again
+       * in `commitImport`. Both sides read the same fields on this screen, so there is
+       * no second copy of the rule to drift.
        */
-      const withinSession =
-        field === "slot.start" || field === "slot.end"
-          ? {
-              min: toTimeInput((draft["session.start"] ?? "").trim()) || undefined,
-              max: toTimeInput((draft["session.end"] ?? "").trim()) || undefined,
-            }
-          : {};
+      const clock = (name: string) => toTimeInput((draft[name] ?? "").trim()) || undefined;
+      const later = (a?: string, b?: string) => (a && b ? (a > b ? a : b) : (a ?? b));
+      const earlier = (a?: string, b?: string) => (a && b ? (a < b ? a : b) : (a ?? b));
+      const sessionFrom = clock("session.start");
+      const sessionTo = clock("session.end");
+
+      const bounds: { min?: string; max?: string } =
+        field === "slot.start"
+          ? { min: sessionFrom, max: earlier(clock("slot.end"), sessionTo) }
+          : field === "slot.end"
+            ? { min: later(clock("slot.start"), sessionFrom), max: sessionTo }
+            : field === "session.start"
+              ? { max: sessionTo }
+              : field === "session.end"
+                ? { min: sessionFrom }
+                : {};
 
       if (picker !== null) {
         return (
@@ -323,7 +354,7 @@ function RowEditor({
               type={isDate ? "date" : "time"}
               style={{ width: "100%", ...border }}
               value={picker}
-              {...withinSession}
+              {...bounds}
               {...(visible && visible !== full ? { "aria-label": full } : {})}
               onChange={(event) => set(field, event.target.value)}
             />
@@ -406,7 +437,11 @@ function RowEditor({
         if (event.target === event.currentTarget && !busy) onCancel();
       }}
     >
-      <div className="card" style={{ maxWidth: 560, width: "100%", maxHeight: "86vh", overflow: "auto" }}>
+      <div
+        ref={formRef}
+        className="card"
+        style={{ maxWidth: 560, width: "100%", maxHeight: "86vh", overflow: "auto" }}
+      >
         {/*
           `.chd` is a card header built for a short name beside a short meta string, and
           the meta here is whatever the spreadsheet put in the title cell — ninety
@@ -531,11 +566,15 @@ function RowEditor({
           <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
             <button
               className="btn pri"
-              disabled={busy || Object.keys(changed).length === 0 || stillMissing.length > 0}
+              disabled={
+                busy || Object.keys(changed).length === 0 || stillMissing.length > 0 || outOfRange
+              }
               title={
-                stillMissing.length > 0
-                  ? `Still needed: ${stillMissing.map((field) => FIELD_LABELS[field] ?? field).join(", ")}`
-                  : undefined
+                outOfRange
+                  ? "A time here is outside the range its field allows — the red boxes."
+                  : stillMissing.length > 0
+                    ? `Still needed: ${stillMissing.map((field) => FIELD_LABELS[field] ?? field).join(", ")}`
+                    : undefined
               }
               onClick={() => onSave(changed)}
             >

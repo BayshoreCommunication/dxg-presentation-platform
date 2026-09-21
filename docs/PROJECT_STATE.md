@@ -2262,3 +2262,44 @@ contains no prose at all.
 Proved by reverting: the three bounds cases fail without it, the rest stay green.
 
 CI green, 208 unit tests; invariants **116** pass, 0 skipped. Probe events removed.
+
+## 2026-09-21 (sixty-ninth) — the wrong time stops being offered
+
+Travis, shown *"The presentation ends at 03:15 and starts at 09:30 — it cannot end before it starts"*:
+make the boundary so the time cannot be selected outside the session, and disable Save when there is
+an error. D-042.
+
+**The error he saw was yesterday's fix working, which is the point.** The sixty-eighth entry bounded
+the presentation pickers by the session, but `min`/`max` on a time input only *marks* a value invalid:
+stepping past the bound is refused, typing past it is not. The value stuck, the row saved, and the
+server explained afterwards what should never have been on offer.
+
+**Every clock is now fenced by the ones it has to agree with** — `slot.start` by the session start and
+by the earlier of the slot end and the session end; `slot.end` by the later of the slot start and the
+session start, and by the session end; and the session's own pair by each other, which closes the
+backwards-session case the same way.
+
+**The fences are mutual, and that is what keeps them from being a cage.** A row that arrives 10:25 →
+10:10 has both fields out of range and no legal move in sight; because each bound reads the other
+field's *current* value, correcting either one releases the other. Checked rather than assumed: fixing
+only the end moved the start's `max` from 10:10 to 10:45 and the untouched start went valid on its own.
+
+**Save reads `:invalid` from the inputs** rather than a second copy of the rules, so the button and the
+red borders cannot disagree. It is deliberately *not* gated on the problems the server returned for the
+row — those are what the operator opened the dialog to fix, and gating on them would make a blocking
+row permanently unfixable. That was the one way this request could have been implemented into a trap.
+
+**The server rules stay.** A pasted value ignores `min`/`max`, and nothing in a browser is a rule. What
+changed is that an operator working normally will never meet those messages again.
+
+Verified in the browser: on a good row the four pickers carry exactly the bounds above; setting the end
+to 03:15 — Travis's case — turns it red, reports "Value must be 9:30 AM or later." and disables Save
+with a tooltip naming the red boxes; putting a good value back re-enables it.
+
+**A gap stated rather than papered over:** none of this client behaviour has an automated test, because
+the repo has no component-test harness at all — `npm test` runs `node --test` over the packages and app
+sources, and BUILD_SPEC §16's Jest/Testing Library layer has never been built. The rules these fences
+mirror are covered by the API suites; the fences themselves are covered by the browser session recorded
+here. That is weaker and should not be mistaken for equivalent.
+
+CI green, 208 unit tests; invariants 116 pass, 0 skipped. Probe event removed.
