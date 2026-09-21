@@ -169,7 +169,10 @@ describe("the blank template is downloadable and importable", () => {
     ).text();
     const filled = [
       ...template.split("\r\n").filter(Boolean).slice(0, 4),
-      "Template Row,Ballroom D,04/02/2027,9:00 AM,10:00 AM,Plenary,chair@example.invalid,Dana,Reyes,Example Institute",
+      // The template's own fourteen columns (D-029), in its order. The three
+      // Presentation* columns and the Presenter 2 block are left empty, as an
+      // organiser filling in a single-presenter session would leave them.
+      "Template Row,Ballroom D,04/02/2027,9:00 AM,10:00 AM,,,,chair@example.invalid,Dana,Reyes,,,",
     ].join("\r\n");
 
     const preview = await upload(filled);

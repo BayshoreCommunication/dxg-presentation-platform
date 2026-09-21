@@ -121,22 +121,50 @@ export function autoMap(headers: string[]): (ImportField | null)[] {
 /* ── the blank template we hand out ────────────────────────────────── */
 
 /**
- * Column headings, in the order the template writes them, each with the format hint
- * and whether it is required. Built from the same field list the mapper uses, so a
- * template can never offer a column the importer does not understand, or omit one it
- * needs.
+ * The columns of DXG's own agenda sheet (the Preseria import template, v.1.3), in its
+ * order, with its format hints and its REQUIRED/OPTIONAL row.
+ *
+ * Matching it exactly is the point: this is the sheet event organisers already receive
+ * and fill in, so a template of ours with different columns would be a second format
+ * to reconcile rather than a help. `field` is what the importer reads the column as —
+ * `null` means we recognise the column and deliberately do not map it.
  */
-const TEMPLATE_COLUMNS: { heading: string; field: ImportField; hint: string; required: boolean }[] = [
+const TEMPLATE_COLUMNS: { heading: string; field: ImportField | null; hint: string; required: boolean }[] = [
   { heading: "Session Title", field: "session.title", hint: "max 255 chars.", required: true },
-  { heading: "Session Location", field: "room.name", hint: "room or venue name", required: true },
+  { heading: "Session Location", field: "room.name", hint: "max 100 chars.", required: true },
   { heading: "Session Date", field: "session.date", hint: "mm/dd/yyyy", required: true },
   { heading: "Session Start", field: "session.start", hint: "h:mm AM/PM", required: true },
-  { heading: "Session End", field: "session.end", hint: "h:mm AM/PM", required: false },
-  { heading: "Track", field: "track.name", hint: "max 80 chars.", required: false },
-  { heading: "Presenter Email", field: "speaker.email", hint: "name@example.com", required: false },
-  { heading: "Presenter First Name", field: "speaker.first_name", hint: "max 80 chars.", required: false },
-  { heading: "Presenter Last Name", field: "speaker.last_name", hint: "max 80 chars.", required: false },
-  { heading: "Presenter Organization", field: "speaker.organization", hint: "max 120 chars.", required: false },
+  { heading: "Session End", field: "session.end", hint: "h:mm AM/PM", required: true },
+  /*
+   * A Preseria "session" can hold several presentations, and these three describe a
+   * presentation inside one. This platform's schedule is sessions and slots, with no
+   * equivalent of a sub-presentation time, so the columns are carried and deliberately
+   * left unmapped rather than quietly folded into the session's own times.
+   */
+  { heading: "Presentation Start", field: null, hint: "h:mm AM/PM", required: false },
+  { heading: "Presentation End", field: null, hint: "h:mm AM/PM", required: false },
+  { heading: "Presentation Duration", field: null, hint: "number ( 0 - 999 min. )", required: false },
+  { heading: "Presenter 1 Email", field: "speaker.email", hint: "max 80 chars.", required: true },
+  { heading: "Presenter 1 First Name", field: "speaker.first_name", hint: "max 80 chars.", required: true },
+  /*
+   * DXG's sheet labels this one "Presenter 2 Last Name", which is a mistake at source:
+   * it sits between "Presenter 1 First Name" and "Presenter 2 Email" and is marked
+   * REQUIRED, where presenter 2's fields are all optional. It is presenter 1's surname.
+   *
+   * Ours says so. Reproducing the wrong label would invite organisers to put the second
+   * presenter's surname in the first presenter's column — a data fault we would be
+   * manufacturing, in a template we hand out. Files still carrying the original label
+   * import identically, because the mapper takes the first unclaimed match.
+   */
+  { heading: "Presenter 1 Last Name", field: "speaker.last_name", hint: "max 80 chars.", required: true },
+  /*
+   * Only presenter 1 is imported as the assigned speaker. A second presenter is a
+   * second speaker assignment, which the import screen is not where to decide — so
+   * these are carried, named and unmapped rather than dropped from the sheet.
+   */
+  { heading: "Presenter 2 Email", field: null, hint: "max 80 chars.", required: false },
+  { heading: "Presenter 2 First Name", field: null, hint: "max 80 chars.", required: false },
+  { heading: "Presenter 2 Last Name", field: null, hint: "max 80 chars.", required: false },
 ];
 
 const csvCell = (value: string): string =>
@@ -156,30 +184,34 @@ const csvCell = (value: string): string =>
  */
 export function agendaTemplateCsv(eventName?: string): string {
   const banner = [
-    `DXG AGENDA TEMPLATE${eventName ? ` — ${eventName}` : ""}`,
+    `DXG AGENDA TEMPLATE (US Date/Time Format)${eventName ? ` \u2014 ${eventName}` : ""}`,
     "Version: 1",
     "Date Format: mm/dd/yyyy",
     "Time Format: h:mm AM/PM",
-    "Delete the three grey rows before uploading, or leave them — they are ignored either way",
+    "The three rows below the headings are guidance \u2014 delete them or leave them, they are ignored",
+  ];
+  const pad = (row: string[]): string[] => [
+    ...row,
+    ...Array(Math.max(0, TEMPLATE_COLUMNS.length - row.length)).fill(""),
   ];
   const rows = [
-    // Pad the banner to the column count so the file is rectangular.
-    [...banner, ...Array(Math.max(0, TEMPLATE_COLUMNS.length - banner.length)).fill("")],
+    pad(banner),
     TEMPLATE_COLUMNS.map((column) => column.heading),
     TEMPLATE_COLUMNS.map((column) => column.hint),
     TEMPLATE_COLUMNS.map((column) => (column.required ? "REQUIRED" : "OPTIONAL")),
-    [
-      "EXAMPLE — delete this row",
+    pad([
+      "EXAMPLE \u2014 delete this row",
       "Ballroom A",
       "03/14/2027",
       "9:00 AM",
       "10:00 AM",
-      "Clinical Practice",
+      "", // Presentation Start
+      "", // Presentation End
+      "", // Presentation Duration
       "presenter@example.com",
       "Alex",
       "Okonkwo",
-      "Example Health Group",
-    ],
+    ]),
   ];
   return rows.map((row) => row.map(csvCell).join(",")).join("\r\n") + "\r\n";
 }

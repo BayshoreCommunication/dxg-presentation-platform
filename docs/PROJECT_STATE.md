@@ -1417,3 +1417,52 @@ file, filled both rooms, cleared the banner and enabled import. A row with no en
 alone, and a presenter with no name shows the address without a leading dash.
 
 CI green, 194 unit tests. Probe events removed.
+
+## 2026-09-21 (fifty-first) — the template becomes DXG's own sheet
+
+Travis: "blank demo template doesn't match with the example session data, we need to every field same as
+like that", with the Preseria sheet attached again. D-029.
+
+The generated template offered ten columns of our own choosing. It now reproduces the Preseria import
+template v.1.3 column for column — the same fourteen headings in the same order, the same format-hint
+row, the same REQUIRED/OPTIONAL row. Organisers receive that sheet, fill it in and send it back; a
+template with different column names is a second format to reconcile, not a help.
+
+**Carried and deliberately unmapped:** `Presentation Start`/`End`/`Duration` describe a presentation
+*inside* a Preseria session, and this platform's schedule is sessions and slots with no equivalent, so
+folding them into the session's own times would be inventing a meaning. The `Presenter 2` columns are
+recognised and unmapped because only presenter 1 becomes the assigned speaker. Carrying them
+named-but-unmapped is deliberately different from dropping them — the operator can see the column was
+read and not used.
+
+**One heading is corrected, and it is the only deviation.** DXG's eleventh column is labelled
+`Presenter 2 Last Name` but is presenter 1's surname: it sits between `Presenter 1 First Name` and
+`Presenter 2 Email` and is marked REQUIRED where every presenter 2 field is optional. Reproducing the
+wrong label in a template *we* hand out would invite organisers to put the second presenter's surname
+in the first presenter's column — a fault we would be manufacturing rather than inheriting. Ours reads
+`Presenter 1 Last Name`, and a test asserts DXG's original label maps identically so files already in
+circulation cannot regress.
+
+**Dropped:** `Track` and `Presenter Organization` are no longer offered, because DXG's sheet has
+neither. The importer still reads both if a file supplies them.
+
+Verified against the real file rather than a description of it: headings compared cell by cell against
+`Preseria Import Sheet - Sessions and Presentations.csv` — 13 of 14 identical, the fourteenth the
+deliberate correction; hint row identical; REQUIRED/OPTIONAL row identical bar their own inconsistent
+casing (`Optional` in columns 12–14, `OPTIONAL` in 6–8; ours is uppercase throughout and the parser is
+case-insensitive); **auto-mapping identical for both sheets**. Live against the running API: template
+served as `text/csv`, filled in and re-uploaded gives 2 rows / 0 incomplete / 0 warnings with
+`Dana Reyes` and `Sam Ito` intact and 8:00 AM reading as `12:00Z` (EDT); DXG's own sheet with the
+original mislabel still imports 11 rows / 0 incomplete with column 11 mapping to `speaker.last_name`;
+a blank template imports nothing (`import.empty`).
+
+**The invariant suite caught my own stale fixture,** which is the whole reason it exists: it still
+filled the template in the *old* ten-column layout, so `Example Institute` landed in the first-name
+column and the assertion that the presenter is `Dana Reyes` failed. Nothing wrong with the code — the
+test row had to move with the template. Updated to the fourteen-column order.
+
+CI green, 196 unit tests; invariants 61 pass, 0 skipped. Probe event removed.
+
+**A note on the run, not the code.** Docker Desktop hung mid-verification and the API went unreachable
+with its ports still listening — `curl` returned 000 and `docker ps` never returned. Nothing to do with
+this change; recorded because "the API is down" looked at first like something the work had broken.

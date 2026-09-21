@@ -256,30 +256,71 @@ describe("the agenda template we hand out is one we can read", () => {
    * were discarded by the `speaker.name ||` precedence in buildPreview. Our own
    * template demonstrated the bug and the test could not see it.
    */
-  test("every column maps to the field its heading names", () => {
+  test("every column maps to the field its heading names, and the rest to nothing", () => {
     const { headers } = findHeaderRow(sheet);
     const mapping = autoMap(headers);
-    const expected: Record<string, string> = {
-      "Session Title": "session.title",
-      "Session Location": "room.name",
-      "Session Date": "session.date",
-      "Session Start": "session.start",
-      "Session End": "session.end",
-      Track: "track.name",
-      "Presenter Email": "speaker.email",
-      "Presenter First Name": "speaker.first_name",
-      "Presenter Last Name": "speaker.last_name",
-      "Presenter Organization": "speaker.organization",
-    };
-    for (const [heading, field] of Object.entries(expected)) {
-      assert.equal(mapping[headers.indexOf(heading)], field, `"${heading}" should map to ${field}`);
-    }
+    // The whole sheet, in order: what each column is read as, or null where the column
+    // is recognised and deliberately not mapped.
+    const expected: [string, string | null][] = [
+      ["Session Title", "session.title"],
+      ["Session Location", "room.name"],
+      ["Session Date", "session.date"],
+      ["Session Start", "session.start"],
+      ["Session End", "session.end"],
+      // A Preseria presentation sits inside a session; this platform has no equivalent.
+      ["Presentation Start", null],
+      ["Presentation End", null],
+      ["Presentation Duration", null],
+      ["Presenter 1 Email", "speaker.email"],
+      ["Presenter 1 First Name", "speaker.first_name"],
+      ["Presenter 1 Last Name", "speaker.last_name"],
+      // Only presenter 1 becomes the assigned speaker.
+      ["Presenter 2 Email", null],
+      ["Presenter 2 First Name", null],
+      ["Presenter 2 Last Name", null],
+    ];
+    assert.deepEqual(headers, expected.map(([heading]) => heading), "the template's columns, in order");
+    assert.deepEqual(mapping, expected.map(([, field]) => field));
   });
 
-  test("a column about the presenter is not a column of their name", () => {
-    // "presenter" appears in all of these; only one of them is a name.
-    const mapping = autoMap(["Presenter Email", "Presenter Organization", "Presenter First Name"]);
-    assert.deepEqual(mapping, ["speaker.email", "speaker.organization", "speaker.first_name"]);
+  test("it carries the same columns as DXG's own sheet", () => {
+    // The sheet event organisers already receive. Ours differs in exactly one heading:
+    // theirs labels presenter 1's surname "Presenter 2 Last Name", which is a mistake
+    // at source — it is REQUIRED and sits inside presenter 1's block.
+    const dxg = [
+      "Session Title", "Session Location", "Session Date", "Session Start", "Session End",
+      "Presentation Start", "Presentation End", "Presentation Duration",
+      "Presenter 1 Email", "Presenter 1 First Name", "Presenter 2 Last Name",
+      "Presenter 2 Email", "Presenter 2 First Name", "Presenter 2 Last Name",
+    ];
+    const ours = findHeaderRow(sheet).headers;
+    assert.equal(ours.length, dxg.length);
+    const differences = ours.filter((heading, index) => heading !== dxg[index]);
+    assert.deepEqual(differences, ["Presenter 1 Last Name"], "one corrected label, nothing else");
+  });
+
+  test("a sheet still carrying the original mislabel maps the same way", () => {
+    // Files already in circulation must not be affected by our corrected heading.
+    const theirs = autoMap([
+      "Presenter 1 Email", "Presenter 1 First Name", "Presenter 2 Last Name",
+      "Presenter 2 Email", "Presenter 2 First Name", "Presenter 2 Last Name",
+    ]);
+    const ours = autoMap([
+      "Presenter 1 Email", "Presenter 1 First Name", "Presenter 1 Last Name",
+      "Presenter 2 Email", "Presenter 2 First Name", "Presenter 2 Last Name",
+    ]);
+    assert.deepEqual(theirs, ours);
+    assert.deepEqual(ours, ["speaker.email", "speaker.first_name", "speaker.last_name", null, null, null]);
+  });
+
+  test("the required row matches what the importer actually refuses to import without", () => {
+    const { headers, index } = findHeaderRow(sheet);
+    const requiredRow = sheet[index + 2]!;
+    const mapping = autoMap(headers);
+    for (const field of REQUIRED_FIELDS) {
+      const column = mapping.indexOf(field);
+      assert.equal(requiredRow[column], "REQUIRED", `${field}'s column must be marked REQUIRED`);
+    }
   });
 
   test("the hint, REQUIRED and EXAMPLE rows are all annotation, so a blank template has no sessions", () => {
@@ -290,12 +331,17 @@ describe("the agenda template we hand out is one we can read", () => {
   test("the example row's own date format is the one the template asks for", () => {
     // The row is dropped on import, but it is what a human copies. If it demonstrated
     // a format the parser could not read, the template would be teaching the mistake.
+    const { headers } = findHeaderRow(sheet);
+    const mapping = autoMap(headers);
     const example = sheet.find((row) => /^EXAMPLE/.test(row[0] ?? ""))!;
-    assert.equal(toDateTime(example[2]!, example[3]!), "2027-03-14T09:00:00");
+    const at = (field: string) => example[mapping.indexOf(field as never)]!;
+    assert.equal(toDateTime(at("session.date"), at("session.start")), "2027-03-14T09:00:00");
+    assert.equal(at("speaker.first_name"), "Alex");
+    assert.equal(at("speaker.last_name"), "Okonkwo");
   });
 
   test("names the event when it knows it, and copes when it does not", () => {
     assert.match(agendaTemplateCsv("MedTech Forward 2027"), /MedTech Forward 2027/);
-    assert.ok(agendaTemplateCsv().startsWith("DXG AGENDA TEMPLATE,"));
+    assert.ok(agendaTemplateCsv().startsWith("DXG AGENDA TEMPLATE (US Date/Time Format),"));
   });
 });
