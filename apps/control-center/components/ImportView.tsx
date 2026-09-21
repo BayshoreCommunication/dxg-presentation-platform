@@ -790,23 +790,46 @@ export function ImportView({
                               {row.ends_at && row.ends_at !== row.starts_at
                                 ? `–${clock(row.ends_at, preview.timezone)}`
                                 : ""}
+                              {/*
+                                The presentation's own window, when the file gives one.
+                                It imports either way, but a row carrying one looked
+                                identical to a row that did not — unreviewable before
+                                committing it.
+                              */}
+                              {row.slot_starts_at && (
+                                <div style={{ fontSize: 11, opacity: 0.75 }}>
+                                  talk {clock(row.slot_starts_at, preview.timezone)}
+                                  {row.slot_ends_at && row.slot_ends_at !== row.slot_starts_at
+                                    ? `–${clock(row.slot_ends_at, preview.timezone)}`
+                                    : ""}
+                                </div>
+                              )}
                             </>
                           ) : (
                             <span className="chip c-bad">missing</span>
                           )}
                         </td>
                         <td>
-                          {row.cells["speaker.name"] ||
-                            [row.cells["speaker.first_name"], row.cells["speaker.last_name"]]
-                              .filter(Boolean)
-                              .join(" ") ||
-                            row.cells["speaker.email"] || <span className="note">—</span>}
-                          {(row.cells["speaker.first_name"] || row.cells["speaker.last_name"]) &&
-                            row.cells["speaker.email"] && (
-                              <div className="note" style={{ fontSize: 11 }}>
-                                {row.cells["speaker.email"]}
-                              </div>
-                            )}
+                          {/*
+                            Everyone the row names, not just presenter 1. A co-presenter
+                            was invisible here, so an operator could approve an import
+                            without seeing who it was about to create.
+
+                            Name over address: a mis-mapped column shows up as an address
+                            where a name belongs, which is how the operator catches what
+                            the mapping table used to be asked to.
+                          */}
+                          {row.presenters.length === 0 && <span className="note">—</span>}
+                          {row.presenters.map((presenter, index) => (
+                            <div key={index} style={{ marginTop: index === 0 ? 0 : 4 }}>
+                              {presenter.name || presenter.email}
+                              {presenter.name && presenter.email && (
+                                <div className="note" style={{ fontSize: 11 }}>
+                                  {presenter.email}
+                                </div>
+                              )}
+                            </div>
+                          ))}
                           {row.cells["speaker.organization"] && (
                             <div className="note" style={{ fontSize: 11 }}>
                               {row.cells["speaker.organization"]}

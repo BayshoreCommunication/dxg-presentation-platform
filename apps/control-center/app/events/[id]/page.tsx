@@ -22,6 +22,41 @@ export default async function CommandCenterPage({ params }: { params: Promise<{ 
     `/events/${id}`,
   );
 
+  /*
+   * This line was the literal string "Tampa Convention Center · Day 2 of 3 · Doors
+   * 08:00" on every event, whatever its venue and however long it ran — invented
+   * operational facts on the event's home screen, beside a live indicator. SCREEN_SPECS
+   * §4 specifies `name · venue · Day N of M · doors`; three of those four are real data
+   * and the fourth is not recorded anywhere, so it is not shown.
+   *
+   * "Day N of M" only appears while the event is running. Before it starts and after it
+   * ends there is no current day, and picking one would be the same invention in a
+   * smaller font.
+   */
+  const days = (() => {
+    const from = new Date(`${summary.event.starts_on}T00:00:00Z`);
+    const to = new Date(`${summary.event.ends_on}T00:00:00Z`);
+    const total = Math.round((to.getTime() - from.getTime()) / 86_400_000) + 1;
+    // Today as the venue reckons it, not as the viewer's browser does.
+    const todayThere = new Date().toLocaleDateString("en-CA", { timeZone: summary.event.timezone });
+    const current =
+      Math.round(new Date(`${todayThere}T00:00:00Z`).getTime() - from.getTime()) / 86_400_000 + 1;
+    return current >= 1 && current <= total ? `Day ${current} of ${total}` : null;
+  })();
+
+  const dateRange = `${new Date(`${summary.event.starts_on}T00:00:00Z`).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  })} – ${new Date(`${summary.event.ends_on}T00:00:00Z`).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  })}`;
+
+  const header = [summary.event.venue, days ?? dateRange].filter(Boolean) as string[];
+
   const kpis = [
     { label: "Collected", value: `${summary.collected} / ${summary.total}`, note: `${summary.total === 0 ? 0 : Math.round((summary.collected / summary.total) * 100)}% of talks` },
     { label: "Approved", value: summary.approved, color: "var(--ok)" },
@@ -39,7 +74,8 @@ export default async function CommandCenterPage({ params }: { params: Promise<{ 
             {summary.event.name}
           </h1>
           <span className="note">
-            Tampa Convention Center · Day 2 of 3 · Doors 08:00 &nbsp;
+            {header.join(" · ")}
+            {header.length > 0 && <>&nbsp;</>}
             <span className="live">
               <i /> live
             </span>

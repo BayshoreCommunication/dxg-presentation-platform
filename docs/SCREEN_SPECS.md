@@ -107,7 +107,7 @@ Reading rules:
 
 **Data** `GET /events/{id}/reports/collection` for KPIs; risk list from a role-scoped query of talks whose derived status is in {Missing, Needs revision, Warning, Approved — delivering, Update pending ack}; activity feed from `audit_records` projected to a readable feed; live updates via SSE.
 
-**Elements** event header (name · venue · Day N of M · doors), KPI row (Collected `n/total` · Approved · Warnings open · Missing · Rooms ready `n/14`), **Today's risk list** (each row opens Presentation detail), Activity list (timestamped, actor-attributed). Action `Send reminder batch` (PM).
+**Elements** event header (name · venue · Day N of M) — every part read from the event, with `Day N of M` shown only while the event is running and the date range otherwise. **Doors is not shown**: no field records it, and the header carried an invented `Doors 08:00` on every event until 2026-09-21, KPI row (Collected `n/total` · Approved · Warnings open · Missing · Rooms ready `n/14`), **Today's risk list** (each row opens Presentation detail), Activity list (timestamped, actor-attributed). Action `Send reminder batch` (PM).
 
 **Behaviour** every status chip is derived live; when a review decision is made elsewhere, this screen updates without a manual refresh. `Rooms ready` is the aggregate of `room_files` states plus agent heartbeat freshness — the prototype's 12/14 → 13/14 transition on acknowledgment is the specified behaviour.
 

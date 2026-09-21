@@ -3,7 +3,16 @@ import { deriveTalkStatus, deriveRoomReadiness, TALK_STATUS_LABEL } from "@pmp/d
 import type { TalkSnapshot, VersionSnapshot, RoomCopySnapshot } from "@pmp/domain";
 
 export type EventSummary = {
-  event: { id: string; name: string; starts_on: string; ends_on: string; status: string; timezone: string };
+  event: {
+    id: string;
+    name: string;
+    starts_on: string;
+    ends_on: string;
+    status: string;
+    timezone: string;
+    /** Null when no venue has been recorded — the header says so rather than inventing one. */
+    venue: string | null;
+  };
   collected: number;
   total: number;
   approved: number;
@@ -61,7 +70,16 @@ const snapshotOf = (row: TalkAggRow): TalkSnapshot => ({
 /** Command-center KPI row (screen 4) — every number computed, none stored. */
 export async function eventSummary(tx: pg.PoolClient, eventId: string): Promise<EventSummary | null> {
   const { rows: eventRows } = await tx.query<EventSummary["event"]>(
-    `SELECT id, name, starts_on::text, ends_on::text, status, timezone FROM pmp.events WHERE id = $1`,
+    /*
+     * The venue comes back with the event because the command centre's header claims
+     * to show it. It was a hardcoded string there — "Tampa Convention Center · Day 2
+     * of 3 · Doors 08:00" on every event, whatever its venue and however long it ran.
+     */
+    `SELECT e.id, e.name, e.starts_on::text, e.ends_on::text, e.status, e.timezone,
+            v.name AS venue
+       FROM pmp.events e
+       LEFT JOIN pmp.venues v ON v.id = e.venue_id
+      WHERE e.id = $1`,
     [eventId],
   );
   const event = eventRows[0];

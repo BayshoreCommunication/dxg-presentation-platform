@@ -656,6 +656,18 @@ export async function buildPreview(
       [at("speaker.first_name"), at("speaker.last_name")].filter(Boolean).join(" ");
     const speakerEmail = at("speaker.email");
 
+    /*
+     * Everyone this row names, presenter 1 first. Computed here rather than further
+     * down because the new-speaker count below needs it: counting only presenter 1 is
+     * what made the count say 5 for a file that created 6.
+     */
+    const presenters = PRESENTER_PREFIXES.map((prefix) => ({
+      name: [at(`${prefix}.first_name` as ImportField), at(`${prefix}.last_name` as ImportField)]
+        .filter(Boolean)
+        .join(" "),
+      email: at(`${prefix}.email` as ImportField),
+    })).filter((presenter) => presenter.name || presenter.email);
+
     if (!title) {
       issues.push({ row: rowNumber, column: "session.title", severity: "blocking", message: "Session title is empty." });
     }
@@ -702,7 +714,15 @@ export async function buildPreview(
         message: "No speaker email — this session imports, but invitations are held until an email is added.",
       });
     }
-    if (speakerEmail && !existingEmails.has(speakerEmail.toLowerCase())) newSpeakers.add(speakerEmail.toLowerCase());
+    /*
+     * Everyone the row names, not just presenter 1. The count said 5 for a file that
+     * created 6 speakers — a co-presenter was invisible to the number an operator uses
+     * to decide whether to commit, which is the one job that number has.
+     */
+    for (const presenter of presenters) {
+      const address = presenter.email.toLowerCase();
+      if (address && !existingEmails.has(address)) newSpeakers.add(address);
+    }
 
     /*
      * The presentation's own time. `Presentation Duration` is minutes, and is only
@@ -728,12 +748,6 @@ export async function buildPreview(
       });
     }
 
-    const presenters = PRESENTER_PREFIXES.map((prefix) => ({
-      name: [at(`${prefix}.first_name` as ImportField), at(`${prefix}.last_name` as ImportField)]
-        .filter(Boolean)
-        .join(" "),
-      email: at(`${prefix}.email` as ImportField),
-    })).filter((presenter) => presenter.name || presenter.email);
 
     const key = `${normalise(room)}|${startsAt ? zonedToUtc(startsAt, timeZone).toISOString() : ""}|${normalise(title)}`;
     const match = existingKeys.get(key);

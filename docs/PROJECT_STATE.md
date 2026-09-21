@@ -1783,3 +1783,57 @@ afterwards were 76/76. It is the TOTP contention recorded in the forty-seventh e
 for it. `signInStaff` retries, but the retry budget is finite and the pile-up is now larger. Not
 introduced by this change and not fixed here; recorded because a green run after a red one is not
 evidence the red one was nothing.
+
+## 2026-09-21 (sixtieth) — a review of Create event, and four things it found
+
+Travis asked for the create-event flow to be reviewed again and the imported agenda checked. Walked it
+end to end with a five-session file in DXG's template shape, then read the database.
+
+**The import itself is sound.** 3 rooms, 2 event days, a quoted-comma title intact, a presentation
+window of 10:30→11:10 inside its 10:30–12:00 session, 13:05→13:45 derived from a 40-minute duration
+with no end time, 6 speakers and 6 assignments including a co-presenter on one slot, and a provisional
+name for an email-only presenter. Nothing wrong with what lands.
+
+**What was wrong was what the screens said about it.**
+
+**1. The command centre header was a hardcoded string** — `Tampa Convention Center · Day 2 of 3 ·
+Doors 08:00`, on every event, whatever its venue and however long it ran. Beside a live indicator, on
+the event's home screen. SCREEN_SPECS §4 specifies `name · venue · Day N of M · doors`; three of those
+are real data and the fourth is recorded nowhere. The venue is now read through `events.venue_id`
+(`eventSummary` joins `venues`), the day is computed in the event's own timezone, and **Doors is not
+shown at all** rather than invented. `Day N of M` appears only while the event is running — before and
+after there is no current day, and choosing one would be the same fabrication in a smaller font; the
+date range shows instead. Verified across three cases: a running event reads `tampa · Day 1 of 6`, a
+future one `Orlando Civic Hall · May 3 – May 4, 2027`, and MedTech — which genuinely has no venue —
+omits it rather than filling the gap.
+
+**2. `NEW SPEAKERS` undercounted.** It said 5 for a file that created 6: the count added only presenter
+1's address, so every co-presenter was invisible to the one number an operator uses to decide whether
+to commit. Counts everyone now; the recheck file reads 4 for four distinct addresses.
+
+**3. The preview showed only presenter 1.** `Imaging Advances` displayed "Sam Ito" with no hint that
+Lee Ng was about to be created and assigned. The presenter column lists everyone the row names.
+
+**4. The presentation window was invisible in the preview.** A row carrying its own 10:30–11:10 looked
+identical to one running with its session. Shown as a second line — `talk 10:30–11:10`.
+
+2 and 3 were the same defect in two places: the preview still described a one-presenter world the
+importer had stopped living in.
+
+**And the TOTP flake, fixed rather than recorded a third time.** Six invariant suites sign in as
+`admin@example.invalid`, `node --test` gives each file its own process, and `freshCode`'s bookkeeping is
+module-level — so it cannot see the other five. One run burned 69 seconds and failed five tests.
+`tests/helpers/signIn.ts` now records the last-consumed step per account in a file guarded by an
+exclusive-create mutex, and claims *and spends* the step under that lock — picking a code and then
+racing another process to the server is the collision itself.
+
+**The faster fix was tried and backed out, which is worth recording.** One TOTP code per 30 seconds per
+account is a floor, so six sign-ins cost six windows; sharing one verified session across the suites
+would have cost one. It also coupled suites that were independent — `auth-separation.test.ts:61` logs
+the staff session out in its teardown, which killed every other suite mid-run. Two runs reported 63 and
+68 tests where there are 76, which is the failure mode to fear: not red, just quietly less. Reverted.
+
+Cost accepted: `test:invariants` goes from ~70s to ~135–180s. Three consecutive runs at 76 pass, 0
+fail, 0 skipped, and the count is stable, which it was not before.
+
+CI green, 208 unit tests. Walkthrough events removed.

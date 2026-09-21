@@ -137,7 +137,8 @@ export type EventRow = {
 };
 
 export type Summary = {
-  event: EventRow & { timezone: string };
+  /** `venue` is null when none was recorded — the header says so rather than inventing one. */
+  event: EventRow & { timezone: string; venue: string | null };
   total: number;
   collected: number;
   approved: number;
@@ -482,6 +483,11 @@ export type StagedRow = {
   room: string;
   /** Every mapped field's current value — the whole row as the file states it. */
   cells: Record<string, string>;
+  /** Everyone this row names, presenter 1 first. */
+  presenters: { name: string; email: string }[];
+  /** The presentation's own window inside the session, when the file gives one. */
+  slot_starts_at: string | null;
+  slot_ends_at: string | null;
   /** Which required fields this row still has no usable value for. */
   missing: string[];
   starts_at: string | null;
