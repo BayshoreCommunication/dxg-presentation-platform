@@ -2216,3 +2216,49 @@ disagreeing with the file, duration with no end, nothing at all, and a duration 
 `input` element remains in the field in any of them.
 
 CI green, 208 unit tests; invariants 112 pass, 0 skipped. Probe events removed.
+
+## 2026-09-21 (sixty-eighth) — the duration box loses its prose, and a talk can no longer escape its session
+
+Travis, three things: remove the Presentation box's note, show the duration in a box like an input
+field, drop the "from the file — not used…" lines, default it to `0 min`, and stop an operator setting
+presentation times outside the session's. D-041.
+
+**The duration now keeps the shape of the fields beside it.** Start, End and Duration describe one
+thing; a line of prose between two boxes read as a different kind of statement. A disabled input,
+value only. `0 min` where nothing is set — a presentation with no times of its own has no length of
+its own, and zero says so in the same shape as every other value.
+
+**What the removed text cost, recorded rather than argued.** The lines naming a number's origin are
+gone, and so is the one that appeared when a file's duration disagreed with its times. A sheet
+claiming 55 against a fifteen-minute window now shows `15 min` and no trace of the 55. The resolution
+is unchanged — the published end has always won — but the disagreement is no longer visible. A
+deliberate trade of evidence for quiet, restorable in one line.
+
+**And the part that was a real hole.** `slots` and `sessions` carry their times independently with no
+constraint relating them, so a presentation starting before its session opened, or running past the
+end of it, imported cleanly — and unlike the sixty-sixth entry's three cases, **no database error was
+waiting to catch this one.** It would have reached the room schedule and the speaker's portal looking
+authoritative.
+
+Held in both places on purpose: `min`/`max` on the pickers makes the rule *reachable* — an operator
+cannot step or type outside it, and an out-of-range value turns the field the blocking colour. That
+last part needed a stylesheet rule, because nothing styled `:invalid` at all, so until now the browser
+knew the value was wrong and the operator could not see it. Scoped to `time` and `date` inputs: a
+blanket rule would have lit up every merely-empty field elsewhere in the product. Then `buildPreview`
+raises a blocking issue and `commitImport` refuses the row against the instants it is about to insert,
+because `min`/`max` is a hint that a pasted value walks straight through.
+
+**An older test had to be rewritten, and the reason is worth keeping.** "A presentation that ends
+before it starts" used 5:25 PM → 5:10 PM inside a 8:00–10:00 session, so once this rule existed the row
+tripped two at once while the test asserted it tripped exactly one. Moved inside the session, so each
+case still isolates the rule it names.
+
+Verified in the browser: the pickers carry `min="09:00" max="11:00"` from the session's own times, the
+session's own pickers stay unbounded, a value of 08:30 turns the border from `rgb(226,232,236)` to the
+blocking `rgb(214,69,69)` and reports "Value must be 9:00 AM or later.", the duration reads `45 min`
+derived from 09:30–10:15 and `0 min` on a row with no presentation times, and the Presentation box
+contains no prose at all.
+
+Proved by reverting: the three bounds cases fail without it, the rest stay green.
+
+CI green, 208 unit tests; invariants **116** pass, 0 skipped. Probe events removed.

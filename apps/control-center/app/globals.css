@@ -69,6 +69,11 @@ tr.rb{cursor:pointer} tr.rb:hover td{background:var(--mist)} tr.sel td{backgroun
 .frow{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-top:1px solid var(--line);font-size:13px;align-items:center}
 input,select{font:inherit;color:var(--ink);background:var(--white);border:1px solid var(--line);border-radius:6px;padding:8px 12px}
 label{font-size:12px;color:var(--slate);font-weight:600;display:block;margin-bottom:4px}
+/* A time or date outside the range its field allows — a presentation dragged outside
+   its session, say — is otherwise indistinguishable from a good one until the server
+   refuses it on save. Scoped to these two types: they are the only inputs carrying
+   min/max, and a blanket :invalid rule would light up anything merely left empty. */
+input[type=time]:invalid,input[type=date]:invalid{border-color:var(--block)}
 .field{margin-bottom:12px}
 .darkpane{background:var(--ink);color:var(--paneink);border-radius:8px}
 .demo-bar{flex-shrink:0;display:flex;align-items:center;gap:12px;background:var(--ink);color:var(--paneink);padding:10px 16px;font-size:13.5px;border-top:2px solid var(--blue)}

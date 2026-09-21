@@ -296,7 +296,9 @@ describe("the preview refuses what the database would", () => {
     const preview = await rowsOf(
       [
         "Session Title,Session Location,Session Date,Session Start,Session End,Presentation Start,Presentation End,Presenter Email",
-        "Backwards Talk,Ballroom A,03/14/2027,8:00 AM,10:00 AM,5:25 PM,5:10 PM,c@example.invalid",
+        // Inside the session, so this isolates the backwards rule rather than also
+        // tripping the one about a presentation escaping its session.
+        "Backwards Talk,Ballroom A,03/14/2027,8:00 AM,12:00 PM,10:25 AM,10:10 AM,c@example.invalid",
       ].join("\n"),
     );
     const blocking = preview.issues.filter((issue) => issue.severity === "blocking");
@@ -334,5 +336,60 @@ describe("the preview refuses what the database would", () => {
 
     const row = preview.rows.find((entry) => entry.title === "Disagreeing Row");
     assert.ok(row, "the row is in the preview");
+  });
+});
+
+/*
+ * A presentation happens inside its session. Nothing in the database says so — `slots`
+ * and `sessions` carry their times independently — which is why it is checked here: a
+ * talk starting before its room opens, or running past the session it belongs to, is
+ * wrong in a way no constraint will catch, and it would reach the room schedule and
+ * the speaker's portal looking authoritative.
+ */
+describe("a presentation cannot escape its session", () => {
+  const row = (slotStart: string, slotEnd: string, duration = "") =>
+    [
+      "Session Title,Session Location,Session Date,Session Start,Session End,Presentation Start,Presentation End,Presentation Duration,Presenter Email",
+      `Bounded,Ballroom A,03/14/2027,9:00 AM,10:00 AM,${slotStart},${slotEnd},${duration},f@example.invalid`,
+    ].join("\n");
+
+  test("starting before the session starts is blocked", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const preview = await upload(row("8:30 AM", "9:30 AM"));
+    const blocking = preview.issues.filter((issue) => issue.severity === "blocking");
+    assert.equal(blocking.length, 1);
+    assert.equal(blocking[0]?.column, "slot.start");
+    assert.match(blocking[0]!.message, /before its session starts/);
+    assert.equal((await commit(preview)).status, 400);
+  });
+
+  test("ending after the session ends is blocked", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const preview = await upload(row("9:30 AM", "10:30 AM"));
+    const blocking = preview.issues.filter((issue) => issue.severity === "blocking");
+    assert.equal(blocking.length, 1);
+    assert.equal(blocking[0]?.column, "slot.end");
+    assert.match(blocking[0]!.message, /after its session ends/);
+    assert.equal((await commit(preview)).status, 400);
+  });
+
+  test("a duration that runs past the session's end is blocked too", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    // No end given, so the duration decides it — and 90 minutes from 9:30 lands at
+    // 11:00, half an hour past a session that ends at 10:00.
+    const preview = await upload(row("9:30 AM", "", "90"));
+    const blocking = preview.issues.filter((issue) => issue.severity === "blocking");
+    assert.equal(blocking.length, 1);
+    assert.equal(blocking[0]?.column, "slot.end");
+    assert.match(blocking[0]!.message, /90 minutes/);
+    assert.equal((await commit(preview)).status, 400);
+  });
+
+  test("a presentation filling its session exactly is fine", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    // The boundaries are inclusive: a session with one talk in it is the ordinary case.
+    const preview = await upload(row("9:00 AM", "10:00 AM"));
+    assert.equal(preview.issues.filter((issue) => issue.severity === "blocking").length, 0);
+    assert.equal((await commit(preview)).status, 200);
   });
 });

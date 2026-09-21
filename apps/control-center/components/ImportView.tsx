@@ -128,13 +128,6 @@ const toTimeInput = (value: string): string | null => {
   return `${String(hour).padStart(2, "0")}:${match[2]}`;
 };
 
-/** `HH:MM` plus n minutes, as `HH:MM`. Same day: a presentation does not cross midnight. */
-const addMinutes = (clock: string, minutes: number): string => {
-  const total = Number(clock.slice(0, 2)) * 60 + Number(clock.slice(3, 5)) + minutes;
-  const wrapped = ((total % 1440) + 1440) % 1440;
-  return `${String(Math.floor(wrapped / 60)).padStart(2, "0")}:${String(wrapped % 60).padStart(2, "0")}`;
-};
-
 /** Minutes between two `HH:MM` clock values; negative when the second is earlier. */
 const minutesBetween = (from: string, to: string): number => {
   const parts = (value: string) => Number(value.slice(0, 2)) * 60 + Number(value.slice(3, 5));
@@ -264,54 +257,38 @@ function RowEditor({
 
     if (field === "slot.duration") {
       /*
-       * Read-only, and derived wherever it can be (Travis's call, superseding the
-       * slider he asked for in D-032/D-033).
+       * Read-only, and derived wherever it can be (D-040). A duration is stored
+       * nowhere — no table has a column for it, and the importer only ever turns one
+       * into an end time — so it is not a second fact about a presentation but a
+       * second spelling of the one the Start and End already give. Two editable
+       * spellings of one fact is how a row comes to read 5:10 PM → 5:25 PM beside
+       * "55 min". Length is set by setting the times.
        *
-       * A duration is stored nowhere: no table has a column for it, and the importer
-       * only ever turns it into an end time. So it is not a second fact about a
-       * presentation, it is a second *spelling* of the one the Start and End already
-       * give — and two editable spellings of one fact is how a row comes to say
-       * 5:10 PM → 5:25 PM alongside "55 min". Length is set by setting the times.
-       *
-       * It is still shown, because a file's own number is evidence: a sheet claiming
-       * 55 against a fifteen-minute window is a disagreement the operator should see
-       * rather than have silently resolved. Where the number comes from is named, so
-       * "45 min" from the file and "15 min" from the times are never confused.
+       * It keeps the shape of the inputs it sits between rather than becoming a line
+       * of prose: the three fields describe one thing, and a box among boxes is read
+       * as part of the same group. Disabled rather than merely `readOnly`, so that it
+       * looks unavailable as well as behaving that way.
        */
       const minutes = /^\d{1,3}$/.test(value.trim()) ? Number(value.trim()) : null;
       const startClock = toTimeInput((draft["slot.start"] ?? "").trim());
       const endClock = toTimeInput((draft["slot.end"] ?? "").trim());
       const derived = startClock && endClock ? minutesBetween(startClock, endClock) : null;
-
-      const [shown, source] =
-        derived !== null
-          ? [`${derived} min`, "from the times above"]
-          : minutes === null
-            ? ["not set", startClock ? "the presentation has no end — set one above" : null]
-            : startClock
-              ? [`${minutes} min`, `from the file — ends ${addMinutes(startClock, minutes)}`]
-              : [`${minutes} min`, "from the file — not used, the presentation has no start"];
+      // Falls back to zero rather than to an empty box: a presentation with no times of
+      // its own has no length of its own — it runs with its session — and "0 min" says
+      // that in the same shape as every other value this field shows.
+      const shown = derived ?? minutes ?? 0;
 
       return (
         <div className="field" key={field}>
-          {/* A `label` element for the styling every other field caption gets, with no
-              `htmlFor`: there is no control here to point at any more. */}
-          <label style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
-            <span>{visible ?? full}</span>
-            <span className="note" style={{ whiteSpace: "nowrap", fontWeight: 400 }}>
-              {shown}
-            </span>
-          </label>
-          {source && (
-            <div className="note" style={{ fontSize: 11 }}>
-              {source}
-            </div>
-          )}
-          {minutes !== null && derived !== null && minutes !== derived && (
-            <div className="note" style={{ fontSize: 11 }}>
-              The file says {minutes}; the times win.
-            </div>
-          )}
+          <label htmlFor={`edit-${field}`}>{visible ?? full}</label>
+          <input
+            id={`edit-${field}`}
+            style={{ width: "100%" }}
+            value={`${shown} min`}
+            disabled
+            readOnly
+            aria-label={`${full} in minutes`}
+          />
         </div>
       );
     }
@@ -319,6 +296,24 @@ function RowEditor({
     if (TIME_FIELDS.has(field) || DATE_FIELDS.has(field)) {
       const isDate = DATE_FIELDS.has(field);
       const picker = isDate ? toDateInput(value) : toTimeInput(value);
+
+      /*
+       * A presentation happens inside its session, so its pickers are bounded by the
+       * session's own times. `min`/`max` on a time input is a hint the browser
+       * enforces for typing and stepping, not a guarantee — a pasted value still
+       * lands, and the rule is held server-side in `buildPreview` as a blocking issue.
+       * Both sides read the same two fields on this screen, so the bound moves when
+       * the operator corrects the session above it, and there is no second copy of the
+       * rule to drift: the browser says what is reachable, the server decides.
+       */
+      const withinSession =
+        field === "slot.start" || field === "slot.end"
+          ? {
+              min: toTimeInput((draft["session.start"] ?? "").trim()) || undefined,
+              max: toTimeInput((draft["session.end"] ?? "").trim()) || undefined,
+            }
+          : {};
+
       if (picker !== null) {
         return (
           <div className="field" key={field}>
@@ -328,6 +323,7 @@ function RowEditor({
               type={isDate ? "date" : "time"}
               style={{ width: "100%", ...border }}
               value={picker}
+              {...withinSession}
               {...(visible && visible !== full ? { "aria-label": full } : {})}
               onChange={(event) => set(field, event.target.value)}
             />
@@ -476,10 +472,7 @@ function RowEditor({
             <div style={{ marginTop: 10 }}>{line(SESSION_WHEN_FIELDS)}</div>
           </Section>
 
-          <Section
-            heading="Presentation"
-            note="Its own time inside the session — leave blank if it runs with the session. A duration in the file fills the end in when the file gives no end."
-          >
+          <Section heading="Presentation">
             {line(PRESENTATION_FIELDS, (field) => PRESENTATION_SHORT_LABELS[field])}
           </Section>
 

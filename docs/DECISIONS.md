@@ -517,3 +517,43 @@ set its floor. Neither is reversed on a matter of taste — the reason they are 
 they controlled turned out to be derived rather than stored, which neither decision knew at the time.
 
 Verified against all five states the field can be in. Owner: Travis.
+
+## D-041 (2026-09-21): A presentation cannot escape its session, and the duration box says 0 — Status: ACCEPTED (Travis's call)
+Three requests in one: drop the Presentation box's explanatory note, show the duration in a box like
+the fields beside it, and stop an operator setting presentation times outside the session's.
+
+**The duration keeps the shape of its neighbours.** Start, End and Duration describe one thing, and a
+line of prose among two boxes read as a different kind of statement. It is a disabled input now,
+showing a value and nothing else. **Falling back to `0 min`** rather than an empty box is Travis's
+call and is defensible on its own terms: a presentation with no times of its own has no length of its
+own — it runs with its session — and zero says that in the same shape as every other value the field
+shows.
+
+**What the removed text cost, said plainly.** The note that named a number's origin
+(`from the times above` / `from the file — ends 13:45`) is gone, and with it the line that appeared
+when a file's duration disagreed with its times (`The file says 55; the times win.`). A sheet claiming
+55 against a fifteen-minute window now shows `15 min` and no trace of the 55. The resolution is
+unchanged and correct — the published end has always won — but the disagreement is no longer visible
+to the operator. Recorded here rather than argued: it is a deliberate trade of evidence for quiet,
+and it can be restored in one line.
+
+**A presentation happens inside its session, and nothing enforced it.** `slots` and `sessions` carry
+their times independently, with no constraint relating them, so a talk starting before its room opened
+or running past the session it belongs to imported cleanly and reached the room schedule and the
+speaker's portal looking authoritative. Unlike the D-039 checks, no database error was waiting to catch
+this one — it would simply have been wrong.
+
+**Enforced in both places, deliberately.** The pickers carry `min`/`max` from the session's own times,
+which is what makes the rule *reachable* — the operator cannot step or type outside it, and an
+out-of-range value turns the field the blocking colour (a new `input[type=time]:invalid` rule, scoped
+to time and date so that merely-empty inputs elsewhere are unaffected). But `min`/`max` is a hint: the
+value still lands if pasted. So `buildPreview` raises a blocking issue and `commitImport` refuses the
+row against the instants it is about to insert. Both sides derive the bound from the same two fields
+on the same screen, so there is no second copy of the rule to drift.
+
+**Inclusive at both ends**, because a session with one talk filling it is the ordinary case, not an
+edge case.
+
+Proved by reverting: the three bounds cases fail without it and the rest stay green. One older case had
+to be rewritten — the backwards-presentation row's times sat outside its session too, so it was
+tripping two rules at once and asserting it tripped one. Owner: Travis.

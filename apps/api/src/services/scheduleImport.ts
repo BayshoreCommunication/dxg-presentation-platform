@@ -772,7 +772,7 @@ export async function buildPreview(
       slotEnd = new Date(from.getTime() + durationMinutes * 60_000).toISOString();
     }
     // Only when the file gave both: an end derived from a duration cannot precede its
-    // own start, since the slider floor is 5 and the range input cannot go negative.
+    // own start, since a duration is a positive number of minutes.
     if (slotStart && slotEndText && slotEnd && new Date(slotEnd) < new Date(slotStart)) {
       issues.push({
         row: rowNumber,
@@ -780,6 +780,43 @@ export async function buildPreview(
         severity: "blocking",
         message: `The presentation ends at ${slotEndText} and starts at ${slotStartText} — it cannot end before it starts.`,
       });
+    }
+
+    /*
+     * A presentation happens *inside* its session, so its window has to sit within the
+     * session's. Nothing in the database enforces this — `slots` and `sessions` carry
+     * their times independently — which is exactly why it belongs here: a talk
+     * recorded as starting before the room opens or running past the session it
+     * belongs to is wrong in a way no constraint will ever catch, and it would reach
+     * the room schedule and the speaker's portal looking authoritative.
+     *
+     * Compared as absolute instants, because an end derived from a duration is already
+     * UTC while one read from a cell is still wall-clock in the event's zone.
+     */
+    const asInstant = (value: string): number =>
+      new Date(value.endsWith("Z") ? value : zonedToUtc(value, timeZone).toISOString()).getTime();
+
+    if (startsAt && endsAt && (slotStart || slotEnd)) {
+      const sessionFrom = asInstant(startsAt);
+      const sessionTo = asInstant(endsAt);
+      if (slotStart && asInstant(slotStart) < sessionFrom) {
+        issues.push({
+          row: rowNumber,
+          column: "slot.start",
+          severity: "blocking",
+          message: `The presentation starts at ${slotStartText}, before its session starts at ${start}.`,
+        });
+      }
+      if (slotEnd && asInstant(slotEnd) > sessionTo) {
+        issues.push({
+          row: rowNumber,
+          column: "slot.end",
+          severity: "blocking",
+          message: slotEndText
+            ? `The presentation ends at ${slotEndText}, after its session ends at ${end}.`
+            : `The presentation runs ${durationMinutes} minutes from ${slotStartText}, which ends after its session ends at ${end}.`,
+        });
+      }
     }
     if (at("slot.start") && !slotStart) {
       issues.push({
@@ -923,14 +960,24 @@ export async function commitImport(
    * "Unexpected server error", after the operator had reviewed the file and pressed
    * Import, naming no row.
    */
-  const backwards = (row: StagedRow): boolean =>
-    (row.starts_at !== null && row.ends_at !== null && new Date(row.ends_at) <= new Date(row.starts_at)) ||
-    (row.slot_starts_at !== null &&
-      row.slot_ends_at !== null &&
-      new Date(row.slot_ends_at) < new Date(row.slot_starts_at));
+  const impossible = (row: StagedRow): boolean => {
+    const at = (value: string | null) => (value === null ? null : new Date(value).getTime());
+    const from = at(row.starts_at);
+    const to = at(row.ends_at);
+    const slotFrom = at(row.slot_starts_at);
+    const slotTo = at(row.slot_ends_at);
+
+    // A window that runs backwards, which the database would refuse.
+    if (from !== null && to !== null && to <= from) return true;
+    if (slotFrom !== null && slotTo !== null && slotTo < slotFrom) return true;
+    // A presentation outside the session it belongs to, which nothing would refuse.
+    if (from !== null && slotFrom !== null && slotFrom < from) return true;
+    if (to !== null && slotTo !== null && slotTo > to) return true;
+    return false;
+  };
 
   const blocking = input.rows.filter(
-    (row) => !row.title || !row.room || !row.starts_at || backwards(row),
+    (row) => !row.title || !row.room || !row.starts_at || impossible(row),
   );
   if (blocking.length > 0) {
     return err({
