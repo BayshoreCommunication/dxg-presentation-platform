@@ -1746,3 +1746,26 @@ helper's correct policy (history stays) and means one deactivated account accumu
 **Still open: RLS is inert.** Migration 005 is correct but the app connects as `PGUSER=pmp`, the
 compose superuser, which bypasses every policy. This entry closes the application-layer hole
 everywhere; the database-layer one needs the app to stop connecting as a superuser and is untouched.
+
+## 2026-09-21 (fifty-ninth) — Schedule import leaves the sidebar
+
+Travis: remove it from the left nav, it already shows when creating an event.
+
+Right, and for a reason beyond the duplication: the sidebar entry pointed at
+`/events/:id/import` for the **currently selected** event, so following it mid-wizard meant importing
+into a different event than the one being created. Since D-027 the import is step 2 and an event
+cannot be activated without it — the sidebar was offering as a destination something the product takes
+you to.
+
+**It was also the only link to that screen anywhere in the app,** so removing it outright would have
+made screen 3 unreachable. Re-import is a real workflow: agendas are revised constantly before an
+event, and `commitImport` matches on (room, start, title) and updates rather than duplicating,
+machinery built for exactly that. The command centre now carries `Re-import agenda` beside
+`Open review queue`, which is where someone looking at an event would go.
+
+Logged as a deviation in `VISUAL_ACCEPTANCE.md` — §2.1 fixes the sidebar's names and order and the
+baseline lists Schedule import third. The screen inventory is unchanged; this is a navigation change,
+not the removal of a screen.
+
+Verified: sidebar reads Portfolio → Create event → Command center, and the command centre's
+`Re-import agenda` points at `/events/{id}/import`. CI green, 208 unit tests; invariants 76 pass.

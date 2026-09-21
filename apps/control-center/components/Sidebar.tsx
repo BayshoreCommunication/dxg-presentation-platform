@@ -46,7 +46,12 @@ const GROUPS: { group: string; roles?: string[]; items: { label: string; href?: 
     items: [
       { label: "Portfolio", href: "/" },
       { label: "Create event", href: "/events/new" },
-      { label: "Schedule import", href: "/events/:id/import" },
+      /*
+       * Schedule import is step 2 of Create event (D-027), so listing it here offered
+       * it as somewhere to go when it is really somewhere you are taken. The screen
+       * still exists for re-importing a revised agenda, reached from the command
+       * centre — the event it would import into is the one you are looking at.
+       */
       { label: "Command center", href: "/events/:id" },
       { label: "Speakers", href: "/events/:id/speakers" },
       { label: "Presentation detail" },

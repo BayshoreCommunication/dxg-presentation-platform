@@ -125,3 +125,22 @@ account row carried controls for a question nobody was asking at that moment.
 The baseline has no equivalent to weigh this against: it is a single-event prototype with no roles, so
 neither screen exists in it. Nothing else is renamed, reordered or regrouped.
 
+
+### 2026-09-21 — Schedule import leaves the sidebar
+
+**Deviation.** §2.1 fixes the sidebar's names and order, and the baseline lists `Schedule import` third
+under Control Center. It is no longer there.
+
+Screen 3 still exists and is unchanged; what changed is how it is reached. Since D-027 the import is
+step 2 of Create event and an event cannot be activated without it, so the sidebar was offering as a
+destination something the product takes you to. Worse, the entry pointed at `/events/:id/import` for
+the *currently selected* event — so following it from the sidebar mid-wizard meant importing into a
+different event than the one being created.
+
+**The screen keeps an entry point**, on the command centre, labelled `Re-import agenda`. That is the
+case it still serves: agendas are revised constantly before an event, and re-import matches on
+(room, start, title) and updates rather than duplicating. A capability with no way in is a capability
+nobody has — and the sidebar was, until now, the only link to it anywhere in the app.
+
+Nothing else is renamed, reordered or regrouped. The baseline's screen inventory is unchanged: this is
+a navigation change, not the removal of a screen.

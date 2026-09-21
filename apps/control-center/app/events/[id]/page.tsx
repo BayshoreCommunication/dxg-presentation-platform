@@ -45,9 +45,20 @@ export default async function CommandCenterPage({ params }: { params: Promise<{ 
             </span>
           </span>
         </div>
-        <Link href={`/events/${id}/review`} className="btn pri">
-          Open review queue →
-        </Link>
+        <div style={{ display: "flex", gap: 8 }}>
+          {/*
+            The only way into the standalone import screen now that it has left the
+            sidebar. Agendas are revised constantly before an event, and re-import
+            matches on (room, start, title) and updates rather than duplicating — a
+            capability with no entry point is a capability nobody has.
+          */}
+          <Link href={`/events/${id}/import`} className="btn">
+            Re-import agenda
+          </Link>
+          <Link href={`/events/${id}/review`} className="btn pri">
+            Open review queue →
+          </Link>
+        </div>
       </div>
 
       <div className="krow">

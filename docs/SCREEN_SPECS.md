@@ -52,6 +52,8 @@ Reading rules:
 
 ## 3. Schedule import
 
+**Reached from** step 2 of the Create event wizard (D-027) for a new event, and from `Re-import agenda` on the command centre for a revised one. It is deliberately **not** in the sidebar: it is somewhere the product takes you, not somewhere you go, and a sidebar entry pointing at the selected event is a trap mid-wizard.
+
 **Route** `/events/[id]/import` · **Roles** PjM, PM · **Requirements** FR-IMP-001/002, M02
 
 **Flow** upload XLSX/CSV → `POST /events/{id}/imports` (returns `importId`, parses async) → `GET /imports/{id}` returns row count, auto-mapped columns, blocking errors, warnings, new-speaker count → user fixes/overrides mapping → `POST /imports/{id}:commit` (transactional).
