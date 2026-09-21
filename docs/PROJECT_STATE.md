@@ -1569,3 +1569,44 @@ presentation time at all. In the browser the editor shows all four groups under 
 `+ Add another presenter` adds the Presenter 2 block, and Remove takes it away.
 
 CI green, 206 unit tests; invariants 63 pass, 0 skipped. Probe events removed.
+
+## 2026-09-21 (fifty-fourth) — pickers, one line per group, no Track
+
+Travis on the editor: presentation start/end/duration on one line, time pickers, duration as a
+5-minute slider, presenters' name and email on one line, session info on one line, drop Track. D-032.
+
+Fifteen identical text boxes in a two-column grid, scrolling. Now a line at a time — title and
+location; date, start and end; the presentation's three; each presenter's three — with the control
+chosen per field.
+
+**Times are `<input type="time">`, the date `<input type="date">`.** Both hand back values the importer
+already reads — `HH:MM` satisfies the clock rule, ISO satisfies `toCalendarDate` — so no parsing changed
+to accommodate them. **The date picker was not asked for**; included because it is the same one-line
+change against the same mistake, and mm/dd/yyyy typed by hand is the most error-prone cell in the sheet.
+Trivial to revert.
+
+**A picker cannot show what it cannot parse, and blanking it would destroy the evidence.** A cell
+reading `half past three` has no representation in a time input; rendering an empty one would silently
+discard the thing the operator opened the row to fix. `toTimeInput`/`toDateInput` return null for such a
+value and the field falls back to a text box holding it, outlined in the blocking colour, with "Not a
+time we can read — clear it to use the picker." Verified: that row shows `type=text`, value
+`half past three`, and the note.
+
+**The slider goes to 240, not the template's 999.** Five-minute steps over 999 minutes is two hundred
+positions to land on 45. A file carrying more is **shown, not clamped**, with a note and a Clear button
+— silently rewriting an operator's data to fit our control is the one thing a picker must never do.
+Zero means "not set", so the slider at rest and an empty cell agree.
+
+**Track is gone from the editor** — DXG's sheet has no such column, so it was a box nobody could fill
+from the file in front of them. The importer still reads a Track column when a file has one, and an
+existing value survives editing because only changed cells are sent.
+
+Verified end to end: the modal shows `date`, `time`, `time`, `time`, `time`, `range` and text inputs in
+the right places with `03/14/2027` rendering as `2027-03-14` and `1:00 PM` as `13:00`; no Track;
+filling a title, setting `13:15` on the presentation time picker and dragging duration to 45 saved in
+one request and cleared the row. After import the database holds `Filled Through The Pickers` with
+session 13:00–14:00 and presentation **13:15–14:00** — the end derived from the slider — alongside
+`Panel On Imaging` 09:30–10:15 with Dana Reyes + Sam Ito, and `Bad Time` running with its session
+because its start was unreadable.
+
+CI green, 206 unit tests; invariants 63 pass, 0 skipped. Probe event removed.

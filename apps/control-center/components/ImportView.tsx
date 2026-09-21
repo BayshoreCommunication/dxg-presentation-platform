@@ -42,27 +42,62 @@ const FIELD_LABELS: Record<string, string> = {
 /** The placeholder shows the shape a value has to take, not a second label. */
 const FIELD_HINTS: Record<string, string> = {
   "session.date": "mm/dd/yyyy",
-  "session.start": "9:00 AM",
-  "session.end": "10:00 AM",
+  "session.start": "h:mm AM/PM",
+  "session.end": "h:mm AM/PM",
   "slot.start": "h:mm AM/PM",
   "slot.end": "h:mm AM/PM",
-  "slot.duration": "minutes (0–999)",
   "speaker.email": "name@example.com",
   "speaker2.email": "name@example.com",
 };
 
-/** The sheet's own order: the session, the presentation within it, then who gives it. */
-const SESSION_FIELDS = [
-  "session.title",
-  "room.name",
-  "session.date",
-  "session.start",
-  "session.end",
-  "track.name",
-];
+/**
+ * `Track` is not in DXG's sheet (D-029) so it is not in the editor. The importer still
+ * reads a Track column when a file happens to carry one; a row's value is preserved
+ * because only changed cells are sent.
+ */
+const SESSION_TEXT_FIELDS = ["session.title", "room.name"];
+const SESSION_WHEN_FIELDS = ["session.date", "session.start", "session.end"];
 const PRESENTATION_FIELDS = ["slot.start", "slot.end", "slot.duration"];
 const PRESENTER_1_FIELDS = ["speaker.first_name", "speaker.last_name", "speaker.email"];
 const PRESENTER_2_FIELDS = ["speaker2.first_name", "speaker2.last_name", "speaker2.email"];
+
+const TIME_FIELDS = new Set(["session.start", "session.end", "slot.start", "slot.end"]);
+const DATE_FIELDS = new Set(["session.date"]);
+
+/**
+ * A clock cell as `<input type="time">` wants it. Returns null when the cell holds
+ * something no picker can represent — `not-a-date`, a half-typed value — so the caller
+ * can fall back to a text box rather than render an empty picker and quietly discard
+ * the evidence of what was wrong.
+ */
+const toTimeInput = (value: string): string | null => {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  const match = /^(\d{1,2}):(\d{2})\s*(am|pm)?$/i.exec(trimmed);
+  if (!match) return null;
+  let hour = Number(match[1]);
+  const meridiem = match[3]?.toLowerCase();
+  if (meridiem === "pm" && hour < 12) hour += 12;
+  if (meridiem === "am" && hour === 12) hour = 0;
+  if (hour > 23) return null;
+  return `${String(hour).padStart(2, "0")}:${match[2]}`;
+};
+
+/** The same, for a date cell. `mm/dd/yyyy` in, ISO out; the importer reads both. */
+const toDateInput = (value: string): string | null => {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  const slashed = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(trimmed);
+  if (slashed) {
+    return `${slashed[3]}-${slashed[1]!.padStart(2, "0")}-${slashed[2]!.padStart(2, "0")}`;
+  }
+  return /^\d{4}-\d{2}-\d{2}$/.test(trimmed) ? trimmed : null;
+};
+
+/** The slider's range. A file may carry more, and that value is shown rather than clamped. */
+const DURATION_MAX = 240;
+const DURATION_STEP = 5;
+
 /**
  * Date and clock, split, so a table of sessions reads down its columns.
  *
@@ -112,31 +147,126 @@ function RowEditor({
     PRESENTER_2_FIELDS.some((field) => (row.cells[field] ?? "").trim() !== ""),
   );
 
-  const renderField = (field: string) => {
-    const isMissing = row.missing.includes(field);
-    return (
-      <div className="field" key={field}>
-        <label htmlFor={`edit-${field}`}>
-          {FIELD_LABELS[field] ?? field}
-          {isMissing && <span style={{ color: "var(--block)" }}> · required</span>}
-        </label>
-        <input
-          id={`edit-${field}`}
-          style={{
-            width: "100%",
-            ...(isMissing && !(draft[field] ?? "").trim() ? { borderColor: "var(--block)" } : {}),
-          }}
-          placeholder={FIELD_HINTS[field] ?? ""}
-          value={draft[field] ?? ""}
-          onChange={(event) => setDraft({ ...draft, [field]: event.target.value })}
-        />
-      </div>
-    );
-  };
   const changed = Object.fromEntries(
     Object.entries(draft).filter(([field, value]) => (row.cells[field] ?? "") !== value),
   );
   const stillMissing = row.missing.filter((field) => !(draft[field] ?? "").trim());
+
+  const set = (field: string, value: string) => setDraft({ ...draft, [field]: value });
+
+  /** One labelled control, picking the input its field deserves. */
+  const renderField = (field: string) => {
+    const isMissing = row.missing.includes(field);
+    const value = draft[field] ?? "";
+    const empty = !value.trim();
+    const border = isMissing && empty ? { borderColor: "var(--block)" } : {};
+
+    const label = (
+      <label htmlFor={`edit-${field}`}>
+        {FIELD_LABELS[field] ?? field}
+        {isMissing && <span style={{ color: "var(--block)" }}> · required</span>}
+      </label>
+    );
+
+    if (field === "slot.duration") {
+      const minutes = /^\d{1,3}$/.test(value.trim()) ? Number(value.trim()) : null;
+      // A file may carry a duration past the slider's range. Showing it as a number
+      // rather than clamping it keeps the operator's data theirs.
+      const beyondSlider = minutes !== null && minutes > DURATION_MAX;
+      return (
+        <div className="field" key={field}>
+          <label htmlFor={`edit-${field}`}>
+            {FIELD_LABELS[field]}
+            <span className="note" style={{ marginLeft: 6 }}>
+              {minutes === null ? "not set" : `${minutes} min`}
+            </span>
+          </label>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <input
+              id={`edit-${field}`}
+              type="range"
+              min={0}
+              max={DURATION_MAX}
+              step={DURATION_STEP}
+              value={minutes !== null && !beyondSlider ? minutes : 0}
+              style={{ flex: 1 }}
+              aria-label={`${FIELD_LABELS[field]} in minutes`}
+              onChange={(event) =>
+                // Zero is "not set", not a zero-minute presentation.
+                set(field, event.target.value === "0" ? "" : event.target.value)
+              }
+            />
+            {minutes !== null && (
+              <button className="btn" style={{ padding: "2px 9px" }} onClick={() => set(field, "")}>
+                Clear
+              </button>
+            )}
+          </div>
+          {beyondSlider && (
+            <div className="note" style={{ fontSize: 11 }}>
+              {minutes} minutes — longer than the slider goes; Clear to change it.
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    if (TIME_FIELDS.has(field) || DATE_FIELDS.has(field)) {
+      const isDate = DATE_FIELDS.has(field);
+      const picker = isDate ? toDateInput(value) : toTimeInput(value);
+      if (picker !== null) {
+        return (
+          <div className="field" key={field}>
+            {label}
+            <input
+              id={`edit-${field}`}
+              type={isDate ? "date" : "time"}
+              style={{ width: "100%", ...border }}
+              value={picker}
+              onChange={(event) => set(field, event.target.value)}
+            />
+          </div>
+        );
+      }
+      // Unreadable: a picker cannot show it, and blanking it would hide the very thing
+      // the operator was sent here to fix.
+      return (
+        <div className="field" key={field}>
+          {label}
+          <input
+            id={`edit-${field}`}
+            style={{ width: "100%", borderColor: "var(--block)" }}
+            value={value}
+            placeholder={FIELD_HINTS[field] ?? ""}
+            onChange={(event) => set(field, event.target.value)}
+          />
+          <div className="note" style={{ fontSize: 11 }}>
+            Not a {isDate ? "date" : "time"} we can read — clear it to use the picker.
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="field" key={field}>
+        {label}
+        <input
+          id={`edit-${field}`}
+          style={{ width: "100%", ...border }}
+          placeholder={FIELD_HINTS[field] ?? ""}
+          value={value}
+          onChange={(event) => set(field, event.target.value)}
+        />
+      </div>
+    );
+  };
+
+  /** Fields across one line, each taking an equal share of it. */
+  const line = (fields: string[]) => (
+    <div style={{ display: "grid", gridTemplateColumns: `repeat(${fields.length}, 1fr)`, gap: 10 }}>
+      {fields.map(renderField)}
+    </div>
+  );
 
   return (
     <div
@@ -157,7 +287,7 @@ function RowEditor({
         if (event.target === event.currentTarget && !busy) onCancel();
       }}
     >
-      <div className="card" style={{ maxWidth: 620, width: "100%", maxHeight: "86vh", overflow: "auto" }}>
+      <div className="card" style={{ maxWidth: 760, width: "100%", maxHeight: "86vh", overflow: "auto" }}>
         <div className="chd">
           <h3>Row {row.row}</h3>
           <span className="m">{row.cells["session.title"] || "untitled session"}</span>
@@ -190,21 +320,31 @@ function RowEditor({
             </div>
           )}
 
-          {[
-            { heading: "Session", fields: SESSION_FIELDS },
-            { heading: "Presentation", fields: PRESENTATION_FIELDS, note: "Its own time inside the session — leave blank if it runs with the session." },
-            { heading: "Presenter 1", fields: PRESENTER_1_FIELDS },
-          ].map((group) => (
-            <div key={group.heading} style={{ marginBottom: 14 }}>
-              <div className="kl" style={{ marginBottom: 6 }}>{group.heading}</div>
-              {group.note && (
-                <div className="note" style={{ marginBottom: 8 }}>
-                  {group.note}
-                </div>
-              )}
-              <div className="grid2">{group.fields.map(renderField)}</div>
+          <div style={{ marginBottom: 14 }}>
+            <div className="kl" style={{ marginBottom: 6 }}>
+              Session
             </div>
-          ))}
+            {line(SESSION_TEXT_FIELDS)}
+            <div style={{ marginTop: 10 }}>{line(SESSION_WHEN_FIELDS)}</div>
+          </div>
+
+          <div style={{ marginBottom: 14 }}>
+            <div className="kl" style={{ marginBottom: 6 }}>
+              Presentation
+            </div>
+            <div className="note" style={{ marginBottom: 8 }}>
+              Its own time inside the session — leave blank if it runs with the session. Duration is
+              only used when there is no end time.
+            </div>
+            {line(PRESENTATION_FIELDS)}
+          </div>
+
+          <div style={{ marginBottom: 14 }}>
+            <div className="kl" style={{ marginBottom: 6 }}>
+              Presenter 1
+            </div>
+            {line(PRESENTER_1_FIELDS)}
+          </div>
 
           {/*
             A second presenter is hidden until asked for. Most sessions have one, and
@@ -231,7 +371,7 @@ function RowEditor({
                   Remove
                 </button>
               </div>
-              <div className="grid2">{PRESENTER_2_FIELDS.map(renderField)}</div>
+              {line(PRESENTER_2_FIELDS)}
             </div>
           ) : (
             <button className="btn" style={{ marginBottom: 14 }} onClick={() => setShowSecond(true)}>

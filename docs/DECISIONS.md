@@ -228,3 +228,14 @@ The editor showed a field this platform's words called "Room / location" and omi
 2. **`session` alone was a synonym for `session.title`,** so on a sheet with no explicit title column `Session Start` claimed the title on the substring pass. Session times are decided by a decisive rule now, after the presentation ones, so the qualifier settles which time a column is.
 
 Owner: Travis.
+
+## D-032 (2026-09-21): Pickers, one line per group, and no Track in the row editor — Status: ACCEPTED (Travis's call)
+The editor was a two-column grid of identical text boxes, fifteen of them, which scrolled. It is now laid out a line at a time — session title and location; date, start and end; the presentation's start, end and duration; each presenter's first name, last name and email — with a control chosen per field rather than one control for everything.
+
+**A time typed as text is a time that can be typed wrong.** `h:mm AM/PM` is the format the sheet asks for and the format the parser accepts, and neither fact helps the person who writes `3.30pm`. Times are `<input type="time">` and the date is `<input type="date">`; both hand back values the importer already reads (`HH:MM` is accepted by the clock rule, ISO by `toCalendarDate`), so nothing about the parsing changed to accommodate them. **The date picker was not asked for** and is included because it is the same one-line change against the same class of mistake — mm/dd/yyyy typed by hand is the single most error-prone cell in the sheet. Easy to revert if it is unwanted.
+
+**A picker cannot show a value it cannot parse, and blanking it would destroy the evidence.** A cell reading `half past three` has no representation in a time input, and rendering an empty picker would silently discard the very thing the operator opened the row to fix. `toTimeInput`/`toDateInput` return `null` for such a value, and the field falls back to a text box holding it, outlined in the blocking colour, with "Not a time we can read — clear it to use the picker."
+
+**The duration slider goes to 240, not the template's 999.** Five-minute steps over 999 minutes is two hundred positions to land on 45; a slider that cannot be aimed is worse than the number it replaced. 240 covers any real presentation. A file carrying more is **shown, not clamped** — the value appears with a note and a `Clear` button, because silently rewriting an operator's data to fit our control is the one thing a picker must never do. Zero means "not set" rather than a zero-minute presentation, so the slider at rest and an empty cell are the same thing.
+
+**`Track` is gone from the editor.** DXG's sheet has no such column (D-029), so it was a box nobody could be asked to fill from the file in front of them. The importer still reads a `Track` column when a file supplies one, and a row's existing value survives editing because only changed cells are sent. Owner: Travis.
