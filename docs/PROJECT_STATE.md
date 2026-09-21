@@ -2337,3 +2337,25 @@ session's as `INPUT`; the end offers 10:25 AM → 11:00 AM and stops, the start 
 four of those and shrinks the list from ten options back to nine.
 
 CI green, 208 unit tests; invariants 116 pass, 0 skipped. Probe event removed.
+
+## 2026-09-21 (seventy-first) — the empty option loses its words, not its job
+
+Travis: remove the "— runs with the session" option, keep only time.
+
+**Done literally first, and it broke the screen**, which is why the option survives as a blank rather
+than not at all. A `<select>` holding a value no option matches does not render empty — it falls back
+to the first option. With the empty one gone, a row carrying **no** presentation time displayed
+`9:00 AM` in both fields while holding neither: `startValue "09:00"`, `selectedIndex 0`, against a
+draft still holding `""`. The dialog stated a time the row did not have, and one touch of the field
+would have written that invention into it — the same defect as the hardcoded command-centre header,
+arriving through a dropdown.
+
+So the option is `<option value="" />`: no text, which is what was asked for — the list is times and
+nothing else — while an empty row still looks empty and a time already set can still be cleared, for
+a talk that turns out to run with its session.
+
+Verified both ways on a 09:00–11:00 session: a row with 10:25–10:40 shows `10:25 AM` and `15 min`; a
+row with no presentation times shows blank, value `""`, `0 min`; and the option labels read `""`,
+`9:00 AM`, `9:05 AM` with no prose anywhere in the list.
+
+CI green, 208 unit tests; invariants 116 pass, 0 skipped. Probe event removed.

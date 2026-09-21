@@ -407,7 +407,20 @@ function RowEditor({
               {...(visible && visible !== full ? { "aria-label": full } : {})}
               onChange={(event) => set(field, event.target.value)}
             >
-              <option value="">— runs with the session</option>
+              {/*
+                Times only, at Travis's request — the option that read "— runs with the
+                session" is now blank.
+                
+                It could not be removed outright, and the reason is worth keeping: a
+                `<select>` holding a value no option matches does not render empty, it
+                falls back to the first option. A row with no presentation time of its
+                own therefore displayed "9:00 AM" in both fields while holding neither,
+                and one touch of the field would have written that invention into the
+                row. Blank keeps the list free of prose, keeps an empty row looking
+                empty, and keeps a time already set clearable — a talk that turns out to
+                run with its session has somewhere to go back to.
+              */}
+              <option value="" />
               {stranded && <option value={picker}>{clockLabel(picker)} — outside the session</option>}
               {offered.map((option) => (
                 <option key={option} value={option}>
