@@ -1517,3 +1517,55 @@ which described the inputs that no longer exist. It now points at Edit.
 
 **Not mine:** an event called "Test Event 1" (draft, created 05:40 UTC today) is in the database and was
 left alone.
+
+## 2026-09-21 (fifty-third) — the row editor becomes the sheet row, and two silent defaults die
+
+Travis, on the editor: columns still missing (session location, session start/end, presentation
+start/end/duration), add a second presenter, drop the organization. D-031.
+
+**Half of "missing" was mislabelling.** `Session Location`, `Session Start` and `Session End` were all
+on screen — as "Room / location", "Start time" and "End time". Same fields; to someone holding the
+spreadsheet they were filled from, different ones. The editor now uses DXG's own headings throughout,
+grouped Session / Presentation / Presenter 1 / Presenter 2.
+
+**The other half was genuinely absent, and I would not put editable boxes on screen for data with
+nowhere to go.** `slots` carried only `position`. A Preseria presentation inside a session is exactly
+what a slot is, so migration `010_slot_times.sql` adds nullable `starts_at`/`ends_at` with a
+`CHECK (ends_at >= starts_at)` — additive, and a slot with no time of its own runs with its session,
+which was the only case that existed before. Duration is minutes and is consulted only when no end
+time is given: a sheet carrying both and disagreeing means the published end wins.
+
+**A second presenter is a second `speaker_assignments` row on the same slot**, which that table has
+always allowed and the import never used. Two people presenting one talk share the talk, its file and
+its approval. D-026 and D-029 both said this was not the import screen's decision; Travis has now made
+it. Collapsed behind **+ Add another presenter**, opening by itself when the file already names one,
+and **Remove clears the fields as well as hiding them** — a hidden box holding a value the operator
+thinks they deleted is how a wrong presenter gets imported.
+
+**Position decides which presenter a column belongs to, not the number in the heading.** Forced by
+D-029: DXG's sheet labels presenter 1's surname `Presenter 2 Last Name`, so matching on the ordinal
+would file it under presenter 2 and leave presenter 1 with no surname — worse than before presenter 2
+existed. First email column is presenter 1's, second is presenter 2's, whatever the headings say.
+Both sheets then map identically; two tests hold it.
+
+**Two defects, both found by running the importer and reading the output.**
+
+`toDateTime` defaulted a missing clock to 09:00. On the optional `Presentation Start` that gave a slot
+time to every row leaving it blank — which is how I noticed: "Closing", with both presentation cells
+empty, came back with a slot starting at 9:00 AM. Chasing it found the worse case: on `Session Start`
+a blank cell produced a usable `starts_at`, so the row passed the required-field check that the
+template's REQUIRED row, `REQUIRED_FIELDS` and the row editor all promise to enforce. **`Session Start`
+was never actually required.** Four cases written first, one failed, fixed.
+
+And `session` alone was a synonym for `session.title`, so on a sheet with no explicit title column
+`Session Start` claimed the title on the substring pass. My own new test exposed it. Session times are
+decisive now, checked after the presentation ones so the qualifier settles which time a column is.
+
+Verified end to end: a three-row file mapped all fourteen columns (including DXG's mislabelled
+eleventh to presenter 1's surname and the real presenter 2 block to `speaker2.*`), and the database
+holds `Panel On Imaging` session 09:00–11:00 / presentation 09:30–10:15 / **Dana Reyes + Sam Ito**,
+`Lightning Talk` 11:35–11:55 from a 20-minute duration with no end time, and `Closing` with no
+presentation time at all. In the browser the editor shows all four groups under the sheet's headings,
+`+ Add another presenter` adds the Presenter 2 block, and Remove takes it away.
+
+CI green, 206 unit tests; invariants 63 pass, 0 skipped. Probe events removed.

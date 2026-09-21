@@ -158,12 +158,13 @@ describe("the Preseria template (v.1.3) imports without manual mapping", () => {
     assert.deepEqual(autoMap(["Session Title", "", ""]), ["session.title", null, null]);
   });
 
-  test("the timing columns Preseria leaves optional stay unmapped", () => {
+  test("the presentation timing columns are read as the slot's own time", () => {
+    // These were unmapped until `slots` had times to put them in (D-031).
     const { headers } = findHeaderRow(sheet);
     const mapping = autoMap(headers);
-    for (const column of ["Presentation Start", "Presentation End", "Presentation Duration"]) {
-      assert.equal(mapping[headers.indexOf(column)], null, `${column} should not be guessed at`);
-    }
+    assert.equal(mapping[headers.indexOf("Presentation Start")], "slot.start");
+    assert.equal(mapping[headers.indexOf("Presentation End")], "slot.end");
+    assert.equal(mapping[headers.indexOf("Presentation Duration")], "slot.duration");
   });
 });
 
@@ -267,17 +268,16 @@ describe("the agenda template we hand out is one we can read", () => {
       ["Session Date", "session.date"],
       ["Session Start", "session.start"],
       ["Session End", "session.end"],
-      // A Preseria presentation sits inside a session; this platform has no equivalent.
-      ["Presentation Start", null],
-      ["Presentation End", null],
-      ["Presentation Duration", null],
+      // A Preseria presentation sits inside a session — now a slot with its own time.
+      ["Presentation Start", "slot.start"],
+      ["Presentation End", "slot.end"],
+      ["Presentation Duration", "slot.duration"],
       ["Presenter 1 Email", "speaker.email"],
       ["Presenter 1 First Name", "speaker.first_name"],
       ["Presenter 1 Last Name", "speaker.last_name"],
-      // Only presenter 1 becomes the assigned speaker.
-      ["Presenter 2 Email", null],
-      ["Presenter 2 First Name", null],
-      ["Presenter 2 Last Name", null],
+      ["Presenter 2 Email", "speaker2.email"],
+      ["Presenter 2 First Name", "speaker2.first_name"],
+      ["Presenter 2 Last Name", "speaker2.last_name"],
     ];
     assert.deepEqual(headers, expected.map(([heading]) => heading), "the template's columns, in order");
     assert.deepEqual(mapping, expected.map(([, field]) => field));
@@ -310,7 +310,14 @@ describe("the agenda template we hand out is one we can read", () => {
       "Presenter 2 Email", "Presenter 2 First Name", "Presenter 2 Last Name",
     ]);
     assert.deepEqual(theirs, ours);
-    assert.deepEqual(ours, ["speaker.email", "speaker.first_name", "speaker.last_name", null, null, null]);
+    assert.deepEqual(ours, [
+      "speaker.email",
+      "speaker.first_name",
+      "speaker.last_name",
+      "speaker2.email",
+      "speaker2.first_name",
+      "speaker2.last_name",
+    ]);
   });
 
   test("the required row matches what the importer actually refuses to import without", () => {
@@ -343,5 +350,118 @@ describe("the agenda template we hand out is one we can read", () => {
   test("names the event when it knows it, and copes when it does not", () => {
     assert.match(agendaTemplateCsv("MedTech Forward 2027"), /MedTech Forward 2027/);
     assert.ok(agendaTemplateCsv().startsWith("DXG AGENDA TEMPLATE (US Date/Time Format),"));
+  });
+});
+
+/*
+ * DXG's sheet labels presenter 1's surname "Presenter 2 Last Name" (D-029). Matching
+ * on the ordinal *in the label* would therefore file it under the second presenter and
+ * leave the first with no surname — worse than before. Matching on the order the
+ * columns appear gets both sheets right, and is how these sheets are actually laid out.
+ */
+describe("a second presenter is read from the second set of presenter columns", () => {
+  test("DXG's own sheet, mislabel and all, fills presenter 1 then presenter 2", () => {
+    assert.deepEqual(
+      autoMap([
+        "Presenter 1 Email",
+        "Presenter 1 First Name",
+        "Presenter 2 Last Name", // mislabelled at source; it is presenter 1's surname
+        "Presenter 2 Email",
+        "Presenter 2 First Name",
+        "Presenter 2 Last Name",
+      ]),
+      [
+        "speaker.email",
+        "speaker.first_name",
+        "speaker.last_name",
+        "speaker2.email",
+        "speaker2.first_name",
+        "speaker2.last_name",
+      ],
+    );
+  });
+
+  test("our corrected template maps the same way", () => {
+    assert.deepEqual(
+      autoMap([
+        "Presenter 1 Email",
+        "Presenter 1 First Name",
+        "Presenter 1 Last Name",
+        "Presenter 2 Email",
+        "Presenter 2 First Name",
+        "Presenter 2 Last Name",
+      ]),
+      [
+        "speaker.email",
+        "speaker.first_name",
+        "speaker.last_name",
+        "speaker2.email",
+        "speaker2.first_name",
+        "speaker2.last_name",
+      ],
+    );
+  });
+
+  test("a sheet with one presenter leaves the second unmapped", () => {
+    assert.deepEqual(autoMap(["Presenter Email", "Presenter First Name", "Presenter Last Name"]), [
+      "speaker.email",
+      "speaker.first_name",
+      "speaker.last_name",
+    ]);
+  });
+
+  test("a third presenter is not invented", () => {
+    const mapped = autoMap([
+      "Presenter 1 Email", "Presenter 2 Email", "Presenter 3 Email",
+    ]);
+    assert.deepEqual(mapped, ["speaker.email", "speaker2.email", null]);
+  });
+});
+
+describe("a presentation's own time is not the session's", () => {
+  test("the presentation columns map to the slot, the session columns to the session", () => {
+    assert.deepEqual(
+      autoMap([
+        "Session Start",
+        "Session End",
+        "Presentation Start",
+        "Presentation End",
+        "Presentation Duration",
+      ]),
+      ["session.start", "session.end", "slot.start", "slot.end", "slot.duration"],
+    );
+  });
+
+  test("the order the columns appear in does not change what they mean", () => {
+    assert.deepEqual(
+      autoMap(["Presentation Start", "Session Start", "Presentation End", "Session End"]),
+      ["slot.start", "session.start", "slot.end", "session.end"],
+    );
+  });
+});
+
+/*
+ * `toDateTime` defaulted a missing clock to 09:00. For a session that quietly invented
+ * a start time — and worse, made `Session Start` pass the required-field check that
+ * the template and the row editor both promise to enforce. For a presentation it
+ * invented a slot time on every row whose optional Presentation Start was blank.
+ */
+describe("a missing time is missing, not nine in the morning", () => {
+  test("a date with no clock yields nothing", () => {
+    assert.equal(toDateTime("03/14/2027", ""), null);
+    assert.equal(toDateTime("03/14/2027", "   "), null);
+  });
+
+  test("a date with a clock is unaffected", () => {
+    assert.equal(toDateTime("03/14/2027", "9:00 AM"), "2027-03-14T09:00:00");
+    assert.equal(toDateTime("03/14/2027", "4:30 PM"), "2027-03-14T16:30:00");
+  });
+
+  test("an unreadable clock is still refused", () => {
+    assert.equal(toDateTime("03/14/2027", "half past nine"), null);
+  });
+
+  test("no date means no time, whatever the clock says", () => {
+    assert.equal(toDateTime("", "9:00 AM"), null);
   });
 });

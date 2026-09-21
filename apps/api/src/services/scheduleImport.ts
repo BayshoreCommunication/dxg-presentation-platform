@@ -18,11 +18,22 @@ export const IMPORT_FIELDS = [
   "speaker.email",
   "speaker.organization",
   "track.name",
+  // The presentation's own time inside its session (D-031).
+  "slot.start",
+  "slot.end",
+  "slot.duration",
+  // A second presenter on the same slot. `speaker_assignments` has always allowed
+  // several speakers per slot; until now the import only ever created one.
+  "speaker2.first_name",
+  "speaker2.last_name",
+  "speaker2.email",
 ] as const;
 export type ImportField = (typeof IMPORT_FIELDS)[number];
 
 const SYNONYMS: Record<ImportField, string[]> = {
-  "session.title": ["session title", "title", "talk", "presentation", "session"],
+  // Not bare "session": "Session Start" contains it, and claimed the title on the
+  // substring pass whenever a sheet had no explicit title column to take it first.
+  "session.title": ["session title", "title", "talk"],
   "room.name": ["room", "location", "venue room", "hall", "session location"],
   "session.date": ["date", "day", "session date"],
   "session.start": ["start", "start time", "from", "begins"],
@@ -33,6 +44,12 @@ const SYNONYMS: Record<ImportField, string[]> = {
   "speaker.email": ["speaker email", "email", "e-mail", "contact"],
   "speaker.organization": ["organization", "organisation", "company", "affiliation", "org"],
   "track.name": ["track", "stream", "theme", "category"],
+  "slot.start": ["presentation start"],
+  "slot.end": ["presentation end"],
+  "slot.duration": ["presentation duration", "duration"],
+  "speaker2.first_name": ["presenter 2 first name", "speaker 2 first name"],
+  "speaker2.last_name": ["presenter 2 last name", "speaker 2 last name"],
+  "speaker2.email": ["presenter 2 email", "speaker 2 email"],
 };
 
 const normalise = (value: string): string => value.trim().toLowerCase().replace(/[_\-.]+/g, " ").replace(/\s+/g, " ");
@@ -45,17 +62,39 @@ const normalise = (value: string): string => value.trim().toLowerCase().replace(
  * took `speaker.email` — so the platform would have filed presenter 1's address as a
  * display name and sent every upload invitation to the *second* presenter. A column
  * that says "email" is an email column and nothing else.
+ *
+ * Each entry lists the field for the first column of that kind and, where there is
+ * one, the field for the second. **Which presenter a column belongs to is decided by
+ * the order the columns appear, not by the number in the heading** — DXG's sheet
+ * labels presenter 1's surname `Presenter 2 Last Name` (D-029), so trusting the label
+ * would file it under the second presenter and leave the first with no surname. The
+ * positional rule reads that sheet and our corrected one identically.
  */
-const DECISIVE: [RegExp, ImportField][] = [
-  [/\b(e\s*mail|email)\b/, "speaker.email"],
-  [/\b(first|given)\s*name\b|\bforename\b/, "speaker.first_name"],
-  [/\b(last|family)\s*name\b|\bsurname\b/, "speaker.last_name"],
+const DECISIVE: { pattern: RegExp; fields: ImportField[] }[] = [
+  // Checked before the plain start/end rules: "Presentation Start" is the slot's time,
+  // "Session Start" is the session's, and only the qualifier tells them apart.
+  { pattern: /\bpresentation\s+start\b/, fields: ["slot.start"] },
+  { pattern: /\bpresentation\s+end\b/, fields: ["slot.end"] },
+  { pattern: /\bduration\b/, fields: ["slot.duration"] },
+  // After the presentation rules above, so the qualifier decides which time a column
+  // is. Decisive rather than left to the substring pass, because "Session Start" would
+  // otherwise be matched by whatever loose synonym happened to come first.
+  { pattern: /\bstarts?\b/, fields: ["session.start"] },
+  { pattern: /\bends?\b|\bfinish(es)?\b/, fields: ["session.end"] },
+  { pattern: /\b(e\s*mail|email)\b/, fields: ["speaker.email", "speaker2.email"] },
+  {
+    pattern: /\b(first|given)\s*name\b|\bforename\b/,
+    fields: ["speaker.first_name", "speaker2.first_name"],
+  },
+  {
+    pattern: /\b(last|family)\s*name\b|\bsurname\b/,
+    fields: ["speaker.last_name", "speaker2.last_name"],
+  },
   // Our own template's "Presenter Organization" mapped to `speaker.name`, because the
   // substring pass tries `speaker.name` first and the header contains "presenter".
   // The organization then became the speaker's display name and the first/last name
   // columns were discarded — mapped, but beaten by the `speaker.name ||` precedence.
-  // A column that says organization is an organization column, whose it may be.
-  [/\b(organisation|organization|company|affiliation)\b/, "speaker.organization"],
+  { pattern: /\b(organisation|organization|company|affiliation)\b/, fields: ["speaker.organization"] },
 ];
 
 /**
@@ -85,10 +124,13 @@ export function autoMap(headers: string[]): (ImportField | null)[] {
 
   keys.forEach((key, index) => {
     if (!open[index]) return;
-    const decisive = DECISIVE.find(([pattern]) => pattern.test(key));
+    const decisive = DECISIVE.find((rule) => rule.pattern.test(key));
     if (!decisive) return;
-    if (!taken.has(decisive[1])) claim(index, decisive[1]);
-    else open[index] = false; // spoken for — leave it unmapped rather than guess
+    // The first unclaimed field of this kind: the first email column is presenter 1's,
+    // the second is presenter 2's, whatever the headings call them.
+    const field = decisive.fields.find((candidate) => !taken.has(candidate));
+    if (field) claim(index, field);
+    else open[index] = false; // all spoken for — unmapped rather than guessed
   });
 
   keys.forEach((key, index) => {
@@ -137,13 +179,12 @@ const TEMPLATE_COLUMNS: { heading: string; field: ImportField | null; hint: stri
   { heading: "Session End", field: "session.end", hint: "h:mm AM/PM", required: true },
   /*
    * A Preseria "session" can hold several presentations, and these three describe a
-   * presentation inside one. This platform's schedule is sessions and slots, with no
-   * equivalent of a sub-presentation time, so the columns are carried and deliberately
-   * left unmapped rather than quietly folded into the session's own times.
+   * presentation inside one — which is what a slot is. `slots` gained its own times in
+   * migration 010 so these could land somewhere instead of being read as nothing.
    */
-  { heading: "Presentation Start", field: null, hint: "h:mm AM/PM", required: false },
-  { heading: "Presentation End", field: null, hint: "h:mm AM/PM", required: false },
-  { heading: "Presentation Duration", field: null, hint: "number ( 0 - 999 min. )", required: false },
+  { heading: "Presentation Start", field: "slot.start", hint: "h:mm AM/PM", required: false },
+  { heading: "Presentation End", field: "slot.end", hint: "h:mm AM/PM", required: false },
+  { heading: "Presentation Duration", field: "slot.duration", hint: "number ( 0 - 999 min. )", required: false },
   { heading: "Presenter 1 Email", field: "speaker.email", hint: "max 80 chars.", required: true },
   { heading: "Presenter 1 First Name", field: "speaker.first_name", hint: "max 80 chars.", required: true },
   /*
@@ -158,13 +199,12 @@ const TEMPLATE_COLUMNS: { heading: string; field: ImportField | null; hint: stri
    */
   { heading: "Presenter 1 Last Name", field: "speaker.last_name", hint: "max 80 chars.", required: true },
   /*
-   * Only presenter 1 is imported as the assigned speaker. A second presenter is a
-   * second speaker assignment, which the import screen is not where to decide — so
-   * these are carried, named and unmapped rather than dropped from the sheet.
+   * A second presenter is a second row in `speaker_assignments`, which has always
+   * allowed several speakers per slot. These were carried-but-unmapped until D-031.
    */
-  { heading: "Presenter 2 Email", field: null, hint: "max 80 chars.", required: false },
-  { heading: "Presenter 2 First Name", field: null, hint: "max 80 chars.", required: false },
-  { heading: "Presenter 2 Last Name", field: null, hint: "max 80 chars.", required: false },
+  { heading: "Presenter 2 Email", field: "speaker2.email", hint: "max 80 chars.", required: false },
+  { heading: "Presenter 2 First Name", field: "speaker2.first_name", hint: "max 80 chars.", required: false },
+  { heading: "Presenter 2 Last Name", field: "speaker2.last_name", hint: "max 80 chars.", required: false },
 ];
 
 const csvCell = (value: string): string =>
@@ -335,8 +375,14 @@ export type StagedRow = {
   missing: string[];
   starts_at: string | null;
   ends_at: string | null;
+  /** The presentation's own time inside the session, when the file gives one. */
+  slot_starts_at: string | null;
+  slot_ends_at: string | null;
   speaker_name: string;
   speaker_email: string;
+  /** A second presenter on the same slot, when the file names one. */
+  speaker2_name: string;
+  speaker2_email: string;
   organization: string;
   track: string;
   action: "create" | "update" | "unchanged";
@@ -461,11 +507,19 @@ export function toDateTime(date: string, time: string): string | null {
     const minutes = Math.round(Number(clock) * 24 * 60);
     clock = `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
   }
+  /*
+   * An absent clock used to default to 09:00. That invented a start time for any
+   * session whose time cell was blank — and because the row then had a usable
+   * `starts_at`, it also passed the required-field check that the template's REQUIRED
+   * row and the row editor both promise to enforce. On the optional
+   * `Presentation Start` it invented a slot time on every row that left it empty.
+   */
+  if (!clock) return null;
   const match = /^(\d{1,2}):(\d{2})\s*(am|pm)?$/i.exec(clock);
-  if (!match && clock) return null;
-  let hour = match ? Number(match[1]) : 9;
-  const minute = match ? Number(match[2]) : 0;
-  const meridiem = match?.[3]?.toLowerCase();
+  if (!match) return null;
+  let hour = Number(match[1]);
+  const minute = Number(match[2]);
+  const meridiem = match[3]?.toLowerCase();
   if (meridiem === "pm" && hour < 12) hour += 12;
   if (meridiem === "am" && hour === 12) hour = 0;
   return `${iso}T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00`;
@@ -612,6 +666,33 @@ export async function buildPreview(
     }
     if (speakerEmail && !existingEmails.has(speakerEmail.toLowerCase())) newSpeakers.add(speakerEmail.toLowerCase());
 
+    /*
+     * The presentation's own time. `Presentation Duration` is minutes, and is only
+     * consulted when no end time was given — a sheet carrying both and disagreeing
+     * means the published end wins, since that is the one an attendee was told.
+     */
+    const slotStartText = at("slot.start");
+    const slotStart = slotStartText ? toDateTime(date, slotStartText) : null;
+    const durationText = at("slot.duration");
+    const durationMinutes = /^\d{1,3}$/.test(durationText) ? Number(durationText) : null;
+    const slotEndText = at("slot.end");
+    let slotEnd = slotEndText ? toDateTime(date, slotEndText) : null;
+    if (!slotEnd && slotStart && durationMinutes !== null) {
+      const from = zonedToUtc(slotStart, timeZone);
+      slotEnd = new Date(from.getTime() + durationMinutes * 60_000).toISOString();
+    }
+    if (at("slot.start") && !slotStart) {
+      issues.push({
+        row: rowNumber,
+        column: "slot.start",
+        severity: "warning",
+        message: `Could not read a presentation start time from \u201c${at("slot.start")}\u201d — the session's own time is used instead.`,
+      });
+    }
+
+    const speaker2Name = [at("speaker2.first_name"), at("speaker2.last_name")].filter(Boolean).join(" ");
+    const speaker2Email = at("speaker2.email");
+
     const key = `${normalise(room)}|${startsAt ? zonedToUtc(startsAt, timeZone).toISOString() : ""}|${normalise(title)}`;
     const match = existingKeys.get(key);
 
@@ -639,6 +720,15 @@ export async function buildPreview(
       // interpreted in the event's timezone.
       starts_at: startsAt ? zonedToUtc(startsAt, timeZone).toISOString() : null,
       ends_at: endsAt ? zonedToUtc(endsAt, timeZone).toISOString() : null,
+      slot_starts_at: slotStart ? zonedToUtc(slotStart, timeZone).toISOString() : null,
+      // Already absolute when derived from a duration; converted when read from a cell.
+      slot_ends_at: slotEnd
+        ? slotEnd.endsWith("Z")
+          ? slotEnd
+          : zonedToUtc(slotEnd, timeZone).toISOString()
+        : null,
+      speaker2_name: speaker2Name,
+      speaker2_email: speaker2Email,
       speaker_name: speakerName,
       speaker_email: speakerEmail,
       organization: at("speaker.organization"),
@@ -818,6 +908,17 @@ export async function commitImport(
         unchanged += 1;
       }
       slotId = existing[0].slot_id;
+      // A slot's own time can arrive in a later revision of the agenda, so it is
+      // applied on update too. COALESCE keeps a time the file no longer carries
+      // rather than silently clearing one somebody is relying on.
+      if (row.slot_starts_at || row.slot_ends_at) {
+        await tx.query(
+          `UPDATE pmp.slots SET starts_at = COALESCE($2::timestamptz, starts_at),
+                                ends_at   = COALESCE($3::timestamptz, ends_at)
+            WHERE id = $1`,
+          [slotId, row.slot_starts_at, row.slot_ends_at],
+        );
+      }
     } else {
       const { rows: sessionRows } = await tx.query<{ id: string }>(
         `INSERT INTO pmp.sessions (event_id, client_id, room_id, track_id, day_id, title, starts_at, ends_at)
@@ -826,8 +927,16 @@ export async function commitImport(
         [input.eventId, clientId, roomId, trackId, dayId, row.title, row.starts_at, row.ends_at],
       );
       const { rows: slotRows } = await tx.query<{ id: string }>(
-        `INSERT INTO pmp.slots (session_id, event_id, client_id, title) VALUES ($1,$2,$3,$4) RETURNING id`,
-        [sessionRows[0]!.id, input.eventId, clientId, row.title],
+        `INSERT INTO pmp.slots (session_id, event_id, client_id, title, starts_at, ends_at)
+         VALUES ($1,$2,$3,$4,$5::timestamptz,$6::timestamptz) RETURNING id`,
+        [
+          sessionRows[0]!.id,
+          input.eventId,
+          clientId,
+          row.title,
+          row.slot_starts_at,
+          row.slot_ends_at,
+        ],
       );
       slotId = slotRows[0]!.id;
       created += 1;
@@ -869,6 +978,36 @@ export async function commitImport(
         `INSERT INTO pmp.speaker_assignments (speaker_id, slot_id, event_id, client_id)
          VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING`,
         [speakerId, slotId, input.eventId, clientId],
+      );
+    }
+
+    /*
+     * A second presenter is a second assignment on the same slot, not a second slot —
+     * two people presenting one talk share the talk, its file and its approval.
+     * `speaker_assignments` has always allowed this; the import simply never used it.
+     */
+    const second = row.speaker2_name || provisionalName(row.speaker2_email);
+    if (second) {
+      const { rows: found } = await tx.query<{ id: string }>(
+        row.speaker2_email
+          ? `SELECT id FROM pmp.speakers WHERE event_id = $1 AND lower(email::text) = lower($2) AND merged_into IS NULL`
+          : `SELECT id FROM pmp.speakers WHERE event_id = $1 AND lower(full_name) = lower($2) AND merged_into IS NULL`,
+        [input.eventId, row.speaker2_email || second],
+      );
+      const secondId =
+        found[0]?.id ??
+        (
+          await tx.query<{ id: string }>(
+            `INSERT INTO pmp.speakers (client_id, event_id, email, full_name)
+             VALUES ($1,$2,NULLIF($3,'')::citext,$4) RETURNING id`,
+            [clientId, input.eventId, row.speaker2_email, second],
+          )
+        ).rows[0]!.id;
+      speakers.add(secondId);
+      await tx.query(
+        `INSERT INTO pmp.speaker_assignments (speaker_id, slot_id, event_id, client_id)
+         VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING`,
+        [secondId, slotId, input.eventId, clientId],
       );
     }
   }

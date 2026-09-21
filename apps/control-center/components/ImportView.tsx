@@ -14,19 +14,29 @@ import {
 } from "@/lib/api";
 import { Chip } from "@/components/Chip";
 
-/** What the operator calls these, rather than what the code does. */
+/**
+ * The headings DXG's own agenda sheet uses (D-029), so a field in this dialog and a
+ * column in the spreadsheet are recognisably the same thing. They were labelled in
+ * this platform's words — "Room / location", "Start time" — which read as different
+ * fields to someone holding the sheet they were filled from.
+ */
 const FIELD_LABELS: Record<string, string> = {
-  "session.title": "Session title",
-  "room.name": "Room / location",
-  "session.date": "Session date",
-  "session.start": "Start time",
-  "session.end": "End time",
+  "session.title": "Session Title",
+  "room.name": "Session Location",
+  "session.date": "Session Date",
+  "session.start": "Session Start",
+  "session.end": "Session End",
+  "slot.start": "Presentation Start",
+  "slot.end": "Presentation End",
+  "slot.duration": "Presentation Duration",
+  "speaker.email": "Presenter 1 Email",
+  "speaker.first_name": "Presenter 1 First Name",
+  "speaker.last_name": "Presenter 1 Last Name",
+  "speaker.name": "Presenter 1 Name",
+  "speaker2.email": "Presenter 2 Email",
+  "speaker2.first_name": "Presenter 2 First Name",
+  "speaker2.last_name": "Presenter 2 Last Name",
   "track.name": "Track",
-  "speaker.email": "Presenter email",
-  "speaker.first_name": "Presenter first name",
-  "speaker.last_name": "Presenter last name",
-  "speaker.name": "Presenter name",
-  "speaker.organization": "Presenter organization",
 };
 
 /** The placeholder shows the shape a value has to take, not a second label. */
@@ -34,23 +44,25 @@ const FIELD_HINTS: Record<string, string> = {
   "session.date": "mm/dd/yyyy",
   "session.start": "9:00 AM",
   "session.end": "10:00 AM",
+  "slot.start": "h:mm AM/PM",
+  "slot.end": "h:mm AM/PM",
+  "slot.duration": "minutes (0–999)",
   "speaker.email": "name@example.com",
+  "speaker2.email": "name@example.com",
 };
 
-/** The order the editor lists them in: the session, then when, then who. */
-const EDITOR_FIELDS = [
+/** The sheet's own order: the session, the presentation within it, then who gives it. */
+const SESSION_FIELDS = [
   "session.title",
   "room.name",
   "session.date",
   "session.start",
   "session.end",
   "track.name",
-  "speaker.first_name",
-  "speaker.last_name",
-  "speaker.email",
-  "speaker.organization",
 ];
-
+const PRESENTATION_FIELDS = ["slot.start", "slot.end", "slot.duration"];
+const PRESENTER_1_FIELDS = ["speaker.first_name", "speaker.last_name", "speaker.email"];
+const PRESENTER_2_FIELDS = ["speaker2.first_name", "speaker2.last_name", "speaker2.email"];
 /**
  * Date and clock, split, so a table of sessions reads down its columns.
  *
@@ -96,6 +108,31 @@ function RowEditor({
   onSave: (cells: Record<string, string>) => void;
 }) {
   const [draft, setDraft] = useState<Record<string, string>>({ ...row.cells });
+  const [showSecond, setShowSecond] = useState(
+    PRESENTER_2_FIELDS.some((field) => (row.cells[field] ?? "").trim() !== ""),
+  );
+
+  const renderField = (field: string) => {
+    const isMissing = row.missing.includes(field);
+    return (
+      <div className="field" key={field}>
+        <label htmlFor={`edit-${field}`}>
+          {FIELD_LABELS[field] ?? field}
+          {isMissing && <span style={{ color: "var(--block)" }}> · required</span>}
+        </label>
+        <input
+          id={`edit-${field}`}
+          style={{
+            width: "100%",
+            ...(isMissing && !(draft[field] ?? "").trim() ? { borderColor: "var(--block)" } : {}),
+          }}
+          placeholder={FIELD_HINTS[field] ?? ""}
+          value={draft[field] ?? ""}
+          onChange={(event) => setDraft({ ...draft, [field]: event.target.value })}
+        />
+      </div>
+    );
+  };
   const changed = Object.fromEntries(
     Object.entries(draft).filter(([field, value]) => (row.cells[field] ?? "") !== value),
   );
@@ -153,31 +190,54 @@ function RowEditor({
             </div>
           )}
 
-          <div className="grid2">
-            {EDITOR_FIELDS.map((field) => {
-              const isMissing = row.missing.includes(field);
-              return (
-                <div className="field" key={field}>
-                  <label htmlFor={`edit-${field}`}>
-                    {FIELD_LABELS[field] ?? field}
-                    {isMissing && <span style={{ color: "var(--block)" }}> · required</span>}
-                  </label>
-                  <input
-                    id={`edit-${field}`}
-                    style={{
-                      width: "100%",
-                      ...(isMissing && !(draft[field] ?? "").trim()
-                        ? { borderColor: "var(--block)" }
-                        : {}),
-                    }}
-                    placeholder={FIELD_HINTS[field] ?? ""}
-                    value={draft[field] ?? ""}
-                    onChange={(event) => setDraft({ ...draft, [field]: event.target.value })}
-                  />
+          {[
+            { heading: "Session", fields: SESSION_FIELDS },
+            { heading: "Presentation", fields: PRESENTATION_FIELDS, note: "Its own time inside the session — leave blank if it runs with the session." },
+            { heading: "Presenter 1", fields: PRESENTER_1_FIELDS },
+          ].map((group) => (
+            <div key={group.heading} style={{ marginBottom: 14 }}>
+              <div className="kl" style={{ marginBottom: 6 }}>{group.heading}</div>
+              {group.note && (
+                <div className="note" style={{ marginBottom: 8 }}>
+                  {group.note}
                 </div>
-              );
-            })}
-          </div>
+              )}
+              <div className="grid2">{group.fields.map(renderField)}</div>
+            </div>
+          ))}
+
+          {/*
+            A second presenter is hidden until asked for. Most sessions have one, and
+            three empty boxes on every row of an eleven-row agenda is the same noise the
+            validation list was. It opens by itself when the file already named one.
+          */}
+          {showSecond ? (
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                <div className="kl">Presenter 2</div>
+                <button
+                  className="btn"
+                  style={{ padding: "2px 9px" }}
+                  onClick={() => {
+                    // Clearing as well as collapsing: a hidden box holding a value the
+                    // operator thinks they removed is how a wrong presenter gets imported.
+                    setDraft({
+                      ...draft,
+                      ...Object.fromEntries(PRESENTER_2_FIELDS.map((field) => [field, ""])),
+                    });
+                    setShowSecond(false);
+                  }}
+                >
+                  Remove
+                </button>
+              </div>
+              <div className="grid2">{PRESENTER_2_FIELDS.map(renderField)}</div>
+            </div>
+          ) : (
+            <button className="btn" style={{ marginBottom: 14 }} onClick={() => setShowSecond(true)}>
+              + Add another presenter
+            </button>
+          )}
 
           <div className="note" style={{ marginTop: 10 }}>
             Times are read in {timeZone}, the event&rsquo;s own timezone. Nothing is written to the event
