@@ -2402,3 +2402,46 @@ Also applied to the wizard's start and end dates, each bounded by the other, and
 upload deadline, bounded by the event's own start.
 
 CI green, 208 unit tests; invariants 116 pass, 0 skipped; `next build` clean. Probe event removed.
+
+## 2026-09-21 (seventy-third) — walking create event with the new picker, and the field that never had one
+
+Travis: check the create event flow with the new picker. Walked all four steps end to end in the
+browser, on a real event, and read the database afterwards.
+
+**It works, and one field was found not to have been a picker at any point.** Step 3's *Speaker upload
+deadline* was a free-text box with `Feb 27, 2027 · 23:59` as its placeholder — not a date input, so
+nothing about D-044 touched it. Whatever was typed was stored verbatim in
+`settings.upload_deadline`, and **Event details reads that same setting through a date field**, so the
+two screens disagreed about the shape of one value and a deadline set in the wizard did not display on
+the details screen at all. Now the same `DateField`, bounded by the event's own start, and the
+round-trip is checked: `09/01/2026` in the wizard, `2026-09-01` in the database, `09/01/2026` back on
+the details screen.
+
+**The rest of the walk, verified rather than eyeballed.** Step 1's two dates bound each other — with
+the start on 09/12, the end calendar struck through 1–11 and **clicking a struck-through day did
+nothing** (value stayed empty, calendar stayed open), while the 14th took. Step 2 read a three-row
+agenda, one row deliberately missing a title: `Rows 3 · Incomplete 1 · New speakers 3`, forward
+disabled. The row editor showed the missing title in the blocking colour with Save refused, and its
+presentation clock offered **exactly that row's session window** — 11:00 AM to 12:00 PM, nothing else
+— which is the bound coming from the row being edited rather than from the event. Fixing the title
+enabled Save; the import reported `3 created · 0 updated · 0 unchanged`; steps 3 and 4 opened; the
+event activated and landed on its command centre reading `Tampa Convention Center · Sep 12 – Sep 14,
+2026`.
+
+The database holds 3 days, 1 room, 3 sessions, 3 speakers, `upload_deadline 2026-09-01`, accent
+`#44C7F4`, and `Opening Plenary` with its own 09:15–10:00 talk window inside a 09:00 session. `Panel On
+Imaging`, which gave a duration and no presentation start, correctly has no slot times: a duration
+fills an end, and there was no start for it to fill from.
+
+**Self-inflicted, and worth recording because it cost twenty minutes.** The `next build` I ran to prove
+the new dependency wrote a production build into the same `.next` the dev server was using, and the
+dev server then failed with `Cannot find module './673.js'` on every route. Clearing `.next` was not
+enough — the running process holds its own state — so it needed a restart. **Never run `next build`
+against a tree with `next dev` live on it**; build in CI or stop the dev server first.
+
+**An observation, not a defect:** with the End date empty, the calendar fills today's cell the same
+cyan as a selection, because react-datepicker marks it `--keyboard-selected` and the ported theme
+styles that identically to `--selected`. That is the DXG dashboard's own behaviour, so it is left
+alone; distinguishing them (outline versus fill) is a one-rule change if Travis wants it.
+
+CI green, 208 unit tests; invariants 116 pass, 0 skipped. Walkthrough event removed.

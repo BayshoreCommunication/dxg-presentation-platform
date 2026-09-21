@@ -212,12 +212,23 @@ export function CreateEventWizard({
           {step === 3 && (
             <div className="grid2">
               <div className="field">
-                <label>Speaker upload deadline</label>
-                <input
-                  style={{ width: "100%" }}
+                <label htmlFor="upload-deadline">Speaker upload deadline</label>
+                {/*
+                  A free-text box until now, with `Feb 27, 2027 · 23:59` as its
+                  placeholder — so this screen and Event details, which reads the same
+                  `upload_deadline` setting through a date field, disagreed about what
+                  shape the value has. Whatever was typed here was stored verbatim and
+                  then did not display there at all. One control, one format (D-044).
+
+                  Bounded by the event's own start: a deadline after the event has begun
+                  is not a deadline.
+                */}
+                <DateField
+                  id="upload-deadline"
                   value={deadline}
-                  onChange={(event) => setDeadline(event.target.value)}
-                  placeholder="Feb 27, 2027 · 23:59"
+                  max={basics.starts_on || undefined}
+                  onChange={setDeadline}
+                  ariaLabel="Speaker upload deadline"
                 />
               </div>
               <div className="field">
