@@ -2176,3 +2176,43 @@ stays green in both directions — `slots` allows `>=` where `sessions` demands 
 the line where the schema does rather than somewhere rounder.
 
 CI green, 208 unit tests; invariants **112** pass, 0 skipped. Probe events removed.
+
+## 2026-09-21 (sixty-seventh) — the duration slider goes, because duration is not a fact
+
+Travis: duration can be calculated from the session start and end, so the slider is not needed — am I
+right? Right, and for a better reason than redundancy. D-040.
+
+**Checked before answering: a duration is stored nowhere.** No migration creates a column for it;
+`slots` has `starts_at` and `ends_at` and nothing else, and the importer only ever turns a duration
+into an end. So it was never a second fact about a presentation, only a second *spelling* of the one
+the times already give — which is precisely how a row comes to read 5:10 PM → 5:25 PM beside "55 min",
+the contradiction asked about three hours earlier.
+
+**The one case where it is not derivable is still not a case for an input.** A row with a start and no
+end has nothing to compute from, and there the file's duration decides. But setting the End says the
+same thing, and the End picker is the control immediately beside it. What is lost is arithmetic — 45
+minutes from 13:07 is now 13:52 typed by hand — and the slider could not express that anyway, being
+fixed to 5-minute steps since D-033.
+
+**Still shown, because the file's number is evidence**, and always labelled with where it came from:
+`15 min · from the times above` · `45 min · from the file — ends 13:45` · `90 min · from the file —
+not used, the presentation has no start` · `not set`. A file that disagrees with the times gets a line
+saying so and saying which wins.
+
+**Deleted with it:** the range input, `DURATION_MIN/MAX/STEP`, the floor of 5, the over-240 clamp note,
+the Clear button, the disabled state and the "not used" wording from this morning. Two of Travis's own
+decisions superseded at his request — and not on taste: the field they governed turned out to be
+derived rather than stored, which neither knew.
+
+**Two smaller things the change turned up.** `label` is styled as an element rather than a class, so
+the caption-only markup had to stay a `<label>` (with no `htmlFor`, since there is no longer a control
+to point at) or it would have rendered unstyled beside two real fields. And the box's own helper text
+still said "Duration is only used when there is no end time", which had quietly become a sentence about
+a control that no longer exists — now "a duration in the file fills the end in when the file gives no
+end", which describes the importer rather than the screen.
+
+Verified against every state the field can be in, with a five-row file: times agreeing, times
+disagreeing with the file, duration with no end, nothing at all, and a duration with no start. No
+`input` element remains in the field in any of them.
+
+CI green, 208 unit tests; invariants 112 pass, 0 skipped. Probe events removed.

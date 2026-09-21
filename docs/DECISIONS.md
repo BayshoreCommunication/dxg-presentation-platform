@@ -483,3 +483,37 @@ Proved by reverting: the three new cases fail without the guards and pass with t
 zero-length presentation case — legal, since `slots` allows `>=` where `sessions` requires `>` — stays
 green in both directions, so the suite is checking the line the schema actually draws rather than a
 rounder one. Owner: Travis.
+
+## D-040 (2026-09-21): Duration is shown, never set — the slider goes — Status: ACCEPTED (Travis's call, supersedes the D-032/D-033 slider)
+Travis: duration can be calculated from the start and end times, so the slider is not needed — am I
+right? Yes, and the reason is stronger than redundancy.
+
+**A duration is stored nowhere.** No migration creates a column for it; `slots` holds `starts_at` and
+`ends_at` and that is all. The importer only ever turns a duration into an end time. So it was never
+a second fact about a presentation, only a second *spelling* of the one the Start and End already
+give — and two editable spellings of one fact is exactly how a row comes to read 5:10 PM → 5:25 PM
+beside "55 min", which is the contradiction D-039 was asked about the same day.
+
+**Where it is genuinely not derivable, it is still not needed.** A row with a start and no end has
+nothing to compute a length from, and there the file's duration decides the end. But the operator can
+say the same thing by setting the End, which sits immediately beside it. The one thing lost is mental
+arithmetic — a 45-minute talk from 13:07 now means typing 13:52 — and the slider could not have
+expressed that anyway, since D-033 fixed it to 5-minute steps.
+
+**It is still shown, because a file's own number is evidence.** A sheet claiming 55 against a
+fifteen-minute window is a disagreement the operator should see, not one the product resolves in
+silence. The display always names where the number came from, so the two kinds are never confused:
+`15 min · from the times above`, or `45 min · from the file — ends 13:45`, or `90 min · from the file
+— not used, the presentation has no start`, or `not set`. When the file disagrees with the times it
+says so and says which wins.
+
+**What this deletes:** the range input, `DURATION_MIN`/`MAX`/`STEP`, the floor of 5 (D-033), the
+clamp-and-explain path for a file carrying more than 240 (D-032), the Clear button, the disabled state
+and the "not used" wording added hours earlier in D-039. The importer is untouched — it still reads a
+Duration column from any file that has one, and the precedence rule is unchanged.
+
+**Superseding two of Travis's own decisions**, at his request: D-032 asked for the slider and D-033
+set its floor. Neither is reversed on a matter of taste — the reason they are gone is that the field
+they controlled turned out to be derived rather than stored, which neither decision knew at the time.
+
+Verified against all five states the field can be in. Owner: Travis.

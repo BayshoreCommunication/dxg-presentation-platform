@@ -128,6 +128,13 @@ const toTimeInput = (value: string): string | null => {
   return `${String(hour).padStart(2, "0")}:${match[2]}`;
 };
 
+/** `HH:MM` plus n minutes, as `HH:MM`. Same day: a presentation does not cross midnight. */
+const addMinutes = (clock: string, minutes: number): string => {
+  const total = Number(clock.slice(0, 2)) * 60 + Number(clock.slice(3, 5)) + minutes;
+  const wrapped = ((total % 1440) + 1440) % 1440;
+  return `${String(Math.floor(wrapped / 60)).padStart(2, "0")}:${String(wrapped % 60).padStart(2, "0")}`;
+};
+
 /** Minutes between two `HH:MM` clock values; negative when the second is earlier. */
 const minutesBetween = (from: string, to: string): number => {
   const parts = (value: string) => Number(value.slice(0, 2)) * 60 + Number(value.slice(3, 5));
@@ -144,16 +151,6 @@ const toDateInput = (value: string): string | null => {
   }
   return /^\d{4}-\d{2}-\d{2}$/.test(trimmed) ? trimmed : null;
 };
-
-/**
- * The slider's range. It starts at 5 rather than 0 — a zero-minute presentation is not
- * a thing, so the lowest position it can reach is the shortest real one. "Not set"
- * stays reachable through Clear, and is what an untouched slider still means.
- * A file carrying more than the maximum is shown rather than clamped.
- */
-const DURATION_MIN = 5;
-const DURATION_MAX = 240;
-const DURATION_STEP = 5;
 
 /**
  * Date and clock, split, so a table of sessions reads down its columns.
@@ -266,77 +263,53 @@ function RowEditor({
     );
 
     if (field === "slot.duration") {
-      const minutes = /^\d{1,3}$/.test(value.trim()) ? Number(value.trim()) : null;
-      // A file may carry a duration past the slider's range. Showing it as a number
-      // rather than clamping it keeps the operator's data theirs.
-      const beyondSlider = minutes !== null && minutes > DURATION_MAX;
-
       /*
-       * The importer consults a duration only when no end time was given: a row
-       * carrying both and disagreeing imports the end, "since that is the one an
-       * attendee was told" (scheduleImport.ts). The screen did not say so anywhere
-       * near the control, so a row reading 5:10 PM → 5:25 PM alongside "Duration
-       * 55 min" looked like a contradiction the product had failed to notice, and the
-       * slider invited an operator to adjust a number that would be thrown away.
+       * Read-only, and derived wherever it can be (Travis's call, superseding the
+       * slider he asked for in D-032/D-033).
        *
-       * The number is not overwritten with the real window: it is what the file said,
-       * and rewriting an operator's data to agree with our arithmetic is what the
-       * fifty-fourth entry refused to do for the same control.
+       * A duration is stored nowhere: no table has a column for it, and the importer
+       * only ever turns it into an end time. So it is not a second fact about a
+       * presentation, it is a second *spelling* of the one the Start and End already
+       * give — and two editable spellings of one fact is how a row comes to say
+       * 5:10 PM → 5:25 PM alongside "55 min". Length is set by setting the times.
+       *
+       * It is still shown, because a file's own number is evidence: a sheet claiming
+       * 55 against a fifteen-minute window is a disagreement the operator should see
+       * rather than have silently resolved. Where the number comes from is named, so
+       * "45 min" from the file and "15 min" from the times are never confused.
        */
-      const endText = (draft["slot.end"] ?? "").trim();
-      const startText = (draft["slot.start"] ?? "").trim();
-      const endWins = endText !== "" && toTimeInput(endText) !== null;
-      const window =
-        endWins && toTimeInput(startText)
-          ? minutesBetween(toTimeInput(startText)!, toTimeInput(endText)!)
-          : null;
+      const minutes = /^\d{1,3}$/.test(value.trim()) ? Number(value.trim()) : null;
+      const startClock = toTimeInput((draft["slot.start"] ?? "").trim());
+      const endClock = toTimeInput((draft["slot.end"] ?? "").trim());
+      const derived = startClock && endClock ? minutesBetween(startClock, endClock) : null;
+
+      const [shown, source] =
+        derived !== null
+          ? [`${derived} min`, "from the times above"]
+          : minutes === null
+            ? ["not set", startClock ? "the presentation has no end — set one above" : null]
+            : startClock
+              ? [`${minutes} min`, `from the file — ends ${addMinutes(startClock, minutes)}`]
+              : [`${minutes} min`, "from the file — not used, the presentation has no start"];
 
       return (
         <div className="field" key={field}>
-          <label htmlFor={`edit-${field}`} style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+          {/* A `label` element for the styling every other field caption gets, with no
+              `htmlFor`: there is no control here to point at any more. */}
+          <label style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
             <span>{visible ?? full}</span>
-            {/* Short on purpose: this line shares a third of the dialog's width with the
-                label and Clear, and a sentence here wraps into a six-line column. The
-                explanation goes in the note below, which has the width for it. */}
-            <span className="note" style={{ whiteSpace: "nowrap" }}>
-              {endWins ? "not used" : minutes === null ? "not set" : `${minutes} min`}
+            <span className="note" style={{ whiteSpace: "nowrap", fontWeight: 400 }}>
+              {shown}
             </span>
-            {/* On the label line, not beside the slider: in a third of the dialog's
-                width the two together left the button clipped off the edge. */}
-            {minutes !== null && (
-              <button
-                className="btn"
-                style={{ padding: "0 6px", fontSize: 11, marginLeft: "auto" }}
-                onClick={() => set(field, "")}
-              >
-                Clear
-              </button>
-            )}
           </label>
-          <input
-            id={`edit-${field}`}
-            type="range"
-            min={DURATION_MIN}
-            max={DURATION_MAX}
-            step={DURATION_STEP}
-            value={minutes !== null && !beyondSlider ? minutes : DURATION_MIN}
-            style={{ width: "100%", opacity: endWins ? 0.45 : 1 }}
-            disabled={endWins}
-            aria-label={`${full} in minutes`}
-            onChange={(event) => set(field, event.target.value)}
-          />
-          {endWins && (
+          {source && (
             <div className="note" style={{ fontSize: 11 }}>
-              {window === null
-                ? "The End time decides this presentation's length."
-                : `The times above give ${window} min.`}
-              {minutes !== null && ` The file says ${minutes}.`} Clear the End to use the duration
-              instead.
+              {source}
             </div>
           )}
-          {beyondSlider && !endWins && (
+          {minutes !== null && derived !== null && minutes !== derived && (
             <div className="note" style={{ fontSize: 11 }}>
-              {minutes} minutes — longer than the slider goes; Clear to change it.
+              The file says {minutes}; the times win.
             </div>
           )}
         </div>
@@ -505,7 +478,7 @@ function RowEditor({
 
           <Section
             heading="Presentation"
-            note="Its own time inside the session — leave blank if it runs with the session. Duration is only used when there is no end time."
+            note="Its own time inside the session — leave blank if it runs with the session. A duration in the file fills the end in when the file gives no end."
           >
             {line(PRESENTATION_FIELDS, (field) => PRESENTATION_SHORT_LABELS[field])}
           </Section>
