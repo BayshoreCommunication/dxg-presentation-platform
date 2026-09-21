@@ -504,6 +504,9 @@ export type ImportPreview = {
   rows: StagedRow[];
 };
 
+/** Mirrors IMPORT_FIELDS in apps/api/src/services/scheduleImport.ts, which is the
+ *  source of truth. Also served by GET /import-fields if this ever needs to stop
+ *  being a copy. */
 export const IMPORT_FIELDS = [
   "session.title",
   "room.name",
@@ -511,6 +514,8 @@ export const IMPORT_FIELDS = [
   "session.start",
   "session.end",
   "speaker.name",
+  "speaker.first_name",
+  "speaker.last_name",
   "speaker.email",
   "speaker.organization",
   "track.name",

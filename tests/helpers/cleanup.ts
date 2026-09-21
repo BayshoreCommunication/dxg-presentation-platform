@@ -118,8 +118,20 @@ export async function removeTestEvents(namePrefixes: readonly string[]): Promise
        * touched — an event that wrote to a speaker keeps that record and gets
        * archived instead.
        */
+      /*
+       * Ordered so a child goes before whatever it points at. `sessions.room_id` has a
+       * foreign key to `rooms`, so deleting rooms first failed with
+       * `sessions_room_id_fkey` — which no test could hit until the create-event
+       * wizard began importing an agenda (D-026) and test events started having a
+       * schedule at all.
+       */
       for (const table of [
         "event_roles",
+        "speaker_assignments",
+        "slots",
+        "sessions",
+        "speakers",
+        "schedule_imports",
         "rooms",
         "tracks",
         "event_days",

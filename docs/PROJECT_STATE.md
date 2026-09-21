@@ -1219,3 +1219,84 @@ Two consecutive full runs: 48 pass, 0 fail, 3 skipped both times. The three rema
 honest — those tests read the password-reset link out of `.data/mail`, which only the file transport
 writes, and the dispatcher is currently on SES. They cannot verify a link they cannot read, and say so.
 
+
+## 2026-09-21 (forty-eighth) — the agenda builds the event, and three bugs under the floorboards
+
+Travis supplied DXG's actual agenda file — the Preseria import template, `v.1.3` — and asked for the
+create-event wizard to drop its "Rooms & tracks" step and import a schedule instead. D-026.
+
+**The manual step was worse than redundant.** `commitImport` already created rooms, tracks and event
+days from a committed agenda, and that code is untouched by this change. Typing rooms in first did not
+save the work; it created a second list the spreadsheet then had to agree with, and `buildPreview`
+treats an unrecognised room as a **blocking** error once an event has rooms. A project manager who
+typed `Ballroom B` and was sent `Ballroon B` got a blocked import on data they did not author. Step 2
+is now `ImportView` itself, embedded — the same component as screen 3, with an `embedded` flag, rather
+than a second copy that could drift from it.
+
+Step 2 is skippable on purpose. The button reads **Skip for now ›** until something is imported and
+**Save & continue ›** afterwards. An event can still reach `active` with no rooms, which the wizard
+could not previously produce; that is a real reduction in what `active` tells you, and it is accepted
+because a mandatory step traps anyone who opens the wizard before the spreadsheet exists. The guard
+that matters — `comms.event_incomplete` — is unchanged.
+
+**The import could not read DXG's file, and reading the code would not have told me so.** Running it
+did. The template opens with a banner row, puts the real headers on row 2 and two annotation rows
+(`max 255 chars.`, `REQUIRED`) beneath them:
+
+- `buildPreview` destructured `const [headers, ...dataRows] = sheet`, so it mapped the banner as the
+  header row and validated `REQUIRED` as a session title. `findHeaderRow` now scores the first rows
+  against the field synonyms and drops annotation rows below the winner.
+- **Every blank header matched.** `normalise("")` is `""` and `"".includes("")` is true, so under the
+  substring pass the banner's ten empty cells claimed `session.title`, `room.name`, `session.start`
+  and the rest, in order.
+- **`Presenter 1 Email` mapped to `speaker.name`**, because the substring pass tried `speaker.name`
+  first and the header contains "presenter" — then `Presenter 2 Email` took `speaker.email`. The
+  platform would have filed presenter 1's address as a display name and **sent every upload invitation
+  to the second presenter**. A decisive-keyword pass now runs first, and a header whose keyword is
+  already taken maps to nothing rather than falling through: an unmapped column gets noticed and
+  fixed, a wrongly mapped one does not.
+
+**Then two more, neither of which any existing test could have caught.**
+
+**Every session imported a day early, on this machine and not in production.** `toDateTime` built its
+date with `new Date(value).toISOString().slice(0, 10)` — an instant resolved in the server's timezone,
+read back in UTC. Here (Asia/Dhaka, UTC+6) `05/16/2023` came back as `2023-05-15`, and `03/01/2026`
+rolled back to `2026-02-28`. The first end-to-end run put the whole agenda on the 15th and that is the
+only reason it was seen. `toCalendarDate` reads the parts with the clock that parsed them. Proved by
+writing the five cases first and watching four fail.
+
+**Schedule import has never worked from a browser.** The upload sends the filename in `x-file-name`;
+`Access-Control-Allow-Headers` listed only `content-type, authorization`, so Chrome refused the
+preflight and the request was never sent. This is not new — screen 3 has shipped with it — and it
+survived because every test of the import has run from a script, where CORS does not exist. Found by
+handing the real file to the page's own file input through `DataTransfer` and reading the console.
+`tests/invariants/cors.test.ts` now asserts the preflight for each custom header the web apps send.
+
+**`removeTestEvents` could not delete an event with a schedule.** `sessions.room_id` references
+`rooms`, and rooms were deleted first — `sessions_room_id_fkey`. No test event had ever had an agenda
+before; now every test that walks the wizard will. The table list is ordered child-first.
+
+Verified end to end rather than asserted: 11 rows, 0 blocking, 8/14 columns auto-mapped, committed to
+1 room (`Virtual`, created by the file), 1 event day `2023-05-16`, 11 sessions, 1 speaker and 11
+assignments, first session 08:00 America/New_York. Re-importing the same file: 0 created, 0 updated,
+11 unchanged, no duplicates. Then the same file through the browser, in the wizard: upload → preview →
+`Import 11 sessions` → the button flips to Save & continue → step 3 shows `Rooms: Virtual`.
+
+CI green, 187 unit tests (was 171); `test:invariants` 53 pass, 0 fail, 0 skipped — the three
+password-reset skips pass here because this run uses the file mail transport. Probe events removed,
+no orphaned sessions or speakers.
+
+**The committed fixture is synthetic.** `tests/fixtures/preseria-v1.3.csv` reproduces the template's
+structure exactly — banner row, headers on row 2, two annotation rows, `mm/dd/yyyy`, `h:mm AM/PM`,
+an email column with the name columns empty, a quoted title containing commas — with invented
+sessions and `presenter@example.invalid`. The file Travis supplied carries a real presenter's
+address and a real conference's session titles, and BUILD_SPEC §17 forbids committing client
+content as a fixture. The structure is what the tests exercise; the content was never the point.
+
+**Left undone, deliberately.** Only presenter 1 is imported; the template's presenter 2 columns are
+recognised and left unmapped rather than silently dropped, because a second presenter is a speaker
+assignment and the import screen is not where that is decided. **Worth telling DXG:** their template's
+eleventh column is labelled `Presenter 2 Last Name` but sits between `Presenter 1 First Name` and
+`Presenter 2 Email` and is marked REQUIRED — it is presenter 1's surname, mislabelled. The mapper
+lands on the right field by first-occurrence, so the file imports correctly, but the label is wrong at
+source and should be fixed there.

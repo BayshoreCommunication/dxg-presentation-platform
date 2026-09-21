@@ -90,7 +90,11 @@ app.use((req, res, next) => {
   const origin = req.header("origin");
   if (origin) res.header("Access-Control-Allow-Origin", origin);
   res.header("Access-Control-Allow-Credentials", "true");
-  res.header("Access-Control-Allow-Headers", "content-type, authorization");
+  // `x-file-name` carries the original filename on an upload. It is not a simple
+  // header, so leaving it out of this list meant the browser refused every schedule
+  // import before sending it — on the standalone screen and in the create-event
+  // wizard alike — while the same call from a script worked perfectly.
+  res.header("Access-Control-Allow-Headers", "content-type, authorization, x-file-name");
   res.header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
   next();
 });

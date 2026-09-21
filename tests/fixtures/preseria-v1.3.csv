@@ -1,0 +1,15 @@
+PRESERIA IMPORT TEMPLATE (US Date/Time Format),Version: v.1.3,Date Format: mm/dd/yyyy,Time Format: h:mm AM/PM,,,,,,,,,,
+Session Title,Session Location,Session Date,Session Start,Session End,Presentation Start,Presentation End,Presentation Duration,Presenter 1 Email,Presenter 1 First Name,Presenter 2 Last Name,Presenter 2 Email,Presenter 2 First Name,Presenter 2 Last Name
+max 255 chars.,max 100 chars.,mm/dd/yyyy,h:mm AM/PM,h:mm AM/PM,h:mm AM/PM,h:mm AM/PM,number ( 0 - 999 min. ),max 80 chars.,max 80 chars.,max 80 chars.,max 80 chars.,max 80 chars.,max 80 chars.
+REQUIRED,REQUIRED,REQUIRED,REQUIRED,REQUIRED,OPTIONAL,OPTIONAL,OPTIONAL,REQUIRED,REQUIRED,REQUIRED,Optional,Optional,Optional
+01P - Opening Plenary: Measurement at Scale,Virtual,05/16/2023,8:00 AM,9:00 AM,,,,presenter@example.invalid,,,,,
+02P - Field Notes from a Multi-Site Rollout — smart quotes ’ and dashes — included,Virtual,05/16/2023,9:00 AM,10:00 AM,,,,presenter@example.invalid,,,,,
+03P - The Wider View: Access and Opportunity Across Four Regions,Virtual,05/16/2023,10:00 AM,11:00 AM,,,,presenter@example.invalid,,,,,
+"04P - A Title Containing Commas, Because Real Ones Do, And The Parser Must Cope",Virtual,05/16/2023,11:00 AM,12:00 PM,,,,presenter@example.invalid,,,,,
+05P - From Idea to Intervention,Virtual,05/16/2023,12:00 PM,1:00 PM,,,,presenter@example.invalid,,,,,
+06P - Supporting Second-Language Learners,Virtual,05/16/2023,12:00 PM,1:00 PM,,,,presenter@example.invalid,,,,,
+07P - Adapting Delivery Under Constraint: Lessons Learned ,Virtual,05/16/2023,1:00 PM,2:00 PM,,,,presenter@example.invalid,,,,,
+08P - Belonging and Capacity in Technical Subjects ,Virtual,05/16/2023,2:00 PM,3:00 PM,,,,presenter@example.invalid,,,,,
+09P - Where Novel Approaches Meet Process Data,Virtual,05/16/2023,3:00 PM,4:00 PM,,,,presenter@example.invalid,,,,,
+10p - lower-case identifiers should not change how a row is read,Virtual,05/16/2023,4:00 PM,5:00 PM,,,,presenter@example.invalid,,,,,
+11P - Closing Session,Virtual,05/16/2023,5:00 PM,6:00 PM,,,,presenter@example.invalid,,,,,

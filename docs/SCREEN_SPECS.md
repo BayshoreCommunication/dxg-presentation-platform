@@ -32,14 +32,18 @@ Reading rules:
 
 **Route** `/events/new` · **Roles** PjM, PM, Admin · **Requirements** FR-EVT-001/002/003, M01
 
-**Steps** 1 Basics (name, client, venue, time zone, start/end) · 2 Rooms & tracks · 3 Deadlines & workflow (upload deadline, reminder cadence T-14/T-7/T-2, review workflow preset) · 4 Branding & template (accent colour, event header image, slide template).
+**Steps** 1 Basics (name, client, venue, time zone, start/end) · 2 **Schedule import** · 3 Deadlines & workflow (upload deadline, reminder cadence T-14/T-7/T-2, review workflow preset) · 4 Branding & template (accent colour, event header image, slide template).
 
-**API** `POST /events` (step 1 commits a draft), `POST /events/{id}/rooms`, `PATCH /events/{id}` for steps 3–4, `POST /events/{id}/holding-media` for template/header uploads. Duplication from an existing event: `POST /events/{id}:duplicate` (structure and settings only — never files or speakers).
+**Rooms and tracks are not entered by hand** (D-026). Step 2 is the schedule import described in §3, embedded in the wizard against the draft event; the committed agenda is what creates rooms, tracks and event days. A room typed into a box before the agenda arrived was a room the agenda then had to match, and the mismatch surfaced as a blocking error on someone else's spreadsheet.
 
-**Guards** the prototype's rule is normative: **invitations cannot be sent until the event has at least one day and at least one room**; the wizard surfaces it as an inline warning at step 2 and the comms endpoints enforce it server-side (`comms.event_incomplete`).
+**API** `POST /events` (step 1 commits a draft), the §3 import endpoints for step 2, `PATCH /events/{id}` for steps 3–4, `POST /events/{id}/holding-media` for template/header uploads. Duplication from an existing event: `POST /events/{id}:duplicate` (structure and settings only — never files or speakers).
+
+**Guards** the prototype's rule is normative: **invitations cannot be sent until the event has at least one day and at least one room**; both now arrive with the import, the wizard surfaces the rule as an inline warning at step 2, and the comms endpoints enforce it server-side (`comms.event_incomplete`). Step 2 may be **skipped** — an event can be activated with no agenda and imported later from §3 — but the wizard says plainly that nothing can be sent until it happens.
 
 **Acceptance**
 - A part-completed wizard leaves a `draft` event that can be resumed; nothing is sent to anyone from a draft.
+- After step 2 commits an agenda, the event's rooms are exactly the distinct locations named in the file, created in one transaction with the sessions.
+- Activating without importing is allowed and leaves an event with zero rooms; the comms endpoints still refuse to send from it.
 - Duplication copies rooms, tracks, deadlines, templates and team roles; it copies no speakers, files or communications.
 - Time zone is stored on the event and every displayed time in the product renders in it (no browser-local drift).
 
@@ -54,6 +58,11 @@ Reading rules:
 **Elements** KPI row (Rows · Blocking errors · Warnings · New speakers); column-mapping table (source column → platform field → mapped ✓) with manual override; validation list with per-row detail and **suggested fixes** (the prototype's "Room 'Ballroon B' … closest match: Ballroom B" with an `Apply fix` action); `Download error report` (CSV); `Fix & import N sessions`.
 
 **Rules**
+- **The header row is found, not assumed.** Vendor templates put a banner on row 1 and annotation rows (`max 255 chars.`, `REQUIRED`) beneath the real headers. The parser scores each of the first few rows against the known field synonyms, takes the best as the header, and drops any following row that is annotation rather than data. Reading row 1 blindly mapped a banner as the header and fed `REQUIRED` in as a session.
+- **A blank column header never auto-maps.** An empty string matched every field under substring matching, so the empty trailing columns of a template silently claimed `session.title`, `room.name` and the rest.
+- **Presenter names arrive split.** `speaker.first_name` and `speaker.last_name` are mapped fields in their own right and are joined for `speakers.full_name`; a sheet carrying a single `Speaker Name` still maps to `speaker.name` as before.
+- **An email column is an email column.** Matching is ordered so `Presenter 1 Email` maps to `speaker.email`; before this it matched `speaker.name` on the word "presenter" and the *second* presenter's address became the contact address.
+- Only presenter 1 is imported as the assigned speaker. Additional presenter columns are recognised and deliberately left unmapped rather than silently dropped — a second presenter is a speaker assignment, and the import screen is not where that relationship is decided.
 - Commit is all-or-nothing in one transaction; a commit with blocking errors is refused.
 - Re-import matches existing rows by key `(room, start, title)` and **updates instead of duplicating** (FR-IMP-002); the UI shows a diff preview (create / update / unchanged / orphan) before commit.
 - Rows with no speaker email import successfully but are held out of invitation batches until an email exists, and are counted on this screen.
@@ -61,6 +70,8 @@ Reading rules:
 
 **Acceptance**
 - Importing the same file twice produces zero duplicate sessions and a diff preview that is entirely "unchanged".
+- The Preseria template (`v.1.3`, banner row + two annotation rows + split presenter names) maps every required column without manual intervention, and its presenter email lands on `speaker.email`.
+- On an event with no rooms, the commit creates one room per distinct location in the file; on an event that already has rooms, an unrecognised location is still a blocking error with a suggestion.
 - A file with one blocking error cannot be committed and the error report names the row and column.
 - Import of a 212-row file completes parse + validation in ≤10 s (fixture test).
 

@@ -3,11 +3,20 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { EventDraft } from "@/lib/api";
-import { createEvent, configureEvent, activateEvent, ApiError } from "@/lib/api";
+import { createEvent, configureEvent, activateEvent, getDraft, ApiError } from "@/lib/api";
+import { ImportView } from "@/components/ImportView";
 
-const STEPS = ["Basics", "Rooms & tracks", "Deadlines & workflow", "Branding & template"] as const;
+const STEPS = ["Basics", "Schedule import", "Deadlines & workflow", "Branding & template"] as const;
 
-/** Screen 2 — the four-step wizard. Step 1 commits a draft; a draft sends nothing. */
+/**
+ * Screen 2 — the four-step wizard. Step 1 commits a draft; a draft sends nothing.
+ *
+ * Step 2 used to be two text boxes for rooms and tracks. It is the schedule import
+ * now (D-026): `commitImport` already creates rooms, tracks and event days from the
+ * agenda, so typing them first did not save work — it created a second list the
+ * spreadsheet then had to match, and a mismatch was a *blocking* import error on
+ * data the project manager did not author.
+ */
 export function CreateEventWizard({ timezones }: { timezones: string[] }) {
   const router = useRouter();
   const [step, setStep] = useState(1);
@@ -23,8 +32,9 @@ export function CreateEventWizard({ timezones }: { timezones: string[] }) {
     starts_on: "",
     ends_on: "",
   });
-  const [rooms, setRooms] = useState("");
-  const [tracks, setTracks] = useState("");
+  const [imported, setImported] = useState<{ created: number; updated: number; unchanged: number } | null>(
+    null,
+  );
   const [deadline, setDeadline] = useState("");
   const [reminders, setReminders] = useState("T-14 · T-7 · T-2 · missing-file only");
   const [accent, setAccent] = useState("#44C7F4");
@@ -42,12 +52,6 @@ export function CreateEventWizard({ timezones }: { timezones: string[] }) {
       setTimeout(() => setToast(null), 4000);
     }
   }
-
-  const split = (value: string) =>
-    value
-      .split(/[,\n]/)
-      .map((entry) => entry.trim())
-      .filter(Boolean);
 
   return (
     <>
@@ -129,32 +133,22 @@ export function CreateEventWizard({ timezones }: { timezones: string[] }) {
             </>
           )}
 
-          {step === 2 && (
+          {step === 2 && draft && (
             <>
-              <div className="grid2">
-                <div className="field">
-                  <label>Rooms (one per line, or comma-separated)</label>
-                  <textarea
-                    style={{ width: "100%", minHeight: 90, font: "inherit", padding: 8, borderRadius: 6, border: "1px solid var(--line)" }}
-                    value={rooms}
-                    onChange={(event) => setRooms(event.target.value)}
-                    placeholder={"Ballroom A\nBallroom B\nRoom 210"}
-                  />
-                </div>
-                <div className="field">
-                  <label>Tracks</label>
-                  <textarea
-                    style={{ width: "100%", minHeight: 90, font: "inherit", padding: 8, borderRadius: 6, border: "1px solid var(--line)" }}
-                    value={tracks}
-                    onChange={(event) => setTracks(event.target.value)}
-                    placeholder={"Cardiology\nSurgical Innovation"}
-                  />
-                </div>
+              <div className="note" style={{ marginBottom: 12 }}>
+                Upload the agenda and the event builds itself from it — rooms, tracks and days are
+                created from the file, so there is nothing to type twice.
               </div>
-              <div className="note">
-                ⚠ Invitations can&rsquo;t be sent until the event has at least one day and one room —
-                a speaker link would point at nothing.
-              </div>
+
+              <ImportView eventId={draft.id} embedded onCommitted={setImported} />
+
+              {!imported && (
+                <div className="note">
+                  ⚠ Invitations can&rsquo;t be sent until the event has at least one day and one room —
+                  a speaker link would point at nothing. You can skip this and import later from
+                  <b> Import schedule</b>, but nothing goes out to speakers until you do.
+                </div>
+              )}
             </>
           )}
 
@@ -209,7 +203,7 @@ export function CreateEventWizard({ timezones }: { timezones: string[] }) {
                       return null;
                     }
                     const { event_id } = await createEvent(basics);
-                    setDraft(await (await import("@/lib/api")).getDraft(event_id));
+                    setDraft(await getDraft(event_id));
                     setStep(2);
                     return "Draft created — nothing is sent to anyone from a draft";
                   })
@@ -225,19 +219,25 @@ export function CreateEventWizard({ timezones }: { timezones: string[] }) {
                 disabled={busy || !draft}
                 onClick={() =>
                   void run(async () => {
-                    const updated = await configureEvent(draft!.id, {
-                      ...(step === 2 ? { rooms: split(rooms), tracks: split(tracks) } : {}),
-                      ...(step === 3
-                        ? { settings: { upload_deadline: deadline, reminders } }
-                        : {}),
-                    });
-                    setDraft(updated);
+                    if (step === 2) {
+                      // The import wrote the rooms, tracks and days itself. Re-read the
+                      // draft so the summary below reflects what the file created
+                      // rather than what this screen last knew.
+                      setDraft(await getDraft(draft!.id));
+                      setStep(3);
+                      return null;
+                    }
+                    setDraft(
+                      await configureEvent(draft!.id, {
+                        settings: { upload_deadline: deadline, reminders },
+                      }),
+                    );
                     setStep(step + 1);
                     return null;
                   })
                 }
               >
-                Save &amp; continue ›
+                {step === 2 && !imported ? "Skip for now ›" : "Save & continue ›"}
               </button>
             )}
 
@@ -286,7 +286,13 @@ export function CreateEventWizard({ timezones }: { timezones: string[] }) {
                 </tr>
                 <tr>
                   <td>Rooms</td>
-                  <td>{draft.rooms.length > 0 ? draft.rooms.join(", ") : <span className="chip c-warn">none yet</span>}</td>
+                  <td>
+                    {draft.rooms.length > 0 ? (
+                      draft.rooms.join(", ")
+                    ) : (
+                      <span className="chip c-warn">none — import an agenda</span>
+                    )}
+                  </td>
                 </tr>
                 <tr>
                   <td>Tracks</td>

@@ -18,8 +18,23 @@ const time = (iso: string | null) =>
       })
     : "—";
 
-/** Screen 3 — upload, map, validate, then commit all at once or not at all. */
-export function ImportView({ eventId }: { eventId: string }) {
+/**
+ * Screen 3 — upload, map, validate, then commit all at once or not at all.
+ *
+ * Also step 2 of the create-event wizard (D-026), which is why it takes `embedded`:
+ * the same screen, minus the page heading and the "you are finished, go here next"
+ * ending that belongs to the standalone route. One component rather than two, so a
+ * fix to the mapping table cannot land on only one of them.
+ */
+export function ImportView({
+  eventId,
+  embedded = false,
+  onCommitted,
+}: {
+  eventId: string;
+  embedded?: boolean;
+  onCommitted?: (result: { created: number; updated: number; unchanged: number }) => void;
+}) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<ImportPreview | null>(null);
@@ -62,17 +77,19 @@ export function ImportView({ eventId }: { eventId: string }) {
 
   return (
     <>
-      <h1 className="htitle">
-        Import schedule
-        {preview && (
-          <>
-            {" · "}
-            <span className="mono" style={{ fontSize: 16 }}>
-              {preview.file_name}
-            </span>
-          </>
-        )}
-      </h1>
+      {!embedded && (
+        <h1 className="htitle">
+          Import schedule
+          {preview && (
+            <>
+              {" · "}
+              <span className="mono" style={{ fontSize: 16 }}>
+                {preview.file_name}
+              </span>
+            </>
+          )}
+        </h1>
+      )}
 
       {error && <div className="err">{error}</div>}
 
@@ -257,9 +274,11 @@ export function ImportView({ eventId }: { eventId: string }) {
                 {committed.unchanged} unchanged. Re-importing the same file now reports every row as
                 unchanged.
                 <div style={{ marginTop: 10, display: "flex", gap: 8 }}>
-                  <button className="btn" onClick={() => router.push(`/events/${eventId}`)}>
-                    Open command center →
-                  </button>
+                  {!embedded && (
+                    <button className="btn" onClick={() => router.push(`/events/${eventId}`)}>
+                      Open command center →
+                    </button>
+                  )}
                   <button className="btn" onClick={() => setPreview(null)}>
                     Import another file
                   </button>
@@ -280,6 +299,7 @@ export function ImportView({ eventId }: { eventId: string }) {
                   void run(async () => {
                     const result = await commitImport(preview.import_id, eventId, rows);
                     setCommitted(result);
+                    onCommitted?.(result);
                     router.refresh();
                   })
                 }

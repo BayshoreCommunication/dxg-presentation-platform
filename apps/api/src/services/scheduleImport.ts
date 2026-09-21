@@ -13,6 +13,8 @@ export const IMPORT_FIELDS = [
   "session.start",
   "session.end",
   "speaker.name",
+  "speaker.first_name",
+  "speaker.last_name",
   "speaker.email",
   "speaker.organization",
   "track.name",
@@ -21,11 +23,13 @@ export type ImportField = (typeof IMPORT_FIELDS)[number];
 
 const SYNONYMS: Record<ImportField, string[]> = {
   "session.title": ["session title", "title", "talk", "presentation", "session"],
-  "room.name": ["room", "location", "venue room", "hall"],
+  "room.name": ["room", "location", "venue room", "hall", "session location"],
   "session.date": ["date", "day", "session date"],
   "session.start": ["start", "start time", "from", "begins"],
   "session.end": ["end", "end time", "to", "finish", "ends"],
-  "speaker.name": ["speaker name", "speaker", "presenter", "name"],
+  "speaker.name": ["speaker name", "speaker", "presenter", "name", "full name"],
+  "speaker.first_name": ["first name", "given name", "forename"],
+  "speaker.last_name": ["last name", "surname", "family name"],
   "speaker.email": ["speaker email", "email", "e-mail", "contact"],
   "speaker.organization": ["organization", "organisation", "company", "affiliation", "org"],
   "track.name": ["track", "stream", "theme", "category"],
@@ -33,32 +37,128 @@ const SYNONYMS: Record<ImportField, string[]> = {
 
 const normalise = (value: string): string => value.trim().toLowerCase().replace(/[_\-.]+/g, " ").replace(/\s+/g, " ");
 
-/** Auto-mapping is a suggestion: the user can override every column. */
+/**
+ * Some words settle a column on their own, and must be checked before anything else.
+ *
+ * `Presenter 1 Email` used to map to `speaker.name`, because the substring pass tried
+ * `speaker.name` first and the header contains "presenter". `Presenter 2 Email` then
+ * took `speaker.email` — so the platform would have filed presenter 1's address as a
+ * display name and sent every upload invitation to the *second* presenter. A column
+ * that says "email" is an email column and nothing else.
+ */
+const DECISIVE: [RegExp, ImportField][] = [
+  [/\b(e\s*mail|email)\b/, "speaker.email"],
+  [/\b(first|given)\s*name\b|\bforename\b/, "speaker.first_name"],
+  [/\b(last|family)\s*name\b|\bsurname\b/, "speaker.last_name"],
+];
+
+/**
+ * Auto-mapping is a suggestion: the user can override every column. Three passes,
+ * most certain first, so a confident match elsewhere is never stolen by a loose one.
+ *
+ * An unmapped column is always preferable to a wrongly mapped one — an operator sees
+ * "— ignore —" and fixes it, but sees nothing at all when a column was quietly filed
+ * under the wrong field. So a header whose decisive keyword is already spoken for
+ * (the second presenter's email, in DXG's template) maps to nothing rather than
+ * falling through to the fuzzy pass.
+ */
 export function autoMap(headers: string[]): (ImportField | null)[] {
   const taken = new Set<ImportField>();
-  return headers.map((header) => {
-    const key = normalise(header);
-    for (const field of IMPORT_FIELDS) {
-      if (taken.has(field)) continue;
-      if (SYNONYMS[field].some((synonym) => normalise(synonym) === key)) {
-        taken.add(field);
-        return field;
-      }
-    }
-    for (const field of IMPORT_FIELDS) {
-      if (taken.has(field)) continue;
-      if (
-        SYNONYMS[field].some((synonym) => {
-          const candidate = normalise(synonym);
-          return key.includes(candidate) || candidate.includes(key);
-        })
-      ) {
-        taken.add(field);
-        return field;
-      }
-    }
-    return null;
+  const result: (ImportField | null)[] = headers.map(() => null);
+  const keys = headers.map(normalise);
+  // A blank header matched everything: normalise("") is "", and "".includes("") is
+  // true, so under the substring pass each empty trailing column of a template
+  // claimed the next unused field in order.
+  const open = keys.map((key) => key !== "");
+
+  const claim = (index: number, field: ImportField): void => {
+    result[index] = field;
+    taken.add(field);
+    open[index] = false;
+  };
+
+  keys.forEach((key, index) => {
+    if (!open[index]) return;
+    const decisive = DECISIVE.find(([pattern]) => pattern.test(key));
+    if (!decisive) return;
+    if (!taken.has(decisive[1])) claim(index, decisive[1]);
+    else open[index] = false; // spoken for — leave it unmapped rather than guess
   });
+
+  keys.forEach((key, index) => {
+    if (!open[index]) return;
+    const field = IMPORT_FIELDS.find(
+      (candidate) => !taken.has(candidate) && SYNONYMS[candidate].some((synonym) => normalise(synonym) === key),
+    );
+    if (field) claim(index, field);
+  });
+
+  keys.forEach((key, index) => {
+    if (!open[index]) return;
+    const field = IMPORT_FIELDS.find(
+      (candidate) =>
+        !taken.has(candidate) &&
+        SYNONYMS[candidate].some((synonym) => {
+          const word = normalise(synonym);
+          // Length guard: without it a two-letter synonym like "to" matches almost
+          // any header that happens to contain those letters.
+          if (word.length < 3) return false;
+          return key.includes(word) || (key.length >= 3 && word.includes(key));
+        }),
+    );
+    if (field) claim(index, field);
+  });
+
+  return result;
+}
+
+/* ── finding the header row ───────────────────────────────────────────────── */
+
+/**
+ * Cells that describe the column rather than fill it. DXG's Preseria template puts
+ * two such rows under the headers ("max 255 chars.", "REQUIRED"), and reading them as
+ * sessions produced a talk called "max 255 chars." in a room called "max 100 chars.".
+ */
+const ANNOTATION = [
+  /^(required|optional)$/i,
+  /^max \d+ chars\.?$/i,
+  /^(mm\/dd\/yyyy|dd\/mm\/yyyy|yyyy-mm-dd)$/i,
+  /^h?h:mm(\s*(am\/pm))?$/i,
+  /^number\s*\(/i,
+];
+
+const isAnnotationRow = (row: string[]): boolean => {
+  const filled = row.map((cell) => cell.trim()).filter(Boolean);
+  if (filled.length === 0) return false;
+  const marked = filled.filter((cell) => ANNOTATION.some((pattern) => pattern.test(cell))).length;
+  // A clear majority, not merely one cell: a real session whose title happens to read
+  // like a format hint must still reach validation and be seen.
+  return marked / filled.length >= 0.6;
+};
+
+export type HeaderRow = { index: number; headers: string[]; firstDataRow: number };
+
+/**
+ * Vendor templates open with a banner ("PRESERIA IMPORT TEMPLATE … Version: v.1.3"),
+ * so the header row is not row 1. `buildPreview` used to destructure
+ * `const [headers, ...dataRows] = sheet`, which mapped the banner as the header and
+ * fed the annotation rows in as data.
+ *
+ * The row that maps to the most known fields wins. Only the first few rows are
+ * considered — a header further down is a differently broken file, and guessing
+ * deeper would risk skipping real sessions silently.
+ */
+export function findHeaderRow(sheet: string[][], searchDepth = 5): HeaderRow {
+  let best = { index: 0, score: -1 };
+  sheet.slice(0, searchDepth).forEach((row, index) => {
+    const score = autoMap(row).filter(Boolean).length;
+    if (score > best.score) best = { index, score };
+  });
+
+  const headers = sheet[best.index] ?? [];
+  let firstDataRow = best.index + 1;
+  while (firstDataRow < sheet.length && isAnnotationRow(sheet[firstDataRow]!)) firstDataRow += 1;
+  return { index: best.index, headers, firstDataRow };
 }
 
 /** Levenshtein distance, used only to suggest a room the user probably meant. */
@@ -168,20 +268,51 @@ export function zonedToUtc(localIso: string, timeZone: string): Date {
   return new Date(guess.getTime() - (asIfUtc - guess.getTime()));
 }
 
-/** Accepts ISO dates, common written dates, and Excel serial numbers. */
-function toDateTime(date: string, time: string): string | null {
-  if (!date) return null;
-  let iso: string | null = null;
-  if (/^\d+(\.\d+)?$/.test(date)) iso = excelSerialToDate(Number(date)).slice(0, 10);
-  else {
-    const parsed = new Date(`${date}T00:00:00Z`);
-    iso = Number.isNaN(parsed.getTime())
-      ? (() => {
-          const loose = new Date(date);
-          return Number.isNaN(loose.getTime()) ? null : loose.toISOString().slice(0, 10);
-        })()
-      : parsed.toISOString().slice(0, 10);
+/**
+ * The calendar date a human wrote, never an instant.
+ *
+ * This used to go through `new Date(value).toISOString().slice(0, 10)`, which resolves
+ * the string as an instant in the *server's* timezone and then reads the date back in
+ * UTC. Anywhere east of Greenwich that is the previous day: in Asia/Dhaka (UTC+6),
+ * `03/01/2026` came back as `2026-02-28`. Production runs on UTC and would never have
+ * shown it, so every agenda imported on a developer machine was quietly a day early.
+ *
+ * The date parts are read with the same clock that parsed them, so no offset is ever
+ * applied. `mm/dd/yyyy` — what DXG's template uses — is matched explicitly rather than
+ * left to the engine, since that is the one format whose meaning is genuinely
+ * ambiguous between locales.
+ */
+export function toCalendarDate(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  // Excel serials are day counts from an epoch, so UTC is exact here.
+  if (/^\d+(\.\d+)?$/.test(trimmed)) return excelSerialToDate(Number(trimmed)).slice(0, 10);
+
+  const slashed = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(trimmed);
+  if (slashed) {
+    const [, month, day, year] = slashed;
+    return `${year}-${month!.padStart(2, "0")}-${day!.padStart(2, "0")}`;
   }
+
+  const dashed = /^(\d{4})-(\d{2})-(\d{2})/.exec(trimmed);
+  if (dashed) return dashed[0].slice(0, 10);
+
+  // Anything else ("May 16 2023") goes to the engine, but the parts are read back
+  // with the local getters that parsed it rather than through UTC.
+  const loose = new Date(trimmed);
+  if (Number.isNaN(loose.getTime())) return null;
+  return [
+    String(loose.getFullYear()),
+    String(loose.getMonth() + 1).padStart(2, "0"),
+    String(loose.getDate()).padStart(2, "0"),
+  ].join("-");
+}
+
+/** Accepts ISO dates, common written dates, and Excel serial numbers. */
+export function toDateTime(date: string, time: string): string | null {
+  if (!date) return null;
+  const iso = toCalendarDate(date);
   if (!iso) return null;
 
   let clock = time.trim();
@@ -219,8 +350,11 @@ export async function buildPreview(
       message: "That file could not be read as a spreadsheet. Save it as .xlsx or .csv and try again.",
     });
   }
-  const [headers, ...dataRows] = sheet;
-  if (!headers || dataRows.length === 0) {
+  // The header row is found rather than assumed: vendor templates open with a banner
+  // and put annotation rows ("max 255 chars.", "REQUIRED") under the real headers.
+  const { headers, firstDataRow } = findHeaderRow(sheet);
+  const dataRows = sheet.slice(firstDataRow);
+  if (headers.length === 0 || dataRows.length === 0) {
     return err({ code: "import.empty", message: "The file has no data rows." });
   }
 
@@ -262,13 +396,21 @@ export async function buildPreview(
   const newSpeakers = new Set<string>();
 
   dataRows.forEach((row, index) => {
-    const rowNumber = index + 2; // header is row 1, as the user sees it
+    // The row number the operator sees in their spreadsheet, so an error names a row
+    // they can actually go and look at.
+    const rowNumber = firstDataRow + index + 1;
     const title = cell(row, mapping, "session.title");
     const room = cell(row, mapping, "room.name");
     const date = cell(row, mapping, "session.date");
     const start = cell(row, mapping, "session.start");
     const end = cell(row, mapping, "session.end");
-    const speakerName = cell(row, mapping, "speaker.name");
+    // A sheet either carries one name column or splits it. DXG's template splits it,
+    // so first and last are joined here rather than in the mapping layer.
+    const speakerName =
+      cell(row, mapping, "speaker.name") ||
+      [cell(row, mapping, "speaker.first_name"), cell(row, mapping, "speaker.last_name")]
+        .filter(Boolean)
+        .join(" ");
     const speakerEmail = cell(row, mapping, "speaker.email");
 
     if (!title) {
@@ -301,6 +443,14 @@ export async function buildPreview(
       });
     }
 
+    if (!speakerName && speakerEmail) {
+      issues.push({
+        row: rowNumber,
+        column: "speaker.name",
+        severity: "warning",
+        message: "No presenter name — the session imports and the address is kept, but mail will not be personalised.",
+      });
+    }
     if (speakerName && !speakerEmail) {
       issues.push({
         row: rowNumber,
@@ -371,6 +521,21 @@ export async function buildPreview(
 }
 
 /* ── commit (transactional, all or nothing) ──────────────────────────────── */
+
+/**
+ * A display name for a presenter identified only by an address. It never invents a
+ * surname: `wallace@branch-productions.com` becomes `Wallace`, not `Wallace Branch`.
+ * Deliberately plain, so it reads as something to correct on the Speakers screen
+ * rather than as a real name someone typed.
+ */
+export function provisionalName(email: string): string {
+  const local = email.split("@")[0] ?? "";
+  return local
+    .split(/[._\-+]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
 
 export async function commitImport(
   tx: pg.PoolClient,
@@ -499,19 +664,29 @@ export async function commitImport(
       created += 1;
     }
 
-    if (row.speaker_name) {
+    /*
+     * DXG's template fills the presenter's email and leaves the name columns empty on
+     * every row. Keyed on the name alone, that imported the whole agenda with no
+     * speakers and no assignments at all — the sessions arrived and nobody could be
+     * invited to fill them, which is the entire point of the import.
+     *
+     * `speakers.full_name` is NOT NULL, so a provisional name is derived from the
+     * address rather than the row being dropped.
+     */
+    const displayName = row.speaker_name || provisionalName(row.speaker_email);
+    if (displayName) {
       const { rows: speakerRows } = await tx.query<{ id: string }>(
         row.speaker_email
           ? `SELECT id FROM pmp.speakers WHERE event_id = $1 AND lower(email::text) = lower($2) AND merged_into IS NULL`
           : `SELECT id FROM pmp.speakers WHERE event_id = $1 AND lower(full_name) = lower($2) AND merged_into IS NULL`,
-        [input.eventId, row.speaker_email || row.speaker_name],
+        [input.eventId, row.speaker_email || displayName],
       );
       let speakerId = speakerRows[0]?.id;
       if (!speakerId) {
         const { rows: inserted } = await tx.query<{ id: string }>(
           `INSERT INTO pmp.speakers (client_id, event_id, email, full_name, organization)
            VALUES ($1,$2,NULLIF($3,'')::citext,$4,NULLIF($5,'')) RETURNING id`,
-          [clientId, input.eventId, row.speaker_email, row.speaker_name, row.organization],
+          [clientId, input.eventId, row.speaker_email, displayName, row.organization],
         );
         speakerId = inserted[0]!.id;
       } else if (row.organization) {

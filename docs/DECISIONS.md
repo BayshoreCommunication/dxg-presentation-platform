@@ -131,3 +131,27 @@ The account is produced exactly as every other account is: a temporary password 
 
 Twelve cases in `tests/invariants/event-scope.test.ts` across nine surfaces. Verified by reverting the check and re-running: **10 of 12 fail without it, 12 of 12 pass with it.** Owner: Travis.
 
+
+## D-026 (2026-09-20): The agenda defines the rooms — the wizard stops asking for them — Status: ACCEPTED (Travis's call)
+The create-event wizard's step 2 was two free-text boxes, "Rooms" and "Tracks". It is now the schedule import, run against the draft event. Steps 1, 3 and 4 are unchanged.
+
+**The manual step was not just redundant, it was actively harmful.** `commitImport` already creates rooms, tracks and event days from the committed agenda — that code predates this change and is untouched by it. So typing rooms in first did not save work; it created a second list that the spreadsheet then had to agree with. `buildPreview` treats an unrecognised room as a *blocking* error when the event already has rooms, so a project manager who typed `Ballroom B` and received a file saying `Ballroon B` got a blocked import — on data they did not author and often could not correct at source. Removing the box removes the disagreement: on an event with no rooms the importer creates what the file names, and the typo-suggestion path stays for the re-import case, where a mismatch genuinely means something changed.
+
+**Step 2 is skippable, deliberately.** An event can be activated with no agenda and imported later from screen 3, which already exists and is unchanged. Making the import mandatory would have turned a draft into a trap for anyone who does not yet have the spreadsheet — and the guard that actually matters is not "did you import" but "can this event be sent from", which the comms endpoints already enforce with `comms.event_incomplete`. The wizard states the consequence rather than blocking on it.
+
+**What this costs.** An event can now reach `active` with zero rooms, which was previously impossible to do through the wizard. Nothing downstream breaks — room sync shows an empty fleet, comms refuse to send — but "active" now means less than it did, and that is a real reduction in what the status tells you. Accepted because the alternative was a mandatory step that fails for the most common reason a wizard is opened early.
+
+**The import could not actually read DXG's file, and that was found by running it rather than by reading it.** The supplied Preseria template (`v.1.3`) has a banner on row 1, the real headers on row 2 and two annotation rows (`max 255 chars.` / `REQUIRED`) below. `buildPreview` destructured `const [headers, ...dataRows] = sheet`, so it mapped the banner as the header row and validated `REQUIRED` as a session. Three defects fell out of that, none of which any existing test could see:
+
+1. **The header row is now found, not assumed** — the first rows are scored against the field synonyms and the best-scoring one wins, with annotation rows below it dropped.
+2. **A blank header no longer matches anything.** `normalise("")` is `""`, and `"".includes("")` is true, so under the fuzzy pass every empty trailing column claimed the next unused field: the banner row's eight empty cells were mapped to `session.title`, `room.name`, `session.start`, `session.end`, `speaker.name`, `speaker.email`, `speaker.organization` and `track.name` in order.
+3. **`Presenter 1 Email` mapped to `speaker.name`,** because the fuzzy pass tries `speaker.name` first and `"presenter 1 email"` contains `"presenter"`. `Presenter 2 Email` then took `speaker.email`. The platform would have filed presenter 1's address as their display name and **sent every upload invitation to the second presenter** — a silent wrong-recipient bug on the one message the whole product exists to deliver. Exact-match now runs ahead of substring match per column, and an unmapped column is preferred over a wrong one.
+
+`speaker.first_name` and `speaker.last_name` were added as first-class fields, since the template splits them and joining in the mapping layer was the only alternative.
+
+**Two further defects surfaced only by running the thing.** Neither was visible in the source, and neither was reachable before this template arrived:
+
+4. **Every imported session was a day early on any server east of Greenwich.** `toDateTime` produced its date with `new Date(value).toISOString().slice(0, 10)` — an instant resolved in the *server's* timezone, then read back in UTC. On this machine (Asia/Dhaka, UTC+6) `05/16/2023` became `2023-05-15`, and `03/01/2026` became `2026-02-28`. Production runs on UTC and would never have shown it; every agenda imported during development was silently wrong. `toCalendarDate` now reads the parts with the same clock that parsed them, and matches `mm/dd/yyyy` explicitly rather than leaving the one genuinely locale-ambiguous format to the engine.
+5. **Schedule import could not work from a browser at all.** `Access-Control-Allow-Headers` listed `content-type, authorization`; the upload sends the filename in `x-file-name`, so the preflight failed and the request was never sent. This was not introduced here — screen 3 has had it since it shipped, and it went unnoticed because every test of the import ran from a script, where CORS does not apply. `tests/invariants/cors.test.ts` now asserts the preflight against the running API for each custom header the web apps send.
+
+The second of those is the more useful lesson: a suite that never acts as a browser cannot see a defect that only a browser has. Owner: Travis.
