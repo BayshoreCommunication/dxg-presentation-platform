@@ -10,27 +10,31 @@ import {
   setImportCell,
   downloadAgendaTemplate,
   saveBlob,
-  IMPORT_FIELDS,
   ApiError,
 } from "@/lib/api";
 import { Chip } from "@/components/Chip";
 
+/** What the operator calls these, rather than what the code does. */
+const FIELD_LABELS: Record<string, string> = {
+  "session.title": "Session title",
+  "room.name": "Room / location",
+  "session.date": "Session date",
+  "session.start": "Start time",
+};
+
 /**
- * Session times belong to the venue, so they render in the event's timezone — which
- * was hardcoded to America/New_York here, quietly showing New York clock times for an
- * event in Berlin (SCREEN_SPECS §2: "no browser-local drift", and no other city's
- * either).
+ * Date and clock, split, so a table of sessions reads down its columns.
+ *
+ * Both take the event's timezone explicitly. The single helper these replaced had
+ * `America/New_York` hardcoded, which quietly showed New York clock times for an event
+ * in Berlin (SCREEN_SPECS §2: "no browser-local drift", and no other city's either).
  */
-const time = (iso: string | null, timeZone: string) =>
+const day = (iso: string | null, timeZone: string) =>
+  iso ? new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone }) : "—";
+
+const clock = (iso: string | null, timeZone: string) =>
   iso
-    ? new Date(iso).toLocaleString("en-US", {
-        month: "short",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: false,
-        timeZone,
-      })
+    ? new Date(iso).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone })
     : "—";
 
 /**
@@ -135,6 +139,19 @@ export function ImportView({
   }
 
   const blockingRows = rows.filter((row) => row.missing.length > 0);
+
+  /*
+   * The column-mapping table is gone (D-028) — it asked every operator to audit a
+   * machine's work on every import, and the preview below shows what was understood
+   * far more directly. What it also was, though, is the only way to correct a heading
+   * the mapper did not recognise, and without that a file whose room column is called
+   * something unexpected has *every* row missing a room and no way to say so once.
+   * So the repair survives, scoped to the case that actually breaks: a required field
+   * with no column at all.
+   */
+  const unmappedRequired = preview
+    ? (preview.required_fields ?? []).filter((field) => !preview.mapping.includes(field))
+    : [];
 
   /**
    * Sends one corrected cell and replaces the preview with the server's re-validation.
@@ -241,53 +258,51 @@ export function ImportView({
             </div>
           </div>
 
-          <div className="card">
-            <div className="chd">
-              <h3>Column mapping</h3>
-              <span className="m">
-                auto-mapped {preview.mapping.filter(Boolean).length} / {preview.headers.length}
-              </span>
+          {unmappedRequired.length > 0 && (
+            <div className="card" style={{ borderColor: "var(--block)" }}>
+              <div className="chd">
+                <h3>Which column is this?</h3>
+                <span className="m">{unmappedRequired.length} required field(s) not recognised</span>
+              </div>
+              <div className="cbd">
+                <div className="note" style={{ marginBottom: 10 }}>
+                  Every column in your file was read, but nothing in it looked like the field(s) below.
+                  Point each one at the right column and the whole file is re-read — otherwise every row
+                  will be missing the same value.
+                </div>
+                {unmappedRequired.map((field) => (
+                  <div key={field} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
+                    <span className="mono" style={{ minWidth: 130 }}>
+                      {FIELD_LABELS[field] ?? field}
+                    </span>
+                    <select
+                      aria-label={`column for ${field}`}
+                      value=""
+                      onChange={(event) =>
+                        void run(async () => {
+                          const index = Number(event.target.value);
+                          const mapping = [...preview.mapping];
+                          // A column can only carry one field, so releasing it first
+                          // keeps the mapping honest rather than silently duplicated.
+                          const previous = mapping.indexOf(field);
+                          if (previous >= 0) mapping[previous] = null;
+                          mapping[index] = field;
+                          apply(await remapImport(preview.upload_id, mapping));
+                        })
+                      }
+                    >
+                      <option value="">Choose the column…</option>
+                      {preview.headers.map((header, index) => (
+                        <option key={header + String(index)} value={index}>
+                          {header || `(column ${index + 1}, no heading)`}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ))}
+              </div>
             </div>
-            <div className="cbd" style={{ padding: "0 0 4px" }}>
-              <table>
-                <thead>
-                  <tr>
-                    <th>Source column</th>
-                    <th>Platform field</th>
-                    <th>Mapped</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {preview.headers.map((header, index) => (
-                    <tr key={header + String(index)}>
-                      <td>{header}</td>
-                      <td>
-                        <select
-                          className="mono"
-                          value={preview.mapping[index] ?? ""}
-                          onChange={(event) =>
-                            void run(async () => {
-                              const mapping = [...preview.mapping];
-                              mapping[index] = event.target.value || null;
-                              apply(await remapImport(preview.upload_id, mapping));
-                            })
-                          }
-                        >
-                          <option value="">— ignore —</option>
-                          {IMPORT_FIELDS.map((field) => (
-                            <option key={field} value={field}>
-                              {field}
-                            </option>
-                          ))}
-                        </select>
-                      </td>
-                      <td>{preview.mapping[index] ? "✓" : ""}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          )}
 
           <div className="card">
             <div className="chd">
@@ -318,10 +333,11 @@ export function ImportView({
 
           <div className="card">
             <div className="chd">
-              <h3>Preview</h3>
+              <h3>Sessions read from {preview.file_name}</h3>
               <span className="m">
-                {preview.counts.create} create · {preview.counts.update} update ·{" "}
-                {preview.counts.unchanged} unchanged — re-import matches on room + start + title
+                {preview.counts.create} new · {preview.counts.update} updated ·{" "}
+                {preview.counts.unchanged} unchanged — matched on room + start + title · times in{" "}
+                {preview.timezone}
               </span>
             </div>
             <div className="cbd" style={{ padding: "0 0 4px" }}>
@@ -331,8 +347,10 @@ export function ImportView({
                     <th>Row</th>
                     <th>Session</th>
                     <th>Room</th>
-                    <th>Starts</th>
-                    <th>Speaker</th>
+                    <th>Date</th>
+                    <th>Time</th>
+                    <th>Presenter</th>
+                    <th>Track</th>
                     <th>Action</th>
                   </tr>
                 </thead>
@@ -368,7 +386,7 @@ export function ImportView({
                           row.room
                         )}
                       </td>
-                      <td className="note">
+                      <td className="note" colSpan={row.missing.includes("session.date") ? 2 : 1}>
                         {row.missing.includes("session.date") ? (
                           <div style={{ display: "flex", gap: 4 }}>
                             <Fix
@@ -389,10 +407,40 @@ export function ImportView({
                             />
                           </div>
                         ) : (
-                          time(row.starts_at, preview.timezone)
+                          <>
+                            <div>{day(row.starts_at, preview.timezone)}</div>
+                            <div className="note" style={{ fontSize: 11 }}>
+                              {clock(row.starts_at, preview.timezone)}
+                              {/* A file with no end column gets `ends_at = starts_at`
+                                  from the importer, and "09:00–09:00" reads as a
+                                  zero-length session rather than as an unknown one. */}
+                              {row.ends_at && row.ends_at !== row.starts_at
+                                ? `–${clock(row.ends_at, preview.timezone)}`
+                                : ""}
+                            </div>
+                          </>
                         )}
                       </td>
-                      <td className="note">{row.speaker_name || "—"}</td>
+                      <td>
+                        {/* Name over address: a mis-mapped column shows up here as an
+                            address where a name should be, which is how the operator
+                            now catches what the mapping table used to be asked to. */}
+                        {/* Whichever of the two we have leads. A row with an address
+                            and no name rendered as "— address", which looks like a
+                            missing value next to a present one rather than one fact. */}
+                        {row.speaker_name || row.speaker_email || <span className="note">—</span>}
+                        {row.speaker_name && row.speaker_email && (
+                          <div className="note" style={{ fontSize: 11 }}>
+                            {row.speaker_email}
+                          </div>
+                        )}
+                        {row.organization && (
+                          <div className="note" style={{ fontSize: 11 }}>
+                            {row.organization}
+                          </div>
+                        )}
+                      </td>
+                      <td className="note">{row.track || "—"}</td>
                       <td>
                         <Chip
                           status={

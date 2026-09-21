@@ -56,7 +56,9 @@ Reading rules:
 
 **Flow** upload XLSX/CSV → `POST /events/{id}/imports` (returns `importId`, parses async) → `GET /imports/{id}` returns row count, auto-mapped columns, blocking errors, warnings, new-speaker count → user fixes/overrides mapping → `POST /imports/{id}:commit` (transactional).
 
-**Elements** KPI row (Rows · Incomplete rows · Warnings · New speakers); column-mapping table (source column → platform field → mapped ✓) with manual override; validation list with per-row detail and **suggested fixes** (the prototype's "Room 'Ballroon B' … closest match: Ballroom B" with an `Apply fix` action); `Download error report` (a real CSV of row · column · severity · problem); `Download blank template`; `Import N sessions`.
+**Elements** KPI row (Rows · Incomplete rows · Warnings · New speakers); validation list with per-row detail and **suggested fixes** (the prototype's "Room 'Ballroon B' … closest match: Ballroom B" with an `Apply fix` action); `Download error report` (a real CSV of row · column · severity · problem); `Download blank template`; `Import N sessions`.
+
+**There is no column-mapping table** (D-028). The mapping is shown by the data: the sessions table below names what was read from each row — session, room, date, time, presenter with address and organization, track — so a column understood wrongly is visible as an address where a name should be, rather than as a row in a table of `source column → platform field` that an operator has to audit on every import. The only surviving mapping control is the **unrecognised-column repair**: when a *required* field has no column at all, one select per missing field asks which column it is, and choosing re-reads the whole file. Without it an unfamiliar heading leaves every row missing the same value with no way to fix it once.
 
 **Completing an incomplete agenda** (D-027). Each staged row reports which of the required fields — `session.title`, `room.name`, `session.date`/`session.start` — it has no usable value for, and the preview table renders an input in exactly those cells. A typed value is sent to `POST /imports/{uploadId}/cells` as a **cell value**, stored against the cached upload, and the whole file is re-validated server-side: the date is parsed, the event's timezone applied and the `(room, start, title)` match key recomputed by the same code that rejected the row. Nothing about parsing or timezones is reimplemented in the browser. Corrections accumulate across edits and survive a re-map.
 
@@ -82,6 +84,9 @@ Reading rules:
 - A date corrected on the screen produces the same instant as the same date read from the file, in the event's timezone.
 - The blank template, downloaded and filled in, imports with nothing missing and no column mapped by hand — including the presenter's organization, which must not become their name.
 - Session times in the preview render in the event's timezone, not the browser's and not a hardcoded one.
+- The sessions table shows what was read for every mapped field, so a wrongly understood column is visible in the data without opening a mapping table.
+- A file whose required column has an unrecognised heading offers one select per unmapped required field, and choosing a column re-reads the whole file.
+- A session with no end time in the file shows one time, not a zero-length range; a presenter with an address and no name shows the address, not a dash beside it.
 - Import of a 212-row file completes parse + validation in ≤10 s (fixture test).
 
 ---

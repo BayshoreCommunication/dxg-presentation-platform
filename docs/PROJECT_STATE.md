@@ -1371,3 +1371,49 @@ The template round-trips: downloaded, filled, re-uploaded, 0 missing, 0 columns 
 `tests/invariants/schedule-import.test.ts` (8 cases) proved by reverting the override application:
 **3 of 8 fail without it, 8 of 8 with it.** CI green, 194 unit tests; invariants 61 pass, 0 skipped.
 Probe events removed, no orphans.
+
+## 2026-09-21 (fiftieth) — the mapping table goes, the data speaks for itself
+
+Travis: "remove this column mapping, we need to show the imported data properly." D-028.
+
+**Why it deserved to go, beyond the clutter.** The card made every operator audit the mapper's work on
+every import, in the mapper's vocabulary (`speaker.email`, `room.name`), before they were allowed to
+look at their own agenda — and it was a weak check anyway. `session.title ✓` says a column was mapped,
+not that it was mapped *correctly*. **Both mis-mappings this project has actually hit** —
+`Presenter 1 Email → speaker.name` and `Presenter Organization → speaker.name` — **would have shown a
+full row of ticks.** What catches those is seeing an email address where a presenter's name belongs,
+which is exactly what the table now shows.
+
+The preview is now "Sessions read from `<filename>`", with Row · Session · Room · Date · Time ·
+Presenter · Track · Action. Presenter carries name over address over organization; time shows a range.
+The inline inputs from D-027 still appear in place of whichever cell is missing.
+
+**One piece of the old card survives, and it is the piece doing real work.** Those selects were also
+the only way to correct a heading the mapper did not recognise. Deleting them outright means a file
+whose room column is headed `Whereabouts` has *every* row missing a room, an input in every one of
+those cells, and no way to say once what the column is. So a scoped repair remains: when a **required**
+field has no column at all, one select per missing field — "Which column is this?" — and choosing
+re-reads the file. On a file we understand it does not appear at all.
+
+Said plainly, because it is a real narrowing: optional fields are no longer re-mappable, and a column
+mapped to the *wrong* field can no longer be corrected directly — only by the per-cell edits from
+D-027, or by fixing the heading and re-uploading.
+
+**Two display faults fixed with it,** both making correct data look wrong. A file with no end-time
+column gets `ends_at = starts_at` from the importer, which rendered `09:00–09:00` — a zero-length
+session rather than an unknown end. And a presenter with an address but no name rendered `— address`,
+which reads as a missing value beside a present one instead of the one fact we have. Both were only
+visible by looking at the rendered table, not the code.
+
+**Lint proved the removal was clean**, the same way the Admin split did in the forty-second entry: it
+immediately reported `IMPORT_FIELDS` and the old combined `time()` helper as unused, which is exactly
+what should fall away when the mapping table leaves.
+
+Verified in the browser: a well-understood file shows no mapping card and two rows reading
+`Opening Keynote · Ballroom A · Mar 14 · 09:00–10:00 · Dana Reyes / dana@example.invalid /
+Example Institute · Plenary · create`. A file with `Whereabouts` instead of a room heading shows
+"Which column is this?" with a select listing every source column; choosing `Whereabouts` re-read the
+file, filled both rooms, cleared the banner and enabled import. A row with no end time shows `10:30`
+alone, and a presenter with no name shows the address without a leading dash.
+
+CI green, 194 unit tests. Probe events removed.
