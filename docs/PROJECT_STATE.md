@@ -1892,3 +1892,69 @@ that are not mine.
 `retention_policies` carry a `USING (true)` policy. RLS is on and the posture is explicit, but those
 tables have no `client_id` and stay app-mediated until the role × permission matrix (P0-E8) is signed
 off.
+
+## 2026-09-21 (sixty-second) — an unfinished event goes back to the wizard, not to a command centre
+
+Travis, clicking one of the three abandoned `Test` drafts in the portfolio: this should take me to
+the create event flow. D-036.
+
+**Reproduced first, and the destination was the smaller half of it.** The command centre for a draft
+with no rooms, no sessions and no talks showed a green `● live` dot, `0 / 0` collected, `0 / 0` rooms
+ready and *"Nothing at risk — every talk is synchronized onsite."* Four statements about an event that
+has not been set up, three of them reassuring. The sixtieth entry fixed exactly this shape of thing in
+the header beside that same dot; this is the rest of the screen doing it.
+
+**The setup those drafts still needed had no entrance at all.** The wizard kept everything in React
+state and always opened at step 1, so `/events/new` could only ever make a *new* draft — a fourth one
+beside the three. Nothing in the product could reach an existing one.
+
+**Redirecting at the command centre rather than only relabelling the card.** The portfolio link is
+not the only way in: the sidebar's event switcher lists drafts, and so does a bookmark. `/events/{id}`
+on a draft now redirects to `/events/new?event={id}`; the card additionally reads `Continue setup →`
+so the destination is not a surprise before the click.
+
+**Resuming needed the draft to carry back what was typed** — `EventDraft` held name, rooms, tracks,
+days and settings, and the venue, timezone and both dates were written at creation and never read
+again. It carries them now, with `branding` for step 4 and a **`sessions` count**, which is the
+durable form of the question D-027 gates steps 3 and 4 on: `imported` only knows about an import done
+in this browser session, so a resumed draft with a complete agenda would have found steps 3 and 4
+locked against it.
+
+**The half that would have gone wrong quietly: editable boxes that save nothing.** Re-showing step 1
+without a way to store it is the trap D-033 took out of the row editor, and worse here — a wrong date
+is a common reason to abandon setup in the first place. `PATCH /events/{id}` takes `basics`, sharing
+one `checkBasics` with creation so the two cannot drift, and the wizard sends it only when a field
+actually changed.
+
+**Changing the dates reconciles the event's days, and refuses rather than cascades.** Missing days are
+inserted, uncovered ones deleted — unless one carries sessions, which is `events.days_conflict` naming
+the day it would have dropped. Unreachable from the wizard (step 1 sits behind an agenda-gated step 2)
+and reachable from the endpoint, which is the point. After activation `basics` is refused outright.
+
+**A venue is not renamed in place when something else points at it**, because `duplicateEvent` copies
+`venue_id` — editing a duplicated draft's venue would otherwise rename it under the event it came from.
+
+**Two wrong statuses, found by the tests and not by reading.** `statusFor` matched `.conflict` only, so
+`events.days_conflict` went out as 400 "malformed", which it is not; it accepts `_conflict` now.
+`events.not_a_draft` joined the 422 group the same function's own comment describes.
+
+**Proved by reverting: 10 of 10 fail without the change, 10 of 10 pass with it.** The two most useful
+failures returned `200` — before this, a `basics` body was accepted and silently ignored on a draft
+*and* on an activated event.
+
+**Also fixed, one line, because it was a dead control sitting beside a working one:** the portfolio's
+`+ Create event` button was `disabled` with `title="Create event — M1-4"`, left over from before the
+wizard existed. The sidebar has linked to the same screen for days.
+
+Verified end to end in the browser: the three drafts read `Continue setup →`; one resumed at step 2
+with `Test` / `tst` / `America/New_York` / 25–26 Sep in step 1's boxes; editing the venue to
+`Tampa Convention Center` and the end date to 28 Sep saved in one request and moved **Days 2 → 4**,
+with the database holding both and one `events.configured` audit record naming the basics. A draft's
+command-centre URL redirects; an active event's does not, and NeuroSummit — which is active with no
+sessions — now reads "No talks yet" instead of claiming every talk is synchronized onsite.
+
+CI green, 208 unit tests; invariants **98** pass, 0 skipped. Probe events removed.
+
+**Not mine, and changed anyway:** the `Test` draft dated 25–26 Sep is one of the three that were
+already in this database. Verifying the edit path meant editing it — its venue is now
+`Tampa Convention Center` and it ends 28 Sep rather than 26 Sep.

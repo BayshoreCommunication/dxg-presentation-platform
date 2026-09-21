@@ -290,3 +290,63 @@ Migration 005 built the entire client-isolation story in August: row security en
 **The suite is the other half of this decision, and could not have been written before.** Isolation between tenants is untestable with one tenant, and the seed has one client — so it makes a second, proves each sees only its own rows through a bare `SELECT` with no `WHERE` clause, proves a write into the other client is refused by `WITH CHECK` rather than by the application, and takes both away again. **Reverting the connection to the owner fails all twelve.**
 
 **Still not closed:** `users`, `event_roles`, `venues`, `client_grants` and `retention_policies` carry a `USING (true)` policy from 005 — RLS is on and the posture is explicit, but the rows are app-mediated because those tables have no `client_id`. 005 says tightening them waits on the role × permission matrix (P0-E8), and that is still true. Owner: Travis.
+
+## D-036 (2026-09-21): An unfinished event is resumed, not reopened as a running one — Status: ACCEPTED (Travis's finding)
+Every card in the portfolio linked to `/events/{id}`, drafts included. Travis: clicking an unfinished
+event should go to the create-event flow, not the command centre.
+
+**The command centre cannot describe a draft, and did not admit it.** Opened on an event with no
+rooms, no sessions and no talks it rendered a green `live` indicator, `0 / 0` collected, `0 / 0` rooms
+ready and *"Nothing at risk — every talk is synchronized onsite."* Every one of those is the
+reassuring reading of an absence. It is the same defect the sixtieth entry fixed in the header, in a
+different place: a screen stating operational facts it has no basis for.
+
+**And the setup that event still needed was reachable from nowhere.** The wizard held its state in
+React only and always started at step 1, so a draft abandoned at any point could not be picked up
+again — `/events/new` would have created a *second* draft beside the first. The three abandoned
+drafts in the development database are what that looks like after a fortnight.
+
+**The rule lives on the command centre, not only on the card.** A draft that reaches `/events/{id}`
+is redirected to `/events/new?event={id}`. Putting it only on the portfolio link would have fixed the
+click Travis reported and left the sidebar's event switcher — which lists drafts too — pointing at
+the same dead end, along with any bookmark.
+
+**Resuming means the draft has to carry back what was typed.** `EventDraft` was `{id, name, status,
+rooms, tracks, days, settings}`, which is not enough to refill step 1: venue, timezone and both dates
+were written at creation and never read again. It now carries those, plus `branding` for step 4 and a
+`sessions` count — the durable form of the question D-027 gates steps 3 and 4 on. `imported` only
+ever knew about an import performed in the same browser session, so on a resumed draft it is null
+however complete the agenda is; `commitImport` writes sessions, so counting them is the answer that
+survives leaving the screen.
+
+**Step 1 is editable while the event is a draft, and this is the half that could have gone wrong
+quietly.** Re-showing the boxes without saving them would have been a form that accepts typing and
+discards it — the trap D-033 removed from the row editor, arriving by a different door, and worse
+here because a wrong date is exactly the reason someone abandons setup. `PATCH /events/{id}` takes
+`basics` now, sharing one `checkBasics` with creation so the two doors cannot drift, and the wizard
+sends it only when something actually changed, so returning to a draft and pressing on does not
+rewrite its dates or write an audit record claiming it did.
+
+**Editing dates moves the event's days, which is where the danger is.** Days are reconciled to the
+new range — missing ones inserted, uncovered ones deleted. A day carrying sessions is refused
+(`events.days_conflict`, naming the day), not cascaded: the wizard cannot reach that state, because
+step 1 sits behind an agenda-gated step 2, but the endpoint can be called directly and a silent
+cascade would drop an imported agenda on a mistyped date. After activation the basics are refused
+outright (`events.not_a_draft`) — dates, timezone and venue are load-bearing for sessions, room files
+and every deadline computed from them by then, and moving them is a rescheduling job, not a
+correction.
+
+**A venue row is never renamed in place unless this event is the only thing pointing at it.**
+`duplicateEvent` copies `venue_id`, so editing the venue on a duplicated draft would have renamed it
+under the event it was copied from.
+
+**Two things the taxonomy got wrong, found by the tests rather than by reading.** `statusFor` matched
+`.conflict` and nothing else, so `events.days_conflict` went out as `400 Malformed request` — which it
+is not; the rule now accepts `_conflict` too. `events.not_a_draft` joined the 422 group, per the
+comment already in that function: a well-formed request refused by a rule is unprocessable, not
+malformed.
+
+Proved by reverting: `tests/invariants/draft-resume.test.ts` fails **10 of 10** without the change and
+passes 10 of 10 with it. The two most useful failures are the ones that returned `200` — before this,
+`PATCH` accepted a `basics` body on a draft and on an *activated* event alike, and silently ignored
+both. Owner: Travis.

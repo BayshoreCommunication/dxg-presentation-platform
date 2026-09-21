@@ -37,9 +37,9 @@ export default async function PortfolioPage() {
         <h1 className="htitle" style={{ margin: 0 }}>
           Event portfolio
         </h1>
-        <button className="btn pri" disabled title="Create event — M1-4">
+        <Link href="/events/new" className="btn pri">
           + Create event
-        </button>
+        </Link>
       </div>
 
       {items.length === 0 && <div className="card"><div className="empty">No events yet.</div></div>}
@@ -67,8 +67,17 @@ export default async function PortfolioPage() {
                 </span>
                 <span>
                   <span className="mono num">{collected}%</span>{" "}
-                  <Link href={`/events/${event.id}`} className="btn">
-                    Open →
+                  {/*
+                    A draft has no rooms, no sessions and no talks, so its command
+                    centre can only answer in zeroes — and the thing it actually needs,
+                    the rest of its setup, was reachable from nowhere at all. An
+                    unfinished event goes back to the wizard that was making it.
+                  */}
+                  <Link
+                    href={event.status === "draft" ? `/events/new?event=${event.id}` : `/events/${event.id}`}
+                    className="btn"
+                  >
+                    {event.status === "draft" ? "Continue setup →" : "Open →"}
                   </Link>
                 </span>
               </div>

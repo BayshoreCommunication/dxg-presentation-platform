@@ -466,7 +466,10 @@ const statusFor = (error: DomainError): number => {
   ) {
     return 422;
   }
-  if (error.code.endsWith(".conflict")) return 409;
+  // `_conflict` as well as `.conflict`: a state that refuses a well-formed request is a
+  // 409 whichever way the code is spelled, and the suffix rule alone silently sent
+  // `events.days_conflict` out as a 400 — "malformed", which it is not.
+  if (error.code.endsWith(".conflict") || error.code.endsWith("_conflict")) return 409;
   if (error.code.endsWith(".forbidden") || error.code.endsWith(".override_forbidden")) return 403;
   if (
     error.code === "auth.invalid_credentials" ||
@@ -507,6 +510,7 @@ const statusFor = (error: DomainError): number => {
     error.code.endsWith(".incomplete") ||
     error.code.endsWith(".bad_dates") ||
     error.code.endsWith(".name_required") ||
+    error.code.endsWith(".not_a_draft") ||
     error.code.endsWith(".unknown_timezone")
   ) {
     return 422;
@@ -1541,6 +1545,7 @@ app.patch("/api/v1/events/:eventId", async (req, res) => {
   const actor = actorFrom(req);
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   const body = req.body as {
+    basics?: { name: string; venue: string; timezone: string; starts_on: string; ends_on: string };
     rooms?: string[];
     tracks?: string[];
     settings?: Record<string, unknown>;

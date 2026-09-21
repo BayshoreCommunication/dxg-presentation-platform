@@ -659,21 +659,31 @@ export type EventDraft = {
   id: string;
   name: string;
   status: string;
+  venue: string | null;
+  timezone: string;
+  starts_on: string;
+  ends_on: string;
   rooms: string[];
   tracks: string[];
   days: number;
+  /** Zero until an agenda is imported — which is what gates steps 3 and 4 (D-027). */
+  sessions: number;
   settings: Record<string, unknown>;
+  branding: Record<string, unknown>;
 };
 
-export const getTimezones = () => request<{ items: string[] }>(`/timezones`);
-
-export const createEvent = (body: {
+export type EventBasics = {
   name: string;
   venue: string;
   timezone: string;
   starts_on: string;
   ends_on: string;
-}) => request<{ event_id: string }>(`/events`, { method: "POST", body: JSON.stringify(body) });
+};
+
+export const getTimezones = () => request<{ items: string[] }>(`/timezones`);
+
+export const createEvent = (body: EventBasics) =>
+  request<{ event_id: string }>(`/events`, { method: "POST", body: JSON.stringify(body) });
 
 export const getDraft = (eventId: string) =>
   request<EventDraft>(`/events/${eventId}/draft`);
@@ -681,6 +691,7 @@ export const getDraft = (eventId: string) =>
 export const configureEvent = (
   eventId: string,
   body: {
+    basics?: EventBasics;
     rooms?: string[];
     tracks?: string[];
     settings?: Record<string, unknown>;

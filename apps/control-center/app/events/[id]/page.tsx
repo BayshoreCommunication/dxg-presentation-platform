@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { getSummary, getRiskList, getFleet } from "@/lib/api";
 import { Chip } from "@/components/Chip";
 import { AutoRefresh } from "@/components/AutoRefresh";
@@ -21,6 +22,15 @@ export default async function CommandCenterPage({ params }: { params: Promise<{ 
     Promise.all([getSummary(id), getRiskList(id), getFleet(id)]),
     `/events/${id}`,
   );
+
+  /*
+   * A draft is not a running event, and this screen has no way to say so: it would
+   * report a live indicator, zero of zero talks collected and "every talk is
+   * synchronized onsite" for an event with no agenda at all. The portfolio link is not
+   * the only way in — the sidebar's event switcher lists drafts too, as does a
+   * bookmark — so the rule belongs here rather than only on the card that started it.
+   */
+  if (summary.event.status === "draft") redirect(`/events/new?event=${id}`);
 
   /*
    * This line was the literal string "Tampa Convention Center · Day 2 of 3 · Doors
@@ -116,7 +126,11 @@ export default async function CommandCenterPage({ params }: { params: Promise<{ 
         </div>
         <div className="cbd" style={{ padding: "0 0 4px" }}>
           {risk.items.length === 0 ? (
-            <div className="empty">Nothing at risk — every talk is synchronized onsite.</div>
+            <div className="empty">
+              {summary.total === 0
+                ? "No talks yet — the agenda has none, or none of its sessions carry one."
+                : "Nothing at risk — every talk is synchronized onsite."}
+            </div>
           ) : (
             <table>
               <tbody>

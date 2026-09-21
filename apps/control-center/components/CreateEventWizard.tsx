@@ -23,37 +23,65 @@ const STEPS = ["Basics", "Agenda", "Deadlines & workflow", "Branding & template"
  * spreadsheet then had to match, and a mismatch was a *blocking* import error on
  * data the project manager did not author.
  */
-export function CreateEventWizard({ timezones }: { timezones: string[] }) {
+/** Settings and branding come back as `unknown`; a missing one must not become "undefined". */
+const text = (value: unknown, fallback: string): string =>
+  typeof value === "string" && value.length > 0 ? value : fallback;
+
+export function CreateEventWizard({
+  timezones,
+  resume = null,
+}: {
+  timezones: string[];
+  /**
+   * An unfinished draft to carry on with. The portfolio sends one here rather than to
+   * its command centre: a draft has no rooms, no sessions and no talks, so that screen
+   * could only ever answer an event's questions with zeroes, and the one thing the
+   * event actually needs — the rest of its setup — was not reachable from anywhere.
+   */
+  resume?: EventDraft | null;
+}) {
   const router = useRouter();
-  const [step, setStep] = useState(1);
-  const [draft, setDraft] = useState<EventDraft | null>(null);
+  // Back to where the work stopped: step 2 wants the agenda, and once that is in, the
+  // first step that still has something to say.
+  const [step, setStep] = useState(resume ? (resume.sessions > 0 ? 3 : 2) : 1);
+  const [draft, setDraft] = useState<EventDraft | null>(resume);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
   const [basics, setBasics] = useState({
-    name: "",
-    venue: "",
-    timezone: timezones[0] ?? "UTC",
-    starts_on: "",
-    ends_on: "",
+    name: resume?.name ?? "",
+    venue: resume?.venue ?? "",
+    timezone: resume?.timezone ?? timezones[0] ?? "UTC",
+    starts_on: resume?.starts_on ?? "",
+    ends_on: resume?.ends_on ?? "",
   });
   const [imported, setImported] = useState<{ created: number; updated: number; unchanged: number } | null>(
     null,
   );
-  const [deadline, setDeadline] = useState("");
-  const [reminders, setReminders] = useState("T-14 · T-7 · T-2 · missing-file only");
-  const [accent, setAccent] = useState("#44C7F4");
+  const [deadline, setDeadline] = useState(text(resume?.settings.upload_deadline, ""));
+  const [reminders, setReminders] = useState(
+    text(resume?.settings.reminders, "T-14 · T-7 · T-2 · missing-file only"),
+  );
+  const [accent, setAccent] = useState(text(resume?.branding.accent, "#44C7F4"));
 
   /*
    * Steps 3 and 4 are unreachable until an agenda is in (Travis's call, D-026 amended).
    * The chips are a navigation control, so the rule has to live here as well as on the
    * button — otherwise the button is a suggestion and the chip is the way round it.
    */
+  /*
+   * `imported` only knows about an import done in this browser session, so on a
+   * resumed draft it is null however complete the agenda is. The durable answer is the
+   * one the importer left behind: `commitImport` writes the sessions, so a draft that
+   * has any has an agenda.
+   */
+  const hasAgenda = imported !== null || (draft?.sessions ?? 0) > 0;
+
   const reachable = (target: number): boolean => {
     if (target === 1) return true;
     if (!draft) return false;
-    return target === 2 || imported !== null;
+    return target === 2 || hasAgenda;
   };
 
   async function run(work: () => Promise<string | null>) {
@@ -73,6 +101,12 @@ export function CreateEventWizard({ timezones }: { timezones: string[] }) {
   return (
     <>
       <h1 className="htitle">Create event</h1>
+      {resume && (
+        <p className="note" style={{ marginTop: -8, marginBottom: 12 }}>
+          Carrying on with <strong>{resume.name}</strong>, an unfinished draft. Nothing has been sent
+          to anyone from it.
+        </p>
+      )}
       {error && <div className="err">{error}</div>}
 
       <div className="card">
@@ -217,8 +251,19 @@ export function CreateEventWizard({ timezones }: { timezones: string[] }) {
                 onClick={() =>
                   void run(async () => {
                     if (draft) {
+                      // Editable boxes that quietly discard what you type are the trap
+                      // D-033 took out of the row editor. Sent only when something
+                      // actually changed, so returning to a draft and pressing on does
+                      // not rewrite its dates or add an audit record saying it did.
+                      const edited =
+                        draft.name !== basics.name ||
+                        (draft.venue ?? "") !== basics.venue ||
+                        draft.timezone !== basics.timezone ||
+                        draft.starts_on !== basics.starts_on ||
+                        draft.ends_on !== basics.ends_on;
+                      if (edited) setDraft(await configureEvent(draft.id, { basics }));
                       setStep(2);
-                      return null;
+                      return edited ? "Basics saved" : null;
                     }
                     const { event_id } = await createEvent(basics);
                     setDraft(await getDraft(event_id));
@@ -234,9 +279,9 @@ export function CreateEventWizard({ timezones }: { timezones: string[] }) {
             {step > 1 && step < 4 && (
               <button
                 className="btn pri"
-                disabled={busy || !draft || (step === 2 && !imported)}
+                disabled={busy || !draft || (step === 2 && !hasAgenda)}
                 title={
-                  step === 2 && !imported
+                  step === 2 && !hasAgenda
                     ? "Import the schedule to continue — rooms, days and sessions all come from it"
                     : undefined
                 }

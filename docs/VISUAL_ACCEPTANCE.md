@@ -149,3 +149,24 @@ The standalone screen keeps the name `Schedule import`, because there the import
 
 Nothing else is renamed, reordered or regrouped. The baseline's screen inventory is unchanged: this is
 a navigation change, not the removal of a screen.
+
+### 2026-09-21 — a draft's card offers `Continue setup`, and its command centre redirects
+
+**Deviation.** §2.2 fixes the baseline's words as the product's words, and screen 1's portfolio card
+carries `Open →`. On an event still in `Planning` that button now reads `Continue setup →` and goes to
+the wizard rather than to the command centre; reaching a draft's command centre by any other route —
+the sidebar's event switcher, a bookmark — redirects there too.
+
+**Reason.** The baseline is a single-event prototype in which every event already exists, so it has no
+draft, no `Planning` state and nothing to say about one. `Open →` is the right word for an event that
+is running and the wrong word for one that was never finished: the screen it opened reported a live
+indicator, `0 / 0` collected and "every talk is synchronized onsite" for an event with no agenda at
+all, while the setup it actually needed was reachable from nowhere in the product (D-036).
+
+**Scope.** `Open →` is untouched on every active, closed and archived event, which is every event the
+baseline depicts. Nothing is renamed, reordered or regrouped, and the screen inventory is unchanged —
+screen 4 still exists and is still where an event that is running opens.
+
+**A related fix, not a deviation.** Screen 4's risk list said "Nothing at risk — every talk is
+synchronized onsite" whenever it had no rows, including when the event has no talks to be at risk.
+With no talks it now says so.
