@@ -136,10 +136,38 @@ const IMPORT_FIELD_LIST = [
 ];
 
 /** The signed-in staff member, or nobody. A presenter is never a staff actor. */
+/** The event this request is about, once the middleware below has worked it out. */
+const eventOfRequest = (req: express.Request): string | undefined =>
+  (req as express.Request & { eventId?: string }).eventId;
+
+/**
+ * The actor, carrying the roles they hold **on this request's event**.
+ *
+ * `rolesFor` selects `DISTINCT role` with no event filter, which is right for the
+ * question "may this account use the staff area at all" and wrong for every other
+ * question. Handing that flat set to the domain meant `hasAnyRole(actor,
+ * atLeast("presentation_manager"))` asked whether the account was a presentation
+ * manager *anywhere* — so a room technician here who manages presentations on some
+ * other conference could waive blocking findings and roll back approved versions on
+ * this one.
+ *
+ * `platform_admin` survives the filter wherever it is held, for the reason in
+ * PLATFORM_WIDE_ROLES.
+ */
 function actorFrom(req: express.Request): Actor | undefined {
   const principal = (req as express.Request & { principal?: Principal }).principal;
   if (principal?.kind !== "staff") return undefined;
-  return { id: principal.user_id, roles: principal.roles };
+
+  const eventId = eventOfRequest(req);
+  if (!eventId) return { id: principal.user_id, roles: principal.roles };
+
+  const here = principal.event_roles
+    .filter((held) => held.event_id === eventId)
+    .map((held) => held.role);
+  for (const role of PLATFORM_WIDE_ROLES) {
+    if (principal.roles.includes(role) && !here.includes(role)) here.push(role);
+  }
+  return { id: principal.user_id, roles: here };
 }
 
 /**
@@ -190,8 +218,9 @@ function scopeFor(req: express.Request, eventId?: string): {
    * through, so a route added tomorrow inherits the rule instead of having to remember
    * it.
    */
-  if (eventId && !principal.roles.some((role) => PLATFORM_WIDE_ROLES.includes(role))) {
-    const onThisEvent = principal.event_roles.some((held) => held.event_id === eventId);
+  const scopedTo = eventId ?? eventOfRequest(req);
+  if (scopedTo && !principal.roles.some((role) => PLATFORM_WIDE_ROLES.includes(role))) {
+    const onThisEvent = principal.event_roles.some((held) => held.event_id === scopedTo);
     if (!onThisEvent) {
       throw new ScopeError("Your account has no role on this event.");
     }
@@ -200,7 +229,7 @@ function scopeFor(req: express.Request, eventId?: string): {
   const isStaff = principal.roles.some((role) => STAFF_ROLES.includes(role));
   return {
     userId: principal.user_id,
-    ...(eventId ? { eventId } : {}),
+    ...(scopedTo ? { eventId: scopedTo } : {}),
     ...(isStaff ? { allClients: true } : { clientId: principal.client_ids[0] ?? "" }),
   };
 }
@@ -218,6 +247,155 @@ app.use(async (req, _res, next) => {
     console.error("session resolution failed", error);
   }
   return next();
+});
+
+/* ── which event does this URL belong to? ─────────────────────────────────── */
+
+/**
+ * How to find the owning event of a resource named directly in the path.
+ *
+ * D-025 put the event check in `scopeFor`, which every `/events/{eventId}/…` route
+ * passes through — and that is where it stopped. A route like `GET /slots/{id}` never
+ * mentions an event: the event is a property of the slot, and nothing looked it up, so
+ * eighteen routes were protected and twenty were not.
+ *
+ * Matching on the path rather than on Express's route params is deliberate: `app.use`
+ * middleware does not receive them, and a table keyed by URL shape means a route added
+ * tomorrow under an existing prefix inherits the rule instead of having to remember
+ * it — which is what D-025 claimed and only half delivered.
+ */
+const EVENT_OF_PATH: { pattern: RegExp; sql: string }[] = [
+  {
+    pattern: /^\/api\/v1\/events\/([^/]+)/,
+    sql: `SELECT id AS event_id, client_id FROM pmp.events WHERE id = $1`,
+  },
+  {
+    pattern: /^\/api\/v1\/client\/events\/([^/]+)/,
+    sql: `SELECT id AS event_id, client_id FROM pmp.events WHERE id = $1`,
+  },
+  {
+    pattern: /^\/api\/v1\/slots\/([^/]+)/,
+    sql: `SELECT event_id, client_id FROM pmp.slots WHERE id = $1`,
+  },
+  {
+    pattern: /^\/api\/v1\/file-versions\/([^/]+)/,
+    sql: `SELECT s.event_id, s.client_id
+            FROM pmp.file_versions fv
+            JOIN pmp.files f ON f.id = fv.file_id
+            JOIN pmp.slots s ON s.id = f.slot_id
+           WHERE fv.id = $1`,
+  },
+  {
+    pattern: /^\/api\/v1\/findings\/([^/]+)/,
+    sql: `SELECT s.event_id, s.client_id
+            FROM pmp.inspection_findings inf
+            JOIN pmp.file_versions fv ON fv.id = inf.file_version_id
+            JOIN pmp.files f ON f.id = fv.file_id
+            JOIN pmp.slots s ON s.id = f.slot_id
+           WHERE inf.id = $1`,
+  },
+  {
+    pattern: /^\/api\/v1\/rooms\/([^/]+)/,
+    sql: `SELECT event_id, client_id FROM pmp.rooms WHERE id = $1`,
+  },
+  {
+    pattern: /^\/api\/v1\/room-files\/([^/]+)/,
+    sql: `SELECT event_id, client_id FROM pmp.room_files WHERE id = $1`,
+  },
+  {
+    pattern: /^\/api\/v1\/srr\/checkins\/([^/]+)/,
+    sql: `SELECT event_id, client_id FROM pmp.srr_checkins WHERE id = $1`,
+  },
+  {
+    pattern: /^\/api\/v1\/speakers\/([^/]+)/,
+    sql: `SELECT event_id, client_id FROM pmp.speakers WHERE id = $1`,
+  },
+  {
+    pattern: /^\/api\/v1\/archive-packages\/([^/]+)/,
+    sql: `SELECT event_id, client_id FROM pmp.archive_packages WHERE id = $1`,
+  },
+  {
+    /*
+     * Only `commit`. The id in `/imports/{id}/cells` and `/imports/{id}/remap` is an
+     * upload-cache key, not a row — a random UUID that will never be found here, so a
+     * broader pattern turned every correction into a 404. Those two take their event
+     * from the cache entry and pass it to `scopeFor` explicitly, which is the same
+     * check by a different route.
+     */
+    pattern: /^\/api\/v1\/imports\/([^/]+)\/commit/,
+    sql: `SELECT event_id, client_id FROM pmp.schedule_imports WHERE id = $1`,
+  },
+];
+
+/** `<id>:<action>` is one path segment; the id is what comes before the colon. */
+const idPart = (segment: string): string => {
+  const decoded = decodeURIComponent(segment);
+  const colon = decoded.lastIndexOf(":");
+  return colon < 0 ? decoded : decoded.slice(0, colon);
+};
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Resolves the event a request is about, refuses it if the account holds no role
+ * there, and records the attempt when it does refuse (BUILD_SPEC I-4: blocked *and*
+ * logged).
+ *
+ * A resource that does not exist is a 404 and a resource on another event is a 403.
+ * The distinction is deliberate: these are staff-only routes behind a session and the
+ * ids are UUIDs, so confirming existence is not a practical enumeration risk, while
+ * collapsing the two would tell a project manager who mistyped a URL that their own
+ * talk had vanished.
+ */
+app.use(async (req, res, next) => {
+  if (!req.path.startsWith("/api/v1/")) return next();
+  const principal = (req as express.Request & { principal?: Principal }).principal;
+  if (principal?.kind !== "staff") return next();
+
+  const route = EVENT_OF_PATH.find((candidate) => candidate.pattern.test(req.path));
+  if (!route) return next();
+  const id = idPart(route.pattern.exec(req.path)![1] ?? "");
+  // Upload ids are not resources yet — the import cache holds them — and a malformed
+  // id is for the handler to reject with its own message.
+  if (!UUID.test(id)) return next();
+
+  let owner: { event_id: string; client_id: string } | undefined;
+  try {
+    owner = await withSystemScope(async (tx) => {
+      const { rows } = await tx.query<{ event_id: string; client_id: string }>(route.sql, [id]);
+      return rows[0];
+    });
+  } catch {
+    return next(); // a lookup failure is the handler's problem, not a denial
+  }
+
+  if (!owner) {
+    return res.status(404).json({ code: "resource.not_found", message: "No such record." });
+  }
+
+  const request = req as express.Request & { eventId?: string };
+  request.eventId = owner.event_id;
+
+  const platformWide = principal.roles.some((role) => PLATFORM_WIDE_ROLES.includes(role));
+  const onThisEvent = principal.event_roles.some((held) => held.event_id === owner.event_id);
+  if (platformWide || onThisEvent) return next();
+
+  await withSystemScope((tx) =>
+    appendAuditRecord(tx, {
+      partitionId: owner.event_id,
+      clientId: owner.client_id,
+      actorUserId: principal.user_id,
+      action: "security.cross_event_attempt",
+      subjectType: "request",
+      subjectId: id,
+      detail: { method: req.method, path: req.path },
+    }),
+  ).catch(() => undefined);
+
+  return res.status(403).json({
+    code: "auth.not_on_this_event",
+    message: "Your account has no role on this event.",
+  });
 });
 
 /**
@@ -1803,18 +1981,28 @@ app.post("/api/v1/admin/users/:userId/unlock", async (req, res) => {
 });
 
 app.post("/api/v1/admin/users/:userId/roles", async (req, res) => {
-  const actor = actorFrom(req);
-  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   const body = req.body as { event_id?: string; role?: string; grant?: boolean };
   if (!body.event_id || !body.role) {
     return res.status(400).json({ code: "request.invalid", message: "`event_id` and `role` are required." });
   }
+
+  /*
+   * The event is in the body, not the path, so the resolver above cannot see it — and
+   * without it this route asked the flat question: "is this account a project manager
+   * anywhere?" A project manager on one conference could therefore grant themselves,
+   * or anyone, a role on another. Naming the event here puts the route back under the
+   * same rule as every other, `platform_admin` exception and all.
+   */
+  (req as express.Request & { eventId?: string }).eventId = body.event_id;
+
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   const input = {
     userId: String(req.params.userId),
     eventId: body.event_id,
     role: body.role as EventRole,
   };
-  const result = await withScope(scopeFor(req), async (tx) =>
+  const result = await withScope(scopeFor(req, body.event_id), async (tx) =>
     body.grant === false
       ? ((await revokeRole(tx, actor, input)) as Result<{ granted?: true; revoked?: true }, DomainError>)
       : ((await grantRole(tx, actor, input)) as Result<{ granted?: true; revoked?: true }, DomainError>),

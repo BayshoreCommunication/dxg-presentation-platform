@@ -1684,3 +1684,65 @@ Verified: visible labels read `Start` / `End` / `Duration`; the three inputs rep
 `Presentation Start`, `Presentation End`, `Presentation Duration in minutes`.
 
 CI green, 208 unit tests.
+
+## 2026-09-21 (fifty-eighth) — the cross-event hole, closed properly
+
+The defect found at the top of this session and left open since. D-034, superseding the half of D-025
+that was finished.
+
+**D-025 protected the routes that name an event and left the ones that name a resource.** Eighteen
+`/events/{eventId}/…` routes passed through `scopeFor` with an event to check; twenty called
+`scopeFor(req)` with nothing. Reproduced before the fix, with an account holding no role on the event:
+the three parent surfaces returned 403 while `/slots/{id}`, `/file-versions/{id}/findings` and
+`/file-versions/{id}/comments` returned 200 and an internal comment POST returned 201.
+
+**The event is resolved from the resource now, in middleware, keyed by URL shape** — a table mapping
+each prefix to the SQL that finds its owning event. Matching on the path rather than Express route
+params is forced (`app.use` never receives params) and is also the point: a route added under an
+existing prefix inherits the rule, which is what D-025 claimed and did not deliver.
+
+**The middleware was inert when first written and nothing would have told me.** Registered above the
+session middleware, `principal` was always undefined and every request fell through — a check that
+passes everything, which is worse than none because it looks like one. Caught by reading the
+registration order; the suite was green either way, because the routes it covered were refused by
+`scopeFor` regardless. This is the third time this project has hit that shape of bug.
+
+**Roles are held on an event now.** `actorFrom` filters the principal's roles to the request's event
+before the domain sees them, so `atLeast("presentation_manager")` asks whether they manage
+presentations *here*. Before, a room technician here who managed presentations anywhere else could
+waive blocking findings and roll back approved versions on this event.
+
+**And the escalation that made the rest moot:** `POST /admin/users/{id}/roles` takes its event in the
+body, so the resolver cannot see it and the flat question was being asked — a project manager on one
+conference could grant themselves any role on another. Scoped.
+
+**`security.cross_event_attempt` is now written** on every refusal, against the event reached for.
+BUILD_SPEC I-4 asks for "blocked, logged and alerted"; blocking and logging exist, alerting does not
+and is not claimed.
+
+**Two tests first passed for the wrong reason.** The role-scoping cases were being refused by the path
+resolver before the role check was reached, so reverting the role fix changed nothing. They needed an
+actor who genuinely *is* on the event and holds the wrong role there — hence the suite creates two
+accounts: an outsider with no role on MedTech, and an understudy who is a room technician on MedTech
+and a project manager elsewhere.
+
+**A regression the suite caught immediately:** the resolver matched `/imports/{id}/cells`, whose id is
+an upload-cache key rather than a `schedule_imports` row, so every typed correction became a 404. Those
+two routes take their event from the cache and pass it to `scopeFor` explicitly; the pattern is
+narrowed to `/commit`, the only import route whose id is a real row.
+
+Proved one half at a time: reverting the path resolver fails 7 of 11; reverting event-scoped roles
+fails the waive case; reverting the role-grant scoping fails the escalation case. Legitimate work
+unaffected — checked m.vega, c.delgado and t.okafor against their own events (all 200, including
+`/slots/{id}`) and against events they hold no role on (403).
+
+CI green, 208 unit tests; invariants **76** pass, 0 skipped. 96 `security.cross_event_attempt` records
+in the dev database, all written by these runs.
+
+**Left behind on purpose:** two deactivated `probe-outsider-*` accounts. Each refusal writes an audit
+record against the account, so `removeTestAccounts` retires rather than deletes it — which is the
+helper's correct policy (history stays) and means one deactivated account accumulates per suite run.
+
+**Still open: RLS is inert.** Migration 005 is correct but the app connects as `PGUSER=pmp`, the
+compose superuser, which bypasses every policy. This entry closes the application-layer hole
+everywhere; the database-layer one needs the app to stop connecting as a superuser and is untouched.
