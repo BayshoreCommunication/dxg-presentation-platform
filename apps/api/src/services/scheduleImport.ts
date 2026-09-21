@@ -22,12 +22,36 @@ export const IMPORT_FIELDS = [
   "slot.start",
   "slot.end",
   "slot.duration",
-  // A second presenter on the same slot. `speaker_assignments` has always allowed
+  // Further presenters on the same slot. `speaker_assignments` has always allowed
   // several speakers per slot; until now the import only ever created one.
   "speaker2.first_name",
   "speaker2.last_name",
   "speaker2.email",
+  "speaker3.first_name",
+  "speaker3.last_name",
+  "speaker3.email",
+  "speaker4.first_name",
+  "speaker4.last_name",
+  "speaker4.email",
+  "speaker5.first_name",
+  "speaker5.last_name",
+  "speaker5.email",
+  "speaker6.first_name",
+  "speaker6.last_name",
+  "speaker6.email",
 ] as const;
+
+/**
+ * The prefixes of the presenter blocks, in order. A talk with more than six presenters
+ * is a panel, and the schema allows one — but an import screen has to stop somewhere,
+ * and six columns of each kind is already more than any DXG sheet has carried.
+ *
+ * Note the first is `speaker`, not `speaker1`: it predates there being more than one.
+ */
+export const PRESENTER_PREFIXES = ["speaker", "speaker2", "speaker3", "speaker4", "speaker5", "speaker6"] as const;
+
+const presenterField = (prefix: string, part: "first_name" | "last_name" | "email"): ImportField =>
+  `${prefix}.${part}` as ImportField;
 export type ImportField = (typeof IMPORT_FIELDS)[number];
 
 const SYNONYMS: Record<ImportField, string[]> = {
@@ -50,6 +74,18 @@ const SYNONYMS: Record<ImportField, string[]> = {
   "speaker2.first_name": ["presenter 2 first name", "speaker 2 first name"],
   "speaker2.last_name": ["presenter 2 last name", "speaker 2 last name"],
   "speaker2.email": ["presenter 2 email", "speaker 2 email"],
+  "speaker3.first_name": ["presenter 3 first name", "speaker 3 first name"],
+  "speaker3.last_name": ["presenter 3 last name", "speaker 3 last name"],
+  "speaker3.email": ["presenter 3 email", "speaker 3 email"],
+  "speaker4.first_name": ["presenter 4 first name", "speaker 4 first name"],
+  "speaker4.last_name": ["presenter 4 last name", "speaker 4 last name"],
+  "speaker4.email": ["presenter 4 email", "speaker 4 email"],
+  "speaker5.first_name": ["presenter 5 first name", "speaker 5 first name"],
+  "speaker5.last_name": ["presenter 5 last name", "speaker 5 last name"],
+  "speaker5.email": ["presenter 5 email", "speaker 5 email"],
+  "speaker6.first_name": ["presenter 6 first name", "speaker 6 first name"],
+  "speaker6.last_name": ["presenter 6 last name", "speaker 6 last name"],
+  "speaker6.email": ["presenter 6 email", "speaker 6 email"],
 };
 
 const normalise = (value: string): string => value.trim().toLowerCase().replace(/[_\-.]+/g, " ").replace(/\s+/g, " ");
@@ -81,14 +117,14 @@ const DECISIVE: { pattern: RegExp; fields: ImportField[] }[] = [
   // otherwise be matched by whatever loose synonym happened to come first.
   { pattern: /\bstarts?\b/, fields: ["session.start"] },
   { pattern: /\bends?\b|\bfinish(es)?\b/, fields: ["session.end"] },
-  { pattern: /\b(e\s*mail|email)\b/, fields: ["speaker.email", "speaker2.email"] },
+  { pattern: /\b(e\s*mail|email)\b/, fields: PRESENTER_PREFIXES.map((p) => presenterField(p, "email")) },
   {
     pattern: /\b(first|given)\s*name\b|\bforename\b/,
-    fields: ["speaker.first_name", "speaker2.first_name"],
+    fields: PRESENTER_PREFIXES.map((p) => presenterField(p, "first_name")),
   },
   {
     pattern: /\b(last|family)\s*name\b|\bsurname\b/,
-    fields: ["speaker.last_name", "speaker2.last_name"],
+    fields: PRESENTER_PREFIXES.map((p) => presenterField(p, "last_name")),
   },
   // Our own template's "Presenter Organization" mapped to `speaker.name`, because the
   // substring pass tries `speaker.name` first and the header contains "presenter".
@@ -380,9 +416,11 @@ export type StagedRow = {
   slot_ends_at: string | null;
   speaker_name: string;
   speaker_email: string;
-  /** A second presenter on the same slot, when the file names one. */
-  speaker2_name: string;
-  speaker2_email: string;
+  /**
+   * Everyone presenting this slot, presenter 1 first. One entry per filled presenter
+   * block; a block naming nobody is skipped rather than carried as a blank.
+   */
+  presenters: { name: string; email: string }[];
   organization: string;
   track: string;
   action: "create" | "update" | "unchanged";
@@ -690,8 +728,12 @@ export async function buildPreview(
       });
     }
 
-    const speaker2Name = [at("speaker2.first_name"), at("speaker2.last_name")].filter(Boolean).join(" ");
-    const speaker2Email = at("speaker2.email");
+    const presenters = PRESENTER_PREFIXES.map((prefix) => ({
+      name: [at(`${prefix}.first_name` as ImportField), at(`${prefix}.last_name` as ImportField)]
+        .filter(Boolean)
+        .join(" "),
+      email: at(`${prefix}.email` as ImportField),
+    })).filter((presenter) => presenter.name || presenter.email);
 
     const key = `${normalise(room)}|${startsAt ? zonedToUtc(startsAt, timeZone).toISOString() : ""}|${normalise(title)}`;
     const match = existingKeys.get(key);
@@ -727,8 +769,7 @@ export async function buildPreview(
           ? slotEnd
           : zonedToUtc(slotEnd, timeZone).toISOString()
         : null,
-      speaker2_name: speaker2Name,
-      speaker2_email: speaker2Email,
+      presenters,
       speaker_name: speakerName,
       speaker_email: speakerEmail,
       organization: at("speaker.organization"),
@@ -943,71 +984,54 @@ export async function commitImport(
     }
 
     /*
-     * DXG's template fills the presenter's email and leaves the name columns empty on
-     * every row. Keyed on the name alone, that imported the whole agenda with no
-     * speakers and no assignments at all — the sessions arrived and nobody could be
-     * invited to fill them, which is the entire point of the import.
+     * Everyone on the slot, in the order the file names them.
      *
-     * `speakers.full_name` is NOT NULL, so a provisional name is derived from the
-     * address rather than the row being dropped.
+     * A second (or sixth) presenter is another row in `speaker_assignments`, not
+     * another slot — people presenting one talk share the talk, its file and its
+     * approval, which is exactly what that table expresses.
+     *
+     * DXG's template fills the presenter's email and leaves the name columns empty on
+     * every row, so a presenter identified only by an address still has to become a
+     * speaker: keyed on the name alone, that imported whole agendas with no speakers
+     * and no assignments at all — sessions arrived and nobody could be invited to fill
+     * them, which is the entire point of the import. `speakers.full_name` is NOT NULL,
+     * so a provisional name is derived from the address rather than the row dropped.
      */
-    const displayName = row.speaker_name || provisionalName(row.speaker_email);
-    if (displayName) {
-      const { rows: speakerRows } = await tx.query<{ id: string }>(
-        row.speaker_email
+    for (const [index, presenter] of row.presenters.entries()) {
+      const displayName = presenter.name || provisionalName(presenter.email);
+      if (!displayName) continue;
+      // The sheet has one organization column and it sits in presenter 1's block, so
+      // it is presenter 1's. Applying it to everyone would put the first presenter's
+      // employer against the name of every co-presenter.
+      const organization = index === 0 ? row.organization : "";
+
+      const { rows: found } = await tx.query<{ id: string }>(
+        presenter.email
           ? `SELECT id FROM pmp.speakers WHERE event_id = $1 AND lower(email::text) = lower($2) AND merged_into IS NULL`
           : `SELECT id FROM pmp.speakers WHERE event_id = $1 AND lower(full_name) = lower($2) AND merged_into IS NULL`,
-        [input.eventId, row.speaker_email || displayName],
+        [input.eventId, presenter.email || displayName],
       );
-      let speakerId = speakerRows[0]?.id;
+
+      let speakerId = found[0]?.id;
       if (!speakerId) {
         const { rows: inserted } = await tx.query<{ id: string }>(
           `INSERT INTO pmp.speakers (client_id, event_id, email, full_name, organization)
            VALUES ($1,$2,NULLIF($3,'')::citext,$4,NULLIF($5,'')) RETURNING id`,
-          [clientId, input.eventId, row.speaker_email, displayName, row.organization],
+          [clientId, input.eventId, presenter.email, displayName, organization],
         );
         speakerId = inserted[0]!.id;
-      } else if (row.organization) {
+      } else if (organization) {
         await tx.query(`UPDATE pmp.speakers SET organization = COALESCE(organization, $2) WHERE id = $1`, [
           speakerId,
-          row.organization,
+          organization,
         ]);
       }
+
       speakers.add(speakerId);
       await tx.query(
         `INSERT INTO pmp.speaker_assignments (speaker_id, slot_id, event_id, client_id)
          VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING`,
         [speakerId, slotId, input.eventId, clientId],
-      );
-    }
-
-    /*
-     * A second presenter is a second assignment on the same slot, not a second slot —
-     * two people presenting one talk share the talk, its file and its approval.
-     * `speaker_assignments` has always allowed this; the import simply never used it.
-     */
-    const second = row.speaker2_name || provisionalName(row.speaker2_email);
-    if (second) {
-      const { rows: found } = await tx.query<{ id: string }>(
-        row.speaker2_email
-          ? `SELECT id FROM pmp.speakers WHERE event_id = $1 AND lower(email::text) = lower($2) AND merged_into IS NULL`
-          : `SELECT id FROM pmp.speakers WHERE event_id = $1 AND lower(full_name) = lower($2) AND merged_into IS NULL`,
-        [input.eventId, row.speaker2_email || second],
-      );
-      const secondId =
-        found[0]?.id ??
-        (
-          await tx.query<{ id: string }>(
-            `INSERT INTO pmp.speakers (client_id, event_id, email, full_name)
-             VALUES ($1,$2,NULLIF($3,'')::citext,$4) RETURNING id`,
-            [clientId, input.eventId, row.speaker2_email, second],
-          )
-        ).rows[0]!.id;
-      speakers.add(secondId);
-      await tx.query(
-        `INSERT INTO pmp.speaker_assignments (speaker_id, slot_id, event_id, client_id)
-         VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING`,
-        [secondId, slotId, input.eventId, clientId],
       );
     }
   }

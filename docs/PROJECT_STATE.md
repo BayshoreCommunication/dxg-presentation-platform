@@ -1610,3 +1610,43 @@ session 13:00–14:00 and presentation **13:15–14:00** — the end derived fro
 because its start was unreadable.
 
 CI green, 206 unit tests; invariants 63 pass, 0 skipped. Probe event removed.
+
+## 2026-09-21 (fifty-fifth) — presenters become a list; the editor's groups are boxed apart
+
+Travis: can't add presenter 3, duration should default to 5, separate the session / presentation /
+presenter sections, narrow the modal. D-033.
+
+**`speaker2.*` was a second set of fields bolted beside the first, so there could never be a third.**
+Presenters are a list now — `PRESENTER_PREFIXES` generates the fields, `buildPreview` collects everyone
+a row names into `StagedRow.presenters`, and the commit loops over them. Six is the cap: the schema
+would take any number, but the mapper, the template and the editor each have to enumerate them, and six
+is already three times what any DXG sheet has carried. A seventh column maps to nothing rather than
+silently becoming the sixth.
+
+**Removing a presenter shifts the ones below it up.** Clearing in place was easier and wrong: it would
+leave presenter 3's details in a block the next render labels "Presenter 2", or leave a hidden block
+still holding a name — which is how someone nobody meant to keep gets imported. Proved in the browser
+by filling three, removing the middle, and watching `Third` move into presenter 2's slot; the import
+then wrote exactly the two that remained.
+
+**A bug the naive generalisation introduced and the loop made obvious:** `row.organization` applied to
+every presenter, putting presenter 1's employer against the name of each co-presenter. DXG's sheet has
+one organization column and it sits inside presenter 1's block, so it is presenter 1's.
+
+**Boxed, not merely headed.** A heading over a continuous run of inputs still reads as one long form,
+and this form has two sets of times in it — a session's end and a presentation's start sat adjacent and
+looked like the same kind of thing.
+
+**Slider floor is 5**; "not set" stays reachable through Clear and is still what an untouched slider
+means. Dialog down to 560px, and three-up lines survive it by wrapping on `auto-fit` with a floor
+rather than being crushed — one line at 560, two on a phone, no breakpoint.
+
+**Found by looking at the screenshot rather than the code:** with the slider and `Clear` sharing a
+third of 560px, the button was clipped off the edge of the dialog. Moved onto the label line and
+checked by measuring its rect against the dialog's.
+
+Verified end to end: a three-presenter file mapped all three blocks and the database holds `Panel Of
+Three` with Dana Reyes + Lee Ng + Sam Ito on one slot; the edited row holds the two that survived the
+remove. Adding stops at six and the button disappears.
+
+CI green, 208 unit tests; invariants 63 pass, 0 skipped. Probe events removed.

@@ -33,11 +33,16 @@ const FIELD_LABELS: Record<string, string> = {
   "speaker.first_name": "Presenter 1 First Name",
   "speaker.last_name": "Presenter 1 Last Name",
   "speaker.name": "Presenter 1 Name",
-  "speaker2.email": "Presenter 2 Email",
-  "speaker2.first_name": "Presenter 2 First Name",
-  "speaker2.last_name": "Presenter 2 Last Name",
   "track.name": "Track",
 };
+
+/** Presenter 2 onwards, so a sixth presenter is labelled without listing eighteen keys. */
+["speaker2", "speaker3", "speaker4", "speaker5", "speaker6"].forEach((prefix, index) => {
+  const ordinal = index + 2;
+  FIELD_LABELS[`${prefix}.email`] = `Presenter ${ordinal} Email`;
+  FIELD_LABELS[`${prefix}.first_name`] = `Presenter ${ordinal} First Name`;
+  FIELD_LABELS[`${prefix}.last_name`] = `Presenter ${ordinal} Last Name`;
+});
 
 /** The placeholder shows the shape a value has to take, not a second label. */
 const FIELD_HINTS: Record<string, string> = {
@@ -47,7 +52,6 @@ const FIELD_HINTS: Record<string, string> = {
   "slot.start": "h:mm AM/PM",
   "slot.end": "h:mm AM/PM",
   "speaker.email": "name@example.com",
-  "speaker2.email": "name@example.com",
 };
 
 /**
@@ -58,8 +62,16 @@ const FIELD_HINTS: Record<string, string> = {
 const SESSION_TEXT_FIELDS = ["session.title", "room.name"];
 const SESSION_WHEN_FIELDS = ["session.date", "session.start", "session.end"];
 const PRESENTATION_FIELDS = ["slot.start", "slot.end", "slot.duration"];
-const PRESENTER_1_FIELDS = ["speaker.first_name", "speaker.last_name", "speaker.email"];
-const PRESENTER_2_FIELDS = ["speaker2.first_name", "speaker2.last_name", "speaker2.email"];
+/**
+ * Mirrors PRESENTER_PREFIXES in the importer. The first is `speaker`, not `speaker1`:
+ * it predates there being more than one.
+ */
+const PRESENTER_PREFIXES = ["speaker", "speaker2", "speaker3", "speaker4", "speaker5", "speaker6"];
+const presenterFields = (prefix: string) => [
+  `${prefix}.first_name`,
+  `${prefix}.last_name`,
+  `${prefix}.email`,
+];
 
 const TIME_FIELDS = new Set(["session.start", "session.end", "slot.start", "slot.end"]);
 const DATE_FIELDS = new Set(["session.date"]);
@@ -94,7 +106,13 @@ const toDateInput = (value: string): string | null => {
   return /^\d{4}-\d{2}-\d{2}$/.test(trimmed) ? trimmed : null;
 };
 
-/** The slider's range. A file may carry more, and that value is shown rather than clamped. */
+/**
+ * The slider's range. It starts at 5 rather than 0 — a zero-minute presentation is not
+ * a thing, so the lowest position it can reach is the shortest real one. "Not set"
+ * stays reachable through Clear, and is what an untouched slider still means.
+ * A file carrying more than the maximum is shown rather than clamped.
+ */
+const DURATION_MIN = 5;
 const DURATION_MAX = 240;
 const DURATION_STEP = 5;
 
@@ -112,6 +130,37 @@ const clock = (iso: string | null, timeZone: string) =>
   iso
     ? new Date(iso).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone })
     : "—";
+
+/**
+ * One titled block of the row editor, boxed off from its neighbours.
+ *
+ * The groups were headings over a continuous run of inputs, which read as one long
+ * form: a session's end time and a presentation's start time sat adjacent and looked
+ * like the same kind of thing, which is exactly the confusion the two sets of times
+ * invite. Separating them costs a little height and removes the question.
+ */
+function Section({ heading, note, children }: { heading: string; note?: string; children: React.ReactNode }) {
+  return (
+    <div
+      style={{
+        border: "1px solid var(--line)",
+        borderRadius: 8,
+        padding: "10px 12px 12px",
+        marginBottom: 12,
+      }}
+    >
+      <div className="kl" style={{ marginBottom: note ? 4 : 8 }}>
+        {heading}
+      </div>
+      {note && (
+        <div className="note" style={{ marginBottom: 8 }}>
+          {note}
+        </div>
+      )}
+      {children}
+    </div>
+  );
+}
 
 /**
  * The whole row, in a dialog, with every field the importer reads.
@@ -143,9 +192,17 @@ function RowEditor({
   onSave: (cells: Record<string, string>) => void;
 }) {
   const [draft, setDraft] = useState<Record<string, string>>({ ...row.cells });
-  const [showSecond, setShowSecond] = useState(
-    PRESENTER_2_FIELDS.some((field) => (row.cells[field] ?? "").trim() !== ""),
-  );
+  /*
+   * How many presenter blocks are shown. Everyone the file already named, and never
+   * fewer than one — a talk has a presenter. Empty blocks are not shown by default:
+   * eighteen boxes on every row of an eleven-row agenda is the noise D-030 removed.
+   */
+  const [presenterCount, setPresenterCount] = useState(() => {
+    const filled = PRESENTER_PREFIXES.filter((prefix) =>
+      presenterFields(prefix).some((field) => (row.cells[field] ?? "").trim() !== ""),
+    ).length;
+    return Math.max(1, filled);
+  });
 
   const changed = Object.fromEntries(
     Object.entries(draft).filter(([field, value]) => (row.cells[field] ?? "") !== value),
@@ -175,33 +232,32 @@ function RowEditor({
       const beyondSlider = minutes !== null && minutes > DURATION_MAX;
       return (
         <div className="field" key={field}>
-          <label htmlFor={`edit-${field}`}>
-            {FIELD_LABELS[field]}
-            <span className="note" style={{ marginLeft: 6 }}>
-              {minutes === null ? "not set" : `${minutes} min`}
-            </span>
-          </label>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <input
-              id={`edit-${field}`}
-              type="range"
-              min={0}
-              max={DURATION_MAX}
-              step={DURATION_STEP}
-              value={minutes !== null && !beyondSlider ? minutes : 0}
-              style={{ flex: 1 }}
-              aria-label={`${FIELD_LABELS[field]} in minutes`}
-              onChange={(event) =>
-                // Zero is "not set", not a zero-minute presentation.
-                set(field, event.target.value === "0" ? "" : event.target.value)
-              }
-            />
+          <label htmlFor={`edit-${field}`} style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+            <span>{FIELD_LABELS[field]}</span>
+            <span className="note">{minutes === null ? "not set" : `${minutes} min`}</span>
+            {/* On the label line, not beside the slider: in a third of the dialog's
+                width the two together left the button clipped off the edge. */}
             {minutes !== null && (
-              <button className="btn" style={{ padding: "2px 9px" }} onClick={() => set(field, "")}>
+              <button
+                className="btn"
+                style={{ padding: "0 6px", fontSize: 11, marginLeft: "auto" }}
+                onClick={() => set(field, "")}
+              >
                 Clear
               </button>
             )}
-          </div>
+          </label>
+          <input
+            id={`edit-${field}`}
+            type="range"
+            min={DURATION_MIN}
+            max={DURATION_MAX}
+            step={DURATION_STEP}
+            value={minutes !== null && !beyondSlider ? minutes : DURATION_MIN}
+            style={{ width: "100%" }}
+            aria-label={`${FIELD_LABELS[field]} in minutes`}
+            onChange={(event) => set(field, event.target.value)}
+          />
           {beyondSlider && (
             <div className="note" style={{ fontSize: 11 }}>
               {minutes} minutes — longer than the slider goes; Clear to change it.
@@ -261,9 +317,20 @@ function RowEditor({
     );
   };
 
-  /** Fields across one line, each taking an equal share of it. */
+  /**
+   * Fields across one line, each taking an equal share of it — and wrapping rather
+   * than crushing when the dialog is too narrow for them. `auto-fit` with a floor is
+   * what keeps a three-up row of times on one line at 560px and lets it fall to two
+   * on a phone, without a breakpoint to maintain.
+   */
   const line = (fields: string[]) => (
-    <div style={{ display: "grid", gridTemplateColumns: `repeat(${fields.length}, 1fr)`, gap: 10 }}>
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: `repeat(auto-fit, minmax(${fields.length > 2 ? 148 : 190}px, 1fr))`,
+        gap: 10,
+      }}
+    >
       {fields.map(renderField)}
     </div>
   );
@@ -287,7 +354,7 @@ function RowEditor({
         if (event.target === event.currentTarget && !busy) onCancel();
       }}
     >
-      <div className="card" style={{ maxWidth: 760, width: "100%", maxHeight: "86vh", overflow: "auto" }}>
+      <div className="card" style={{ maxWidth: 560, width: "100%", maxHeight: "86vh", overflow: "auto" }}>
         <div className="chd">
           <h3>Row {row.row}</h3>
           <span className="m">{row.cells["session.title"] || "untitled session"}</span>
@@ -320,64 +387,64 @@ function RowEditor({
             </div>
           )}
 
-          <div style={{ marginBottom: 14 }}>
-            <div className="kl" style={{ marginBottom: 6 }}>
-              Session
-            </div>
+          <Section heading="Session">
             {line(SESSION_TEXT_FIELDS)}
             <div style={{ marginTop: 10 }}>{line(SESSION_WHEN_FIELDS)}</div>
-          </div>
+          </Section>
 
-          <div style={{ marginBottom: 14 }}>
-            <div className="kl" style={{ marginBottom: 6 }}>
-              Presentation
-            </div>
-            <div className="note" style={{ marginBottom: 8 }}>
-              Its own time inside the session — leave blank if it runs with the session. Duration is
-              only used when there is no end time.
-            </div>
+          <Section
+            heading="Presentation"
+            note="Its own time inside the session — leave blank if it runs with the session. Duration is only used when there is no end time."
+          >
             {line(PRESENTATION_FIELDS)}
-          </div>
+          </Section>
 
-          <div style={{ marginBottom: 14 }}>
-            <div className="kl" style={{ marginBottom: 6 }}>
-              Presenter 1
-            </div>
-            {line(PRESENTER_1_FIELDS)}
-          </div>
-
-          {/*
-            A second presenter is hidden until asked for. Most sessions have one, and
-            three empty boxes on every row of an eleven-row agenda is the same noise the
-            validation list was. It opens by itself when the file already named one.
-          */}
-          {showSecond ? (
-            <div style={{ marginBottom: 14 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                <div className="kl">Presenter 2</div>
-                <button
-                  className="btn"
-                  style={{ padding: "2px 9px" }}
-                  onClick={() => {
-                    // Clearing as well as collapsing: a hidden box holding a value the
-                    // operator thinks they removed is how a wrong presenter gets imported.
-                    setDraft({
-                      ...draft,
-                      ...Object.fromEntries(PRESENTER_2_FIELDS.map((field) => [field, ""])),
-                    });
-                    setShowSecond(false);
-                  }}
-                >
-                  Remove
-                </button>
+          <Section heading="Presenters">
+            {PRESENTER_PREFIXES.slice(0, presenterCount).map((prefix, index) => (
+              <div key={prefix} style={{ marginBottom: index === presenterCount - 1 ? 0 : 12 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                  <div className="kl">Presenter {index + 1}</div>
+                  {index > 0 && (
+                    <button
+                      className="btn"
+                      style={{ padding: "2px 9px" }}
+                      onClick={() => {
+                        /*
+                         * Shift the ones below up rather than leaving a hole. Clearing
+                         * in place would put presenter 3 in a block labelled 2 on the
+                         * next render, or leave a hidden block still holding a name —
+                         * which is how a presenter nobody meant to keep gets imported.
+                         */
+                        const next = { ...draft };
+                        for (let at = index; at < PRESENTER_PREFIXES.length; at += 1) {
+                          const here = PRESENTER_PREFIXES[at]!;
+                          const below = PRESENTER_PREFIXES[at + 1];
+                          presenterFields(here).forEach((field, part) => {
+                            next[field] = below ? (draft[presenterFields(below)[part]!] ?? "") : "";
+                          });
+                        }
+                        setDraft(next);
+                        setPresenterCount(Math.max(1, presenterCount - 1));
+                      }}
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+                {line(presenterFields(prefix))}
               </div>
-              {line(PRESENTER_2_FIELDS)}
-            </div>
-          ) : (
-            <button className="btn" style={{ marginBottom: 14 }} onClick={() => setShowSecond(true)}>
-              + Add another presenter
-            </button>
-          )}
+            ))}
+
+            {presenterCount < PRESENTER_PREFIXES.length && (
+              <button
+                className="btn"
+                style={{ marginTop: 12 }}
+                onClick={() => setPresenterCount(presenterCount + 1)}
+              >
+                + Add another presenter
+              </button>
+            )}
+          </Section>
 
           <div className="note" style={{ marginTop: 10 }}>
             Times are read in {timeZone}, the event&rsquo;s own timezone. Nothing is written to the event

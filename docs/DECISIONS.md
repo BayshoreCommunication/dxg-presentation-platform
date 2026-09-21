@@ -239,3 +239,18 @@ The editor was a two-column grid of identical text boxes, fifteen of them, which
 **The duration slider goes to 240, not the template's 999.** Five-minute steps over 999 minutes is two hundred positions to land on 45; a slider that cannot be aimed is worse than the number it replaced. 240 covers any real presentation. A file carrying more is **shown, not clamped** — the value appears with a note and a `Clear` button, because silently rewriting an operator's data to fit our control is the one thing a picker must never do. Zero means "not set" rather than a zero-minute presentation, so the slider at rest and an empty cell are the same thing.
 
 **`Track` is gone from the editor.** DXG's sheet has no such column (D-029), so it was a box nobody could be asked to fill from the file in front of them. The importer still reads a `Track` column when a file supplies one, and a row's existing value survives editing because only changed cells are sent. Owner: Travis.
+
+## D-033 (2026-09-21): Presenters are a list of up to six, and the editor's groups are boxed apart — Status: ACCEPTED (Travis's call)
+`speaker2.*` was a second set of fields bolted beside the first, so there could never be a third. Presenters are now a list: `PRESENTER_PREFIXES` generates the fields, the importer collects everyone a row names into `StagedRow.presenters`, and the commit loops. Six is the cap.
+
+**Six, and the cap is a judgement not a limit of the schema.** `speaker_assignments` would take any number; the mapper, the template and the editor all have to enumerate them, and six columns of each kind is already three times what any DXG sheet has carried. A seventh presenter column maps to nothing rather than silently becoming the sixth — a test holds that.
+
+**Removing a presenter shifts the ones below it up.** Clearing in place was the easier implementation and the wrong behaviour: it would leave presenter 3's details in a block the next render labels "Presenter 2", or — worse — leave a hidden block still holding a name, which is how somebody nobody meant to keep gets imported. Verified by filling three and removing the middle: the third moved up, the count fell, and the import wrote exactly the two that remained.
+
+**The organization belongs to presenter 1 only.** DXG's sheet has one organization column and it sits inside presenter 1's block. Applying `row.organization` across the loop — which the naive generalisation does — would have put the first presenter's employer against the name of every co-presenter.
+
+**The groups are boxed rather than merely headed.** A heading over a continuous run of inputs still reads as one long form, and this form has two sets of times in it: a session's end and a presentation's start sat adjacent and looked like the same kind of thing. A border costs a little height and removes the question.
+
+**The slider's floor is 5, not 0.** A zero-minute presentation is not a thing, so the lowest position the control can reach is the shortest real one; "not set" is still reachable through `Clear`, and remains what an untouched slider means. `Clear` moved onto the label line — beside the slider, in a third of a 560px dialog, it was clipped off the edge, which the screenshot showed and the code did not.
+
+**The dialog is 560px, down from 760.** Three-up lines survive it because they wrap on `auto-fit` with a floor rather than being crushed: one line at 560, two on a phone, no breakpoint to maintain. Owner: Travis.

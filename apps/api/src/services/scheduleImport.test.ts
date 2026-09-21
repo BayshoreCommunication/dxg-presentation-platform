@@ -410,11 +410,10 @@ describe("a second presenter is read from the second set of presenter columns", 
     ]);
   });
 
-  test("a third presenter is not invented", () => {
-    const mapped = autoMap([
-      "Presenter 1 Email", "Presenter 2 Email", "Presenter 3 Email",
-    ]);
-    assert.deepEqual(mapped, ["speaker.email", "speaker2.email", null]);
+  test("a third presenter is read too", () => {
+    // Capped at two until presenters became a list; see the "more than two" suite.
+    const mapped = autoMap(["Presenter 1 Email", "Presenter 2 Email", "Presenter 3 Email"]);
+    assert.deepEqual(mapped, ["speaker.email", "speaker2.email", "speaker3.email"]);
   });
 });
 
@@ -463,5 +462,29 @@ describe("a missing time is missing, not nine in the morning", () => {
 
   test("no date means no time, whatever the clock says", () => {
     assert.equal(toDateTime("", "9:00 AM"), null);
+  });
+});
+
+describe("more than two presenters", () => {
+  test("a sheet with three presenter blocks maps all three", () => {
+    assert.deepEqual(
+      autoMap([
+        "Presenter 1 Email", "Presenter 1 First Name", "Presenter 1 Last Name",
+        "Presenter 2 Email", "Presenter 2 First Name", "Presenter 2 Last Name",
+        "Presenter 3 Email", "Presenter 3 First Name", "Presenter 3 Last Name",
+      ]),
+      [
+        "speaker.email", "speaker.first_name", "speaker.last_name",
+        "speaker2.email", "speaker2.first_name", "speaker2.last_name",
+        "speaker3.email", "speaker3.first_name", "speaker3.last_name",
+      ],
+    );
+  });
+
+  test("the run stops at six rather than inventing a seventh", () => {
+    const emails = Array.from({ length: 7 }, (_, index) => `Presenter ${index + 1} Email`);
+    const mapped = autoMap(emails);
+    assert.equal(mapped.filter(Boolean).length, 6);
+    assert.equal(mapped[6], null, "a seventh presenter has no field to go in");
   });
 });
