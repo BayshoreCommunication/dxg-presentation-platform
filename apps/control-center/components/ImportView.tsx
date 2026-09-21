@@ -372,11 +372,15 @@ function RowEditor({
     </div>
   );
 
+  const sessionTitle = row.cells["session.title"] || "untitled session";
+
   return (
     <div
       role="dialog"
       aria-modal="true"
-      aria-label={`Edit row ${row.row}`}
+      // The visible title is truncated; the accessible name is not, since there is no
+      // hovering an ellipsis with a screen reader.
+      aria-label={`Edit row ${row.row}: ${sessionTitle}`}
       style={{
         position: "fixed",
         inset: 0,
@@ -392,9 +396,37 @@ function RowEditor({
       }}
     >
       <div className="card" style={{ maxWidth: 560, width: "100%", maxHeight: "86vh", overflow: "auto" }}>
-        <div className="chd">
-          <h3>Row {row.row}</h3>
-          <span className="m">{row.cells["session.title"] || "untitled session"}</span>
+        {/*
+          `.chd` is a card header built for a short name beside a short meta string, and
+          the meta here is whatever the spreadsheet put in the title cell — ninety
+          characters of conference-speak is normal. Left to the shared rule the title
+          took the width it wanted, wrapped to three lines of monospace, and squeezed
+          "Row 6" into "Row" / "6" stacked in the corner: the row number is what this
+          dialog is *about*, and it had become the smallest thing in its own header.
+
+          So the number never shrinks, and the title takes one line and ellipses.
+          Nothing is lost by truncating it — `Session Title` is the first field in the
+          dialog, in full and editable — but the whole string is on the element's
+          `title` for a hover and in the dialog's accessible name, because a screen
+          reader gets no ellipsis to hover over.
+        */}
+        <div className="chd" style={{ gap: 12 }}>
+          <h3 style={{ flexShrink: 0 }}>Row {row.row}</h3>
+          <span
+            className="m"
+            title={sessionTitle}
+            style={{
+              // `minWidth: 0` is what actually permits a flex item to be narrower than
+              // its content; without it the ellipsis never appears and it overflows.
+              minWidth: 0,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              textAlign: "right",
+            }}
+          >
+            {sessionTitle}
+          </span>
         </div>
         <div className="cbd">
           {problems.length > 0 && (

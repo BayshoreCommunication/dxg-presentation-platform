@@ -2075,3 +2075,40 @@ count back to three afterwards.
 
 **Not mine:** a draft called `Test Event` (Tampa, 21–23 Sep 2026) was created from the browser by
 `admin@example.invalid` at 11:01 UTC today. Left alone.
+
+## 2026-09-21 (sixty-fifth) — the row editor's header stops being the title's passenger
+
+Travis, on the row editor with a real conference title in it: improve the modal header.
+
+**What it was doing.** `.chd` is the shared card header — `display:flex` with
+`justify-content:space-between` — written for a short name beside a short meta string. The meta here
+is whatever the spreadsheet put in the title cell, and a hundred and eleven characters of
+`15P - (In)Congruence Between Rigorous Research and Secondary School Realities: Assessing
+Implementation Fidelity` is an ordinary one. Under the shared rule the title took the width it wanted,
+wrapped to three lines of monospace, and squeezed `Row 6` into `Row` / `6` stacked in the corner — the
+row number is what the dialog is *about* and it had become the smallest thing in its own header.
+
+**Now:** the number never shrinks, the title takes one line and ellipses, and the header is 46px
+instead of three lines of it. Nothing is lost by truncating — `Session Title` is the first field in
+the dialog, in full and editable — and the whole string is on the element's `title` for a hover.
+
+**The accessible name carries the untruncated title**, because there is no hovering an ellipsis with a
+screen reader: `aria-label="Edit row 2: 15P - (In)Congruence Between …"` in full. Same principle as
+the fifty-sixth entry, where short visible labels kept fully-qualified accessible ones.
+
+**`minWidth: 0` is the whole trick and is easy to omit.** A flex item will not shrink below its
+content's width without it, so `text-overflow: ellipsis` never fires and the text simply overflows the
+box. Commented in place, since the next person to touch this will be tempted to delete it as noise.
+
+Scoped to this dialog rather than to `.chd`: every other card header in the product pairs two short
+strings and is fine as it is.
+
+Verified by reproducing first — the broken header photographed at 800px with `Row` / `2` stacked —
+then measuring rather than eyeballing: `rowLabelWraps false`, `titleTruncated true`, the full string in
+both `title` and the dialog's `aria-label`, nothing overflowing the header, at **1202px and at 375px**,
+with a short title (no ellipsis, same 46px) as the control. The long title was measured at 375px too,
+by swapping the text in place and reading the box back.
+
+CI green, lint and type-check clean. Probe event removed.
+
+**Still not mine:** the `Test Event` draft from 11:01 UTC is untouched.
