@@ -2303,3 +2303,37 @@ mirror are covered by the API suites; the fences themselves are covered by the b
 here. That is weaker and should not be mistaken for equivalent.
 
 CI green, 208 unit tests; invariants 116 pass, 0 skipped. Probe event removed.
+
+## 2026-09-21 (seventieth) — the option itself goes, not just the answer
+
+Travis, with a screenshot of Chrome's time dropdown listing 07 08 09 10 11 12 01 on a field bounded to
+a 09:00–11:00 session: we should not give the user the option to select a time outside the session.
+
+**He is right, and the previous fix could not do it.** `min` and `max` do not filter that dropdown —
+Chrome lists every hour of the day and uses the bounds only to mark the result invalid after the fact.
+The sixty-ninth entry made the wrong value refused; it could not make it unoffered, and that gap is
+the whole of this request. Worth recording as the pattern: *a constraint the control does not render
+is not a constraint the user experiences.*
+
+**The presentation's two clocks are now a list of the session's own times**, five-minute grid, bounded
+exactly as before — twenty-five options for a two-hour session, with `— runs with the session` as the
+empty one. The session's own clocks stay native inputs: a presentation's time is chosen from inside a
+known window, which is what a list is for, while a session's time is simply stated and would need 288
+options nobody scrolls.
+
+**A file's out-of-window time is kept and named** — `11:45 AM — outside the session`, red, Save
+refused — rather than dropped into the list, which would silently replace the operator's data with the
+first legal option, or hidden, which would show a value the row does not hold. Picking any legal time
+removes it and the option goes with it.
+
+**Save's gate had to widen**: `input:invalid` is the browser's verdict on `min`/`max` and says nothing
+about a `<select>`, so it now reads `input:invalid, [aria-invalid="true"]` and covers both controls
+with one check.
+
+Verified in the browser on a 09:00–11:00 session: the presentation fields render as `SELECT` and the
+session's as `INPUT`; the end offers 10:25 AM → 11:00 AM and stops, the start stops at its own end
+(10:40 AM); a row carrying 11:45 AM shows it as `11:45 AM — outside the session` with
+`aria-invalid="true"`, border `rgb(214,69,69)` and Save disabled, and choosing 10:55 AM clears all
+four of those and shrinks the list from ten options back to nine.
+
+CI green, 208 unit tests; invariants 116 pass, 0 skipped. Probe event removed.

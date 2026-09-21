@@ -599,3 +599,36 @@ repo has no component-test harness (`npm test` runs `node --test` over `packages
 and BUILD_SPEC §16's Jest/Testing Library layer does not exist yet). The bounds and the Save gate are
 verified in the browser and recorded in PROJECT_STATE; the rules they mirror are covered by the API
 suites. Owner: Travis.
+
+## D-043 (2026-09-21): The presentation's clocks become a list of the session's own times — Status: ACCEPTED (Travis's call, amends D-042)
+Travis, shown Chrome's time dropdown offering 07, 08, 09, 10, 11, 12, 01 on a field bounded to a
+09:00–11:00 session: we should not give the user the option to select a time outside the session.
+
+**With a native time input we cannot.** `min` and `max` do not filter that dropdown — Chrome lists
+every hour of the day and uses the bounds only to mark the result invalid afterwards. D-042 made the
+wrong value *refused*; it could not make it *unoffered*, and the difference is the whole of this
+request.
+
+**So the presentation's two clocks are a `<select>` of the times the session allows**, on a five-minute
+grid, bounded exactly as D-042 bounded them: the start runs from the session start to the earlier of
+the slot end and the session end, the end from the later of the slot start and the session start to the
+session end. A two-hour session yields twenty-five options. The empty option reads
+`— runs with the session`, which is what an absent slot time has always meant.
+
+**A time the file supplied that the window does not contain is kept and named**, as
+`11:45 AM — outside the session`, with the field in the blocking colour and Save refused. Dropping it
+into the list would be silently replacing the operator's data with the first legal option, which is
+what D-032 forbade for this same screen; hiding it would leave the field showing a value the row does
+not hold. Choosing any legal time removes it, and the option disappears with it.
+
+**The session's own clocks stay native inputs**, and the asymmetry is the point rather than an
+oversight: a presentation's time is *chosen from inside a known window*, which is what a list is for,
+while a session's is simply stated. Its only bound is its own other end, so enumerating it means 288
+options for a day nobody scrolls.
+
+**Save now also refuses a stranded dropdown.** `input:invalid` is the browser's verdict on `min`/`max`
+and says nothing about a `<select>`, so the gate reads `input:invalid, [aria-invalid="true"]` — the
+same one check covering both controls.
+
+**The server rules are untouched and still decide.** Nothing in a browser is a rule; what changed is
+that an operator working normally can no longer produce the value the server would refuse. Owner: Travis.

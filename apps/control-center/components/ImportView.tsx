@@ -128,6 +128,34 @@ const toTimeInput = (value: string): string | null => {
   return `${String(hour).padStart(2, "0")}:${match[2]}`;
 };
 
+/** `10:25` → `10:25 AM`, the way the sheet and the rest of this screen write a time. */
+const clockLabel = (hhmm: string): string => {
+  const hour = Number(hhmm.slice(0, 2));
+  const suffix = hour < 12 ? "AM" : "PM";
+  const shown = hour % 12 === 0 ? 12 : hour % 12;
+  return `${shown}:${hhmm.slice(3, 5)} ${suffix}`;
+};
+
+/**
+ * Every `HH:MM` from `from` to `to` inclusive, on a five-minute grid.
+ *
+ * Five because a conference agenda is written on it, and because 288 options for a
+ * whole day is a list nobody scrolls. A session two hours long yields 25.
+ */
+const clockOptions = (from: string, to: string, step = 5): string[] => {
+  const asMinutes = (value: string) => Number(value.slice(0, 2)) * 60 + Number(value.slice(3, 5));
+  const first = asMinutes(from);
+  const last = asMinutes(to);
+  const out: string[] = [];
+  for (let at = Math.ceil(first / step) * step; at <= last; at += step) {
+    out.push(`${String(Math.floor(at / 60)).padStart(2, "0")}:${String(at % 60).padStart(2, "0")}`);
+  }
+  // The bounds themselves are always offerable, even when they are off the grid.
+  if (!out.includes(from)) out.unshift(from);
+  if (!out.includes(to)) out.push(to);
+  return out;
+};
+
 /** Minutes between two `HH:MM` clock values; negative when the second is earlier. */
 const minutesBetween = (from: string, to: string): number => {
   const parts = (value: string) => Number(value.slice(0, 2)) * 60 + Number(value.slice(3, 5));
@@ -247,7 +275,10 @@ function RowEditor({
   const [outOfRange, setOutOfRange] = useState(false);
   useEffect(() => {
     const el = formRef.current;
-    if (el) setOutOfRange(el.querySelectorAll("input:invalid").length > 0);
+    // `input:invalid` is the browser's verdict on min/max; `[aria-invalid]` covers the
+    // dropdowns, which hold an out-of-window value the file supplied rather than one
+    // the operator could have chosen.
+    if (el) setOutOfRange(el.querySelectorAll('input:invalid, [aria-invalid="true"]').length > 0);
   });
 
   const changed = Object.fromEntries(
@@ -344,6 +375,49 @@ function RowEditor({
               : field === "session.end"
                 ? { min: sessionFrom }
                 : {};
+
+      /*
+       * A native time input will not withhold an option: Chrome's dropdown lists every
+       * hour of the day whatever `min` and `max` say, and uses them only to mark the
+       * result invalid afterwards. Travis, shown that list: we should not give the user
+       * the option to select a time outside the session. With that control we cannot —
+       * so for the presentation's two clocks it is a list of the times the session
+       * actually allows.
+       *
+       * The session's own clocks stay native inputs. Their only bound is each other,
+       * and enumerating a whole day is 288 options nobody scrolls; there is no window
+       * to choose from there, only a time to state.
+       */
+      const listable = (field === "slot.start" || field === "slot.end") && bounds.min && bounds.max;
+
+      if (picker !== null && listable) {
+        const offered = clockOptions(bounds.min!, bounds.max!);
+        // A value the file supplied that the window does not contain is kept and named
+        // rather than quietly replaced by the first legal option — the row is here to
+        // be corrected, and destroying the evidence is not correcting it.
+        const stranded = picker !== "" && !offered.includes(picker);
+        return (
+          <div className="field" key={field}>
+            {label}
+            <select
+              id={`edit-${field}`}
+              style={{ width: "100%", ...(stranded ? { borderColor: "var(--block)" } : border) }}
+              value={picker}
+              aria-invalid={stranded || undefined}
+              {...(visible && visible !== full ? { "aria-label": full } : {})}
+              onChange={(event) => set(field, event.target.value)}
+            >
+              <option value="">— runs with the session</option>
+              {stranded && <option value={picker}>{clockLabel(picker)} — outside the session</option>}
+              {offered.map((option) => (
+                <option key={option} value={option}>
+                  {clockLabel(option)}
+                </option>
+              ))}
+            </select>
+          </div>
+        );
+      }
 
       if (picker !== null) {
         return (
