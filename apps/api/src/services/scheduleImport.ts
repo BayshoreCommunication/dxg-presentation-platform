@@ -468,7 +468,6 @@ export const REQUIRED_FIELDS = [
 ] as const;
 
 export type ImportPreview = {
-  import_id: string;
   file_name: string;
   /** The event's timezone, so the screen renders and edits times in it, not the browser's. */
   timezone: string;
@@ -952,25 +951,19 @@ export async function buildPreview(
     unchanged: staged.filter((row) => row.action === "unchanged").length,
   };
 
-  const { rows: importRows } = await tx.query<{ id: string }>(
-    `INSERT INTO pmp.schedule_imports
-       (event_id, client_id, uploaded_by, filename, s3_key, column_mapping, status, row_errors, diff)
-     SELECT $1, e.client_id, $2, $3, $4, $5, $6, $7, $8 FROM pmp.events e WHERE e.id = $1
-     RETURNING id`,
-    [
-      input.eventId,
-      input.actorId,
-      input.fileName,
-      input.s3Key,
-      JSON.stringify(mapping),
-      issues.some((issue) => issue.severity === "blocking") ? "failed" : "validated",
-      JSON.stringify(issues),
-      JSON.stringify({ total: staged.length, counts }),
-    ],
-  );
-
+  /*
+   * Nothing is written here (D-051).
+   *
+   * This used to insert a `schedule_imports` row and hand back its id, which made an
+   * import record out of every *look* at a file. `buildPreview` runs again on every
+   * correction, every re-map, every row added or removed — so one operator finishing
+   * one agenda left dozens of rows, all but the last of them abandoned. A single
+   * session of testing this screen produced eighty-two.
+   *
+   * The record is written by `commitImport` now, once, when an agenda actually
+   * becomes sessions. A preview is a read.
+   */
   return ok({
-    import_id: importRows[0]?.id ?? "",
     file_name: input.fileName,
     timezone: timeZone,
     required_fields: REQUIRED_FIELDS,
@@ -1007,7 +1000,18 @@ export function provisionalName(email: string): string {
 export async function commitImport(
   tx: pg.PoolClient,
   actor: Actor,
-  input: { eventId: string; importId: string; rows: StagedRow[] },
+  input: {
+    eventId: string;
+    rows: StagedRow[];
+    /** What the record should say this import was, since it is written here now. */
+    fileName: string;
+    s3Key: string;
+    /**
+     * The mapping in force, or `[]` when the headings were read automatically and
+     * nothing was corrected by hand — which is the ordinary case.
+     */
+    mapping: readonly (ImportField | null)[];
+  },
 ): Promise<Result<{ created: number; updated: number; unchanged: number; speakers: number }, DomainError>> {
   const { rows: eventRows } = await tx.query<{ client_id: string }>(
     `SELECT client_id FROM pmp.events WHERE id = $1`,
@@ -1247,16 +1251,39 @@ export async function commitImport(
     }
   }
 
-  await tx.query(`UPDATE pmp.schedule_imports SET status = 'committed', committed_at = now() WHERE id = $1`, [
-    input.importId,
-  ]);
+  /*
+   * The import record, written once, here (D-051) — where an agenda actually becomes
+   * sessions, rather than on every preview of it.
+   *
+   * `row_errors` is empty by construction: a row with a blocking problem is refused
+   * above, so a committed import has none by the time it reaches this point. The diff
+   * is the real outcome rather than the preview's prediction of it.
+   */
+  const { rows: importRows } = await tx.query<{ id: string }>(
+    `INSERT INTO pmp.schedule_imports
+       (event_id, client_id, uploaded_by, filename, s3_key, column_mapping,
+        status, row_errors, diff, committed_at)
+     VALUES ($1, $2, $3, $4, $5, $6, 'committed', '[]'::jsonb, $7, now())
+     RETURNING id`,
+    [
+      input.eventId,
+      clientId,
+      actor.id,
+      input.fileName,
+      input.s3Key,
+      JSON.stringify(input.mapping),
+      JSON.stringify({ total: input.rows.length, created, updated, unchanged }),
+    ],
+  );
+  const importId = importRows[0]!.id;
+
   await appendAudit(tx, {
     partitionId: input.eventId,
     clientId,
     actorUserId: actor.id,
     action: "import.committed",
     subjectType: "schedule_import",
-    subjectId: input.importId,
+    subjectId: importId,
     detail: { created, updated, unchanged, speakers: speakers.size },
   });
 

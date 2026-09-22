@@ -500,7 +500,6 @@ export type StagedRow = {
 };
 
 export type ImportPreview = {
-  import_id: string;
   upload_id: string;
   file_name: string;
   /** The event's timezone — times are rendered in it, never the browser's. */
@@ -680,10 +679,16 @@ export const remapImport = (uploadId: string, mapping: (ImportField | null)[]) =
     { method: "POST", body: JSON.stringify({ mapping }) },
   );
 
-export const commitImport = (importId: string, eventId: string, rows: StagedRow[]) =>
+/**
+ * Turns the staged rows into sessions. Keyed by the upload, not by a
+ * `schedule_imports` row: that record is written by the commit now, so there is
+ * nothing to name until it succeeds. The event comes from the server's own cache
+ * entry rather than being sent from here.
+ */
+export const commitImport = (uploadId: string, rows: StagedRow[]) =>
   request<{ created: number; updated: number; unchanged: number; speakers: number }>(
-    `/imports/${importId}/commit`,
-    { method: "POST", body: JSON.stringify({ event_id: eventId, rows }) },
+    `/imports/${uploadId}/commit`,
+    { method: "POST", body: JSON.stringify({ rows }) },
   );
 
 /* ── archive builder & client portal ──────────────────────────────────────── */

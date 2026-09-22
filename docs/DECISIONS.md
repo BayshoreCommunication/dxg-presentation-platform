@@ -882,3 +882,40 @@ offline. Nothing is broken by it, but a virtual location is not a room anyone wi
 in, and Room sync has no way to say so. Worth a "no agent expected" flag on a room; not built.
 
 Six invariants cover it, including both halves of the distinction. Owner: Travis.
+
+## D-051 (2026-09-22): An import is recorded when it commits — Status: ACCEPTED (Travis's call)
+`buildPreview` inserted a `schedule_imports` row and returned its id, so a record was written for
+every *look* at a file. The preview is rebuilt on every correction, re-map, row added and row
+removed, so one operator finishing one agenda left dozens of abandoned rows. Clearing Test Event
+after a session of testing this screen turned up **82** of them against four sessions.
+
+**The record is written by `commitImport` now**, once, when an agenda actually becomes sessions. A
+preview is a read.
+
+**The commit is keyed by the upload, not by a record.** It was `POST /imports/{importId}/commit`
+where `importId` was the row the preview had inserted — the thing being removed. There is nothing to
+name until the commit succeeds, so the staging session identifies itself with the same `upload_id`
+that `cells`, `remap` and the row routes already use, and `import_id` is gone from the preview.
+
+**Two consequences worth stating.**
+
+*Authz.* The cross-event middleware resolved this route's event by looking the `schedule_imports` row
+up, which no longer exists at that point, so its `/imports/…/commit` pattern is gone — leaving no
+`/imports/…` pattern at all, since every id under that prefix is now a cache key. The event comes
+from the cache entry and goes to `scopeFor`, which refuses a caller holding no role on it. That is
+the stronger check of the two: a request body can claim any event, a cache entry cannot. The route
+no longer reads `event_id` from the body at all.
+
+*A commit needs a live staging session.* Committing used to work from the client's copy alone, so a
+preview could be committed after the API had restarted and forgotten the upload. It now answers
+`import.expired`, which is what the correction routes have always done — and is honest, because the
+server cannot record what it no longer has.
+
+**The record is more accurate than the one it replaces.** `diff` is the real outcome rather than the
+preview's prediction, `row_errors` is empty by construction since a blocking row is refused, and
+`status` is `committed` rather than a `validated` row flipped afterwards. The mapping is kept by
+carrying the one each preview settles on in the cache entry — without that, an auto-mapped agenda
+(the ordinary case) would have recorded none.
+
+Two invariants: five rebuilds of a preview write nothing; a commit writes exactly one, with the real
+diff and the auto-derived mapping. Owner: Travis.

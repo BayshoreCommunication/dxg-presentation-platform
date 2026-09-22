@@ -27,7 +27,6 @@ let eventId = "";
 const json = (cookie: string) => ({ "content-type": "application/json", cookie });
 
 type Preview = {
-  import_id: string;
   upload_id: string;
   timezone: string;
   rows: {
@@ -83,10 +82,10 @@ const fixRow = async (
   ).json()) as Preview;
 
 const commit = (preview: Preview) =>
-  fetch(`${API}/imports/${preview.import_id}/commit`, {
+  fetch(`${API}/imports/${preview.upload_id}/commit`, {
     method: "POST",
     headers: json(admin),
-    body: JSON.stringify({ event_id: eventId, rows: preview.rows }),
+    body: JSON.stringify({ rows: preview.rows }),
   });
 
 /** Row 2 complete; row 3 has no title; row 4 no room; row 5 a date nothing can read. */
@@ -437,10 +436,10 @@ describe("a session location the event does not have", () => {
   };
 
   const commitTo = (preview: Preview) =>
-    fetch(`${API}/imports/${preview.import_id}/commit`, {
+    fetch(`${API}/imports/${preview.upload_id}/commit`, {
       method: "POST",
       headers: json(admin),
-      body: JSON.stringify({ event_id: probe, rows: preview.rows }),
+      body: JSON.stringify({ rows: preview.rows }),
     });
 
   const roomsOf = async (): Promise<string[]> =>
@@ -721,5 +720,105 @@ describe("a row can be taken out of an uploaded agenda", () => {
     const back = await restore(preview.upload_id);
     assert.deepEqual(back.excluded, []);
     assert.deepEqual(back.rows.map((row) => row.row), [2, 3, 4, 5]);
+  });
+});
+
+/*
+ * D-051. `buildPreview` used to insert a `schedule_imports` row and hand back its id,
+ * so an import record was written for every *look* at a file — and the preview is
+ * rebuilt on every correction, re-map, row added and row removed. One operator
+ * finishing one agenda left dozens of abandoned rows; a single session of testing this
+ * screen left eighty-two on one event.
+ *
+ * The record belongs to the commit, which is the thing that happened.
+ */
+describe("an import is recorded when it commits, not when it is previewed", () => {
+  const RECORD_PROBE = "Import Record Probe";
+  let probe = "";
+
+  const AGENDA = [
+    "Session Title,Session Location,Session Date,Session Start,Session End",
+    "Recorded Talk,Ballroom A,03/14/2027,9:00 AM,10:00 AM",
+  ].join("\n");
+
+  const recordsFor = async (): Promise<{ status: string; mapping: unknown; diff: unknown }[]> =>
+    withSystemScope(async (tx) => {
+      const { rows } = await tx.query<{ status: string; column_mapping: unknown; diff: unknown }>(
+        `SELECT status, column_mapping, diff FROM pmp.schedule_imports WHERE event_id = $1`,
+        [probe],
+      );
+      return rows.map((row) => ({ status: row.status, mapping: row.column_mapping, diff: row.diff }));
+    });
+
+  const uploadTo = async (): Promise<Preview> =>
+    (await (
+      await fetch(`${API}/events/${probe}/imports`, {
+        method: "POST",
+        headers: { "content-type": "application/octet-stream", "x-file-name": "recorded.csv", cookie: admin },
+        body: Buffer.from(AGENDA, "utf8"),
+      })
+    ).json()) as Preview;
+
+  before(async () => {
+    if (!up) return;
+    const created = (await (
+      await fetch(`${API}/events`, {
+        method: "POST",
+        headers: json(admin),
+        body: JSON.stringify({
+          client_id: "11111111-1111-4111-8111-111111111111",
+          name: RECORD_PROBE,
+          venue: "Tampa",
+          timezone: "America/New_York",
+          starts_on: "2027-03-14",
+          ends_on: "2027-03-14",
+        }),
+      })
+    ).json()) as { event_id: string };
+    probe = created.event_id;
+  });
+
+  after(async () => {
+    if (!up) return;
+    await removeTestEvents([RECORD_PROBE]);
+  });
+
+  test("previewing and correcting a file writes nothing", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const preview = await uploadTo();
+    assert.deepEqual(await recordsFor(), [], "the upload itself is a read");
+
+    // Every one of these rebuilds the preview, and used to leave a row behind.
+    await fixRow(preview.upload_id, 2, { "session.title": "Recorded Talk, take two" });
+    await fixRow(preview.upload_id, 2, { "session.title": "Recorded Talk, take three" });
+    await fetch(`${API}/imports/${preview.upload_id}/rows/2`, { method: "DELETE", headers: json(admin) });
+    await fetch(`${API}/imports/${preview.upload_id}/rows/restore`, { method: "POST", headers: json(admin) });
+
+    assert.deepEqual(await recordsFor(), [], "five rebuilds of the preview, still nothing recorded");
+  });
+
+  test("committing writes exactly one, with the real outcome", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const preview = await uploadTo();
+    const response = await fetch(`${API}/imports/${preview.upload_id}/commit`, {
+      method: "POST",
+      headers: json(admin),
+      body: JSON.stringify({ rows: preview.rows }),
+    });
+    assert.equal(response.status, 200);
+
+    const records = await recordsFor();
+    assert.equal(records.length, 1);
+    assert.equal(records[0]!.status, "committed");
+    // What actually happened, not what the preview predicted would.
+    assert.deepEqual(records[0]!.diff, { total: 1, created: 1, updated: 0, unchanged: 0 });
+    // Auto-mapped agendas still record how their columns were read.
+    assert.deepEqual(records[0]!.mapping, [
+      "session.title",
+      "room.name",
+      "session.date",
+      "session.start",
+      "session.end",
+    ]);
   });
 });

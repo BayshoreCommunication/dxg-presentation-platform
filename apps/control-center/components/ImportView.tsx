@@ -1325,7 +1325,7 @@ export function ImportView({
                 }
                 onClick={() =>
                   void run(async () => {
-                    const result = await commitImport(preview.import_id, eventId, rows);
+                    const result = await commitImport(preview.upload_id, rows);
                     setCommitted(result);
                     onCommitted?.(result);
                     router.refresh();

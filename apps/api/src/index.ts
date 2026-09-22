@@ -315,17 +315,17 @@ const EVENT_OF_PATH: { pattern: RegExp; sql: string }[] = [
     pattern: /^\/api\/v1\/archive-packages\/([^/]+)/,
     sql: `SELECT event_id, client_id FROM pmp.archive_packages WHERE id = $1`,
   },
-  {
-    /*
-     * Only `commit`. The id in `/imports/{id}/cells` and `/imports/{id}/remap` is an
-     * upload-cache key, not a row — a random UUID that will never be found here, so a
-     * broader pattern turned every correction into a 404. Those two take their event
-     * from the cache entry and pass it to `scopeFor` explicitly, which is the same
-     * check by a different route.
-     */
-    pattern: /^\/api\/v1\/imports\/([^/]+)\/commit/,
-    sql: `SELECT event_id, client_id FROM pmp.schedule_imports WHERE id = $1`,
-  },
+  /*
+   * No `/imports/…` pattern at all. Every id under it — `cells`, `remap`, the row
+   * routes and now `commit` (D-051) — is an upload-cache key rather than a row, so a
+   * lookup here would never find one and would turn the request into a 404. They all
+   * take their event from the cache entry and hand it to `scopeFor`, which refuses a
+   * caller holding no role on it: the same check, made where the event is actually
+   * known.
+   *
+   * `commit` was the exception until the `schedule_imports` row stopped existing
+   * before the commit, which is exactly what it used to look up.
+   */
 ];
 
 /** `<id>:<action>` is one path segment; the id is what comes before the colon. */
@@ -1231,6 +1231,14 @@ const importCache = new Map<
     blankRows?: number;
     /** Row numbers taken out of the import; skipped rather than renumbered. */
     excluded?: number[];
+    /**
+     * The mapping the last preview actually used — the operator's if they corrected a
+     * column, the auto-mapped one otherwise. Kept apart from `mapping`, which means
+     * "the operator chose this" and is fed back into `buildPreview` as an override.
+     * This one is only read when the commit writes its record, so an auto-mapped
+     * import still records how its columns were read.
+     */
+    effectiveMapping?: (ImportField | null)[];
   }
 >();
 
@@ -1251,6 +1259,7 @@ app.post("/api/v1/events/:eventId/imports", async (req, res) => {
     buildPreview(tx, { eventId, fileName, body, actorId: actor.id, s3Key: `imports/${uploadId}` }),
   );
   if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+  importCache.set(uploadId, { ...importCache.get(uploadId)!, effectiveMapping: [...result.value.mapping] });
   return res.status(201).json({ ...result.value, upload_id: uploadId, manual: false });
 });
 
@@ -1282,13 +1291,20 @@ app.post("/api/v1/events/:eventId/imports/blank", async (req, res) => {
     }),
   );
   if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+  importCache.set(uploadId, { ...importCache.get(uploadId)!, effectiveMapping: [...result.value.mapping] });
   return res.status(201).json({ ...result.value, upload_id: uploadId, manual: true });
 });
 
-/** Runs the cached file back through validation with whatever is currently known. */
-function revalidate(req: express.Request, actor: Actor, uploadId: string) {
+/**
+ * Runs the cached file back through validation with whatever is currently known.
+ *
+ * Also remembers the mapping the preview settled on. The commit writes the import
+ * record now (D-051) and has no parsed sheet of its own, so without this an
+ * auto-mapped agenda — the ordinary case — would record no mapping at all.
+ */
+async function revalidate(req: express.Request, actor: Actor, uploadId: string) {
   const cached = importCache.get(uploadId)!;
-  return withScope(scopeFor(req, cached.eventId), (tx) =>
+  const result = await withScope(scopeFor(req, cached.eventId), (tx) =>
     buildPreview(tx, {
       eventId: cached.eventId,
       fileName: cached.fileName,
@@ -1301,6 +1317,11 @@ function revalidate(req: express.Request, actor: Actor, uploadId: string) {
       ...(cached.excluded ? { excluded: cached.excluded } : {}),
     }),
   );
+  if (result.ok) {
+    const current = importCache.get(uploadId);
+    if (current) importCache.set(uploadId, { ...current, effectiveMapping: [...result.value.mapping] });
+  }
+  return result;
 }
 
 /** Re-map columns and re-validate without re-uploading the file. */
@@ -1469,18 +1490,38 @@ app.post("/api/v1/imports/:uploadId/rows/restore", async (req, res) => {
   return res.json({ ...result.value, upload_id: uploadId, manual: cached.manual ?? false });
 });
 
-app.post("/api/v1/imports/:importId/commit", async (req, res) => {
+/**
+ * Commit, keyed by the upload rather than by a `schedule_imports` row (D-051).
+ *
+ * It used to be keyed by a record the *preview* had inserted, which is what made every
+ * look at a file leave an import behind. There is no record to name until the commit
+ * succeeds, so the staging session identifies itself — the same `upload_id` that
+ * `cells`, `remap` and the row routes already use.
+ *
+ * The event now comes from the cache entry rather than the request body, and
+ * `scopeFor` refuses a caller with no role on it. That is the check the authz
+ * middleware used to make by looking the import row up, and it is the stronger of the
+ * two: a body can claim any event, a cache entry cannot.
+ */
+app.post("/api/v1/imports/:uploadId/commit", async (req, res) => {
   const actor = actorFrom(req);
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
-  const body = req.body as { event_id?: string; rows?: StagedRow[] };
-  if (!body.event_id || !Array.isArray(body.rows)) {
-    return res.status(400).json({ code: "request.invalid", message: "`event_id` and `rows` are required." });
+  const uploadId = String(req.params.uploadId);
+  const cached = importCache.get(uploadId);
+  if (!cached) return res.status(404).json({ code: "import.expired", message: "Upload the file again." });
+
+  const body = req.body as { rows?: StagedRow[] };
+  if (!Array.isArray(body.rows)) {
+    return res.status(400).json({ code: "request.invalid", message: "`rows` is required." });
   }
-  const result = await withScope(scopeFor(req, body.event_id), (tx) =>
+
+  const result = await withScope(scopeFor(req, cached.eventId), (tx) =>
     commitImport(tx, actor, {
-      eventId: body.event_id as string,
-      importId: String(req.params.importId),
+      eventId: cached.eventId,
       rows: body.rows as StagedRow[],
+      fileName: cached.fileName,
+      s3Key: `imports/${uploadId}`,
+      mapping: cached.effectiveMapping ?? cached.mapping ?? [],
     }),
   );
   if (!result.ok) return res.status(statusFor(result.error)).json(result.error);

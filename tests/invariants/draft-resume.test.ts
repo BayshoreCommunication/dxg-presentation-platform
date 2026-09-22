@@ -86,11 +86,11 @@ const importAgenda = async (eventId: string): Promise<void> => {
       headers: { "content-type": "application/octet-stream", "x-file-name": "agenda.csv", cookie: admin },
       body: Buffer.from(AGENDA, "utf8"),
     })
-  ).json()) as { import_id: string; rows: unknown[] };
-  const committed = await fetch(`${API}/imports/${preview.import_id}/commit`, {
+  ).json()) as { upload_id: string; rows: unknown[] };
+  const committed = await fetch(`${API}/imports/${preview.upload_id}/commit`, {
     method: "POST",
     headers: json(admin),
-    body: JSON.stringify({ event_id: eventId, rows: preview.rows }),
+    body: JSON.stringify({ rows: preview.rows }),
   });
   assert.equal(committed.status, 200, "the probe agenda commits");
 };

@@ -2764,3 +2764,37 @@ anyone installs an agent in and the screen has no way to say so — a "no agent 
 fix it. Not built.
 
 CI green, 212 unit tests; invariants 127.
+
+
+## 2026-09-22 (eighty-fourth) — an import is recorded when it commits
+
+Clearing Test Event turned up 82 `schedule_imports` rows against four sessions. `buildPreview`
+inserted one and handed back its id, so a record was written for every look at a file — and the
+preview is rebuilt on every correction, re-map, row added and row removed. Travis: only record
+commits.
+
+The insert moved to `commitImport`, where an agenda actually becomes sessions. That forced the
+commit to stop being keyed by the record the preview had inserted: it is `POST
+/imports/{uploadId}/commit` now, the same staging-session id the correction routes already use, and
+`import_id` is gone from the preview.
+
+**Authz moved with it.** The cross-event middleware resolved this route's event by looking up the
+`schedule_imports` row, which no longer exists by then, so that pattern is gone — and with it the
+last `/imports/…` entry, every id under that prefix now being a cache key. The event comes from the
+cache and goes to `scopeFor`, which refuses a caller with no role on it. Stronger than what it
+replaced: a request body can claim any event, a cache entry cannot, and the route no longer reads
+`event_id` from the body.
+
+**One behaviour genuinely changed.** A commit needs a live staging session now. It used to work from
+the client's copy alone, so a preview could be committed after the API had restarted and forgotten
+the upload; it answers `import.expired` instead, which is what every correction route already does.
+
+The record itself is better than the one it replaces: `diff` is the real outcome rather than the
+preview's prediction, `row_errors` is empty by construction, and `status` is `committed` rather than
+a `validated` row flipped later. The mapping survives by carrying the one each preview settles on in
+the cache — without it an auto-mapped agenda would have recorded none, which the first attempt did.
+
+Measured: upload, five re-validations, then commit — one row, where the same sequence wrote seven
+before. Walked in the browser too: a two-row agenda imported, one record, `committed`.
+
+CI green, 212 unit tests; invariants 129.
