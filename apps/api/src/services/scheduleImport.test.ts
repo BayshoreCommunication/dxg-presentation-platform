@@ -2,7 +2,7 @@ import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { parseSheet } from "@pmp/files";
-import { autoMap, closestRoom, editDistance, zonedToUtc, findHeaderRow, provisionalName, toDateTime, agendaTemplateCsv, REQUIRED_FIELDS } from "./scheduleImport.ts";
+import { autoMap, closestRoom, editDistance, zonedToUtc, findHeaderRow, provisionalName, toDateTime, agendaTemplateCsv, manualAgendaCsv, REQUIRED_FIELDS } from "./scheduleImport.ts";
 
 describe("column auto-mapping (FR-IMP-001)", () => {
   test("maps a typical DXG header row exactly", () => {
@@ -486,5 +486,41 @@ describe("more than two presenters", () => {
     const mapped = autoMap(emails);
     assert.equal(mapped.filter(Boolean).length, 6);
     assert.equal(mapped[6], null, "a seventh presenter has no field to go in");
+  });
+});
+
+describe("an agenda typed in rather than uploaded", () => {
+  const sheet = parseSheet(Buffer.from(manualAgendaCsv(), "utf8"), "manual-entry.csv");
+
+  test("its headings are row one, and there are no data rows to skip", () => {
+    const { headers, index, firstDataRow } = findHeaderRow(sheet);
+    assert.equal(index, 0);
+    assert.equal(headers[0], "Session Title");
+    assert.equal(firstDataRow, 1);
+    assert.equal(sheet.slice(firstDataRow).length, 0);
+  });
+
+  test("every required field maps, so a typed row is validated like an uploaded one", () => {
+    const mapped = autoMap(findHeaderRow(sheet).headers).filter(Boolean);
+    for (const field of REQUIRED_FIELDS) {
+      assert.ok(mapped.includes(field), `${field} is not mapped by the manual headings`);
+    }
+  });
+
+  /*
+   * The reason `buildPreview` appends typed rows itself rather than writing blank
+   * lines into the body. `parseCsv` drops a row whose every cell is empty, so a blank
+   * row written into the file is gone before anyone can fill it in — which is exactly
+   * how the first attempt at this produced an import with no rows in it.
+   */
+  test("a blank line in the body would not survive parsing", () => {
+    const withBlanks = manualAgendaCsv() + ",,,,,,,,,,,,,\r\n,,,,,,,,,,,,,\r\n";
+    const parsed = parseSheet(Buffer.from(withBlanks, "utf8"), "manual-entry.csv");
+    assert.equal(parsed.length, 1, "the blank rows should have been dropped by the parser");
+  });
+
+  test("the headings are the template's, so a typed agenda and an uploaded one are one format", () => {
+    const template = findHeaderRow(parseSheet(Buffer.from(agendaTemplateCsv(), "utf8"), "t.csv")).headers;
+    assert.deepEqual(findHeaderRow(sheet).headers, template);
   });
 });

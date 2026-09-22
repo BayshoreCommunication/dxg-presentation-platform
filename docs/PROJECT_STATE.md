@@ -2470,3 +2470,58 @@ and an inset `rgb(68,199,244)` 1.5px ring; after choosing the 18th that cell is 
 white text, and the two are visibly different in the same calendar.
 
 CI green, 208 unit tests. The invariant suites were not re-run: nothing outside the stylesheet changed.
+
+## 2026-09-22 (seventy-fifth) — the agenda has a second way in
+
+Screen 3 had one entrance: upload a spreadsheet. An event whose schedule is small, or not yet in a
+file, had to be turned into a spreadsheet first purely to satisfy the importer. **Enter manually**
+now sits beside **Choose file…** (D-045).
+
+**It is the same import with an empty file**, not a second screen. A manual agenda carries the
+template's headings and no data rows; the rows come from a new `blankRows` input to `buildPreview`,
+and everything after that is the path a file already takes — auto-mapping, validation, the row
+editor, the match key, the venue-timezone conversion, the all-or-nothing commit. By the time anything
+is written a typed row and an uploaded row are indistinguishable, so there is no second validator to
+keep in step.
+
+**The indirection has a reason worth keeping visible.** The obvious implementation — write blank lines
+into the CSV body — cannot work: `parseCsv` drops a row whose every cell is empty, so the blank rows
+were gone before they could be filled in, and the first attempt produced an import with no rows. Typed
+rows are therefore appended after parsing, and a regression test asserts the parser still drops blank
+lines so the reason does not quietly stop applying.
+
+**Three things the UI had to learn.** Rows may be added and removed only on a typed agenda — on a file
+import the row numbers belong to the file, and renumbering them would detach corrections from the rows
+they were typed for, so both routes refuse with `import.not_manual`; removing a row re-keys the
+overrides above it, so values typed into row 3 stay with that row when it becomes row 2. **Edit** is
+offered on every row of a typed agenda rather than only a problem one, since the editor is how the row
+was filled in and hiding it once the row validates would leave no way back to a value that is wrong
+rather than missing. And typed rows are numbered from one: a file's rows keep their file numbers so an
+error names a row the operator can go and look at, but a typed agenda has no file, and its first row
+being called "Row 2" was the headings row leaking onto the screen.
+
+Smaller things the same pass fixed, all visible only once the screen was used this way: `Import 1
+sessions` now pluralises; the red banner's file-import explanation ("open Edit on each one… all-or-
+nothing") is suppressed on a typed agenda, where the note under the Import button already says it and
+the row in question is the one just opened; and the post-commit line no longer promises that
+"re-importing the same file" reports every row unchanged when there was no file.
+
+New endpoints: `POST /events/{id}/imports/blank`, `POST /imports/{id}/rows`,
+`DELETE /imports/{id}/rows/{row}`.
+
+**A bug this uncovered, fixed in the same pass (D-046).** The screen decided whether an import could
+proceed from `row.missing` alone, so a room matching nothing on the event — `blocking`, but with no
+missing field, since the cell is filled and merely wrong — left the Import button enabled. Reproduced
+end to end: one row, `Main Hal` against an event holding `Main Hall`, `{"created":1}`, and a second
+room created from the typo. A row is now blocked if it is missing a required value **or** carries any
+blocking issue, which is what SCREEN_SPECS §3 always said. Pre-existing and not specific to typed
+agendas; a hand-typed room name is simply a likelier typo than a spreadsheet column, which is how it
+surfaced. **`POST /imports/{id}/commit` still does not re-validate**, so this guarantee is the
+screen's and not yet the server's — logged in D-046 as separate work.
+
+Verified end to end in the browser against Test Event: entered a session by hand, added a second,
+removed it, committed, and confirmed the session, its auto-created room and its speaker in Postgres
+with the time converted to the venue's zone (9:00 AM America/New_York → 13:00Z). The file-upload path
+was re-run unchanged, and both new routes were confirmed to refuse a file import.
+
+CI green, 212 unit tests (4 new), 116 invariants.

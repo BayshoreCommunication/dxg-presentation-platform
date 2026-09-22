@@ -515,6 +515,8 @@ export type ImportPreview = {
   counts: { create: number; update: number; unchanged: number };
   issues: RowIssue[];
   rows: StagedRow[];
+  /** True when the agenda is being typed in rather than read from a file. */
+  manual?: boolean;
 };
 
 /** Mirrors IMPORT_FIELDS in apps/api/src/services/scheduleImport.ts, which is the
@@ -543,6 +545,22 @@ export const uploadImport = async (eventId: string, file: File) =>
       headers: { "content-type": "application/octet-stream", "x-file-name": file.name },
     },
   );
+
+/**
+ * Starts an agenda with no file, for an event whose schedule is small enough to type
+ * or not yet in a spreadsheet. It is the same import the upload path produces — one
+ * empty row to fill — so validation and commit are shared.
+ */
+export const startManualImport = (eventId: string) =>
+  request<ImportPreview>(`/events/${eventId}/imports/blank`, { method: "POST" });
+
+/** One more empty row to type into. Manual agendas only. */
+export const addImportRow = (uploadId: string) =>
+  request<ImportPreview>(`/imports/${uploadId}/rows`, { method: "POST" });
+
+/** Drops a typed row; the ones below it move up. Manual agendas only. */
+export const removeImportRow = (uploadId: string, row: number) =>
+  request<ImportPreview>(`/imports/${uploadId}/rows/${row}`, { method: "DELETE" });
 
 /**
  * A cell the operator typed for a row the file left incomplete. Sent as the value the

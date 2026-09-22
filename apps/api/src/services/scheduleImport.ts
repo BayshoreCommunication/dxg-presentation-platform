@@ -292,6 +292,19 @@ export function agendaTemplateCsv(eventName?: string): string {
   return rows.map((row) => row.map(csvCell).join(",")).join("\r\n") + "\r\n";
 }
 
+/**
+ * The starting point for an agenda typed in rather than uploaded: the template's
+ * headings and nothing else.
+ *
+ * A manual agenda is the same import as a file one, with an empty file — which keeps
+ * one validation path, one commit and one row editor for both. The rows themselves
+ * come from `buildPreview`'s `blankRows`, since a row of empty cells does not survive
+ * parsing.
+ */
+export function manualAgendaCsv(): string {
+  return TEMPLATE_COLUMNS.map((column) => csvCell(column.heading)).join(",") + "\r\n";
+}
+
 /* ── finding the header row ───────────────────────────────────────────────── */
 
 /**
@@ -587,6 +600,18 @@ export async function buildPreview(
     s3Key: string;
     mapping?: (ImportField | null)[];
     overrides?: RowOverrides;
+    /**
+     * Rows the operator is typing in rather than importing (D-045), appended after whatever
+     * the file carried. They start empty and are filled through `overrides`, exactly
+     * as a correction to a file's own row is — so a typed row is parsed, converted to
+     * the venue's timezone and validated by the code that reads a spreadsheet, not by
+     * a second implementation of it.
+     *
+     * Added here rather than as blank lines in the body because `parseCsv` drops rows
+     * whose every cell is empty: a blank row written into the file would never survive
+     * to be filled in.
+     */
+    blankRows?: number;
   },
 ): Promise<Result<ImportPreview, DomainError>> {
   let sheet: string[][];
@@ -601,7 +626,10 @@ export async function buildPreview(
   // The header row is found rather than assumed: vendor templates open with a banner
   // and put annotation rows ("max 255 chars.", "REQUIRED") under the real headers.
   const { headers, firstDataRow } = findHeaderRow(sheet);
-  const dataRows = sheet.slice(firstDataRow);
+  const dataRows = [
+    ...sheet.slice(firstDataRow),
+    ...Array.from({ length: Math.max(0, input.blankRows ?? 0) }, (): string[] => []),
+  ];
   if (headers.length === 0 || dataRows.length === 0) {
     return err({ code: "import.empty", message: "The file has no data rows." });
   }

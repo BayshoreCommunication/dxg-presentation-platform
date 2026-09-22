@@ -5,6 +5,9 @@ import { useRouter } from "next/navigation";
 import type { ImportPreview, StagedRow } from "@/lib/api";
 import {
   uploadImport,
+  startManualImport,
+  addImportRow,
+  removeImportRow,
   remapImport,
   commitImport,
   setImportCells,
@@ -203,6 +206,7 @@ function Section({ heading, note, children }: { heading: string; note?: string; 
  */
 function RowEditor({
   row,
+  label,
   problems,
   timeZone,
   busy,
@@ -210,6 +214,8 @@ function RowEditor({
   onSave,
 }: {
   row: StagedRow;
+  /** What this row is called on screen — not always `row.row`; see `rowLabel`. */
+  label: number;
   problems: {
     column: string;
     severity: string;
@@ -490,7 +496,7 @@ function RowEditor({
           reader gets no ellipsis to hover over.
         */}
         <div className="chd" style={{ gap: 12 }}>
-          <h3 style={{ flexShrink: 0 }}>Row {row.row}</h3>
+          <h3 style={{ flexShrink: 0 }}>Row {label}</h3>
           <span
             className="m"
             title={sessionTitle}
@@ -508,7 +514,15 @@ function RowEditor({
           </span>
         </div>
         <div className="cbd">
-          {problems.length > 0 && (
+          {/*
+            A row nobody has typed into yet is not a row with problems. Its cells are
+            all empty, so validation reports every required field missing and a date it
+            could not read from "" — three sentences restating the `· required` markers
+            on the fields below, in red, before the operator has done anything. A file's
+            rows are never in this state: the parser drops a row whose every cell is
+            empty, so this is only ever a just-added row on a typed agenda.
+          */}
+          {problems.length > 0 && Object.values(row.cells).some((value) => (value ?? "").trim()) && (
             <div
               className={problems.some((problem) => problem.severity === "blocking") ? "err" : "note"}
               style={{ marginBottom: 12 }}
@@ -670,8 +684,6 @@ export function ImportView({
     }
   }
 
-  const blockingRows = rows.filter((row) => row.missing.length > 0);
-
   /*
    * The column-mapping table is gone (D-028) — it asked every operator to audit a
    * machine's work on every import, and the sessions table shows what was understood
@@ -699,6 +711,28 @@ export function ImportView({
     problemsByRow.set(issue.row, [...(problemsByRow.get(issue.row) ?? []), issue]);
   }
 
+  /*
+   * A row that cannot be imported. Not only one missing a required value: a room that
+   * matches nothing on the event is `blocking` too, and counting only `missing` let it
+   * through — the import committed and created a second room from the typo, which is
+   * the duplicate the check exists to prevent. SCREEN_SPECS §3 has always said a
+   * commit with blocking errors is refused; this is the screen honouring it.
+   */
+  const isBlocked = (row: StagedRow): boolean =>
+    row.missing.length > 0 ||
+    (problemsByRow.get(row.row) ?? []).some((problem) => problem.severity === "blocking");
+
+  const blockingRows = rows.filter(isBlocked);
+
+  /*
+   * What a row is called on screen. A file's rows keep the number they have in the
+   * file, so an error names a row the operator can go and look at. A typed agenda has
+   * no file to look at, and its first row is internally row 2 — the header occupies
+   * row 1 — so counting from one is both clearer and the only honest answer.
+   */
+  const rowLabel = (row: StagedRow): number =>
+    preview?.manual ? rows.findIndex((candidate) => candidate.row === row.row) + 1 : row.row;
+
   const saveRow = (rowNumber: number, cells: Record<string, string>): void => {
     void run(async () => {
       apply(await setImportCells(preview!.upload_id, rowNumber, cells));
@@ -712,8 +746,8 @@ export function ImportView({
     <>
       {!embedded && (
         <h1 className="htitle">
-          Import schedule
-          {preview && (
+          {preview?.manual ? "Enter schedule" : "Import schedule"}
+          {preview && !preview.manual && (
             <>
               {" · "}
               <span className="mono" style={{ fontSize: 16 }}>
@@ -730,7 +764,7 @@ export function ImportView({
         <div className="card">
           <div className="cbd">
             <div style={{ border: "2px dashed var(--line)", borderRadius: 10, padding: 26, textAlign: "center" }}>
-              <b>Upload the agenda</b>
+              <b>Add the agenda</b>
               <div className="note" style={{ margin: "4px 0 10px" }}>
                 .xlsx or .csv · columns are auto-mapped and every row is validated before anything is
                 written
@@ -749,6 +783,24 @@ export function ImportView({
                 <button className="btn pri" disabled={busy} onClick={() => inputRef.current?.click()}>
                   Choose file…
                 </button>
+                {/*
+                  The other way in (D-045). An agenda does not always start as a
+                  spreadsheet — a small event, or one still being decided, was
+                  previously forced through making a file first just to upload it.
+                */}
+                <button
+                  className="btn"
+                  disabled={busy}
+                  onClick={() =>
+                    void run(async () => {
+                      const next = await startManualImport(eventId);
+                      apply(next);
+                      if (next.rows[0]) setEditing(next.rows[0].row);
+                    })
+                  }
+                >
+                  Enter manually
+                </button>
                 <button
                   className="btn"
                   disabled={busy}
@@ -758,8 +810,7 @@ export function ImportView({
                 </button>
               </div>
               <div className="note" style={{ marginTop: 10 }}>
-                No agenda yet? Download the template, fill it in and upload it here. Required columns
-                are marked in the file.
+                No agenda yet? Enter it here, or download the template, fill it in and upload it.
               </div>
             </div>
           </div>
@@ -771,11 +822,18 @@ export function ImportView({
           {blockingRows.length > 0 && (
             <div className="err" style={{ marginBottom: 12 }}>
               <b>
-                {blockingRows.length} of {rows.length} row{rows.length === 1 ? "" : "s"} still
-                {blockingRows.length === 1 ? " needs" : " need"} a required value.
+                {blockingRows.length} of {rows.length} row{rows.length === 1 ? "" : "s"} cannot be
+                imported yet.
               </b>{" "}
-              They are marked in red below — open <b>Edit</b> on each one to fill in what is missing.
-              Import stays unavailable until every row is complete, because it is all-or-nothing.
+              {/* The note under the Import button already says it is all-or-nothing, and
+                  on a typed agenda the row in question is the one just opened. */}
+              {!preview.manual && (
+                <>
+                  They are marked in red below — open <b>Edit</b> on each one to fill in what is
+                  missing. Import stays unavailable until every row is complete, because it is
+                  all-or-nothing.
+                </>
+              )}
             </div>
           )}
 
@@ -850,7 +908,7 @@ export function ImportView({
 
           <div className="card">
             <div className="chd">
-              <h3>Sessions read from {preview.file_name}</h3>
+              <h3>{preview.manual ? "Sessions" : `Sessions read from ${preview.file_name}`}</h3>
               <span className="m">
                 {preview.counts.create} new · {preview.counts.update} updated ·{" "}
                 {preview.counts.unchanged} unchanged — matched on room + start + title · times in{" "}
@@ -874,7 +932,7 @@ export function ImportView({
                 <tbody>
                   {rows.map((row) => {
                     const problems = problemsByRow.get(row.row) ?? [];
-                    const blocked = row.missing.length > 0;
+                    const blocked = isBlocked(row);
                     const warned = !blocked && problems.length > 0;
                     return (
                       <tr
@@ -891,7 +949,7 @@ export function ImportView({
                               : undefined,
                         }}
                       >
-                        <td className="mono">{row.row}</td>
+                        <td className="mono">{rowLabel(row)}</td>
                         <td>{row.title || <span className="chip c-bad">missing</span>}</td>
                         <td>{row.room || <span className="chip c-bad">missing</span>}</td>
                         <td className="note">{day(row.starts_at, preview.timezone)}</td>
@@ -963,7 +1021,13 @@ export function ImportView({
                               }
                               label={blocked ? "incomplete" : row.action}
                             />
-                            {problems.length > 0 && (
+                            {/*
+                              On a typed agenda every row is opened here, including a
+                              complete one: the editor is how the row was filled in, so
+                              hiding it once the row validates would leave no way back
+                              to a value that is wrong rather than missing.
+                            */}
+                            {(preview.manual || problems.length > 0) && (
                               <button
                                 className={blocked ? "btn pri" : "btn"}
                                 style={{ padding: "3px 10px" }}
@@ -973,6 +1037,20 @@ export function ImportView({
                                 Edit
                               </button>
                             )}
+                            {preview.manual && rows.length > 1 && (
+                              <button
+                                className="btn"
+                                style={{ padding: "3px 10px" }}
+                                disabled={busy}
+                                onClick={() =>
+                                  void run(async () =>
+                                    apply(await removeImportRow(preview.upload_id, row.row)),
+                                  )
+                                }
+                              >
+                                Remove
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -980,6 +1058,26 @@ export function ImportView({
                   })}
                 </tbody>
               </table>
+              {preview.manual && (
+                <div style={{ padding: "10px 14px 6px" }}>
+                  <button
+                    className="btn"
+                    disabled={busy}
+                    onClick={() =>
+                      void run(async () => {
+                        const next = await addImportRow(preview.upload_id);
+                        apply(next);
+                        // Straight into the editor: the row that was just added is
+                        // empty, and an empty row is not something to go and find.
+                        const added = next.rows[next.rows.length - 1];
+                        if (added) setEditing(added.row);
+                      })
+                    }
+                  >
+                    + Add session
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 
@@ -987,8 +1085,8 @@ export function ImportView({
             <div className="card" style={{ borderColor: "var(--ok)" }}>
               <div className="cbd">
                 <b>Imported.</b> {committed.created} created · {committed.updated} updated ·{" "}
-                {committed.unchanged} unchanged. Re-importing the same file now reports every row as
-                unchanged.
+                {committed.unchanged} unchanged.
+                {!preview.manual && " Re-importing the same file now reports every row as unchanged."}
                 <div style={{ marginTop: 10, display: "flex", gap: 8 }}>
                   {!embedded && (
                     <button className="btn" onClick={() => router.push(`/events/${eventId}`)}>
@@ -996,7 +1094,7 @@ export function ImportView({
                     </button>
                   )}
                   <button className="btn" onClick={() => setPreview(null)}>
-                    Import another file
+                    Add more sessions
                   </button>
                 </div>
               </div>
@@ -1020,7 +1118,7 @@ export function ImportView({
                   })
                 }
               >
-                Import {rows.length} sessions
+                Import {rows.length} session{rows.length === 1 ? "" : "s"}
               </button>
               <button
                 className="btn"
@@ -1065,6 +1163,7 @@ export function ImportView({
           return (
             <RowEditor
               row={row}
+              label={rowLabel(row)}
               problems={problemsByRow.get(editing) ?? []}
               timeZone={preview?.timezone ?? "UTC"}
               busy={busy}

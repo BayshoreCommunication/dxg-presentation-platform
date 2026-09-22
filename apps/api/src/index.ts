@@ -54,6 +54,7 @@ import type { Lane } from "./services/presentation.ts";
 import {
   buildPreview,
   commitImport,
+  manualAgendaCsv,
   autoMap,
   agendaTemplateCsv,
   IMPORT_FIELDS,
@@ -1219,6 +1220,15 @@ const importCache = new Map<
     body: Buffer;
     mapping?: (ImportField | null)[];
     overrides?: RowOverrides;
+    /**
+     * Set when the agenda is being typed in rather than uploaded. Rows may only be
+     * added and removed on such an import: on a file one the row numbers belong to
+     * the file, and moving them would detach the operator's corrections from the rows
+     * they were typed for.
+     */
+    manual?: boolean;
+    /** How many rows the operator has typed in. */
+    blankRows?: number;
   }
 >();
 
@@ -1239,7 +1249,38 @@ app.post("/api/v1/events/:eventId/imports", async (req, res) => {
     buildPreview(tx, { eventId, fileName, body, actorId: actor.id, s3Key: `imports/${uploadId}` }),
   );
   if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
-  return res.status(201).json({ ...result.value, upload_id: uploadId });
+  return res.status(201).json({ ...result.value, upload_id: uploadId, manual: false });
+});
+
+/**
+ * Start an agenda with no file — the operator types the sessions in.
+ *
+ * It is the same import as an uploaded one, holding the template's headings and no
+ * data rows, so mapping, validation, the row editor and the all-or-nothing commit are
+ * the ones the file path already uses. Only where the rows come from differs.
+ */
+app.post("/api/v1/events/:eventId/imports/blank", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+
+  const eventId = String(req.params.eventId);
+  const uploadId = randomUUID();
+  const fileName = "manual-entry.csv";
+  const body = Buffer.from(manualAgendaCsv(), "utf8");
+  importCache.set(uploadId, { eventId, fileName, body, manual: true, blankRows: 1 });
+
+  const result = await withScope(scopeFor(req, eventId), (tx) =>
+    buildPreview(tx, {
+      eventId,
+      fileName,
+      body,
+      actorId: actor.id,
+      s3Key: `imports/${uploadId}`,
+      blankRows: 1,
+    }),
+  );
+  if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+  return res.status(201).json({ ...result.value, upload_id: uploadId, manual: true });
 });
 
 /** Runs the cached file back through validation with whatever is currently known. */
@@ -1254,6 +1295,7 @@ function revalidate(req: express.Request, actor: Actor, uploadId: string) {
       s3Key: `imports/${uploadId}`,
       ...(cached.mapping ? { mapping: cached.mapping } : {}),
       ...(cached.overrides ? { overrides: cached.overrides } : {}),
+      ...(cached.blankRows ? { blankRows: cached.blankRows } : {}),
     }),
   );
 }
@@ -1269,7 +1311,7 @@ app.post("/api/v1/imports/:uploadId/remap", async (req, res) => {
 
   const result = await revalidate(req, actor, String(req.params.uploadId));
   if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
-  return res.json({ ...result.value, upload_id: String(req.params.uploadId) });
+  return res.json({ ...result.value, upload_id: String(req.params.uploadId), manual: cached.manual ?? false });
 });
 
 /**
@@ -1321,7 +1363,68 @@ app.post("/api/v1/imports/:uploadId/cells", async (req, res) => {
 
   const result = await revalidate(req, actor, uploadId);
   if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
-  return res.json({ ...result.value, upload_id: uploadId });
+  return res.json({ ...result.value, upload_id: uploadId, manual: cached.manual ?? false });
+});
+
+/** One more row to type into, after the last one the import already has. */
+app.post("/api/v1/imports/:uploadId/rows", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  const uploadId = String(req.params.uploadId);
+  const cached = importCache.get(uploadId);
+  if (!cached) return res.status(404).json({ code: "import.expired", message: "Upload the file again." });
+  if (!cached.manual) {
+    return res.status(400).json({ code: "import.not_manual", message: "This agenda came from a file." });
+  }
+
+  importCache.set(uploadId, { ...cached, blankRows: (cached.blankRows ?? 0) + 1 });
+  const result = await revalidate(req, actor, uploadId);
+  if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+  return res.json({ ...result.value, upload_id: uploadId, manual: cached.manual ?? false });
+});
+
+/**
+ * Drop a typed row. Only a typed row: a row the file carried is removed by editing the
+ * file, and deleting one here would make the preview disagree with the thing it claims
+ * to be a preview of.
+ *
+ * Row numbers are positional, so the rows after the removed one move up by one and
+ * their corrections have to move with them — otherwise the values the operator typed
+ * would silently reattach to the following row.
+ */
+app.delete("/api/v1/imports/:uploadId/rows/:row", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  const uploadId = String(req.params.uploadId);
+  const cached = importCache.get(uploadId);
+  if (!cached) return res.status(404).json({ code: "import.expired", message: "Upload the file again." });
+
+  if (!cached.manual) {
+    return res.status(400).json({ code: "import.not_manual", message: "This agenda came from a file." });
+  }
+  const blankRows = cached.blankRows ?? 0;
+
+  const row = Number(req.params.row);
+  if (!Number.isInteger(row)) {
+    return res.status(400).json({ code: "request.invalid", message: "`row` must be a row number." });
+  }
+  // The last one stays: an import with no rows has nothing to commit and nothing to
+  // type into, and `buildPreview` rejects it outright as an empty file.
+  if (blankRows <= 1) {
+    return res.status(400).json({ code: "import.last_row", message: "An agenda needs at least one row." });
+  }
+
+  const overrides: RowOverrides = {};
+  for (const [key, cells] of Object.entries(cached.overrides ?? {})) {
+    const at = Number(key);
+    if (at === row) continue;
+    overrides[at > row ? at - 1 : at] = cells;
+  }
+  importCache.set(uploadId, { ...cached, blankRows: blankRows - 1, overrides });
+
+  const result = await revalidate(req, actor, uploadId);
+  if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+  return res.json({ ...result.value, upload_id: uploadId, manual: cached.manual ?? false });
 });
 
 app.post("/api/v1/imports/:importId/commit", async (req, res) => {

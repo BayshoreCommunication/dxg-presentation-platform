@@ -671,3 +671,63 @@ would not withhold an option. The rule it enforced is unchanged and still enforc
 Applied to every date and time field in the product: the row editor's session date, session clocks and
 presentation clocks; the create-event wizard's start and end dates, each bounded by the other; and the
 event details upload deadline, bounded by the event's own start. Owner: Travis.
+
+## D-045 (2026-09-22): An agenda can be typed in, not only uploaded — Status: ACCEPTED (Travis's call)
+Screen 3 offered one way in: upload a spreadsheet. An event whose schedule is small, or not yet in a
+file, had to be turned into a spreadsheet first purely to satisfy the importer. **Enter manually** is
+the second way in, beside **Choose file…** and the template download.
+
+**It is the same import, with an empty file.** A manual agenda holds the template's headings and no
+data rows; the rows come from a new `blankRows` input to `buildPreview`. Everything downstream is the
+path a file already takes — auto-mapping, per-row validation, the row editor, the (room, start, title)
+match key, the venue-timezone conversion and the all-or-nothing commit. A typed row and an uploaded row
+are indistinguishable by the time anything is written, so there is no second validator to keep in step
+and no second way for a session to reach the database.
+
+**Typed rows are appended after parsing, not written into the body as blank lines.** `parseCsv` drops
+a row whose every cell is empty (`packages/files/src/sheet.ts`), so blank lines in the file would be
+gone before they could be filled in — the first attempt produced an import with no rows in it. A
+regression test asserts the parser still drops them, so the reason this indirection exists stays
+visible.
+
+**Cells are still the unit of edit.** A typed row is filled through the same `POST /imports/:id/cells`
+overrides a correction to a file's row uses, which is why no date parsing or timezone maths moved into
+the browser.
+
+**Rows may be added and removed only on a manual agenda.** On a file import the row numbers belong to
+the file, and renumbering them would detach the operator's corrections from the rows they were typed
+for; both routes refuse with `import.not_manual`. Removing a row re-keys the overrides above it, so the
+values typed into row 3 stay with that row when it becomes row 2. The last row cannot be removed —
+`buildPreview` rejects an import with no rows as an empty file.
+
+**Typed rows are numbered from one.** A file's rows keep their file numbers, so an error names a row
+the operator can go and look at. A typed agenda has no file to look at and its first row is internally
+row 2 (the headings are row 1), so the screen counts from one instead. The internal number is unchanged
+— it is what keys the overrides.
+
+New: `POST /events/:id/imports/blank`, `POST /imports/:id/rows`, `DELETE /imports/:id/rows/:row`.
+Owner: Travis.
+
+## D-046 (2026-09-22): A blocking row blocks the import, not only a missing one — Status: ACCEPTED
+Found while testing D-045. The screen decided whether an import could proceed from `row.missing`
+alone — the required fields a row has no value for. A room that matches no room on the event is also
+`blocking`, and is reported as such by `buildPreview`, but it has no missing field: the cell is filled,
+just wrong.
+
+So the **Import** button stayed enabled, the commit went through, and the typo became a **second room**
+— `Main Hal` beside `Main Hall` — which is precisely the duplicate the room check exists to prevent.
+Reproduced end to end before fixing: one row, one typo, `{"created":1}`, two rooms.
+
+The screen now treats a row as blocked if it is missing a required value **or** carries any issue of
+severity `blocking`, which is what SCREEN_SPECS §3 has always said ("a commit with blocking errors is
+refused"). The same predicate colours the row and counts the KPI, so the banner, the chip, the disabled
+button and the server's own verdict cannot disagree.
+
+**Pre-existing, and not specific to typed agendas** — an uploaded file with an unrecognised room had
+the same hole. D-045 made it much easier to reach, because a room typed by hand is a likelier typo than
+a spreadsheet column, which is how it surfaced.
+
+**The API is still open.** `POST /imports/{id}/commit` takes the staged rows from the client and does
+not re-validate them, so the guarantee is currently the screen's, not the server's. Closing that is
+separate work: it means re-running validation inside the commit transaction and refusing the call,
+which is the only way the rule holds against anything but our own UI. Owner: Travis.
