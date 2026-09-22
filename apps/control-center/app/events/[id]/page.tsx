@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { getSummary, getRiskList, getFleet } from "@/lib/api";
+import { getSummary, getRiskList, getFleet, getDraft, getSession } from "@/lib/api";
 import { Chip } from "@/components/Chip";
 import { AutoRefresh } from "@/components/AutoRefresh";
+import { EventDetails } from "@/components/EventDetails";
 import { guard } from "@/lib/guard";
 
 export const dynamic = "force-dynamic";
@@ -16,10 +17,13 @@ const time = (iso: string, timeZone: string) =>
     timeZone,
   });
 
+/** Who may change an event's setup. A hint for the UI; `services/events.ts` decides. */
+const CONFIGURERS = ["presentation_manager", "project_manager", "platform_admin"];
+
 export default async function CommandCenterPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [summary, risk, fleet] = await guard(
-    Promise.all([getSummary(id), getRiskList(id), getFleet(id)]),
+  const [summary, risk, fleet, setup, session] = await guard(
+    Promise.all([getSummary(id), getRiskList(id), getFleet(id), getDraft(id), getSession()]),
     `/events/${id}`,
   );
 
@@ -98,14 +102,6 @@ export default async function CommandCenterPage({ params }: { params: Promise<{ 
             matches on (room, start, title) and updates rather than duplicating — a
             capability with no entry point is a capability nobody has.
           */}
-          {/*
-            The way back to what this event is. Without it the details screen is
-            reachable only from the portfolio, so anyone already inside an event would
-            have to leave it to read the timezone their times are rendered in.
-          */}
-          <Link href={`/events/${id}/details`} className="btn">
-            Event details
-          </Link>
           <Link href={`/events/${id}/import`} className="btn">
             Re-import agenda
           </Link>
@@ -114,6 +110,18 @@ export default async function CommandCenterPage({ params }: { params: Promise<{ 
           </Link>
         </div>
       </div>
+
+      {/*
+        What the event is, above how it is going (D-058). This was screen 18, a click
+        away, so the timezone every time on this page is rendered in — and the deadline
+        that closes the speaker portal — could only be read by leaving the event.
+      */}
+      <EventDetails
+        setup={setup}
+        talks={{ total: summary.total, collected: summary.collected }}
+        canEdit={session.principal.roles.some((role) => CONFIGURERS.includes(role))}
+        embedded
+      />
 
       <div className="krow">
         {kpis.map((kpi) => (

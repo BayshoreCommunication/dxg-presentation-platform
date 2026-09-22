@@ -2945,3 +2945,28 @@ And the probe event is reused rather than recreated each run: sending writes `co
 append-only with DELETE refused to `pmp_app`, so a probe that has sent can only ever be archived.
 
 CI green, 212 unit tests; invariants 137, up from 133.
+
+
+## 2026-09-22 (ninetieth) — an event opens on one screen
+
+Travis: opening an event should show all of it, and the command centre is not needed as a separate
+thing. Two screens described one event — screen 4 answered *how it is going*, screen 18 answered
+*what it is*, and neither showed the other.
+
+**Folded 18 into 4, which is the opposite of what the words suggested, for a reason worth stating.**
+Screens 1–17 are the client's own prototype and D-010 makes it the baseline — *"the real build
+follows its screen structure and terminology (e.g. 'Command center')"*. Command centre is one of the
+seventeen and is the example D-010 names; event details is the eighteenth, added by us. Removing ours
+keeps the client's inventory whole, removing theirs would have been a scope change needing DXG's
+agreement for nothing gained. Travis chose that reading once it was put to him.
+
+`/events/{id}` carries the setup above the live picture now; `/events/{id}/details` redirects rather
+than 404s, because it was linked from the portfolio and is bookmark-shaped. The portfolio's `Open →`
+points at the merged screen; a draft still goes to the wizard.
+
+**One thing worth having checked rather than assumed:** the setup form now sits on a screen that
+re-fetches every five seconds. A value typed into the venue field survives it — `router.refresh()`
+re-renders with new props while React keeps component state — and editing, saving and persistence
+were walked end to end, then the seeded venue put back.
+
+CI green, 212 unit tests, 137 invariants.

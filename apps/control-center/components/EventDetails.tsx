@@ -20,7 +20,12 @@ const dateRange = (from: string, to: string) => {
 };
 
 /**
- * Screen 18 — an event's own setup, readable and correctable in one place.
+ * An event's own setup, readable and correctable in one place.
+ *
+ * It was screen 18 and is now the top of screen 4 (D-058): opening an event shows what
+ * it is and how it is going, rather than putting the two a click apart. `embedded`
+ * drops this component's own page header, because the command centre already carries
+ * the event's name, venue, day and live indicator — one heading, not two.
  *
  * Two kinds of field share this screen and the difference is stated rather than
  * implied. A **name** and a **venue** are labels: correcting either changes what
@@ -35,10 +40,12 @@ export function EventDetails({
   setup,
   talks,
   canEdit,
+  embedded = false,
 }: {
   setup: EventDraft;
   talks: { total: number; collected: number };
   canEdit: boolean;
+  embedded?: boolean;
 }) {
   const router = useRouter();
   const chip = eventStatusChip(setup.status);
@@ -106,24 +113,26 @@ export function EventDetails({
 
   return (
     <>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
-        <div>
-          <h1 className="htitle" style={{ marginBottom: 2 }}>
-            {setup.name}
-          </h1>
-          <span className="note">
-            {[setup.venue, dateRange(setup.starts_on, setup.ends_on), setup.timezone]
-              .filter(Boolean)
-              .join(" · ")}
-          </span>
+      {!embedded && (
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
+          <div>
+            <h1 className="htitle" style={{ marginBottom: 2 }}>
+              {setup.name}
+            </h1>
+            <span className="note">
+              {[setup.venue, dateRange(setup.starts_on, setup.ends_on), setup.timezone]
+                .filter(Boolean)
+                .join(" · ")}
+            </span>
+          </div>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <Chip status={chip.status} label={chip.label} />
+            <Link href={`/events/${setup.id}`} className="btn pri">
+              Open command center →
+            </Link>
+          </div>
         </div>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <Chip status={chip.status} label={chip.label} />
-          <Link href={`/events/${setup.id}`} className="btn pri">
-            Open command center →
-          </Link>
-        </div>
-      </div>
+      )}
 
       {error && <div className="err">{error}</div>}
       {readOnly && (

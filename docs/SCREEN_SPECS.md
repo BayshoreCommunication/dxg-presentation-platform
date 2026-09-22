@@ -345,7 +345,15 @@ Reading rules:
 
 ---
 
-## 18. Event details
+## 18. Event details — merged into §4 (D-058)
+
+The screen is gone. Its four cards — Basics, Agenda, Deadlines & workflow, Branding — are the top of
+the command centre, so opening an event shows what it is and how it is going on one screen rather
+than a click apart. `/events/{id}/details` redirects to `/events/{id}`; the route is kept rather than
+deleted because it was linked from the portfolio and is the kind of URL that ends up in a bookmark.
+What each card holds is unchanged and is specified below.
+
+### What it was
 
 **Route** `/events/[id]/details` · **Roles** all staff may read; PjM, PM and Admin may change ·
 **Requirements** FR-EVT-001, FR-ADMIN-001, M01

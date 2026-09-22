@@ -62,17 +62,16 @@ export default async function PortfolioPage() {
                 <span>
                   <span className="mono num">{collected}%</span>{" "}
                   {/*
-                    An event opens on what it *is*, not on how it is going: the command
-                    centre is one click further in, from a button that says so. A draft
-                    has no rooms, no sessions and no talks, so it goes back to the
-                    wizard that was making it — its details are those four steps, still
-                    being filled in.
+                    An event opens on one screen showing both what it is and how it is
+                    going (D-058); they used to be a click apart. A draft has no rooms,
+                    no sessions and no talks, so it goes back to the wizard that was
+                    making it — its details are those four steps, still being filled in.
                   */}
                   <Link
                     href={
                       event.status === "draft"
                         ? `/events/new?event=${event.id}`
-                        : `/events/${event.id}/details`
+                        : `/events/${event.id}`
                     }
                     className="btn"
                   >

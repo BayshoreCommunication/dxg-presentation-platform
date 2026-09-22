@@ -1074,3 +1074,28 @@ of archiving the event; `speaker_tokens` was also missing from its list. And the
 is reused rather than recreated: sending writes `communication_events`, which is append-only with
 DELETE refused to `pmp_app`, so a probe that has sent can only be archived. Creating one per run
 would leave a row behind every time.
+
+## D-058 (2026-09-22): An event opens on one screen — Status: ACCEPTED (Travis's call)
+Travis: *"when we open an event details it should show all the details, I think command center is not
+needed."* Two screens described one event — the command centre (screen 4) answered *how it is going*
+and event details (screen 18) answered *what it is*, and neither showed the other.
+
+**Screen 18 folded into screen 4, not the other way round.** Screens 1–17 are the client's own
+prototype, which D-010 makes the baseline: *"the real build follows its screen structure and
+terminology (e.g. 'Command center')"*. Command centre is one of the seventeen and is the example
+D-010 names. Event details is the eighteenth, added by us because the wizard's settings — the
+timezone every displayed time is rendered in, the deadline that closes the portal — were written once
+and then visible nowhere. Removing the screen we added keeps the client's inventory intact; removing
+theirs would have been a scope change needing DXG's agreement for no gain.
+
+So `/events/{id}` now carries the setup above the live picture, and `/events/{id}/details` redirects
+to it. The route is kept rather than deleted: it was linked from the portfolio and from the command
+centre's own header, and it is the kind of URL that ends up in a bookmark, where a 404 is a worse
+answer than the page the content moved to. The portfolio's `Open →` goes straight to it; a draft
+still goes to the wizard, whose four steps are its details.
+
+**The setup form lives on an auto-refreshing screen**, which the command centre has always been —
+`AutoRefresh` re-fetches every five seconds. Checked rather than assumed: a value typed into the
+venue field survives the refresh, because `router.refresh()` re-renders with new props while React
+keeps the component's state. Editing and saving from the merged screen was walked end to end.
+Owner: Travis.
