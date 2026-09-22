@@ -366,10 +366,6 @@ export function CreateEventWizard({
                     )}
                   </td>
                 </tr>
-                <tr>
-                  <td>Tracks</td>
-                  <td>{draft.tracks.length > 0 ? draft.tracks.join(", ") : "—"}</td>
-                </tr>
               </tbody>
             </table>
           </div>

@@ -2881,6 +2881,7 @@ Checked: seven headers, seven cells, no overflow; the typed path shows only "+ A
 
 CI green, 212 unit tests, 133 invariants.
 
-**Still there, not removed:** the *Draft so far* panel in the wizard lists a `Tracks` row, which is
-the same em dash for the same reason. Travis named the table column; this was left alone rather than
-assumed.
+**Then removed too, on asking:** the wizard's *Draft so far* panel listed a `Tracks` row showing the
+same em dash for the same reason. It is Name, Days and Rooms now — the three things importing an
+agenda actually fills in. The `tracks` field stays on the draft payload and on Event details and the
+client portal, which show it where tracks exist.

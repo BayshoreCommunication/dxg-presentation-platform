@@ -996,4 +996,9 @@ something nobody could act on.
   so it rendered an em dash on every row of every agenda. A file that does carry a `Track` column
   still creates its tracks on commit — only the display went.
 
+**Amended: the wizard's `Tracks` row went too.** *Draft so far* listed it beside Name, Days and
+Rooms, showing the same em dash for the same reason. The panel is now the three things an agenda
+actually fills in. `tracks` stays on the draft payload and on Event details and the client portal,
+which show it where tracks exist.
+
 SCREEN_SPECS §3 updated for the column list. Owner: Travis.
