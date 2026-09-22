@@ -2580,3 +2580,33 @@ and no time column. The create-event wizard's two date fields render unchanged.
 
 CI green, 212 unit tests; the control centre also builds clean, which is where the stylesheet is
 actually compiled. Invariants not re-run — nothing outside the stylesheet changed.
+
+
+## 2026-09-22 (seventy-eighth) — the commit repeats the rule the screen holds
+
+D-046 left the room check as the screen's guarantee. It is the server's now.
+
+**The gap was one rule, not the absence of validation.** `commitImport` already repeated six of the
+seven blocking rules the preview applies — empty title, empty room, unreadable date, backwards
+session, backwards presentation, presentation outside its session — precisely because the rows arrive
+from a browser. It missed the seventh: a room matching nothing on the event. One rule, and it was the
+one the typo needed.
+
+The event's rooms are now read once before anything is written, so a room invented by row 1 cannot
+validate row 2, and a row naming an unknown room is refused with those names in
+`detail.unmatched_rooms`. The condition matches the preview's — only once the event has rooms, since
+the first import into an empty event is what defines them, and that path still works.
+
+**A second route to the same duplicate, found while fixing the first.** Validation compares with
+`normalise`, which folds separators and repeated spaces; the commit resolved the room with SQL
+`lower()`, which does not. "Grand  Ballroom" with two spaces passed the check, missed the lookup and
+was created as a new room — the same duplicate by a different door. Both ends use `normalise` now,
+against a map read once instead of a query per row, which also stops two rows naming the same new
+room on an empty event creating it twice.
+
+Four invariants over HTTP, since the hole was reachable without the screen. Each was run with the
+check disabled first and fails there, so none of them can pass for the wrong reason. The two
+positive-path cases — an empty event taking the name it is given, an existing room being joined —
+pass either way, which is the point of having them.
+
+CI green, 212 unit tests; invariants 120, up from 116.

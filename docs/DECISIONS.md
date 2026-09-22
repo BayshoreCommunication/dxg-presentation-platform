@@ -727,7 +727,26 @@ button and the server's own verdict cannot disagree.
 the same hole. D-045 made it much easier to reach, because a room typed by hand is a likelier typo than
 a spreadsheet column, which is how it surfaced.
 
-**The API is still open.** `POST /imports/{id}/commit` takes the staged rows from the client and does
-not re-validate them, so the guarantee is currently the screen's, not the server's. Closing that is
-separate work: it means re-running validation inside the commit transaction and refusing the call,
-which is the only way the rule holds against anything but our own UI. Owner: Travis.
+**Amended 2026-09-22 — the API is closed too.** The first note here said the commit "does not
+re-validate", which was too broad. It did: `commitImport` already repeated six of the seven blocking
+rules — empty title, empty room, unreadable date, backwards session, backwards presentation, and a
+presentation outside its session — because the rows arrive from a browser and a client is not a place
+to hold a rule. It missed exactly one, the seventh: a room matching nothing on the event. That single
+gap is what let the typo through.
+
+It now repeats that rule as well. The event's rooms are read once, before anything is written, so a
+room invented by row 1 cannot silently validate row 2, and the refusal names the rooms it did not
+recognise (`detail.unmatched_rooms`) — a caller that never saw the screen has nothing else to go on.
+The condition is the preview's: only once the event has rooms, since the first import into an empty
+event is what *defines* them.
+
+**A second route to the same duplicate, closed with it.** Validation compares room names with
+`normalise`, which folds separators and repeated spaces; the commit resolved the room with SQL
+`lower()`, which does not. A name differing only in spacing passed the check and then missed the
+lookup, and was created as a new room. Both ends now use `normalise`, and the lookup reads from a map
+built once rather than a query per row — which also means two rows naming the same new room on an
+empty event create it once.
+
+Four cases in `tests/invariants/schedule-import.test.ts`, over HTTP rather than against the function,
+because what was wrong was reachable without the screen's cooperation. Verified to fail with the
+check disabled, so they cannot pass for the wrong reason. Owner: Travis.

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import type { TestContext } from "node:test";
 import { signInStaff } from "../helpers/signIn.ts";
 import { removeTestEvents } from "../helpers/cleanup.ts";
+import { withSystemScope } from "@pmp/db";
 
 /**
  * An agenda arrives incomplete more often than not, and the operator is usually not
@@ -391,5 +392,136 @@ describe("a presentation cannot escape its session", () => {
     const preview = await upload(row("9:00 AM", "10:00 AM"));
     assert.equal(preview.issues.filter((issue) => issue.severity === "blocking").length, 0);
     assert.equal((await commit(preview)).status, 200);
+  });
+});
+
+/*
+ * D-046. `commitImport` already repeated six of the seven blocking rules the preview
+ * applies — an empty title, an empty room, an unreadable date, a backwards session, a
+ * backwards presentation, a presentation outside its session. It did not repeat the
+ * seventh: a room matching nothing on the event.
+ *
+ * So a request that skipped the screen, or replayed a preview taken before the rule
+ * mattered, imported the typo and `rooms` gained "Main Hal" beside "Main Hall" — the
+ * duplicate the check exists to prevent. Reproduced exactly that way before the fix:
+ * one row, one typo, {"created":1}, two rooms.
+ *
+ * These go through the API rather than calling `commitImport`, because what was wrong
+ * was reachable over HTTP without the screen's cooperation, and a unit test on the
+ * function would have passed either way once the screen was fixed.
+ */
+describe("the commit refuses a room the event does not have", () => {
+  const ROOM_PROBE = "Import Room Revalidation Probe";
+  let probe = "";
+
+  /** A typed agenda of one row, filled with whatever this test is about. */
+  const oneRow = async (cells: Record<string, string>) => {
+    const blank = (await (
+      await fetch(`${API}/events/${probe}/imports/blank`, { method: "POST", headers: json(admin) })
+    ).json()) as Preview;
+    return (await (
+      await fetch(`${API}/imports/${blank.upload_id}/cells`, {
+        method: "POST",
+        headers: json(admin),
+        body: JSON.stringify({ row: 2, cells }),
+      })
+    ).json()) as Preview;
+  };
+
+  const commitTo = (preview: Preview) =>
+    fetch(`${API}/imports/${preview.import_id}/commit`, {
+      method: "POST",
+      headers: json(admin),
+      body: JSON.stringify({ event_id: probe, rows: preview.rows }),
+    });
+
+  const roomsOf = async (): Promise<string[]> =>
+    withSystemScope(async (tx) => {
+      const { rows } = await tx.query<{ name: string }>(
+        `SELECT name FROM pmp.rooms WHERE event_id = $1 ORDER BY name`,
+        [probe],
+      );
+      return rows.map((room) => room.name);
+    });
+
+  const session = (title: string, room: string, start: string, end: string) => ({
+    "session.title": title,
+    "room.name": room,
+    "session.date": "03/14/2027",
+    "session.start": start,
+    "session.end": end,
+  });
+
+  before(async () => {
+    if (!up) return;
+    const created = (await (
+      await fetch(`${API}/events`, {
+        method: "POST",
+        headers: json(admin),
+        body: JSON.stringify({
+          client_id: "11111111-1111-4111-8111-111111111111",
+          name: ROOM_PROBE,
+          venue: "Tampa",
+          timezone: "America/New_York",
+          starts_on: "2027-03-14",
+          ends_on: "2027-03-14",
+        }),
+      })
+    ).json()) as { event_id: string };
+    probe = created.event_id;
+  });
+
+  after(async () => {
+    if (!up) return;
+    await removeTestEvents([ROOM_PROBE]);
+  });
+
+  /*
+   * First, because the rest depend on it and because it is the behaviour the rule must
+   * not break: an event with no rooms is one whose first import *defines* them, so
+   * there is nothing to match against and the name is taken as given.
+   */
+  test("an event with no rooms takes the name it is given", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const response = await commitTo(await oneRow(session("Opening", "Grand Ballroom", "9:00 AM", "10:00 AM")));
+    assert.equal(response.status, 200);
+    assert.deepEqual(await roomsOf(), ["Grand Ballroom"]);
+  });
+
+  test("a room the event has commits into it, creating nothing", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const response = await commitTo(await oneRow(session("Second", "Grand Ballroom", "11:00 AM", "12:00 PM")));
+    assert.equal(response.status, 200);
+    assert.deepEqual(await roomsOf(), ["Grand Ballroom"]);
+  });
+
+  test("a room the event does not have is refused, and no room is created", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const preview = await oneRow(session("Typo", "Grand Balroom", "1:00 PM", "2:00 PM"));
+    // The preview already knew. The point of the test is what the commit does with a
+    // row the preview called blocking.
+    assert.ok(preview.issues.some((issue) => issue.column === "room.name" && issue.severity === "blocking"));
+
+    const response = await commitTo(preview);
+    assert.equal(response.status, 400);
+    const body = (await response.json()) as { code: string; detail?: { unmatched_rooms?: string[] } };
+    assert.equal(body.code, "import.blocking_errors");
+    // Named, because a caller that never saw the screen has nothing else to go on.
+    assert.deepEqual(body.detail?.unmatched_rooms, ["Grand Balroom"]);
+    assert.deepEqual(await roomsOf(), ["Grand Ballroom"]);
+  });
+
+  /*
+   * The same duplicate by a second route. Validation compares with `normalise`, which
+   * folds repeated spaces and separators; the commit used to resolve the room with SQL
+   * `lower()`, which does not. A name differing only in spacing therefore passed the
+   * check and then missed the lookup, and was created as a new room. Both ends now
+   * use `normalise`.
+   */
+  test("a name differing only in spacing joins the room, it does not fork it", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const response = await commitTo(await oneRow(session("Spaced", "Grand  Ballroom", "3:00 PM", "4:00 PM")));
+    assert.equal(response.status, 200);
+    assert.deepEqual(await roomsOf(), ["Grand Ballroom"]);
   });
 });
