@@ -383,45 +383,6 @@ aside nav a:not(.on):hover { background: var(--ink2); }
   background: var(--info-soft);
 }
 
-/* Keep date, time, and the Today shortcut inside one compact responsive panel.
-   react-datepicker otherwise positions the Today-time column outside the
-   calendar, which can create a tall overlapping popup in narrow form columns. */
-.dxg-datepicker--with-time.react-datepicker {
-  display: grid;
-  grid-template-columns: minmax(252px, auto) 96px;
-}
-
-.dxg-datepicker--with-time .react-datepicker__month-container {
-  grid-column: 1;
-  grid-row: 1;
-  float: none;
-  min-width: 0;
-}
-
-.dxg-datepicker--with-time .react-datepicker__time-container,
-.dxg-datepicker--with-time
-  .react-datepicker__time-container--with-today-button {
-  position: static;
-  grid-column: 2;
-  grid-row: 1;
-  top: auto;
-  right: auto;
-  float: none;
-  width: 96px;
-  border: 0;
-  border-left: 1px solid var(--line);
-  border-radius: 0;
-}
-
-.dxg-datepicker--with-time .react-datepicker__time,
-.dxg-datepicker--with-time .react-datepicker__time-box {
-  width: 95px;
-}
-
-.dxg-datepicker--with-time .react-datepicker__time-list {
-  height: 252px !important;
-}
-
 /*
  * No horizontal scrollbar under the times.
  *
@@ -439,10 +400,10 @@ aside nav a:not(.on):hover { background: var(--ink2); }
  * `overflow-x: hidden` stays as the guard: it costs nothing, and it keeps a sub-pixel
  * rounding anywhere in this column from putting the bar back.
  *
- * Scoped to `--time-only`, the class the field already carries. Every picker in the
- * app is date-only or time-only today — nothing applies `--with-time`, so the block
- * above it is currently unreached — but scoping keeps this from silently narrowing a
- * date-and-time picker the day one appears.
+ * Scoped to `--time-only`, the class the field already carries, rather than left
+ * unqualified: every picker in the app is date-only or time-only, and a width meant
+ * for a narrow time column should not reach a date-and-time picker the day one
+ * appears.
  */
 .dxg-datepicker--time-only .react-datepicker__time-container,
 .dxg-datepicker--time-only .react-datepicker__time,
@@ -460,11 +421,6 @@ aside nav a:not(.on):hover { background: var(--ink2); }
 
 .dxg-datepicker .react-datepicker__time-list {
   overflow-x: hidden;
-}
-
-.dxg-datepicker--with-time .react-datepicker__today-button {
-  grid-column: 1 / -1;
-  grid-row: 2;
 }
 
 .dxg-datepicker .react-datepicker__navigation {

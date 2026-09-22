@@ -2553,3 +2553,30 @@ Verified in the browser: list `scrollWidth` 77 against `clientWidth` 77 where it
 and zero items reporting a clipped label where sixteen did. The date picker is untouched.
 
 CI green, 212 unit tests. Invariants not re-run — nothing outside the stylesheet changed.
+
+## 2026-09-22 (seventy-seventh) — the unreached date-and-time picker styles go
+
+Six rules, forty-eight lines, styling a `--with-time` variant nothing has ever applied: the grid that
+was to sit a calendar beside a time column, the month container's placement in it, the time column's
+96px and its border, the box's 95px, the list's 252px height and the Today button's spanning row.
+Every picker in the app is date-only (`DateField`) or time-only (`TimeField`), and the class appears
+in no component, no page and not in the prototype baseline.
+
+Two of them were already known to be inert twice over — the box's 95px is written the same way the
+time-only 85px was, at a specificity the library's own `__time-container __time __time-box` beats, so
+it would not have applied even to a picker carrying the class.
+
+Noticed while fixing the horizontal scrollbar (seventy-sixth), where the question "does this width
+reach the other picker?" turned out to have no other picker behind it.
+
+Removed rather than left as a comment: a variant that has never rendered is not a style to maintain,
+and the next person to widen a time column should not have to work out which of two blocks is live.
+If a date-and-time picker is ever wanted, react-datepicker's own layout is the starting point, not
+this.
+
+Verified by measuring the pickers before and after: the time-only box is 92px either way, its list
+77/77 with no horizontal scrollbar and no clipped label, and the date picker is 270px with 35 days
+and no time column. The create-event wizard's two date fields render unchanged.
+
+CI green, 212 unit tests; the control centre also builds clean, which is where the stylesheet is
+actually compiled. Invariants not re-run — nothing outside the stylesheet changed.
