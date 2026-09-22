@@ -1229,6 +1229,8 @@ const importCache = new Map<
     manual?: boolean;
     /** How many rows the operator has typed in. */
     blankRows?: number;
+    /** Row numbers taken out of the import; skipped rather than renumbered. */
+    excluded?: number[];
   }
 >();
 
@@ -1296,6 +1298,7 @@ function revalidate(req: express.Request, actor: Actor, uploadId: string) {
       ...(cached.mapping ? { mapping: cached.mapping } : {}),
       ...(cached.overrides ? { overrides: cached.overrides } : {}),
       ...(cached.blankRows ? { blankRows: cached.blankRows } : {}),
+      ...(cached.excluded ? { excluded: cached.excluded } : {}),
     }),
   );
 }
@@ -1407,13 +1410,14 @@ app.post("/api/v1/imports/:uploadId/rows", async (req, res) => {
 });
 
 /**
- * Drop a typed row. Only a typed row: a row the file carried is removed by editing the
- * file, and deleting one here would make the preview disagree with the thing it claims
- * to be a preview of.
+ * Take a row out of the import — a row from a file as readily as a typed one.
  *
- * Row numbers are positional, so the rows after the removed one move up by one and
- * their corrections have to move with them — otherwise the values the operator typed
- * would silently reattach to the following row.
+ * It is skipped, not deleted. A file's row numbers belong to the file, so an error
+ * that names row 12 has to mean the twelfth row of the spreadsheet on the operator's
+ * screen; shifting the rows below a removal would break that, and would also detach
+ * every correction typed into them, `overrides` being keyed by row number. Skipping
+ * costs nothing and keeps both true — which is why removal now works on an uploaded
+ * agenda at all, where renumbering had ruled it out.
  */
 app.delete("/api/v1/imports/:uploadId/rows/:row", async (req, res) => {
   const actor = actorFrom(req);
@@ -1422,29 +1426,44 @@ app.delete("/api/v1/imports/:uploadId/rows/:row", async (req, res) => {
   const cached = importCache.get(uploadId);
   if (!cached) return res.status(404).json({ code: "import.expired", message: "Upload the file again." });
 
-  if (!cached.manual) {
-    return res.status(400).json({ code: "import.not_manual", message: "This agenda came from a file." });
-  }
-  const blankRows = cached.blankRows ?? 0;
-
   const row = Number(req.params.row);
   if (!Number.isInteger(row)) {
     return res.status(400).json({ code: "request.invalid", message: "`row` must be a row number." });
   }
-  // The last one stays: an import with no rows has nothing to commit and nothing to
-  // type into, and `buildPreview` rejects it outright as an empty file.
-  if (blankRows <= 1) {
+  if (cached.excluded?.includes(row)) {
+    return res.status(409).json({ code: "import.already_removed", message: "That row is already out." });
+  }
+
+  const excluded = [...(cached.excluded ?? []), row];
+  importCache.set(uploadId, { ...cached, excluded });
+
+  const result = await revalidate(req, actor, uploadId);
+  if (!result.ok) {
+    importCache.set(uploadId, cached);
+    return res.status(statusFor(result.error)).json(result.error);
+  }
+  /*
+   * Asked rather than counted. Whether a row is the last one depends on what the file
+   * held, what was typed and what is already out, and `buildPreview` is the only thing
+   * that knows all three — so the removal is tried and put back if it emptied the
+   * import, instead of a second count here that could disagree with it.
+   */
+  if (result.value.rows.length === 0) {
+    importCache.set(uploadId, cached);
     return res.status(400).json({ code: "import.last_row", message: "An agenda needs at least one row." });
   }
+  return res.json({ ...result.value, upload_id: uploadId, manual: cached.manual ?? false });
+});
 
-  const overrides: RowOverrides = {};
-  for (const [key, cells] of Object.entries(cached.overrides ?? {})) {
-    const at = Number(key);
-    if (at === row) continue;
-    overrides[at > row ? at - 1 : at] = cells;
-  }
-  importCache.set(uploadId, { ...cached, blankRows: blankRows - 1, overrides });
+/** Puts every removed row back, for a removal the operator did not mean. */
+app.post("/api/v1/imports/:uploadId/rows/restore", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  const uploadId = String(req.params.uploadId);
+  const cached = importCache.get(uploadId);
+  if (!cached) return res.status(404).json({ code: "import.expired", message: "Upload the file again." });
 
+  importCache.set(uploadId, { ...cached, excluded: [] });
   const result = await revalidate(req, actor, uploadId);
   if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
   return res.json({ ...result.value, upload_id: uploadId, manual: cached.manual ?? false });

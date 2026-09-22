@@ -11,6 +11,7 @@ import {
   startManualImport,
   addImportRow,
   removeImportRow,
+  restoreImportRows,
   remapImport,
   commitImport,
   setImportCells,
@@ -1204,26 +1205,38 @@ export function ImportView({
                               label={blocked ? "incomplete" : row.action}
                             />
                             {/*
-                              On a typed agenda every row is opened here, including a
-                              complete one: the editor is how the row was filled in, so
-                              hiding it once the row validates would leave no way back
-                              to a value that is wrong rather than missing.
+                              Every row, including a complete one. The editor is how a
+                              typed row was filled in and how a file's row was
+                              corrected, so hiding it the moment the row validates
+                              leaves no way back to a value that is wrong rather than
+                              missing — which is exactly the state a row is in right
+                              after someone corrects it.
                             */}
-                            {(preview.manual || problems.length > 0) && (
-                              <button
-                                className={blocked ? "btn pri" : "btn"}
-                                style={{ padding: "3px 10px" }}
-                                title={problems.map((problem) => problem.message).join("\n")}
-                                onClick={() => setEditing(row.row)}
-                              >
-                                Edit
-                              </button>
-                            )}
-                            {preview.manual && rows.length > 1 && (
+                            <button
+                              className={blocked ? "btn pri" : "btn"}
+                              style={{ padding: "3px 10px" }}
+                              title={
+                                problems.length > 0
+                                  ? problems.map((problem) => problem.message).join("\n")
+                                  : undefined
+                              }
+                              onClick={() => setEditing(row.row)}
+                            >
+                              Edit
+                            </button>
+                            {/*
+                              On a file's rows too. Removal skips the row rather than
+                              renumbering the ones below it, so a row that cannot be
+                              completed — or a session that should not be imported —
+                              no longer means editing the spreadsheet and uploading it
+                              again.
+                            */}
+                            {rows.length > 1 && (
                               <button
                                 className="btn"
                                 style={{ padding: "3px 10px" }}
                                 disabled={busy}
+                                title={`Leave row ${rowLabel(row)} out of this import`}
                                 onClick={() =>
                                   void run(async () =>
                                     apply(await removeImportRow(preview.upload_id, row.row)),
@@ -1240,11 +1253,42 @@ export function ImportView({
                   })}
                 </tbody>
               </table>
-              {preview.manual && (
-                <div style={{ padding: "10px 14px 6px" }}>
-                  <button className="btn" disabled={busy} onClick={() => setAdding(true)}>
-                    + Add session
-                  </button>
+              {(preview.manual || preview.excluded.length > 0) && (
+                <div
+                  style={{
+                    padding: "10px 14px 6px",
+                    display: "flex",
+                    gap: 10,
+                    alignItems: "center",
+                    flexWrap: "wrap",
+                  }}
+                >
+                  {preview.manual && (
+                    <button className="btn" disabled={busy} onClick={() => setAdding(true)}>
+                      + Add session
+                    </button>
+                  )}
+                  {/*
+                    A removed row leaves the table, so without this the count would
+                    simply be wrong against the file and nothing would say why. It is
+                    also the only way back from a removal made by mistake.
+                  */}
+                  {preview.excluded.length > 0 && (
+                    <span className="note">
+                      {preview.excluded.length} row{preview.excluded.length === 1 ? "" : "s"} removed
+                      — {preview.excluded.length === 1 ? "it is" : "they are"} not imported.{" "}
+                      <button
+                        className="btn"
+                        style={{ padding: "3px 10px" }}
+                        disabled={busy}
+                        onClick={() =>
+                          void run(async () => apply(await restoreImportRows(preview.upload_id)))
+                        }
+                      >
+                        Put {preview.excluded.length === 1 ? "it" : "them"} back
+                      </button>
+                    </span>
+                  )}
                 </div>
               )}
             </div>

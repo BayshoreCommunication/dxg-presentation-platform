@@ -482,6 +482,8 @@ export type ImportPreview = {
   counts: { create: number; update: number; unchanged: number };
   issues: RowIssue[];
   rows: StagedRow[];
+  /** Row numbers the operator removed; absent from `rows` and never committed. */
+  excluded: readonly number[];
 };
 
 const cell = (row: string[], mapping: (ImportField | null)[], field: ImportField): string => {
@@ -612,6 +614,16 @@ export async function buildPreview(
      * to be filled in.
      */
     blankRows?: number;
+    /**
+     * Rows the operator has taken out, by row number.
+     *
+     * Taken out rather than renumbered: a file's row numbers are the file's, and an
+     * error that names row 12 has to mean the twelfth row of the spreadsheet the
+     * operator is looking at. Shifting the rows below a removal would also detach
+     * every correction typed into them, since `overrides` is keyed by row number.
+     * Skipping is what leaves both intact.
+     */
+    excluded?: readonly number[];
   },
 ): Promise<Result<ImportPreview, DomainError>> {
   let sheet: string[][];
@@ -675,6 +687,10 @@ export async function buildPreview(
     // The row number the operator sees in their spreadsheet, so an error names a row
     // they can actually go and look at.
     const rowNumber = firstDataRow + index + 1;
+
+    // Before anything is read from it: a removed row is not a row with no problems,
+    // it is absent — from the table, the counts, the issue list and the commit.
+    if (input.excluded?.includes(rowNumber)) return;
 
     /*
      * A cell the operator typed on the review screen wins over the file's. Read here,
@@ -946,6 +962,7 @@ export async function buildPreview(
     counts,
     issues,
     rows: staged,
+    excluded: input.excluded ?? [],
   });
 }
 

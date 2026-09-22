@@ -819,3 +819,34 @@ file that becomes a preview the moment it lands, the preview has its own actions
 dropping another file on the same box. A cancel button for an upload in flight is the one arguably
 missing — it needs the XHR handle lifted into state, and a 64 MB ceiling makes the window small
 enough that it was not worth the state. Owner: Travis.
+
+## D-049 (2026-09-22): A row can be taken out of an uploaded agenda — Status: ACCEPTED (Travis's call)
+D-045 allowed removal only on a typed agenda, on the reasoning that a file's rows belong to the file.
+That protected the wrong thing. An agenda arrives with rows that cannot be completed or should not be
+imported — a cancelled session, a row whose room does not exist — and because the commit is
+all-or-nothing, one such row held up the entire import. The only way out was to edit the spreadsheet
+and upload it again.
+
+**Removal now works on any row, because it stopped renumbering.** The first implementation deleted
+the row and shifted the ones below it up, which is what ruled a file out: an error naming row 12 has
+to mean the twelfth row of the spreadsheet on the operator's screen, and `overrides` is keyed by row
+number, so any slip in the re-keying silently reattaches a correction to the wrong session. A removed
+row is now *skipped* in `buildPreview` — before anything is read from it, so it leaves the table, the
+counts, the issue list and the commit together — and every other row keeps its number. The re-keying
+code is gone, and with it the one place this could have gone quietly wrong.
+
+**Reversible, and visible.** A removed row leaves the table, so without a note the count would simply
+disagree with the file and nothing would say why. One line states how many went and offers them back
+(`POST /imports/{id}/rows/restore`).
+
+**The last row stays.** Whether a row is the last depends on the file, what was typed and what is
+already out, and `buildPreview` is the only thing that knows all three — so the removal is applied,
+the result inspected, and the cache put back if the import came out empty, rather than a second count
+here that could disagree with it.
+
+**Edit is now on every row too.** It appeared only on rows with problems, so correcting a row made
+its Edit vanish — no way back to a value that is wrong rather than missing, which is exactly the
+state a row is in right after someone corrects it.
+
+Four invariants, including the one that would have broken under renumbering: a correction typed into
+row 5 is still on row 5 after row 2 is removed. Owner: Travis.

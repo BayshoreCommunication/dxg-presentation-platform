@@ -515,6 +515,8 @@ export type ImportPreview = {
   counts: { create: number; update: number; unchanged: number };
   issues: RowIssue[];
   rows: StagedRow[];
+  /** Row numbers the operator removed; absent from `rows` and never committed. */
+  excluded: readonly number[];
   /** True when the agenda is being typed in rather than read from a file. */
   manual?: boolean;
 };
@@ -627,9 +629,17 @@ export const addImportRow = (uploadId: string, cells: Record<string, string>) =>
     body: JSON.stringify({ cells }),
   });
 
-/** Drops a typed row; the ones below it move up. Manual agendas only. */
+/**
+ * Takes a row out of the import. Works on an uploaded agenda as well as a typed one:
+ * the row is skipped, not renumbered, so the rows below keep their numbers and the
+ * corrections typed into them stay attached.
+ */
 export const removeImportRow = (uploadId: string, row: number) =>
   request<ImportPreview>(`/imports/${uploadId}/rows/${row}`, { method: "DELETE" });
+
+/** Puts every removed row back. */
+export const restoreImportRows = (uploadId: string) =>
+  request<ImportPreview>(`/imports/${uploadId}/rows/restore`, { method: "POST" });
 
 /**
  * A cell the operator typed for a row the file left incomplete. Sent as the value the

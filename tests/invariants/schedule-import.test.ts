@@ -606,3 +606,90 @@ describe("a typed row arrives complete", () => {
     assert.ok(after.rows[1]!.missing.length > 0);
   });
 });
+
+/*
+ * Taking a row out of an uploaded agenda (D-049).
+ *
+ * Removal used to be typed-agendas-only, because the first implementation renumbered:
+ * the rows below a removal moved up and their `overrides` had to move with them. That
+ * is wrong for a file twice over — an error naming row 12 must mean the twelfth row of
+ * the spreadsheet on the operator's screen, and any slip in the re-keying silently
+ * reattaches a correction to the wrong session.
+ *
+ * So a removed row is *skipped*, not deleted, and every other row keeps its number.
+ * These pin both halves: the numbers, and the corrections that hang off them.
+ */
+describe("a row can be taken out of an uploaded agenda", () => {
+  const FIVE_ROWS = [
+    "Session Title,Session Location,Session Date,Session Start,Session End,Presenter 1 Email",
+    "Talk One,Ballroom A,03/14/2027,9:00 AM,10:00 AM,one@example.invalid",
+    "Talk Two,Ballroom A,03/14/2027,10:00 AM,11:00 AM,two@example.invalid",
+    "Talk Three,Ballroom A,03/14/2027,11:00 AM,12:00 PM,three@example.invalid",
+    "Talk Four,Ballroom A,03/14/2027,1:00 PM,2:00 PM,four@example.invalid",
+  ].join("\n");
+
+  const remove = async (uploadId: string, row: number) =>
+    fetch(`${API}/imports/${uploadId}/rows/${row}`, { method: "DELETE", headers: json(admin) });
+
+  const restore = async (uploadId: string): Promise<Preview> =>
+    (await (
+      await fetch(`${API}/imports/${uploadId}/rows/restore`, { method: "POST", headers: json(admin) })
+    ).json()) as Preview;
+
+  test("the removed row goes and the others keep their file row numbers", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const preview = await upload(FIVE_ROWS);
+    assert.deepEqual(preview.rows.map((row) => row.row), [2, 3, 4, 5]);
+
+    const after = (await (await remove(preview.upload_id, 3)).json()) as Preview;
+    // 3 is gone; 4 and 5 are still 4 and 5, not 3 and 4.
+    assert.deepEqual(after.rows.map((row) => row.row), [2, 4, 5]);
+    assert.deepEqual(after.rows.map((row) => row.title), ["Talk One", "Talk Three", "Talk Four"]);
+    assert.equal(after.total_rows, 3);
+  });
+
+  /*
+   * The one that would have broken under renumbering, and the reason this is worth a
+   * test rather than an assertion in a comment.
+   */
+  test("a correction below the removal stays on the row it was typed for", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const preview = await upload(FIVE_ROWS);
+    const corrected = await fixRow(preview.upload_id, 5, { "session.title": "Talk Four, corrected" });
+    assert.equal(corrected.rows.find((row) => row.row === 5)?.title, "Talk Four, corrected");
+
+    const after = (await (await remove(preview.upload_id, 2)).json()) as Preview;
+    assert.equal(
+      after.rows.find((row) => row.row === 5)?.title,
+      "Talk Four, corrected",
+      "the correction followed the row number, so removing an earlier row must not move it",
+    );
+  });
+
+  test("the last row cannot be removed, and the attempt changes nothing", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const preview = await upload(
+      ["Session Title,Session Location,Session Date,Session Start,Session End",
+       "Only Row,Ballroom A,03/14/2027,9:00 AM,10:00 AM"].join("\n"),
+    );
+    const response = await remove(preview.upload_id, 2);
+    assert.equal(response.status, 400);
+    assert.equal(((await response.json()) as { code: string }).code, "import.last_row");
+
+    const still = await restore(preview.upload_id);
+    assert.equal(still.rows.length, 1, "the refused removal must not have been half-applied");
+  });
+
+  test("restore puts every removed row back", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const preview = await upload(FIVE_ROWS);
+    await remove(preview.upload_id, 2);
+    const twoGone = (await (await remove(preview.upload_id, 4)).json()) as Preview;
+    assert.deepEqual(twoGone.excluded, [2, 4]);
+    assert.deepEqual(twoGone.rows.map((row) => row.row), [3, 5]);
+
+    const back = await restore(preview.upload_id);
+    assert.deepEqual(back.excluded, []);
+    assert.deepEqual(back.rows.map((row) => row.row), [2, 3, 4, 5]);
+  });
+});

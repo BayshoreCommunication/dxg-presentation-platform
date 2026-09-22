@@ -2698,3 +2698,34 @@ CI green, 212 unit tests, 122 invariants; the control centre builds clean.
 **Note to self:** running `npm run build -w @pmp/control-center` while `next dev` is serving that
 workspace overwrites its `.next` and every page starts 500ing with `Cannot find module './673.js'`.
 Done it twice now. Clear `.next` and restart the dev server, or build when the dev server is down.
+
+
+## 2026-09-22 (eighty-second) — a row can be taken out of an uploaded agenda
+
+Travis, against a file import: add an option to remove an entry. D-045 had allowed removal only on a
+typed agenda, and that protected the wrong thing — an agenda arrives with rows that cannot be
+completed or should not be imported, the commit is all-or-nothing, and one such row held up
+everything. The only way out was to fix the spreadsheet and upload it again.
+
+**It works on any row now because it stopped renumbering.** The first implementation deleted the row
+and shifted the ones below it up, which is what ruled a file out: an error naming row 12 must mean
+the twelfth row of the operator's spreadsheet, and `overrides` is keyed by row number, so a slip in
+the re-keying reattaches a correction to the wrong session. A removed row is skipped in
+`buildPreview` instead, before anything is read from it — so it leaves the table, the counts, the
+issues and the commit together — and every other row keeps its number. The re-keying code is deleted.
+
+One line says how many rows went and puts them back. The last row cannot go: the removal is applied,
+the result inspected and the cache restored if the import came out empty, rather than a second count
+that could disagree with `buildPreview`.
+
+**Edit moved to every row** while in here. It showed only on rows with problems, so correcting a row
+made its Edit disappear — no way back to a value that is wrong rather than missing, which is the
+state a row is in immediately after being corrected.
+
+Walked it: a six-row file, removed the row that could not be completed, watched the rest keep their
+file numbers 2–6; typed a correction into row 6, removed row 2, and confirmed the correction was
+still on row 6; put everything back and got all six rows with the correction intact; and removed the
+two blocking rows of a five-row agenda to watch Incomplete rows reach 0 and Import become available.
+
+CI green, 212 unit tests; invariants 126, up from 122 — including the case that would have broken
+under renumbering.
