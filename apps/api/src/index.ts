@@ -54,6 +54,8 @@ import type { Lane } from "./services/presentation.ts";
 import {
   buildPreview,
   commitImport,
+  saveTypedRow,
+  deleteTypedSession,
   manualAgendaCsv,
   autoMap,
   agendaTemplateCsv,
@@ -85,7 +87,7 @@ import {
   downloadPackage,
   latestPackage,
 } from "./services/archive.ts";
-import type { ImportField, StagedRow, RowOverrides } from "./services/scheduleImport.ts";
+import type { ImportField, StagedRow, RowOverrides, ImportPreview } from "./services/scheduleImport.ts";
 import type { PortalSession } from "./services/portal.ts";
 import { decide } from "./services/review.ts";
 
@@ -1232,6 +1234,12 @@ const importCache = new Map<
     /** Row numbers taken out of the import; skipped rather than renumbered. */
     excluded?: number[];
     /**
+     * For a typed agenda, the session each row has written (D-053). A row is saved
+     * straight to the event, so this is how a later edit finds the session it made
+     * instead of creating a second one, and how Remove knows what to delete.
+     */
+    sessions?: Record<number, string>;
+    /**
      * The mapping the last preview actually used — the operator's if they corrected a
      * column, the auto-mapped one otherwise. Kept apart from `mapping`, which means
      * "the operator chose this" and is fed back into `buildPreview` as an override.
@@ -1260,7 +1268,7 @@ app.post("/api/v1/events/:eventId/imports", async (req, res) => {
   );
   if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
   importCache.set(uploadId, { ...importCache.get(uploadId)!, effectiveMapping: [...result.value.mapping] });
-  return res.status(201).json({ ...result.value, upload_id: uploadId, manual: false });
+  return res.status(201).json({ ...result.value, upload_id: uploadId, manual: false, saved_rows: [] });
 });
 
 /**
@@ -1292,7 +1300,7 @@ app.post("/api/v1/events/:eventId/imports/blank", async (req, res) => {
   );
   if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
   importCache.set(uploadId, { ...importCache.get(uploadId)!, effectiveMapping: [...result.value.mapping] });
-  return res.status(201).json({ ...result.value, upload_id: uploadId, manual: true });
+  return res.status(201).json({ ...result.value, upload_id: uploadId, manual: true, saved_rows: [] });
 });
 
 /**
@@ -1335,7 +1343,12 @@ app.post("/api/v1/imports/:uploadId/remap", async (req, res) => {
 
   const result = await revalidate(req, actor, String(req.params.uploadId));
   if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
-  return res.json({ ...result.value, upload_id: String(req.params.uploadId), manual: cached.manual ?? false });
+  return res.json({
+    ...result.value,
+    upload_id: String(req.params.uploadId),
+    manual: cached.manual ?? false,
+    saved_rows: savedRows(String(req.params.uploadId)),
+  });
 });
 
 /**
@@ -1387,7 +1400,14 @@ app.post("/api/v1/imports/:uploadId/cells", async (req, res) => {
 
   const result = await revalidate(req, actor, uploadId);
   if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
-  return res.json({ ...result.value, upload_id: uploadId, manual: cached.manual ?? false });
+  // On a typed agenda, saving the row is what puts it on the event (D-053).
+  await persistTypedRow(req, actor, uploadId, body.row, result.value);
+  return res.json({
+    ...result.value,
+    upload_id: uploadId,
+    manual: cached.manual ?? false,
+    saved_rows: savedRows(uploadId),
+  });
 });
 
 /**
@@ -1427,7 +1447,13 @@ app.post("/api/v1/imports/:uploadId/rows", async (req, res) => {
   importCache.set(uploadId, { ...cached, blankRows, overrides });
   const result = await revalidate(req, actor, uploadId);
   if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
-  return res.json({ ...result.value, upload_id: uploadId, manual: cached.manual ?? false });
+  await persistTypedRow(req, actor, uploadId, addedRow, result.value);
+  return res.json({
+    ...result.value,
+    upload_id: uploadId,
+    manual: cached.manual ?? false,
+    saved_rows: savedRows(uploadId),
+  });
 });
 
 /**
@@ -1463,6 +1489,26 @@ app.delete("/api/v1/imports/:uploadId/rows/:row", async (req, res) => {
     importCache.set(uploadId, cached);
     return res.status(statusFor(result.error)).json(result.error);
   }
+
+  /*
+   * On a typed agenda the row is already a session (D-053), so removing it is a
+   * deletion rather than "leave this out of the import". The screen asks first; this
+   * is what it asks about.
+   */
+  const session = cached.sessions?.[row];
+  if (cached.manual && session) {
+    const removal = await withScope(scopeFor(req, cached.eventId), (tx) =>
+      deleteTypedSession(tx, actor, { eventId: cached.eventId, sessionId: session }),
+    );
+    if (!removal.ok) {
+      importCache.set(uploadId, cached);
+      return res.status(statusFor(removal.error)).json(removal.error);
+    }
+    const current = importCache.get(uploadId)!;
+    const sessions = { ...current.sessions };
+    delete sessions[row];
+    importCache.set(uploadId, { ...current, sessions });
+  }
   /*
    * Asked rather than counted. Whether a row is the last one depends on what the file
    * held, what was typed and what is already out, and `buildPreview` is the only thing
@@ -1473,7 +1519,12 @@ app.delete("/api/v1/imports/:uploadId/rows/:row", async (req, res) => {
     importCache.set(uploadId, cached);
     return res.status(400).json({ code: "import.last_row", message: "An agenda needs at least one row." });
   }
-  return res.json({ ...result.value, upload_id: uploadId, manual: cached.manual ?? false });
+  return res.json({
+    ...result.value,
+    upload_id: uploadId,
+    manual: cached.manual ?? false,
+    saved_rows: savedRows(uploadId),
+  });
 });
 
 /** Puts every removed row back, for a removal the operator did not mean. */
@@ -1487,8 +1538,55 @@ app.post("/api/v1/imports/:uploadId/rows/restore", async (req, res) => {
   importCache.set(uploadId, { ...cached, excluded: [] });
   const result = await revalidate(req, actor, uploadId);
   if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
-  return res.json({ ...result.value, upload_id: uploadId, manual: cached.manual ?? false });
+  return res.json({
+    ...result.value,
+    upload_id: uploadId,
+    manual: cached.manual ?? false,
+    saved_rows: savedRows(uploadId),
+  });
 });
+
+/**
+ * Writes a typed row to the event and remembers the session it made (D-053).
+ *
+ * A row that is still incomplete is left alone rather than refused — the operator may
+ * be part-way through it, and the screen already disables Save until it is complete.
+ * This is the belt to that braces.
+ */
+async function persistTypedRow(
+  req: express.Request,
+  actor: Actor,
+  uploadId: string,
+  rowNumber: number,
+  preview: ImportPreview,
+): Promise<void> {
+  const cached = importCache.get(uploadId);
+  if (!cached?.manual) return;
+  const row = preview.rows.find((candidate) => candidate.row === rowNumber);
+  if (!row || row.missing.length > 0) return;
+
+  const existing = cached.sessions?.[rowNumber];
+  const result = await withScope(scopeFor(req, cached.eventId), (tx) =>
+    saveTypedRow(tx, actor, {
+      eventId: cached.eventId,
+      row,
+      ...(existing ? { sessionId: existing } : {}),
+    }),
+  );
+  if (!result.ok) return;
+
+  const current = importCache.get(uploadId);
+  if (current) {
+    importCache.set(uploadId, {
+      ...current,
+      sessions: { ...current.sessions, [rowNumber]: result.value.session_id },
+    });
+  }
+}
+
+/** Which rows of a typed agenda are on the event, so the screen can say so. */
+const savedRows = (uploadId: string): number[] =>
+  Object.keys(importCache.get(uploadId)?.sessions ?? {}).map(Number);
 
 /**
  * Commit, keyed by the upload rather than by a `schedule_imports` row (D-051).

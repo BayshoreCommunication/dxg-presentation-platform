@@ -2822,3 +2822,38 @@ screen with a blocking row shows the button and the explanation and nothing else
 specified both and has been corrected.
 
 CI green, 212 unit tests, 129 invariants.
+
+
+## 2026-09-22 (eighty-sixth) — a typed row is saved to the event, not staged
+
+Travis asked why a typed agenda had both **+ Add session** and **Import 1 session**. The honest
+answer was that three buttons used two verbs between them and only one of them wrote anything:
+**Save row** filled a row, **+ Add session** added another, and **Import** — borrowed from the file
+path — was the finishing step. His call: saving a row should be the finish.
+
+So a typed agenda has no commit. `saveTypedRow` writes the session as the row is saved; staging and
+all-or-nothing stay for a file, where half a spreadsheet is not a schedule.
+
+**Two decisions he made that shaped it.** A saved row remembers its session id, so renaming and
+re-saving updates that session — under the importer's `(location, start, title)` key a rename
+changes the key and quietly makes a second session, which is the case the new invariant covers. And
+**Remove** now deletes: it turns `danger`, names the session and where it is, warns that presenter
+assignments go too, and asks. A staged row needed no confirmation because nothing existed yet.
+
+The per-row work — resolving a location, a track, a day, the presenters — was pulled out of
+`commitImport` first and shared, so the two paths build a row the same way rather than drifting. The
+invariants were run against that refactor alone before anything new was added.
+
+Three consequences. A typed agenda writes **no** `schedule_imports` record, because there is no
+import; each session is audited individually with `via: typed_agenda`, which says more than one bulk
+row would. The wizard's later steps, which unlock on the event having a schedule, now hear about the
+first saved row through the same callback the commit used. And the last row still cannot be removed,
+since the preview needs one row to exist — so a typed agenda's final session has to be deleted from
+another screen. Odd; left alone rather than guessed at.
+
+Walked it: saved a row and watched the session appear with the chip reading "on the event" and no
+Import button; renamed and re-saved, one session not two; added a second, deleted it through the
+confirmation, and checked for orphaned slots and assignments (none) and the audit trail
+(created → updated → created → deleted).
+
+CI green, 212 unit tests; invariants 133, up from 129.

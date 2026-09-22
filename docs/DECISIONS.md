@@ -936,3 +936,43 @@ away from it is answering a question that is no longer asked. `saveBlob` stays; 
 download still uses it.
 
 SCREEN_SPECS §3 updated — it specified both. Owner: Travis.
+
+## D-053 (2026-09-22): A typed row is saved to the event, not staged — Status: ACCEPTED (Travis's call)
+Travis, looking at a typed agenda: *"there is an Add session button, but why the Import 1 session
+button given?"* Both said "session" and neither said which one finished the job. **Save row** filled
+a row, **+ Add session** added another, and **Import 1 session** — a third verb, borrowed from the
+file path — was the one that actually wrote anything. His answer: *when we click the save row, it
+will automatically be added to the event.*
+
+**So a typed agenda has no commit step.** `saveTypedRow` writes the session as the row is saved.
+Staging and all-or-nothing remain for a *file*, where half a spreadsheet is not a schedule; a typed
+row is entered deliberately, one at a time, and stands alone.
+
+**A saved row remembers its session, and re-saving updates it.** Travis's call over reusing the
+importer's `(location, start, title)` match key: under that key, renaming a session changes the key,
+so the next save leaves the old session behind and makes a second. The row carries the id of the
+session it created, and the id is re-checked against the event before use — it comes from an
+in-memory staging entry and the session could have been deleted from another screen meanwhile. An
+update writes every field, not just the end time: on a typed agenda any field can be the one being
+corrected, including the three a file import treats as the key.
+
+**Remove becomes a deletion, and asks.** Travis's call. A staged row is dropped from a list and needs
+no confirmation because nothing exists yet; a live row is a session somebody typed, so the button
+turns `danger`, names the session and where it is, and says the presenter assignments go with it.
+Deleting is the only irreversible thing on this screen, so it is a dialog rather than an inline
+two-step.
+
+**Consequences worth stating.**
+
+*No import record.* A typed agenda writes none — there is no import. Each session is audited
+individually as `session.created` / `session.updated` / `session.deleted`, with `via: typed_agenda`,
+which is a better record of what happened than one row claiming a bulk import.
+
+*The wizard still unlocks.* Its later steps are gated on the event having a schedule, which it
+learned from the commit callback. The first saved row now reports through the same callback.
+
+*The last row still cannot be removed*, because an import needs one row to exist as a preview. A
+typed agenda's final session therefore has to be deleted from elsewhere. Odd, and left alone rather
+than guessed at.
+
+Four invariants, including the rename case that decided the design. Owner: Travis.

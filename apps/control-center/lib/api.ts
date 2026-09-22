@@ -516,6 +516,11 @@ export type ImportPreview = {
   rows: StagedRow[];
   /** Row numbers the operator removed; absent from `rows` and never committed. */
   excluded: readonly number[];
+  /**
+   * Typed agendas only: the rows that are already on the event. A typed row is
+   * written when it is saved, so these are sessions, not staged rows.
+   */
+  saved_rows?: readonly number[];
   /** True when the agenda is being typed in rather than read from a file. */
   manual?: boolean;
 };

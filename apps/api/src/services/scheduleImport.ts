@@ -997,6 +997,299 @@ export function provisionalName(email: string): string {
     .join(" ");
 }
 
+/* ── the pieces a row turns into, shared by both ways in ─────────────────── */
+
+/*
+ * A typed agenda writes each row as it is saved (D-053), where a file writes all of
+ * them at once. They build the same things out of a row — a location, a track, a day,
+ * a session and its slot, the presenters — so those steps live here rather than being
+ * written twice and drifting.
+ */
+
+/** The event's location of this name, created if the event does not have it yet. */
+async function resolveRoom(
+  tx: pg.PoolClient,
+  eventId: string,
+  clientId: string,
+  known: Map<string, string>,
+  name: string,
+): Promise<string> {
+  const existing = known.get(normalise(name));
+  if (existing) return existing;
+  const { rows } = await tx.query<{ id: string }>(
+    `INSERT INTO pmp.rooms (event_id, client_id, name) VALUES ($1, $2, $3) RETURNING id`,
+    [eventId, clientId, name],
+  );
+  const id = rows[0]!.id;
+  // Remembered as well as inserted, so a second row naming the same new location
+  // joins it instead of creating it again.
+  known.set(normalise(name), id);
+  return id;
+}
+
+async function resolveTrack(
+  tx: pg.PoolClient,
+  eventId: string,
+  clientId: string,
+  name: string,
+): Promise<string | null> {
+  if (!name) return null;
+  const { rows } = await tx.query<{ id: string }>(
+    `SELECT id FROM pmp.tracks WHERE event_id = $1 AND lower(name) = lower($2)`,
+    [eventId, name],
+  );
+  if (rows[0]) return rows[0].id;
+  const { rows: inserted } = await tx.query<{ id: string }>(
+    `INSERT INTO pmp.tracks (event_id, client_id, name) VALUES ($1,$2,$3) RETURNING id`,
+    [eventId, clientId, name],
+  );
+  return inserted[0]!.id;
+}
+
+async function resolveDay(
+  tx: pg.PoolClient,
+  eventId: string,
+  clientId: string,
+  dayDate: string,
+): Promise<string | null> {
+  const { rows } = await tx.query<{ id: string }>(
+    `INSERT INTO pmp.event_days (event_id, client_id, day_date) VALUES ($1,$2,$3)
+     ON CONFLICT DO NOTHING RETURNING id`,
+    [eventId, clientId, dayDate],
+  );
+  if (rows[0]) return rows[0].id;
+  const { rows: found } = await tx.query<{ id: string }>(
+    `SELECT id FROM pmp.event_days WHERE event_id = $1 AND day_date = $2`,
+    [eventId, dayDate],
+  );
+  return found[0]?.id ?? null;
+}
+
+/**
+ * Everyone on the slot, in the order the row names them.
+ *
+ * A second (or sixth) presenter is another row in `speaker_assignments`, not another
+ * slot — people presenting one talk share the talk, its file and its approval, which
+ * is exactly what that table expresses.
+ *
+ * DXG's template fills the presenter's email and leaves the name columns empty on
+ * every row, so a presenter identified only by an address still has to become a
+ * speaker: keyed on the name alone, that imported whole agendas with no speakers and
+ * no assignments at all — sessions arrived and nobody could be invited to fill them,
+ * which is the entire point of the import. `speakers.full_name` is NOT NULL, so a
+ * provisional name is derived from the address rather than the row dropped.
+ */
+async function syncPresenters(
+  tx: pg.PoolClient,
+  input: {
+    eventId: string;
+    clientId: string;
+    slotId: string;
+    presenters: { name: string; email: string }[];
+    organization: string;
+  },
+): Promise<Set<string>> {
+  const touched = new Set<string>();
+  for (const [index, presenter] of input.presenters.entries()) {
+    const displayName = presenter.name || provisionalName(presenter.email);
+    if (!displayName) continue;
+    // The sheet has one organization column and it sits in presenter 1's block, so it
+    // is presenter 1's. Applying it to everyone would put the first presenter's
+    // employer against the name of every co-presenter.
+    const organization = index === 0 ? input.organization : "";
+
+    const { rows: found } = await tx.query<{ id: string }>(
+      presenter.email
+        ? `SELECT id FROM pmp.speakers WHERE event_id = $1 AND lower(email::text) = lower($2) AND merged_into IS NULL`
+        : `SELECT id FROM pmp.speakers WHERE event_id = $1 AND lower(full_name) = lower($2) AND merged_into IS NULL`,
+      [input.eventId, presenter.email || displayName],
+    );
+
+    let speakerId = found[0]?.id;
+    if (!speakerId) {
+      const { rows: inserted } = await tx.query<{ id: string }>(
+        `INSERT INTO pmp.speakers (client_id, event_id, email, full_name, organization)
+         VALUES ($1,$2,NULLIF($3,'')::citext,$4,NULLIF($5,'')) RETURNING id`,
+        [input.clientId, input.eventId, presenter.email, displayName, organization],
+      );
+      speakerId = inserted[0]!.id;
+    } else if (organization) {
+      await tx.query(`UPDATE pmp.speakers SET organization = COALESCE(organization, $2) WHERE id = $1`, [
+        speakerId,
+        organization,
+      ]);
+    }
+
+    touched.add(speakerId);
+    await tx.query(
+      `INSERT INTO pmp.speaker_assignments (speaker_id, slot_id, event_id, client_id)
+       VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING`,
+      [speakerId, input.slotId, input.eventId, input.clientId],
+    );
+  }
+  return touched;
+}
+
+/**
+ * One typed row, written to the event as soon as it is saved (D-053).
+ *
+ * A file's rows are staged and committed together, because half a spreadsheet is not
+ * a schedule. A typed row is different: it is entered deliberately, one at a time, and
+ * Travis's call is that saving it should be the end of the action rather than the
+ * middle of one. So there is no separate commit step on a typed agenda, and no
+ * all-or-nothing — each row stands alone.
+ *
+ * `sessionId` is what the row created last time. Given one, this updates *that*
+ * session rather than matching on (location, start, title): the operator renaming a
+ * session must change it, not leave the old one behind and make a second.
+ */
+export async function saveTypedRow(
+  tx: pg.PoolClient,
+  actor: Actor,
+  input: { eventId: string; row: StagedRow; sessionId?: string },
+): Promise<Result<{ session_id: string; action: "created" | "updated" }, DomainError>> {
+  const { row } = input;
+  if (!row.title || !row.room || !row.starts_at) {
+    return err({
+      code: "import.row_incomplete",
+      message: "A session needs a title, a location and a time.",
+    });
+  }
+
+  const { rows: eventRows } = await tx.query<{ client_id: string }>(
+    `SELECT client_id FROM pmp.events WHERE id = $1`,
+    [input.eventId],
+  );
+  const clientId = eventRows[0]?.client_id;
+  if (!clientId) return err({ code: "import.event_not_found", message: "No such event." });
+
+  const { rows: roomRows } = await tx.query<{ id: string; name: string }>(
+    `SELECT id, name FROM pmp.rooms WHERE event_id = $1`,
+    [input.eventId],
+  );
+  const roomIds = new Map(roomRows.map((room) => [normalise(room.name), room.id]));
+
+  const roomId = await resolveRoom(tx, input.eventId, clientId, roomIds, row.room);
+  const trackId = await resolveTrack(tx, input.eventId, clientId, row.track);
+  const dayId = await resolveDay(tx, input.eventId, clientId, row.starts_at.slice(0, 10));
+
+  /*
+   * The session this row already made, if it still exists. Checked rather than
+   * trusted: the id comes from an in-memory staging entry, and the session it names
+   * could have been deleted from another screen in between.
+   */
+  const existing = input.sessionId
+    ? (
+        await tx.query<{ id: string; slot_id: string }>(
+          `SELECT se.id, s.id AS slot_id
+             FROM pmp.sessions se JOIN pmp.slots s ON s.session_id = se.id
+            WHERE se.id = $1 AND se.event_id = $2
+            LIMIT 1`,
+          [input.sessionId, input.eventId],
+        )
+      ).rows[0]
+    : undefined;
+
+  let sessionId: string;
+  let slotId: string;
+  let action: "created" | "updated";
+
+  if (existing) {
+    // Everything, not just the end time: on a typed agenda any field can be the one
+    // being corrected, including the three a file import treats as the match key.
+    await tx.query(
+      `UPDATE pmp.sessions
+          SET room_id = $2, track_id = $3, day_id = $4, title = $5,
+              starts_at = $6::timestamptz,
+              ends_at = COALESCE($7::timestamptz, $6::timestamptz + interval '30 minutes'),
+              lock_version = lock_version + 1
+        WHERE id = $1`,
+      [existing.id, roomId, trackId, dayId, row.title, row.starts_at, row.ends_at],
+    );
+    await tx.query(
+      `UPDATE pmp.slots SET title = $2, starts_at = $3::timestamptz, ends_at = $4::timestamptz
+        WHERE id = $1`,
+      [existing.slot_id, row.title, row.slot_starts_at, row.slot_ends_at],
+    );
+    sessionId = existing.id;
+    slotId = existing.slot_id;
+    action = "updated";
+  } else {
+    const { rows: sessionRows } = await tx.query<{ id: string }>(
+      `INSERT INTO pmp.sessions (event_id, client_id, room_id, track_id, day_id, title, starts_at, ends_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7::timestamptz, COALESCE($8::timestamptz, $7::timestamptz + interval '30 minutes'))
+       RETURNING id`,
+      [input.eventId, clientId, roomId, trackId, dayId, row.title, row.starts_at, row.ends_at],
+    );
+    sessionId = sessionRows[0]!.id;
+    const { rows: slotRows } = await tx.query<{ id: string }>(
+      `INSERT INTO pmp.slots (session_id, event_id, client_id, title, starts_at, ends_at)
+       VALUES ($1,$2,$3,$4,$5::timestamptz,$6::timestamptz) RETURNING id`,
+      [sessionId, input.eventId, clientId, row.title, row.slot_starts_at, row.slot_ends_at],
+    );
+    slotId = slotRows[0]!.id;
+    action = "created";
+  }
+
+  await syncPresenters(tx, {
+    eventId: input.eventId,
+    clientId,
+    slotId,
+    presenters: row.presenters,
+    organization: row.organization,
+  });
+
+  await appendAudit(tx, {
+    partitionId: input.eventId,
+    clientId,
+    actorUserId: actor.id,
+    action: action === "created" ? "session.created" : "session.updated",
+    subjectType: "session",
+    subjectId: sessionId,
+    detail: { title: row.title, location: row.room, via: "typed_agenda" },
+  });
+
+  return ok({ session_id: sessionId, action });
+}
+
+/**
+ * Removes a session a typed row created. Destructive on live data, which is why the
+ * screen asks before calling it — by the time a typed row has a session, "remove"
+ * means delete rather than "leave this out of the import".
+ */
+export async function deleteTypedSession(
+  tx: pg.PoolClient,
+  actor: Actor,
+  input: { eventId: string; sessionId: string },
+): Promise<Result<{ deleted: boolean }, DomainError>> {
+  const { rows } = await tx.query<{ id: string; title: string; client_id: string }>(
+    `SELECT se.id, se.title, se.client_id FROM pmp.sessions se WHERE se.id = $1 AND se.event_id = $2`,
+    [input.sessionId, input.eventId],
+  );
+  const session = rows[0];
+  // Already gone is the outcome the caller wanted, not an error.
+  if (!session) return ok({ deleted: false });
+
+  await tx.query(
+    `DELETE FROM pmp.speaker_assignments WHERE slot_id IN (SELECT id FROM pmp.slots WHERE session_id = $1)`,
+    [session.id],
+  );
+  await tx.query(`DELETE FROM pmp.slots WHERE session_id = $1`, [session.id]);
+  await tx.query(`DELETE FROM pmp.sessions WHERE id = $1`, [session.id]);
+
+  await appendAudit(tx, {
+    partitionId: input.eventId,
+    clientId: session.client_id,
+    actorUserId: actor.id,
+    action: "session.deleted",
+    subjectType: "session",
+    subjectId: session.id,
+    detail: { title: session.title, via: "typed_agenda" },
+  });
+
+  return ok({ deleted: true });
+}
+
 export async function commitImport(
   tx: pg.PoolClient,
   actor: Actor,
@@ -1079,50 +1372,9 @@ export async function commitImport(
   const speakers = new Set<string>();
 
   for (const row of input.rows) {
-    let roomId = roomIds.get(normalise(row.room));
-    if (!roomId) {
-      // A location the event does not have yet, which the agenda is the authority on
-      // (D-050). Recorded in the map as well as the table, so a second row naming the
-      // same new location joins it instead of creating it twice.
-      const { rows: inserted } = await tx.query<{ id: string }>(
-        `INSERT INTO pmp.rooms (event_id, client_id, name) VALUES ($1, $2, $3) RETURNING id`,
-        [input.eventId, clientId, row.room],
-      );
-      roomId = inserted[0]!.id;
-      roomIds.set(normalise(row.room), roomId);
-    }
-
-    let trackId: string | null = null;
-    if (row.track) {
-      const { rows: trackRows } = await tx.query<{ id: string }>(
-        `SELECT id FROM pmp.tracks WHERE event_id = $1 AND lower(name) = lower($2)`,
-        [input.eventId, row.track],
-      );
-      trackId =
-        trackRows[0]?.id ??
-        (
-          await tx.query<{ id: string }>(
-            `INSERT INTO pmp.tracks (event_id, client_id, name) VALUES ($1,$2,$3) RETURNING id`,
-            [input.eventId, clientId, row.track],
-          )
-        ).rows[0]!.id;
-    }
-
-    const dayDate = row.starts_at!.slice(0, 10);
-    const { rows: dayRows } = await tx.query<{ id: string }>(
-      `INSERT INTO pmp.event_days (event_id, client_id, day_date) VALUES ($1,$2,$3)
-       ON CONFLICT DO NOTHING RETURNING id`,
-      [input.eventId, clientId, dayDate],
-    );
-    const dayId =
-      dayRows[0]?.id ??
-      (
-        await tx.query<{ id: string }>(
-          `SELECT id FROM pmp.event_days WHERE event_id = $1 AND day_date = $2`,
-          [input.eventId, dayDate],
-        )
-      ).rows[0]?.id ??
-      null;
+    const roomId = await resolveRoom(tx, input.eventId, clientId, roomIds, row.room);
+    const trackId = await resolveTrack(tx, input.eventId, clientId, row.track);
+    const dayId = await resolveDay(tx, input.eventId, clientId, row.starts_at!.slice(0, 10));
 
     // Update-by-key: (room, start, title) identifies a session across re-imports.
     const { rows: existing } = await tx.query<{
@@ -1198,56 +1450,14 @@ export async function commitImport(
       created += 1;
     }
 
-    /*
-     * Everyone on the slot, in the order the file names them.
-     *
-     * A second (or sixth) presenter is another row in `speaker_assignments`, not
-     * another slot — people presenting one talk share the talk, its file and its
-     * approval, which is exactly what that table expresses.
-     *
-     * DXG's template fills the presenter's email and leaves the name columns empty on
-     * every row, so a presenter identified only by an address still has to become a
-     * speaker: keyed on the name alone, that imported whole agendas with no speakers
-     * and no assignments at all — sessions arrived and nobody could be invited to fill
-     * them, which is the entire point of the import. `speakers.full_name` is NOT NULL,
-     * so a provisional name is derived from the address rather than the row dropped.
-     */
-    for (const [index, presenter] of row.presenters.entries()) {
-      const displayName = presenter.name || provisionalName(presenter.email);
-      if (!displayName) continue;
-      // The sheet has one organization column and it sits in presenter 1's block, so
-      // it is presenter 1's. Applying it to everyone would put the first presenter's
-      // employer against the name of every co-presenter.
-      const organization = index === 0 ? row.organization : "";
-
-      const { rows: found } = await tx.query<{ id: string }>(
-        presenter.email
-          ? `SELECT id FROM pmp.speakers WHERE event_id = $1 AND lower(email::text) = lower($2) AND merged_into IS NULL`
-          : `SELECT id FROM pmp.speakers WHERE event_id = $1 AND lower(full_name) = lower($2) AND merged_into IS NULL`,
-        [input.eventId, presenter.email || displayName],
-      );
-
-      let speakerId = found[0]?.id;
-      if (!speakerId) {
-        const { rows: inserted } = await tx.query<{ id: string }>(
-          `INSERT INTO pmp.speakers (client_id, event_id, email, full_name, organization)
-           VALUES ($1,$2,NULLIF($3,'')::citext,$4,NULLIF($5,'')) RETURNING id`,
-          [clientId, input.eventId, presenter.email, displayName, organization],
-        );
-        speakerId = inserted[0]!.id;
-      } else if (organization) {
-        await tx.query(`UPDATE pmp.speakers SET organization = COALESCE(organization, $2) WHERE id = $1`, [
-          speakerId,
-          organization,
-        ]);
-      }
-
+    for (const speakerId of await syncPresenters(tx, {
+      eventId: input.eventId,
+      clientId,
+      slotId,
+      presenters: row.presenters,
+      organization: row.organization,
+    })) {
       speakers.add(speakerId);
-      await tx.query(
-        `INSERT INTO pmp.speaker_assignments (speaker_id, slot_id, event_id, client_id)
-         VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING`,
-        [speakerId, slotId, input.eventId, clientId],
-      );
     }
   }
 

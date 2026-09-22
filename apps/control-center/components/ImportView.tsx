@@ -706,6 +706,8 @@ export function ImportView({
    * empty row behind: three changes of mind, three rows reading "missing".
    */
   const [adding, setAdding] = useState(false);
+  /** The row whose deletion is being confirmed, if any. */
+  const [deleting, setDeleting] = useState<number | null>(null);
   /** Set while a file is over the drop area, so the area can say it will take it. */
   const [dragging, setDragging] = useState(false);
   /*
@@ -722,6 +724,14 @@ export function ImportView({
     setPreview(next);
     setRows(next.rows);
     setCommitted(null);
+    /*
+     * A typed agenda has no commit to report (D-053) — each row goes to the event as
+     * it is saved. The wizard still has to know the event has a schedule, since that
+     * is what unlocks its later steps, so the first saved row tells it.
+     */
+    if (next.manual && (next.saved_rows?.length ?? 0) > 0) {
+      onCommitted?.({ created: next.saved_rows!.length, updated: 0, unchanged: 0 });
+    }
   }
 
   async function run(work: () => Promise<void>) {
@@ -1117,6 +1127,8 @@ export function ImportView({
                     const problems = problemsByRow.get(row.row) ?? [];
                     const blocked = isBlocked(row);
                     const warned = !blocked && problems.length > 0;
+                    // A typed row that is already a session on the event (D-053).
+                    const live = Boolean(preview.manual) && (preview.saved_rows ?? []).includes(row.row);
                     return (
                       <tr
                         key={row.row}
@@ -1192,17 +1204,23 @@ export function ImportView({
                         <td className="note">{row.cells["track.name"] || "—"}</td>
                         <td>
                           <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                            {/*
+                              A typed row is on the event the moment it is saved, so
+                              "create" — a thing it is about to do — would be a lie.
+                            */}
                             <Chip
                               status={
                                 blocked
                                   ? "needs_revision"
-                                  : row.action === "create"
-                                    ? "submitted"
-                                    : row.action === "update"
-                                      ? "needs_revision"
-                                      : "canceled"
+                                  : live
+                                    ? "approved"
+                                    : row.action === "create"
+                                      ? "submitted"
+                                      : row.action === "update"
+                                        ? "needs_revision"
+                                        : "canceled"
                               }
-                              label={blocked ? "incomplete" : row.action}
+                              label={blocked ? "incomplete" : live ? "on the event" : row.action}
                             />
                             {/*
                               Every row, including a complete one. The editor is how a
@@ -1233,15 +1251,23 @@ export function ImportView({
                             */}
                             {rows.length > 1 && (
                               <button
-                                className="btn"
+                                className={live ? "btn danger" : "btn"}
                                 style={{ padding: "3px 10px" }}
                                 disabled={busy}
-                                title={`Leave row ${rowLabel(row)} out of this import`}
-                                onClick={() =>
-                                  void run(async () =>
-                                    apply(await removeImportRow(preview.upload_id, row.row)),
-                                  )
+                                title={
+                                  live
+                                    ? `Delete “${row.title}” from the event`
+                                    : `Leave row ${rowLabel(row)} out of this import`
                                 }
+                                onClick={() => {
+                                  // A staged row is only dropped from a list. A live
+                                  // one is a session somebody typed, so it asks.
+                                  if (live) setDeleting(row.row);
+                                  else
+                                    void run(async () =>
+                                      apply(await removeImportRow(preview.upload_id, row.row)),
+                                    );
+                                }}
                               >
                                 Remove
                               </button>
@@ -1294,12 +1320,31 @@ export function ImportView({
             </div>
           </div>
 
-          {committed ? (
+          {/*
+            A typed agenda has nothing to commit (D-053): each row is written when it
+            is saved, so an "Import N sessions" button beside "+ Add session" promised
+            a second, final step that no longer exists — which is the confusion it
+            caused. What is left is the way out of the screen.
+          */}
+          {preview.manual ? (
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 24, alignItems: "center" }}>
+              {!embedded && (
+                <button className="btn" onClick={() => router.push(`/events/${eventId}`)}>
+                  Open command center →
+                </button>
+              )}
+              <span className="note">
+                {(preview.saved_rows?.length ?? 0) === 0
+                  ? "Nothing is on the event yet — a session is added when you save it."
+                  : `${preview.saved_rows!.length} session${preview.saved_rows!.length === 1 ? " is" : "s are"} on the event. Saving a row adds it; there is no separate import step.`}
+              </span>
+            </div>
+          ) : committed ? (
             <div className="card" style={{ borderColor: "var(--ok)" }}>
               <div className="cbd">
                 <b>Imported.</b> {committed.created} created · {committed.updated} updated ·{" "}
                 {committed.unchanged} unchanged.
-                {!preview.manual && " Re-importing the same file now reports every row as unchanged."}
+ Re-importing the same file now reports every row as unchanged.
                 <div style={{ marginTop: 10, display: "flex", gap: 8 }}>
                   {!embedded && (
                     <button className="btn" onClick={() => router.push(`/events/${eventId}`)}>
@@ -1372,6 +1417,66 @@ export function ImportView({
               }}
               onSave={(cells) => saveRow(editing, cells)}
             />
+          );
+        })()}
+
+      {/*
+        Deleting a session, which is what Remove means once a typed row is live
+        (D-053). A dialog rather than an inline two-step: the row is a few narrow
+        cells, and this is the only irreversible thing on the screen.
+      */}
+      {deleting !== null &&
+        preview &&
+        (() => {
+          const row = rows.find((candidate) => candidate.row === deleting);
+          if (!row) return null;
+          return (
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-label={`Delete ${row.title || "this session"} from the event`}
+              style={{
+                position: "fixed",
+                inset: 0,
+                background: "rgba(8,12,20,.55)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: 20,
+                zIndex: 50,
+              }}
+              onClick={(event) => {
+                if (event.target === event.currentTarget && !busy) setDeleting(null);
+              }}
+            >
+              <div className="card" style={{ maxWidth: 440, width: "100%" }}>
+                <div className="cbd">
+                  <b>Delete “{row.title || "this session"}” from the event?</b>
+                  <div className="note" style={{ marginTop: 6 }}>
+                    It is already on {row.room}
+                    {row.starts_at ? ` at ${clock(row.starts_at, preview.timezone)}` : ""}. This
+                    cannot be undone — the session and its presenter assignments go.
+                  </div>
+                  <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+                    <button
+                      className="btn danger"
+                      disabled={busy}
+                      onClick={() =>
+                        void run(async () => {
+                          apply(await removeImportRow(preview.upload_id, deleting));
+                          setDeleting(null);
+                        })
+                      }
+                    >
+                      Delete
+                    </button>
+                    <button className="btn pri" disabled={busy} onClick={() => setDeleting(null)}>
+                      Keep it
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
           );
         })()}
 

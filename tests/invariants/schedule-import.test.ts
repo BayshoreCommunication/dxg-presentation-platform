@@ -822,3 +822,149 @@ describe("an import is recorded when it commits, not when it is previewed", () =
     ]);
   });
 });
+
+/*
+ * D-053. A typed agenda has no commit step: saving a row puts it on the event.
+ *
+ * A file's rows are staged and committed together, because half a spreadsheet is not
+ * a schedule. A typed row is entered deliberately, one at a time, and an "Import N
+ * sessions" button beside "+ Add session" promised a second, final step — which is
+ * what made the screen confusing enough to ask about.
+ */
+describe("a typed row is saved to the event, not staged", () => {
+  const TYPED_PROBE = "Typed Live Probe";
+  let probe = "";
+
+  const sessionsOf = async (): Promise<{ title: string; starts_at: string }[]> =>
+    withSystemScope(async (tx) => {
+      const { rows } = await tx.query<{ title: string; starts_at: string }>(
+        `SELECT s.title, se.starts_at::text FROM pmp.slots s
+           JOIN pmp.sessions se ON se.id = s.session_id
+          WHERE s.event_id = $1 ORDER BY se.starts_at`,
+        [probe],
+      );
+      return rows;
+    });
+
+  const importRecords = async (): Promise<number> =>
+    withSystemScope(async (tx) => {
+      const { rows } = await tx.query<{ n: string }>(
+        `SELECT count(*)::text AS n FROM pmp.schedule_imports WHERE event_id = $1`,
+        [probe],
+      );
+      return Number(rows[0]!.n);
+    });
+
+  const blank = async (): Promise<Preview & { saved_rows?: number[] }> =>
+    (await (
+      await fetch(`${API}/events/${probe}/imports/blank`, { method: "POST", headers: json(admin) })
+    ).json()) as Preview & { saved_rows?: number[] };
+
+  const saveCells = async (uploadId: string, row: number, cells: Record<string, string>) =>
+    (await (
+      await fetch(`${API}/imports/${uploadId}/cells`, {
+        method: "POST",
+        headers: json(admin),
+        body: JSON.stringify({ row, cells }),
+      })
+    ).json()) as Preview & { saved_rows?: number[] };
+
+  const addRow = async (uploadId: string, cells: Record<string, string>) =>
+    (await (
+      await fetch(`${API}/imports/${uploadId}/rows`, {
+        method: "POST",
+        headers: json(admin),
+        body: JSON.stringify({ cells }),
+      })
+    ).json()) as Preview & { saved_rows?: number[] };
+
+  const session = (title: string, start: string, end: string) => ({
+    "session.title": title,
+    "room.name": "Ballroom A",
+    "session.date": "03/14/2027",
+    "session.start": start,
+    "session.end": end,
+  });
+
+  before(async () => {
+    if (!up) return;
+    const created = (await (
+      await fetch(`${API}/events`, {
+        method: "POST",
+        headers: json(admin),
+        body: JSON.stringify({
+          client_id: "11111111-1111-4111-8111-111111111111",
+          name: TYPED_PROBE,
+          venue: "Tampa",
+          timezone: "America/New_York",
+          starts_on: "2027-03-14",
+          ends_on: "2027-03-14",
+        }),
+      })
+    ).json()) as { event_id: string };
+    probe = created.event_id;
+  });
+
+  after(async () => {
+    if (!up) return;
+    await removeTestEvents([TYPED_PROBE]);
+  });
+
+  test("saving a row puts the session on the event, with no commit", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const started = await blank();
+    assert.deepEqual(await sessionsOf(), [], "nothing exists before the row is filled in");
+
+    const after = await saveCells(started.upload_id, 2, session("Typed Opener", "9:00 AM", "10:00 AM"));
+    assert.deepEqual(after.saved_rows, [2], "the row reports itself as on the event");
+    assert.deepEqual((await sessionsOf()).map((s) => s.title), ["Typed Opener"]);
+  });
+
+  /*
+   * The case that decided the design. Under the importer's (location, start, title)
+   * match key, renaming a session changes the key and the next save creates a second
+   * one; the row remembers the session it made instead.
+   */
+  test("renaming and re-saving updates that session, it does not make a second", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const started = await blank();
+    await saveCells(started.upload_id, 2, session("First Name", "11:00 AM", "12:00 PM"));
+    await saveCells(started.upload_id, 2, { "session.title": "Second Name", "session.start": "11:30 AM" });
+
+    const titles = (await sessionsOf()).map((s) => s.title);
+    assert.ok(titles.includes("Second Name"));
+    assert.ok(!titles.includes("First Name"), "the old title must not survive as a separate session");
+  });
+
+  test("removing a saved row deletes the session and leaves nothing behind", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const started = await blank();
+    await saveCells(started.upload_id, 2, session("Keeper", "1:00 PM", "2:00 PM"));
+    await addRow(started.upload_id, session("Doomed", "3:00 PM", "4:00 PM"));
+    assert.ok((await sessionsOf()).some((s) => s.title === "Doomed"));
+
+    // Row 3 is the one just added: a typed agenda's rows start at 2.
+    const response = await fetch(`${API}/imports/${started.upload_id}/rows/3`, {
+      method: "DELETE",
+      headers: json(admin),
+    });
+    assert.equal(response.status, 200);
+
+    assert.ok(!(await sessionsOf()).some((s) => s.title === "Doomed"), "the session is gone");
+    const orphans = await withSystemScope(async (tx) => {
+      const { rows } = await tx.query<{ slots: string; assignments: string }>(
+        `SELECT (SELECT count(*) FROM pmp.slots s LEFT JOIN pmp.sessions se ON se.id = s.session_id
+                  WHERE se.id IS NULL)::text AS slots,
+                (SELECT count(*) FROM pmp.speaker_assignments sa LEFT JOIN pmp.slots s ON s.id = sa.slot_id
+                  WHERE s.id IS NULL)::text AS assignments`,
+      );
+      return rows[0]!;
+    });
+    assert.deepEqual(orphans, { slots: "0", assignments: "0" }, "no orphaned slot or assignment");
+  });
+
+  test("a typed agenda writes no import record — there is no import", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    assert.equal(await importRecords(), 0);
+  });
+});
