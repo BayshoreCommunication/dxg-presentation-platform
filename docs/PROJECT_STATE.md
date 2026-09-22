@@ -2610,3 +2610,28 @@ positive-path cases — an empty event taking the name it is given, an existing 
 pass either way, which is the point of having them.
 
 CI green, 212 unit tests; invariants 120, up from 116.
+
+
+## 2026-09-22 (seventy-ninth) — a cancelled dialog adds nothing
+
+Travis found it by doing the obvious thing: open **+ Add session**, change your mind, close it. The
+row stayed. Three times through and the table read *missing · missing · missing*, three blocking rows
+to remove by hand before anything could be imported.
+
+**The order was wrong, not the rows.** The button appended the row and then opened the editor over
+it, so the row existed before the operator had committed to anything — fine for correcting a row that
+came from a file, wrong for inventing one. The editor now opens over a row-shaped object held only in
+the screen, and saving is what appends it, in one request carrying its cells
+(`POST /imports/{id}/rows` takes them now). Cancel makes no request at all.
+
+**And the same complaint once rather than three times:** starting manual entry and cancelling
+immediately used to leave one empty row, because an import must hold at least one. That now drops the
+preview and returns to the three ways in — but only while the row is untouched, so cancelling an edit
+of a row that already has values never throws the agenda away. Checked both.
+
+Walked in the browser: three add-then-cancel cycles leave exactly one row; adding and saving creates
+the row complete, presenter and all; cancelling an edit of a filled row keeps everything. Two
+invariants pin the endpoint side, including that an added row arrives already converted to the
+venue's timezone rather than blocking and then filled.
+
+CI green, 212 unit tests; invariants 122, up from 120.

@@ -525,3 +525,84 @@ describe("the commit refuses a room the event does not have", () => {
     assert.deepEqual(await roomsOf(), ["Grand Ballroom"]);
   });
 });
+
+/*
+ * A row is added with its values, not before them.
+ *
+ * `+ Add session` used to append the row and then open the editor over it, so
+ * cancelling the dialog left the row behind — empty, blocking, and one per change of
+ * mind. The screen now opens the editor over nothing and saving is what appends; this
+ * is the endpoint contract that makes that possible, so a cancelled dialog has
+ * nothing to undo.
+ */
+describe("a typed row arrives complete", () => {
+  const ADD_PROBE = "Import Add Row Probe";
+  let probe = "";
+
+  const blank = async (): Promise<Preview> =>
+    (await (
+      await fetch(`${API}/events/${probe}/imports/blank`, { method: "POST", headers: json(admin) })
+    ).json()) as Preview;
+
+  const addRow = async (uploadId: string, cells: Record<string, string>): Promise<Preview> =>
+    (await (
+      await fetch(`${API}/imports/${uploadId}/rows`, {
+        method: "POST",
+        headers: json(admin),
+        body: JSON.stringify({ cells }),
+      })
+    ).json()) as Preview;
+
+  before(async () => {
+    if (!up) return;
+    const created = (await (
+      await fetch(`${API}/events`, {
+        method: "POST",
+        headers: json(admin),
+        body: JSON.stringify({
+          client_id: "11111111-1111-4111-8111-111111111111",
+          name: ADD_PROBE,
+          venue: "Tampa",
+          timezone: "America/New_York",
+          starts_on: "2027-03-14",
+          ends_on: "2027-03-14",
+        }),
+      })
+    ).json()) as { event_id: string };
+    probe = created.event_id;
+  });
+
+  after(async () => {
+    if (!up) return;
+    await removeTestEvents([ADD_PROBE]);
+  });
+
+  test("the added row is complete on arrival, not blocking and then filled", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const started = await blank();
+    const after = await addRow(started.upload_id, {
+      "session.title": "Added Complete",
+      "room.name": "Ballroom A",
+      "session.date": "03/14/2027",
+      "session.start": "2:00 PM",
+      "session.end": "3:00 PM",
+    });
+
+    assert.equal(after.rows.length, 2);
+    const added = after.rows[1]!;
+    assert.equal(added.title, "Added Complete");
+    assert.deepEqual(added.missing, [], "the row should never exist in an incomplete state");
+    // Parsed and converted by the importer, not taken as typed: 2pm on 14 March is EDT.
+    assert.equal(added.starts_at, "2027-03-14T18:00:00.000Z");
+  });
+
+  test("adding without values still appends an empty row, for callers that want one", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const started = await blank();
+    const after = (await (
+      await fetch(`${API}/imports/${started.upload_id}/rows`, { method: "POST", headers: json(admin) })
+    ).json()) as Preview;
+    assert.equal(after.rows.length, 2);
+    assert.ok(after.rows[1]!.missing.length > 0);
+  });
+});

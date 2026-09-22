@@ -665,6 +665,13 @@ export function ImportView({
   );
   /** The row number whose editor is open, if any. */
   const [editing, setEditing] = useState<number | null>(null);
+  /*
+   * A session being typed that does not exist yet — "+ Add session" opens the editor
+   * over nothing rather than appending a row first. The row was previously created on
+   * the server the moment the button was pressed, so cancelling the dialog left an
+   * empty row behind: three changes of mind, three rows reading "missing".
+   */
+  const [adding, setAdding] = useState(false);
 
   function apply(next: ImportPreview) {
     setPreview(next);
@@ -1060,20 +1067,7 @@ export function ImportView({
               </table>
               {preview.manual && (
                 <div style={{ padding: "10px 14px 6px" }}>
-                  <button
-                    className="btn"
-                    disabled={busy}
-                    onClick={() =>
-                      void run(async () => {
-                        const next = await addImportRow(preview.upload_id);
-                        apply(next);
-                        // Straight into the editor: the row that was just added is
-                        // empty, and an empty row is not something to go and find.
-                        const added = next.rows[next.rows.length - 1];
-                        if (added) setEditing(added.row);
-                      })
-                    }
-                  >
+                  <button className="btn" disabled={busy} onClick={() => setAdding(true)}>
                     + Add session
                   </button>
                 </div>
@@ -1160,6 +1154,17 @@ export function ImportView({
         (() => {
           const row = rows.find((candidate) => candidate.row === editing);
           if (!row) return null;
+          /*
+           * Abandoning the first row of a typed agenda abandons the agenda. The row
+           * exists on the server — an import has to have one — so leaving it would put
+           * the operator in front of a table of one empty row, which is the same "I
+           * changed my mind and it kept something" the new-row draft avoids. The
+           * preview is dropped instead and the screen goes back to offering the three
+           * ways in. Only while it is untouched: once a value is in it, Cancel means
+           * cancel this edit.
+           */
+          const untouched = Object.values(row.cells).every((value) => !(value ?? "").trim());
+          const abandonsTheAgenda = Boolean(preview?.manual) && rows.length === 1 && untouched;
           return (
             <RowEditor
               row={row}
@@ -1167,8 +1172,54 @@ export function ImportView({
               problems={problemsByRow.get(editing) ?? []}
               timeZone={preview?.timezone ?? "UTC"}
               busy={busy}
-              onCancel={() => setEditing(null)}
+              onCancel={() => {
+                setEditing(null);
+                if (abandonsTheAgenda) setPreview(null);
+              }}
               onSave={(cells) => saveRow(editing, cells)}
+            />
+          );
+        })()}
+
+      {/*
+        A session that does not exist yet. It is given the shape of a row so the editor
+        does not have to know the difference — every required field missing, nothing
+        filled — and saving is what creates it, in one request carrying the values.
+      */}
+      {adding &&
+        preview &&
+        (() => {
+          const draft: StagedRow = {
+            row: (rows[rows.length - 1]?.row ?? 1) + 1,
+            title: "",
+            room: "",
+            cells: {},
+            presenters: [],
+            slot_starts_at: null,
+            slot_ends_at: null,
+            missing: [...(preview.required_fields ?? [])],
+            starts_at: null,
+            ends_at: null,
+            speaker_name: "",
+            speaker_email: "",
+            organization: "",
+            track: "",
+            action: "create",
+          };
+          return (
+            <RowEditor
+              row={draft}
+              label={rows.length + 1}
+              problems={[]}
+              timeZone={preview.timezone}
+              busy={busy}
+              onCancel={() => setAdding(false)}
+              onSave={(cells) =>
+                void run(async () => {
+                  apply(await addImportRow(preview.upload_id, cells));
+                  setAdding(false);
+                })
+              }
             />
           );
         })()}

@@ -554,9 +554,17 @@ export const uploadImport = async (eventId: string, file: File) =>
 export const startManualImport = (eventId: string) =>
   request<ImportPreview>(`/events/${eventId}/imports/blank`, { method: "POST" });
 
-/** One more empty row to type into. Manual agendas only. */
-export const addImportRow = (uploadId: string) =>
-  request<ImportPreview>(`/imports/${uploadId}/rows`, { method: "POST" });
+/**
+ * Appends a row, with its values. Manual agendas only.
+ *
+ * The cells go up with the row rather than after it: the editor for a new session
+ * opens over nothing, so a dialog that is cancelled has added nothing to cancel.
+ */
+export const addImportRow = (uploadId: string, cells: Record<string, string>) =>
+  request<ImportPreview>(`/imports/${uploadId}/rows`, {
+    method: "POST",
+    body: JSON.stringify({ cells }),
+  });
 
 /** Drops a typed row; the ones below it move up. Manual agendas only. */
 export const removeImportRow = (uploadId: string, row: number) =>

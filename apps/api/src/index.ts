@@ -1366,7 +1366,15 @@ app.post("/api/v1/imports/:uploadId/cells", async (req, res) => {
   return res.json({ ...result.value, upload_id: uploadId, manual: cached.manual ?? false });
 });
 
-/** One more row to type into, after the last one the import already has. */
+/**
+ * One more row, after the last the import already has — with its values, not before
+ * them.
+ *
+ * `cells` is optional, but it is how the screen uses this: the editor for a new
+ * session opens over nothing on the server, and only saving sends anything here.
+ * Appending the row first and filling it afterwards is what left an empty row behind
+ * every time the dialog was cancelled.
+ */
 app.post("/api/v1/imports/:uploadId/rows", async (req, res) => {
   const actor = actorFrom(req);
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
@@ -1377,7 +1385,22 @@ app.post("/api/v1/imports/:uploadId/rows", async (req, res) => {
     return res.status(400).json({ code: "import.not_manual", message: "This agenda came from a file." });
   }
 
-  importCache.set(uploadId, { ...cached, blankRows: (cached.blankRows ?? 0) + 1 });
+  const body = (req.body ?? {}) as { cells?: Partial<Record<ImportField, string>> };
+  const cells = body.cells ?? {};
+  const unknown = Object.keys(cells).filter((field) => !IMPORT_FIELDS.includes(field as ImportField));
+  if (unknown.length > 0) {
+    return res.status(400).json({ code: "request.invalid", message: `Unknown field ${unknown[0]}.` });
+  }
+
+  const blankRows = (cached.blankRows ?? 0) + 1;
+  /*
+   * A typed agenda carries no rows from a file, so its data rows are numbered from 2
+   * — the headings are row 1 — and the row just appended is the last of them.
+   */
+  const addedRow = blankRows + 1;
+  const overrides: RowOverrides = { ...cached.overrides };
+  if (Object.keys(cells).length > 0) overrides[addedRow] = cells;
+  importCache.set(uploadId, { ...cached, blankRows, overrides });
   const result = await revalidate(req, actor, uploadId);
   if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
   return res.json({ ...result.value, upload_id: uploadId, manual: cached.manual ?? false });

@@ -750,3 +750,26 @@ empty event create it once.
 Four cases in `tests/invariants/schedule-import.test.ts`, over HTTP rather than against the function,
 because what was wrong was reachable without the screen's cooperation. Verified to fail with the
 check disabled, so they cannot pass for the wrong reason. Owner: Travis.
+
+## D-047 (2026-09-22): A cancelled dialog adds nothing — Status: ACCEPTED (Travis's report)
+Reported against D-045: opening the new-session dialog and closing it without typing left a row
+behind. Three changes of mind, three rows reading *missing · missing · missing*, each one blocking
+the import until it was removed by hand.
+
+The cause was the order. **+ Add session** appended the row on the server and *then* opened the
+editor over it, so the row existed before the operator had committed to anything and Cancel had
+nothing to undo. Correct for a row being corrected; wrong for a row being invented.
+
+**The editor now opens over nothing.** A new session is a row-shaped object held in the screen — every
+required field missing, no values — and saving is what appends it, in one request that carries the
+cells (`POST /imports/{id}/rows` now takes them). Cancel clears local state and no request is made.
+Adding rows and filling them separately is still supported for callers that want it.
+
+**Abandoning the first row abandons the agenda.** The import has to hold at least one row, so
+starting manual entry and cancelling straight away would leave a table of one empty row — the same
+complaint, once instead of three times. The preview is dropped instead and the screen returns to
+offering the three ways in. Only while that row is untouched: once it holds a value, Cancel means
+cancel this edit, and an agenda already being typed is never discarded by it.
+
+Two invariants pin the endpoint contract — a row added with cells arrives complete and already
+timezone-converted, never blocking-then-filled. Owner: Travis.
