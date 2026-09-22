@@ -2798,3 +2798,27 @@ Measured: upload, five re-validations, then commit — one row, where the same s
 before. Walked in the browser too: a two-row agenda imported, one record, `committed`.
 
 CI green, 212 unit tests; invariants 129.
+
+
+## 2026-09-22 (eighty-fifth) — two things the import screen no longer needs
+
+Travis, on the agenda step: remove the locked-steps warning and the error-report download.
+
+The warning spent three lines explaining a disabled button and a saved draft, above a step that
+already says both without words — **Save & continue** is visibly disabled and *Draft so far* reads
+`Rooms — none, import an agenda`. The behaviour is untouched; only the paragraph went.
+
+`Download error report` was a CSV of row · column · severity · problem to carry back to whoever
+produced the agenda, and it made sense when fixing a row meant fixing the file and uploading it
+again. The row editor fills a row in place now, a correction is re-validated by the code that
+rejected it, and a row that cannot be saved is removed from the import — nobody is trapped on this
+screen, so a list to take away from it answers a question nobody asks. `saveBlob` stays for the
+blank-template download.
+
+The commit row is now just **Import N sessions** and, when something blocks, the sentence saying so.
+
+Checked both: the wizard step 2 reads as one line, the drop area and the two alternates; the import
+screen with a blocking row shows the button and the explanation and nothing else. SCREEN_SPECS §3
+specified both and has been corrected.
+
+CI green, 212 unit tests, 129 invariants.

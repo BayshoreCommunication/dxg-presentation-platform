@@ -919,3 +919,20 @@ carrying the one each preview settles on in the cache entry — without that, an
 
 Two invariants: five rebuilds of a preview write nothing; a commit writes exactly one, with the real
 diff and the auto-derived mapping. Owner: Travis.
+
+## D-052 (2026-09-22): Two things the screen no longer needs — Status: ACCEPTED (Travis's call)
+**The wizard's locked-steps warning.** Step 2 carried *"⚠ The event's rooms, days and sessions all
+come from the agenda, so the remaining steps stay locked until it is imported. The draft is saved —
+you can leave and come back to it."* It explained a disabled button and a saved draft in three
+lines, above a step that already says both without words: **Save & continue** is visibly disabled,
+and *Draft so far* shows `Rooms — none, import an agenda`. Removed; the behaviour is unchanged.
+
+**`Download error report`.** A CSV of row · column · severity · problem, to carry back to whoever
+produced the agenda. It made sense when the only way to fix a row was to fix the file and upload it
+again — the report was the way out. Since then the row editor fills a row in place (D-027), a
+correction is re-validated by the same code that rejected it (D-030), and a row that cannot be saved
+is removed from the import (D-049). Nobody is trapped on this screen any more, so a list to take
+away from it is answering a question that is no longer asked. `saveBlob` stays; the blank-template
+download still uses it.
+
+SCREEN_SPECS §3 updated — it specified both. Owner: Travis.

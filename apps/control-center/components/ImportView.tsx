@@ -16,7 +16,6 @@ import {
   commitImport,
   setImportCells,
   downloadAgendaTemplate,
-  saveBlob,
   ApiError,
 } from "@/lib/api";
 import { formatBytes } from "@pmp/format";
@@ -1333,31 +1332,6 @@ export function ImportView({
                 }
               >
                 Import {rows.length} session{rows.length === 1 ? "" : "s"}
-              </button>
-              <button
-                className="btn"
-                disabled={busy || preview.issues.length === 0}
-                onClick={() => {
-                  // This used to raise a toast listing row numbers. SCREEN_SPECS §3
-                  // calls for a CSV the operator can take back to whoever produced the
-                  // agenda, which a toast cannot be.
-                  const escape = (value: string) =>
-                    /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
-                  const csv = [
-                    ["Row", "Column", "Severity", "Problem"],
-                    ...preview.issues.map((issue) => [
-                      String(issue.row),
-                      issue.column,
-                      issue.severity,
-                      issue.message,
-                    ]),
-                  ]
-                    .map((row) => row.map(escape).join(","))
-                    .join("\r\n");
-                  saveBlob(new Blob([csv], { type: "text/csv" }), `import errors — ${preview.file_name}.csv`);
-                }}
-              >
-                ↓ Download error report
               </button>
               {blockingRows.length > 0 && (
                 <span className="note" style={{ alignSelf: "center" }}>

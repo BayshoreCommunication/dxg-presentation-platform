@@ -58,7 +58,7 @@ Reading rules:
 
 **Flow** upload XLSX/CSV → `POST /events/{id}/imports` (returns `importId`, parses async) → `GET /imports/{id}` returns row count, auto-mapped columns, blocking errors, warnings, new-speaker count → user fixes/overrides mapping → `POST /imports/{id}:commit` (transactional).
 
-**Elements** KPI row (Rows · Incomplete rows · Warnings · New speakers); the sessions table; `Download error report` (a real CSV of row · column · severity · problem); `Download blank template`; `Import N sessions`.
+**Elements** KPI row (Rows · Incomplete rows · Warnings · New speakers); the sessions table; `Download blank template`; `Import N sessions`. **There is no `Download error report`** (D-052): it existed to carry a list of problems back to whoever produced the agenda, from a time when the only way to fix a row was to fix the file. A row is now edited in place and a row that cannot be saved is removed, so the list was a way out of a screen that no longer traps anyone.
 
 **An agenda can be typed in as well as uploaded** (D-045). The empty state offers **Choose file…**, **Enter manually** and **Download blank template**. Manual entry is the same import with an empty file: `POST /events/{id}/imports/blank` returns a preview holding the template's headings and one empty row, which the row editor opens straight away. Rows are added with `POST /imports/{uploadId}/rows` (**+ Add session**, which also opens the new row) and dropped with `DELETE /imports/{uploadId}/rows/{row}` (**Remove**). Both refuse on a file import with `import.not_manual` — a file's row numbers belong to the file, and renumbering them would detach the operator's corrections from the rows they were typed for. The last row cannot be removed. **Edit** is offered on every row of a typed agenda, not only a problem one, since the editor is how the row was filled in. Typed rows are numbered from one on screen, where a file's rows keep their file numbers.
 
@@ -85,7 +85,7 @@ Reading rules:
 - Importing the same file twice produces zero duplicate sessions and a diff preview that is entirely "unchanged".
 - The Preseria template (`v.1.3`, banner row + two annotation rows + split presenter names) maps every required column without manual intervention, and its presenter email lands on `speaker.email`.
 - On an event with no rooms, the commit creates one room per distinct location in the file; on an event that already has rooms, an unrecognised location is still a blocking error with a suggestion.
-- A file with one blocking error cannot be committed and the error report names the row and column.
+- A file with one blocking error cannot be committed; the row is coloured, its problems are stated in the editor that fixes them, and it can be removed from the import instead.
 - A row missing a required value is filled with the blocking colour and offers `Edit`; a row with only warnings uses the warning colour; a clean row is neither coloured nor given an action.
 - The editor shows every mapped field of that row with its current value, under the same heading the spreadsheet uses, marks the missing ones, and refuses to save while any of them is still empty.
 - `Presentation Start`/`End` are stored on the slot, not the session; `Presentation Duration` is used only when no end time is given.

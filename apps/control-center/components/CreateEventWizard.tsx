@@ -199,13 +199,6 @@ export function CreateEventWizard({
 
               <ImportView eventId={draft.id} embedded onCommitted={setImported} />
 
-              {!imported && (
-                <div className="note">
-                  ⚠ The event&rsquo;s rooms, days and sessions all come from the agenda, so the
-                  remaining steps stay locked until it is imported. The draft is saved — you can
-                  leave and come back to it.
-                </div>
-              )}
             </>
           )}
 
