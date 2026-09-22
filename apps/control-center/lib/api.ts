@@ -536,15 +536,76 @@ export const IMPORT_FIELDS = [
   "track.name",
 ];
 
-export const uploadImport = async (eventId: string, file: File) =>
-  request<ImportPreview>(
-    `/events/${eventId}/imports`,
-    {
-      method: "POST",
-      body: await file.arrayBuffer(),
-      headers: { "content-type": "application/octet-stream", "x-file-name": file.name },
-    },
-  );
+/** What the importer reads, and what the server's raw body parser will accept. */
+export const AGENDA_EXTENSIONS = [".xlsx", ".csv"] as const;
+export const AGENDA_MAX_BYTES = 64 * 1024 * 1024;
+/*
+ * Written out rather than formatted. `formatBytes` is decimal and correct — 64 MiB is
+ * 67.1 MB — but "up to 67.1 MB" reads like a number someone measured rather than a
+ * limit someone set, and the limit is the server's own `limit: "64mb"`.
+ */
+export const AGENDA_MAX_LABEL = "64 MB";
+
+/**
+ * A header value may only hold Latin-1, and both `fetch` and `XMLHttpRequest` throw on
+ * a name that does not — an agenda called "Programm – Übersicht.csv" would have failed
+ * before a byte was sent. The name is display text and the extension chooses the
+ * parser, so anything unrepresentable becomes an underscore rather than an exception.
+ */
+const headerSafeName = (name: string): string =>
+  name.replace(/[^\x20-\x7E]/g, "_") || "agenda.csv";
+
+/**
+ * Uploads the agenda, reporting how much of it has been sent.
+ *
+ * `XMLHttpRequest` rather than `fetch` for one reason: it is still the only way to
+ * watch a request body go out. The preview that comes back is the whole file parsed
+ * and validated, so the bytes arriving is not the end of the wait — `onProgress`
+ * reaching the total means the server has the file and is now reading it, which is
+ * what the screen says at that point.
+ */
+export const uploadImport = (
+  eventId: string,
+  file: File,
+  onProgress?: (sent: number, total: number) => void,
+): Promise<ImportPreview> =>
+  new Promise((resolve, reject) => {
+    const request = new XMLHttpRequest();
+    request.open("POST", `${BASE}/events/${eventId}/imports`);
+    request.withCredentials = true;
+    request.setRequestHeader("content-type", "application/octet-stream");
+    request.setRequestHeader("x-file-name", headerSafeName(file.name));
+
+    request.upload.onprogress = (event) => {
+      if (event.lengthComputable) onProgress?.(event.loaded, event.total);
+    };
+
+    request.onload = () => {
+      let body: { code?: string; message?: string } | null = null;
+      try {
+        body = JSON.parse(request.responseText) as { code?: string; message?: string };
+      } catch {
+        body = null;
+      }
+      if (request.status >= 200 && request.status < 300 && body) {
+        resolve(body as unknown as ImportPreview);
+        return;
+      }
+      reject(
+        new ApiError(
+          body?.code ?? "import.failed",
+          body?.message ?? "That file could not be read.",
+          request.status,
+        ),
+      );
+    };
+
+    request.onerror = () =>
+      reject(new ApiError("network", "The upload did not reach the server.", 0));
+    request.onabort = () => reject(new ApiError("aborted", "Upload cancelled.", 0));
+
+    request.send(file);
+  });
 
 /**
  * Starts an agenda with no file, for an event whose schedule is small enough to type

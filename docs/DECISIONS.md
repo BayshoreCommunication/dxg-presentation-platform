@@ -782,3 +782,40 @@ still closes on one click and the question never becomes noise. The question rep
 rather than joining them: a "Discard" sitting beside the "Save row" it undoes is a misclick waiting
 to happen. The backdrop matters most here — a click anywhere outside the card, easy to hit by
 accident, and previously the quietest way to lose a filled-in session. Owner: Travis.
+
+## D-048 (2026-09-22): The drop area does one thing — Status: ACCEPTED (Travis's call)
+The agenda step had grown three buttons of equal weight inside one dashed box — **Choose file…**,
+**Enter manually**, **Download blank template** — under two lines of explanation, with the wizard's
+own note above it. Travis called it congested. It was also incoherent: a dashed border is a promise
+that a file can be dropped there, and two of the three things inside it had nothing to do with files.
+
+**The box is now the upload and nothing else**, with the other two routes on one line beneath it:
+*No file to upload? **Enter it manually** or **↓ Download the template***. Neither is a fallback for
+the other, and neither competes with the drop target.
+
+Worked against an uploading-media checklist; what it changed:
+
+- **Empty state.** An upload icon, "Drop the agenda here", and *choose a file* for those who prefer
+  it. Previously there was no icon and no indication the dashed box would accept a drop — it only
+  looked like one.
+- **Drag and drop.** It genuinely accepts a drop now, and says so: the border goes cyan, the field
+  fills `--info-soft`, the icon darkens and the words become "Drop it here". `dragenter`/`dragleave`
+  fire per element crossed, so the state is held by a depth counter rather than a boolean, which
+  otherwise flickers off the moment the pointer passes over the text inside.
+- **Constraints, stated up front.** `.xlsx or .csv · up to 64 MB`, and checked in the browser before
+  anything is sent — a 60 MB `.pptx` is named and refused immediately rather than uploaded and then
+  rejected. The limit is the server's own `limit: "64mb"`; it is written out rather than formatted,
+  because `formatBytes` correctly says 67.1 MB and that reads like a measurement, not a rule.
+- **Progress.** `uploadImport` moved from `fetch` to `XMLHttpRequest`, the only way to watch a
+  request body go out, and reports real bytes. **Two phases, deliberately:** the bytes arriving is
+  not the end of the wait, since the server then parses and validates every row — so the bar fills
+  to "Uploading… 12 MB of 41.9 MB" and then says "Reading the file…" rather than sitting full while
+  nothing appears to happen.
+- **Outcome.** A refusal names the file and the rule it broke; success is the preview table, which
+  already names the file it was read from.
+
+**Not done, and why.** Retry/cancel/delete actions and multi-file lists do not apply: this is one
+file that becomes a preview the moment it lands, the preview has its own actions, and "retry" is
+dropping another file on the same box. A cancel button for an upload in flight is the one arguably
+missing — it needs the XHR handle lifted into state, and a 64 MB ceiling makes the window small
+enough that it was not worth the state. Owner: Travis.

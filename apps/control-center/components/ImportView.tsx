@@ -5,6 +5,9 @@ import { useRouter } from "next/navigation";
 import type { ImportPreview, StagedRow } from "@/lib/api";
 import {
   uploadImport,
+  AGENDA_EXTENSIONS,
+  AGENDA_MAX_BYTES,
+  AGENDA_MAX_LABEL,
   startManualImport,
   addImportRow,
   removeImportRow,
@@ -15,6 +18,7 @@ import {
   saveBlob,
   ApiError,
 } from "@/lib/api";
+import { formatBytes } from "@pmp/format";
 import { Chip } from "@/components/Chip";
 import { DateField, TimeField } from "@/components/DateTimeField";
 
@@ -702,6 +706,17 @@ export function ImportView({
    * empty row behind: three changes of mind, three rows reading "missing".
    */
   const [adding, setAdding] = useState(false);
+  /** Set while a file is over the drop area, so the area can say it will take it. */
+  const [dragging, setDragging] = useState(false);
+  /*
+   * dragenter and dragleave fire for every element the pointer crosses, including the
+   * text inside the zone, so a single boolean flickers off as soon as the file passes
+   * over a child. Counting entries against leaves is what makes the state survive the
+   * crossing.
+   */
+  const dragDepth = useRef(0);
+  /** Bytes sent of bytes total, while a file is going up. */
+  const [sending, setSending] = useState<{ name: string; sent: number; total: number } | null>(null);
 
   function apply(next: ImportPreview) {
     setPreview(next);
@@ -770,6 +785,44 @@ export function ImportView({
   const rowLabel = (row: StagedRow): number =>
     preview?.manual ? rows.findIndex((candidate) => candidate.row === row.row) + 1 : row.row;
 
+  /*
+   * What the screen will accept, checked before anything is sent. The server refuses
+   * the same things, but it refuses them after the whole file has gone up — a 60 MB
+   * .pptx dropped here should be turned away immediately, and named, rather than
+   * uploaded and then rejected.
+   */
+  const rejectionFor = (file: File): string | null => {
+    const extension = file.name.slice(file.name.lastIndexOf(".")).toLowerCase();
+    if (!AGENDA_EXTENSIONS.includes(extension as (typeof AGENDA_EXTENSIONS)[number])) {
+      return `“${file.name}” is ${extension || "not a spreadsheet"}. The agenda has to be ${AGENDA_EXTENSIONS.join(" or ")}.`;
+    }
+    if (file.size > AGENDA_MAX_BYTES) {
+      return `“${file.name}” is ${formatBytes(file.size)}. The limit is ${AGENDA_MAX_LABEL}.`;
+    }
+    return null;
+  };
+
+  const upload = (file: File): void => {
+    const rejection = rejectionFor(file);
+    if (rejection) {
+      setError(rejection);
+      return;
+    }
+    setError(null);
+    setSending({ name: file.name, sent: 0, total: file.size });
+    void run(async () => {
+      try {
+        apply(
+          await uploadImport(eventId, file, (sent, total) =>
+            setSending({ name: file.name, sent, total }),
+          ),
+        );
+      } finally {
+        setSending(null);
+      }
+    });
+  };
+
   const saveRow = (rowNumber: number, cells: Record<string, string>): void => {
     void run(async () => {
       apply(await setImportCells(preview!.upload_id, rowNumber, cells));
@@ -800,55 +853,147 @@ export function ImportView({
       {!preview && (
         <div className="card">
           <div className="cbd">
-            <div style={{ border: "2px dashed var(--line)", borderRadius: 10, padding: 26, textAlign: "center" }}>
-              <b>Add the agenda</b>
-              <div className="note" style={{ margin: "4px 0 10px" }}>
-                .xlsx or .csv · columns are auto-mapped and every row is validated before anything is
-                written
-              </div>
-              <input
-                ref={inputRef}
-                type="file"
-                accept=".xlsx,.csv"
-                style={{ display: "none" }}
-                onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  if (file) void run(async () => apply(await uploadImport(eventId, file)));
-                }}
-              />
-              <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
-                <button className="btn pri" disabled={busy} onClick={() => inputRef.current?.click()}>
-                  Choose file…
-                </button>
-                {/*
-                  The other way in (D-045). An agenda does not always start as a
-                  spreadsheet — a small event, or one still being decided, was
-                  previously forced through making a file first just to upload it.
-                */}
-                <button
-                  className="btn"
-                  disabled={busy}
-                  onClick={() =>
-                    void run(async () => {
-                      const next = await startManualImport(eventId);
-                      apply(next);
-                      if (next.rows[0]) setEditing(next.rows[0].row);
-                    })
-                  }
-                >
-                  Enter manually
-                </button>
-                <button
-                  className="btn"
-                  disabled={busy}
-                  onClick={() => void run(async () => downloadAgendaTemplate(eventId))}
-                >
-                  ↓ Download blank template
-                </button>
-              </div>
-              <div className="note" style={{ marginTop: 10 }}>
-                No agenda yet? Enter it here, or download the template, fill it in and upload it.
-              </div>
+            <input
+              ref={inputRef}
+              type="file"
+              accept={AGENDA_EXTENSIONS.join(",")}
+              style={{ display: "none" }}
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) upload(file);
+                // Cleared so choosing the same file twice — after fixing it — still
+                // fires a change event.
+                event.target.value = "";
+              }}
+            />
+
+            {/*
+              The drop area does one thing (D-048). It used to carry three buttons of
+              equal weight — upload, type it in, download a template — which read as a
+              choice to make before the obvious action, inside a box whose dashed
+              border promises a file can be dropped on it. Only uploading belongs in
+              here; the other two routes are a line underneath.
+            */}
+            <div
+              onDragEnter={(event) => {
+                event.preventDefault();
+                dragDepth.current += 1;
+                setDragging(true);
+              }}
+              onDragOver={(event) => event.preventDefault()}
+              onDragLeave={() => {
+                dragDepth.current -= 1;
+                if (dragDepth.current <= 0) setDragging(false);
+              }}
+              onDrop={(event) => {
+                event.preventDefault();
+                dragDepth.current = 0;
+                setDragging(false);
+                const file = event.dataTransfer.files[0];
+                if (file) upload(file);
+              }}
+              style={{
+                border: `2px dashed ${dragging ? "var(--blue)" : "var(--line)"}`,
+                background: dragging ? "var(--info-soft)" : undefined,
+                borderRadius: 10,
+                padding: 26,
+                textAlign: "center",
+                transition: "border-color 120ms ease, background-color 120ms ease",
+              }}
+            >
+              {sending ? (
+                <>
+                  <div className="mono" style={{ fontSize: 13 }}>
+                    {sending.name}
+                  </div>
+                  <div className="bar blue" style={{ margin: "10px auto 6px", maxWidth: 280 }}>
+                    <i
+                      style={{
+                        width: `${sending.total > 0 ? Math.round((sending.sent / sending.total) * 100) : 0}%`,
+                        transition: "width 120ms linear",
+                      }}
+                    />
+                  </div>
+                  {/*
+                    The bytes arriving is not the end of the wait: the server then
+                    parses every row and validates it, which on a long sheet is the
+                    longer half. Saying "uploading" through that would be a bar that
+                    sits full while nothing appears to happen.
+                  */}
+                  <div className="note">
+                    {sending.sent < sending.total
+                      ? `Uploading… ${formatBytes(sending.sent)} of ${formatBytes(sending.total)}`
+                      : "Reading the file…"}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <svg
+                    width="28"
+                    height="28"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke={dragging ? "var(--blueDark)" : "var(--slate)"}
+                    strokeWidth="1.6"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                    style={{ display: "block", margin: "0 auto 8px" }}
+                  >
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <path d="M12 3v13" />
+                    <path d="m7 8 5-5 5 5" />
+                  </svg>
+                  <b>{dragging ? "Drop it here" : "Drop the agenda here"}</b>
+                  <div className="note" style={{ margin: "4px 0 0" }}>
+                    or{" "}
+                    <button
+                      className="btn"
+                      style={{ padding: "3px 10px" }}
+                      disabled={busy}
+                      onClick={() => inputRef.current?.click()}
+                    >
+                      choose a file
+                    </button>
+                  </div>
+                  {/* Stated before anyone tries, not only when something is refused. */}
+                  <div className="note" style={{ marginTop: 10 }}>
+                    {AGENDA_EXTENSIONS.join(" or ")} · up to {AGENDA_MAX_LABEL} · every row is checked
+                    before anything is written
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/*
+              The other two ways in (D-045), out of the drop area and level with each
+              other: neither is the upload, and neither is a fallback for the other.
+            */}
+            <div className="note" style={{ marginTop: 12, textAlign: "center" }}>
+              No file to upload?{" "}
+              <button
+                className="btn"
+                style={{ padding: "3px 10px" }}
+                disabled={busy}
+                onClick={() =>
+                  void run(async () => {
+                    const next = await startManualImport(eventId);
+                    apply(next);
+                    if (next.rows[0]) setEditing(next.rows[0].row);
+                  })
+                }
+              >
+                Enter it manually
+              </button>{" "}
+              or{" "}
+              <button
+                className="btn"
+                style={{ padding: "3px 10px" }}
+                disabled={busy}
+                onClick={() => void run(async () => downloadAgendaTemplate(eventId))}
+              >
+                ↓ Download the template
+              </button>
             </div>
           </div>
         </div>

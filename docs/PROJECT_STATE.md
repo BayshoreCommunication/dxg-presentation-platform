@@ -2663,3 +2663,38 @@ wired into `npm test` (CLAUDE.md names Jest for them; nothing is configured). Ve
 instead, path by path.
 
 CI green, 212 unit tests, 122 invariants — unchanged, as nothing outside the dialog moved.
+
+
+## 2026-09-22 (eighty-first) — the drop area does one thing
+
+Travis: the agenda step is congested, move **Enter manually** out of the upload box. It had three
+buttons of equal weight inside one dashed border, under two lines of explanation. It was also
+incoherent — a dashed border promises a file can be dropped there, and two of the three buttons had
+nothing to do with files.
+
+The box is the upload now, and the other two routes are one line under it. Worked against an
+uploading-media checklist at the same time (D-048): an upload icon and a real drop target; a visible
+drag state (cyan border, tinted field, "Drop it here") held by a depth counter, because
+`dragenter`/`dragleave` fire per element crossed and a plain boolean flickers off as the pointer
+passes over the text inside; constraints stated before anyone tries and checked in the browser, so a
+`.pptx` is named and refused without being uploaded first; and real upload progress.
+
+**Progress needed `XMLHttpRequest`** — still the only way to watch a request body go out — and it
+reports two phases on purpose. Bytes arriving is not the end of the wait: the server then parses and
+validates every row, so a bar that filled and stopped would sit there while the longest part of the
+wait happened silently. It says "Uploading… X of Y" and then "Reading the file…".
+
+Also fixed on the way past: a filename outside Latin-1 would have thrown before a byte was sent, as
+neither `fetch` nor XHR will put it in a header. Unrepresentable characters become underscores; the
+name is display text and only the extension picks the parser.
+
+Verified in the browser: drag state on and off; a dropped `.pptx` refused by name; a 68 MB file
+refused against the 64 MB limit; a dropped CSV read into a two-row preview; and a 41.9 MB upload
+showing the bar, the byte counts and the switch to "Reading the file…" before landing as a valid
+preview. Wizard step 2 checked too, since that is where the complaint came from.
+
+CI green, 212 unit tests, 122 invariants; the control centre builds clean.
+
+**Note to self:** running `npm run build -w @pmp/control-center` while `next dev` is serving that
+workspace overwrites its `.next` and every page starts 500ing with `Cannot find module './673.js'`.
+Done it twice now. Clear `.next` and restart the dev server, or build when the dev server is down.

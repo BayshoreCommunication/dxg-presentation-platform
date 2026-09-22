@@ -193,15 +193,15 @@ export function CreateEventWizard({
           {step === 2 && draft && (
             <>
               <div className="note" style={{ marginBottom: 12 }}>
-                Upload the agenda and the event builds itself from it — rooms, tracks and days are
-                created from the file, so there is nothing to type twice.
+                The event builds itself from the agenda — rooms, tracks and days are created from it,
+                so there is nothing to type twice.
               </div>
 
               <ImportView eventId={draft.id} embedded onCommitted={setImported} />
 
               {!imported && (
                 <div className="note">
-                  ⚠ The event&rsquo;s rooms, days and sessions all come from this file, so the
+                  ⚠ The event&rsquo;s rooms, days and sessions all come from the agenda, so the
                   remaining steps stay locked until it is imported. The draft is saved — you can
                   leave and come back to it.
                 </div>
