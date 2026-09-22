@@ -2885,3 +2885,34 @@ CI green, 212 unit tests, 133 invariants.
 same em dash for the same reason. It is Name, Days and Rooms now — the three things importing an
 agenda actually fills in. The `tracks` field stays on the draft payload and on Event details and the
 client portal, which show it where tracks exist.
+
+
+## 2026-09-22 (eighty-eighth) — Bulk remind actually sends
+
+Travis asked what the wizard's `Reminders` field does. The answer was "nothing" — `settings.reminders`
+is stored and never read, no scheduler exists, and `T-14 · T-7 · T-2 · missing-file only` is a
+description of an intention. Worse, while reading that path: **Bulk remind** on the Speakers screen
+raised *"Reminder queued to the N speakers without a file"* and made no request at all. He asked for
+that fixed.
+
+It calls `POST /events/{id}/comms/send` with `missing_only: true` rather than gaining its own route,
+so it inherits the guards that belong to sending — no invitations before the event has a day and a
+room, nothing written to a bounced address, nobody sent the same batch twice — and it reports what
+actually happened rather than asserting success.
+
+Verified against the local stack: ten speakers without files, ten mail files written to `.data/mail`,
+ten `communications` rows at `sent`, toast reading *"Reminder sent to 10 speakers"*. Pressed again:
+no new mail, and *"Nobody was emailed — 10 already received this batch"*.
+
+**Checked before sending anything**, since `.env` says `MAIL_TRANSPORT=ses`: nothing in this repo
+loads `.env` — no dotenv, no `--env-file`. The database only works because `packages/db`'s defaults
+match compose exactly. So `senderFromEnv()` sees nothing, falls to `FileSender`, and the local stack
+cannot send real mail — safe, but by luck, and the SES settings added for the September webhook test
+have never taken effect (D-056).
+
+**Left alone, recorded as D-055:** `already_sent` has no time bound, so a speaker can be reminded
+once per template, ever. Right for an invitation, wrong for a reminder — the three-reminder schedule
+the wizard describes cannot be sent even manually. It touches Communications too and is a decision
+about emailing speakers repeatedly.
+
+CI green, 212 unit tests, 133 invariants.

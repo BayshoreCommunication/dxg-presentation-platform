@@ -840,6 +840,38 @@ export type CommsView = {
 export const getComms = (eventId: string) =>
   request<CommsView>(`/events/${eventId}/comms`);
 
+/**
+ * The seeded reminder template's name, as `DEFAULT_TEMPLATES` writes it onto every
+ * event. The Speakers screen has to find this template by name because it is created
+ * per event and has no stable id — see `remindSpeakersWithoutFiles`.
+ */
+export const REMINDER_TEMPLATE_NAME = "Reminder — file still missing";
+
+/**
+ * Chases everyone whose talk has no file, with the event's reminder template.
+ *
+ * Two calls rather than a new endpoint: `POST /comms/send` already filters to the
+ * speakers with nothing uploaded and carries the guards that belong to sending —
+ * an event with no rooms or days cannot invite anyone, a bounced address is not
+ * written to again, and nobody receives the same batch twice. A second route would
+ * have had to repeat all of it.
+ */
+export const remindSpeakersWithoutFiles = async (eventId: string) => {
+  const { templates } = await getComms(eventId);
+  const template =
+    templates.find((candidate) => candidate.name === REMINDER_TEMPLATE_NAME) ??
+    // Renamed by hand, most likely. Better than refusing to chase anyone.
+    templates.find((candidate) => /reminder/i.test(candidate.name));
+  if (!template) {
+    throw new ApiError(
+      "comms.template_not_found",
+      "This event has no reminder template — add one on Communications.",
+      404,
+    );
+  }
+  return sendBatch(eventId, template.id, true);
+};
+
 export const sendBatch = (eventId: string, templateId: string, missingOnly: boolean) =>
   request<{ queued: number; skipped: { reason: string; count: number }[] }>(
     `/events/${eventId}/comms/send`,

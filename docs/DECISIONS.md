@@ -1002,3 +1002,42 @@ actually fills in. `tracks` stays on the draft payload and on Event details and 
 which show it where tracks exist.
 
 SCREEN_SPECS §3 updated for the column list. Owner: Travis.
+
+## D-055 (2026-09-22): Bulk remind actually sends — Status: ACCEPTED (Travis's call)
+Found while answering what the wizard's `Reminders` field does. **Bulk remind** on the Speakers
+screen raised the toast *"Reminder queued to the N speakers without a file"* and made no request —
+its handler was `onClick={() => setToast(...)}`. The one control on that screen claiming an action
+had happened was the one that had not.
+
+**It calls `POST /events/{id}/comms/send` with `missing_only: true`**, rather than gaining a route of
+its own. That endpoint already filters to the speakers whose talk has no file and carries the guards
+that belong to sending: an event with no day or room cannot invite anyone, because the link would
+point at nothing; a bounced or complained address is never written to again; and nobody receives the
+same batch twice. A second route would have had to repeat all of it, or quietly not.
+
+**It reports what happened.** `sendBatch` returns `{queued, skipped[]}`, and both are shown —
+*"Reminder sent to 10 speakers"*, or *"Nobody was emailed — 10 already received this batch"*. A
+button that lied about sending should not be replaced by one that is vague about not sending.
+
+**Finding the template.** `communication_templates` are copied onto each event at creation, so the
+reminder has no stable id and is matched by name, falling back to any template matching `/reminder/i`
+and erroring clearly when an event has none.
+
+**A limitation this inherits, not one it introduces.** `already_sent` is `EXISTS (… WHERE speaker_id
+= … AND template_id = …)` with no time bound, so a speaker can be reminded **once, ever**, per
+template. That is right for an invitation and wrong for a reminder — the `T-14 · T-7 · T-2` the
+wizard describes needs three. Chasing the same speaker again currently means a second template.
+Changing it affects the Communications screen too and is a decision about emailing speakers
+repeatedly, so it is recorded rather than taken. Owner: Travis.
+
+## D-056 (2026-09-22): `.env` is not loaded by anything — Status: NOTED
+Checked before triggering a send, because `.env` sets `MAIL_TRANSPORT=ses` and the dispatcher reports
+`transport=file`. Nothing in the repo reads `.env` — no `dotenv`, no `--env-file`, no
+`process.loadEnvFile`. The database works because `packages/db/src/config.ts` defaults happen to
+match `docker-compose.yml` exactly, so the file looks loaded without being.
+
+`senderFromEnv()` therefore sees `MAIL_TRANSPORT` undefined and, outside production, returns
+`FileSender` — the local stack cannot send real mail whatever `.env` says. That is the safe failure,
+but it is luck rather than design, and the SES configuration added on 2026-09-20 for the webhook test
+has never taken effect. Worth an `--env-file=.env` on the dev scripts, or deleting the misleading
+values.

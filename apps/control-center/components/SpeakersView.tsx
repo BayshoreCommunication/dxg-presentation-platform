@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { DuplicatePair, SpeakerRow } from "@/lib/api";
-import { getSpeakers, mergeSpeakers, inviteSpeaker, ApiError } from "@/lib/api";
+import { getSpeakers, mergeSpeakers, inviteSpeaker, remindSpeakersWithoutFiles, ApiError } from "@/lib/api";
 import { Chip } from "@/components/Chip";
 
 /** Screen 5 — the speaker directory, its duplicates, and the chase list. */
@@ -49,14 +49,41 @@ export function SpeakersView({
           Speakers · {rows.length}
         </h1>
         <span style={{ display: "flex", gap: 8 }}>
+          {/*
+            It sends now. This said "Reminder queued to the N speakers without a
+            file" and queued nothing — the handler only set the toast — so the one
+            thing on the screen that claimed an action had happened was the one thing
+            that had not. It reports what actually happened instead, including the
+            recipients the send refused and why.
+          */}
           <button
             className="btn"
             disabled={busy || missing.length === 0}
-            onClick={() =>
-              setToast(
-                `Reminder queued to the ${missing.length} speaker${missing.length === 1 ? "" : "s"} without a file`,
-              )
-            }
+            onClick={() => {
+              setBusy(true);
+              setError(null);
+              setToast(null);
+              void (async () => {
+                try {
+                  const result = await remindSpeakersWithoutFiles(eventId);
+                  const skipped = result.skipped
+                    .map((entry) => `${entry.count} ${entry.reason}`)
+                    .join(" · ");
+                  setToast(
+                    result.queued === 0 && skipped
+                      ? `Nobody was emailed — ${skipped}`
+                      : `Reminder sent to ${result.queued} speaker${result.queued === 1 ? "" : "s"}` +
+                          (skipped ? ` · skipped: ${skipped}` : ""),
+                  );
+                  // The log and the delivery counters live on Communications.
+                  router.refresh();
+                } catch (caught) {
+                  setError(caught instanceof ApiError ? caught.message : "The reminder could not be sent.");
+                } finally {
+                  setBusy(false);
+                }
+              })();
+            }}
           >
             Bulk remind ({missing.length})
           </button>
