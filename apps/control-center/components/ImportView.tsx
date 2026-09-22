@@ -263,6 +263,21 @@ function RowEditor({
   const changed = Object.fromEntries(
     Object.entries(draft).filter(([field, value]) => (row.cells[field] ?? "") !== value),
   );
+
+  /*
+   * Leaving costs something only when something was typed. `changed` is already the
+   * difference between the boxes and the row behind them, so it answers this too —
+   * and it answers it for a session being invented as well as a row being corrected,
+   * where the row behind is empty and every value is a change.
+   */
+  const dirty = Object.keys(changed).length > 0;
+  const [confirmingDiscard, setConfirmingDiscard] = useState(false);
+  /*
+   * Both ways out ask. The backdrop is the easier one to hit by accident — a click
+   * anywhere outside the card — and it was the one that would have quietly thrown
+   * away a filled-in session.
+   */
+  const leave = () => (dirty ? setConfirmingDiscard(true) : onCancel());
   const stillMissing = row.missing.filter((field) => !(draft[field] ?? "").trim());
 
   const set = (field: string, value: string) => setDraft({ ...draft, [field]: value });
@@ -473,7 +488,7 @@ function RowEditor({
         zIndex: 50,
       }}
       onClick={(event) => {
-        if (event.target === event.currentTarget && !busy) onCancel();
+        if (event.target === event.currentTarget && !busy) leave();
       }}
     >
       <div
@@ -610,27 +625,42 @@ function RowEditor({
             until you import.
           </div>
 
-          <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
-            <button
-              className="btn pri"
-              disabled={
-                busy || Object.keys(changed).length === 0 || stillMissing.length > 0 || outOfRange
-              }
-              title={
-                outOfRange
-                  ? "A time here is outside the range its field allows — the red boxes."
-                  : stillMissing.length > 0
-                    ? `Still needed: ${stillMissing.map((field) => FIELD_LABELS[field] ?? field).join(", ")}`
-                    : undefined
-              }
-              onClick={() => onSave(changed)}
-            >
-              Save row
-            </button>
-            <button className="btn" disabled={busy} onClick={onCancel}>
-              Cancel
-            </button>
-          </div>
+          {/*
+            The question replaces the buttons rather than sitting above them, so the
+            two things that can now happen are the only two things on offer — a
+            "Discard" beside the "Save row" it undoes is a misclick waiting to happen.
+          */}
+          {confirmingDiscard ? (
+            <div style={{ display: "flex", gap: 8, marginTop: 14, alignItems: "center", flexWrap: "wrap" }}>
+              <b>Discard what you have typed?</b>
+              <button className="btn" disabled={busy} onClick={onCancel}>
+                Discard
+              </button>
+              <button className="btn pri" disabled={busy} onClick={() => setConfirmingDiscard(false)}>
+                Keep editing
+              </button>
+            </div>
+          ) : (
+            <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+              <button
+                className="btn pri"
+                disabled={busy || !dirty || stillMissing.length > 0 || outOfRange}
+                title={
+                  outOfRange
+                    ? "A time here is outside the range its field allows — the red boxes."
+                    : stillMissing.length > 0
+                      ? `Still needed: ${stillMissing.map((field) => FIELD_LABELS[field] ?? field).join(", ")}`
+                      : undefined
+                }
+                onClick={() => onSave(changed)}
+              >
+                Save row
+              </button>
+              <button className="btn" disabled={busy} onClick={leave}>
+                Cancel
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>

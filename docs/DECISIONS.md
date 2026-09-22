@@ -772,4 +772,13 @@ offering the three ways in. Only while that row is untouched: once it holds a va
 cancel this edit, and an agenda already being typed is never discarded by it.
 
 Two invariants pin the endpoint contract — a row added with cells arrives complete and already
-timezone-converted, never blocking-then-filled. Owner: Travis.
+timezone-converted, never blocking-then-filled.
+
+**Amended: leaving with something typed now asks.** The above stops a cancelled dialog *adding*
+anything; it does not stop one *losing* anything, and a half-filled session was still discarded in
+silence. Cancel and the backdrop both now ask **Discard what you have typed?** with **Discard** and
+**Keep editing** — but only when the boxes differ from the row behind them, so an untouched dialog
+still closes on one click and the question never becomes noise. The question replaces the buttons
+rather than joining them: a "Discard" sitting beside the "Save row" it undoes is a misclick waiting
+to happen. The backdrop matters most here — a click anywhere outside the card, easy to hit by
+accident, and previously the quietest way to lose a filled-in session. Owner: Travis.

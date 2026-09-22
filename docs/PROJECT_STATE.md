@@ -2635,3 +2635,31 @@ invariants pin the endpoint side, including that an added row arrives already co
 venue's timezone rather than blocking and then filled.
 
 CI green, 212 unit tests; invariants 122, up from 120.
+
+
+## 2026-09-22 (eightieth) — and leaving with something typed asks first
+
+The seventy-ninth entry stopped a cancelled dialog *adding* a row. It did not stop one *losing*
+work: a half-filled session was still discarded in silence, which was the remaining half of the same
+complaint.
+
+Cancel and the backdrop now both ask **Discard what you have typed?**, offering **Discard** and
+**Keep editing**. Only when the boxes differ from the row behind them — `changed` already computes
+exactly that, for a session being invented as well as a row being corrected — so an untouched dialog
+closes on one click and the question never becomes the thing you learn to click through.
+
+Two details worth keeping. The question **replaces** the buttons rather than joining them, because a
+"Discard" beside the "Save row" it undoes is a misclick waiting to happen. And the **backdrop** goes
+through the same check: a click anywhere outside the card is the easiest dismissal to hit by
+accident and was the quietest way to lose a filled-in session.
+
+Six paths walked in the browser: untouched Cancel closes with no question; typed Cancel asks; typed
+backdrop-click asks; Keep editing returns with the typing intact; Discard on a never-saved first row
+drops the agenda and returns to the three ways in; Discard on a saved row returns to the table with
+the original value and the edit not applied.
+
+No automated coverage — this is React state in a component, and the frontends have no test runner
+wired into `npm test` (CLAUDE.md names Jest for them; nothing is configured). Verified by hand
+instead, path by path.
+
+CI green, 212 unit tests, 122 invariants — unchanged, as nothing outside the dialog moved.
