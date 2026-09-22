@@ -2729,3 +2729,38 @@ two blocking rows of a five-row agenda to watch Incomplete rows reach 0 and Impo
 
 CI green, 212 unit tests; invariants 126, up from 122 — including the case that would have broken
 under renumbering.
+
+
+## 2026-09-22 (eighty-third) — the agenda's location is taken as given
+
+Travis, on an agenda of online sessions: *Room “Virtual” doesn't match any room on this event.* The
+importer refused any location the event did not already have. An event's first import defined its
+locations and no later one could add another, so an agenda naming "Virtual" could not be imported at
+all — and the message had no "Closest match" clause, meaning the importer had already worked out it
+was not a typo of anything, and blocked it anyway.
+
+His call: there is no room to match against, it is a session location — which is what DXG's own sheet
+calls the column. So the location is created rather than refused.
+
+**The typo protection survives as advice, using a signal that was already there.** `closestRoom` only
+speaks within an edit distance of two and stays silent on a tie, and nothing acted on the difference.
+Now a near miss reads *“Main Hal” is not on this event. Did you mean Main Hall?* and anything else
+reads *“Virtual” is new — it will be added to this event*. Warnings, not blockers.
+
+This reverses the commit half of D-046 — the rule it enforced is gone, so there is nothing to repeat
+— but keeps the part that mattered more: the commit resolves a location through `normalise`, not SQL
+`lower()`, so "Main  Hall" joins the existing location rather than forking it. With unknown locations
+now created, that is the only thing between a stray space and a duplicate.
+
+The table column reads **Location** now, matching the row editor and the sheet.
+
+Checked with an agenda mixing three "Virtual" rows and one "Main Hal" typo against an event holding
+"Main Hall": four rows, zero incomplete, Import available, and the two messages distinct on the rows
+they belong to.
+
+**Worth knowing:** locations are `rooms` rows and Room sync reads readiness from an agent heartbeat,
+so "Virtual" will sit there permanently offline. Nothing breaks, but a virtual location is not a room
+anyone installs an agent in and the screen has no way to say so — a "no agent expected" flag would
+fix it. Not built.
+
+CI green, 212 unit tests; invariants 127.

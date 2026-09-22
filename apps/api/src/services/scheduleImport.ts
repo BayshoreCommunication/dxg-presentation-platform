@@ -731,16 +731,37 @@ export async function buildPreview(
     }
 
     if (!room) {
-      issues.push({ row: rowNumber, column: "room.name", severity: "blocking", message: "Room is empty." });
-    } else if (roomNames.length > 0 && !roomNames.some((name) => normalise(name) === normalise(room))) {
-      const suggestion = closestRoom(room, roomNames);
       issues.push({
         row: rowNumber,
         column: "room.name",
         severity: "blocking",
+        message: "Session location is empty.",
+      });
+    } else if (roomNames.length > 0 && !roomNames.some((name) => normalise(name) === normalise(room))) {
+      /*
+       * A location the event does not have yet is not an error (D-050).
+       *
+       * This was blocking, on the reasoning that an unrecognised room is a typo. It
+       * cannot tell a typo from a location that is simply new — "Virtual" is not a
+       * misspelling of anything — and the agenda is the authority on where a session
+       * happens. An event's first import defines its locations; every later one was
+       * forbidden from adding another, so an agenda with online sessions could not be
+       * imported at all.
+       *
+       * The typo case survives as advice rather than a refusal. `closestRoom` is
+       * deliberately narrow — within an edit distance of two, and silent when two
+       * rooms are equally close — so a suggestion means "you probably meant this",
+       * and its absence means the name looks nothing like anything here, which is
+       * what a genuinely new location looks like.
+       */
+      const suggestion = closestRoom(room, roomNames);
+      issues.push({
+        row: rowNumber,
+        column: "room.name",
+        severity: "warning",
         message: suggestion
-          ? `Room “${room}” doesn't match any room on this event. Closest match: ${suggestion}.`
-          : `Room “${room}” doesn't match any room on this event.`,
+          ? `Session location “${room}” is not on this event. Did you mean ${suggestion}?`
+          : `Session location “${room}” is new — it will be added to this event.`,
         ...(suggestion ? { suggestion: { field: "room.name" as ImportField, value: suggestion } } : {}),
       });
     }
@@ -996,37 +1017,20 @@ export async function commitImport(
   if (!clientId) return err({ code: "import.event_not_found", message: "No such event." });
 
   /*
-   * The event's rooms, read once and keyed the way `buildPreview` compares them.
+   * The event's locations, read once and keyed the way `buildPreview` compares them.
    *
-   * Two reasons it is not the per-row `lower(name) = lower(...)` lookup this used to
-   * do. The rule below has to see the rooms as they were *before* this import, or a
-   * room invented by row 1 would silently validate row 2. And `normalise` is what the
-   * preview matches with — it also folds separators and repeated spaces — so matching
-   * here on `lower()` alone let "Main  Hall" pass the check and then miss the lookup,
-   * creating the duplicate by a second route.
+   * Not the per-row `lower(name) = lower(...)` lookup this used to do: `normalise`
+   * also folds separators and repeated spaces, and matching on `lower()` alone let
+   * "Main  Hall" miss the lookup and be created a second time beside "Main Hall".
+   * Now that an unrecognised location is created rather than refused (D-050), this
+   * is the only thing standing between a stray double space and a duplicate.
    */
   const { rows: roomRows } = await tx.query<{ id: string; name: string }>(
     `SELECT id, name FROM pmp.rooms WHERE event_id = $1`,
     [input.eventId],
   );
   const roomIds = new Map(roomRows.map((room) => [normalise(room.name), room.id]));
-  const eventHasRooms = roomRows.length > 0;
 
-  /*
-   * A room naming nothing on this event (D-046).
-   *
-   * `buildPreview` calls this blocking, and it was the one blocking rule the commit
-   * did not repeat — so a request that skipped the screen, or replayed an older
-   * preview, imported the typo and `rooms` gained "Main Hal" beside "Main Hall". The
-   * duplicate is exactly what the check exists to prevent, and a rule the browser is
-   * the only one holding is not a rule.
-   *
-   * Only once the event has rooms, which is the preview's condition too: the first
-   * import into an empty event is what *defines* the rooms, and there is nothing yet
-   * to match against.
-   */
-  const unknownRoom = (row: StagedRow): boolean =>
-    eventHasRooms && !!row.room && !roomIds.has(normalise(row.room));
 
   /*
    * This check is made against the instants about to be inserted rather than against
@@ -1055,19 +1059,13 @@ export async function commitImport(
   };
 
   const blocking = input.rows.filter(
-    (row) => !row.title || !row.room || !row.starts_at || impossible(row) || unknownRoom(row),
+    (row) => !row.title || !row.room || !row.starts_at || impossible(row),
   );
   if (blocking.length > 0) {
-    const unmatched = [...new Set(input.rows.filter(unknownRoom).map((row) => row.room))];
     return err({
       code: "import.blocking_errors",
       message: `${blocking.length} row(s) still have blocking errors — fix them or remove them before importing.`,
-      detail: {
-        rows: blocking.map((row) => row.row),
-        // Named, because "blocking errors" on a request that never saw the screen
-        // gives the caller nothing to act on.
-        ...(unmatched.length > 0 ? { unmatched_rooms: unmatched } : {}),
-      },
+      detail: { rows: blocking.map((row) => row.row) },
     });
   }
 
@@ -1079,9 +1077,9 @@ export async function commitImport(
   for (const row of input.rows) {
     let roomId = roomIds.get(normalise(row.room));
     if (!roomId) {
-      // Reachable only for an event that had no rooms, every other case having been
-      // refused above. Recorded in the map as well as the table, so a second row
-      // naming the same new room joins it instead of creating it again.
+      // A location the event does not have yet, which the agenda is the authority on
+      // (D-050). Recorded in the map as well as the table, so a second row naming the
+      // same new location joins it instead of creating it twice.
       const { rows: inserted } = await tx.query<{ id: string }>(
         `INSERT INTO pmp.rooms (event_id, client_id, name) VALUES ($1, $2, $3) RETURNING id`,
         [input.eventId, clientId, row.room],

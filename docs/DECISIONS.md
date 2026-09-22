@@ -850,3 +850,35 @@ state a row is in right after someone corrects it.
 
 Four invariants, including the one that would have broken under renumbering: a correction typed into
 row 5 is still on row 5 after row 2 is removed. Owner: Travis.
+
+## D-050 (2026-09-22): The agenda's location is taken as given — Status: ACCEPTED (Travis's call)
+An agenda naming "Virtual" could not be imported. The importer refused any location the event did not
+already have, so an event's first import defined its locations and every later one was forbidden from
+adding another — and an agenda of online sessions was refused outright on any event that already had
+a room.
+
+**Travis's call: there is no room to match against, it is a session location.** The agenda is the
+authority on where a session happens, which is also what DXG's own sheet calls the column
+(`Session Location`, D-029). So an unrecognised location is created rather than refused.
+
+**The typo protection survives as advice.** The rule existed to stop "Main Hal" becoming a second
+room beside "Main Hall", and that is still worth catching — it just is not worth refusing an import
+over, because the check cannot tell a typo from a location that is simply new. `closestRoom` already
+made the distinction and nothing acted on it: it only speaks within an edit distance of two and stays
+silent when two rooms are equally close. So a suggestion now reads *“Main Hal” is not on this event.
+Did you mean Main Hall?* and its absence reads *“Virtual” is new — it will be added to this event*.
+Both are warnings; neither blocks.
+
+**This reverses the commit-side half of D-046.** That entry closed a hole where the commit did not
+repeat the preview's room rule; the rule itself is now gone, so there is nothing to repeat. What
+survives from it, and matters more, is the lookup: the commit resolves a location through `normalise`
+rather than SQL `lower()`, so "Main  Hall" with a double space joins the existing location instead of
+forking it. With unrecognised locations now created, that is the only thing standing between a stray
+space and a duplicate.
+
+**A consequence to be aware of.** Locations are `rooms` rows, and Room sync derives readiness from a
+room agent's heartbeat — so a location with no agent, like "Virtual", appears there permanently
+offline. Nothing is broken by it, but a virtual location is not a room anyone will install an agent
+in, and Room sync has no way to say so. Worth a "no agent expected" flag on a room; not built.
+
+Six invariants cover it, including both halves of the distinction. Owner: Travis.

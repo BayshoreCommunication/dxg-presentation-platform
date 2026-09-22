@@ -39,7 +39,15 @@ type Preview = {
     slot_starts_at?: string | null;
     slot_ends_at?: string | null;
   }[];
-  issues: { row: number; column: string; severity: string; message: string }[];
+  issues: {
+    row: number;
+    column: string;
+    severity: string;
+    message: string;
+    suggestion?: { field: string; value: string };
+  }[];
+  /** Row numbers taken out of the import. */
+  excluded: number[];
 };
 
 const upload = async (csv: string): Promise<Preview> => {
@@ -410,7 +418,7 @@ describe("a presentation cannot escape its session", () => {
  * was reachable over HTTP without the screen's cooperation, and a unit test on the
  * function would have passed either way once the screen was fixed.
  */
-describe("the commit refuses a room the event does not have", () => {
+describe("a session location the event does not have", () => {
   const ROOM_PROBE = "Import Room Revalidation Probe";
   let probe = "";
 
@@ -495,20 +503,38 @@ describe("the commit refuses a room the event does not have", () => {
     assert.deepEqual(await roomsOf(), ["Grand Ballroom"]);
   });
 
-  test("a room the event does not have is refused, and no room is created", async (t: TestContext) => {
+  /*
+   * D-050 turned this around. It used to assert that an unrecognised location was
+   * refused and no room created — the guard against a typo becoming a second room.
+   * That guard could not tell a typo from a location that is simply new, and refused
+   * both, which is why an agenda naming "Virtual" could not be imported at all. The
+   * agenda is the authority on where a session happens, so the location is created
+   * and the likely typo is raised as advice instead.
+   */
+  test("a location the event does not have is created, and flagged as new", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
-    const preview = await oneRow(session("Typo", "Grand Balroom", "1:00 PM", "2:00 PM"));
-    // The preview already knew. The point of the test is what the commit does with a
-    // row the preview called blocking.
-    assert.ok(preview.issues.some((issue) => issue.column === "room.name" && issue.severity === "blocking"));
+    const preview = await oneRow(session("Online", "Virtual", "1:00 PM", "2:00 PM"));
+    const issue = preview.issues.find((candidate) => candidate.column === "room.name");
+    assert.equal(issue?.severity, "warning", "a new location must not block the import");
+    assert.match(issue?.message ?? "", /new/);
 
     const response = await commitTo(preview);
-    assert.equal(response.status, 400);
-    const body = (await response.json()) as { code: string; detail?: { unmatched_rooms?: string[] } };
-    assert.equal(body.code, "import.blocking_errors");
-    // Named, because a caller that never saw the screen has nothing else to go on.
-    assert.deepEqual(body.detail?.unmatched_rooms, ["Grand Balroom"]);
-    assert.deepEqual(await roomsOf(), ["Grand Ballroom"]);
+    assert.equal(response.status, 200);
+    assert.deepEqual(await roomsOf(), ["Grand Ballroom", "Virtual"]);
+  });
+
+  /*
+   * The typo half, which must still be caught — as advice. `closestRoom` only speaks
+   * within an edit distance of two, so a suggestion means "you probably meant this"
+   * where its absence (the test above) means the name looks like nothing here.
+   */
+  test("a near-miss is suggested rather than silently accepted", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const preview = await oneRow(session("Typo", "Grand Balroom", "3:00 PM", "4:00 PM"));
+    const issue = preview.issues.find((candidate) => candidate.column === "room.name");
+    assert.equal(issue?.severity, "warning");
+    assert.match(issue?.message ?? "", /Did you mean Grand Ballroom\?/);
+    assert.deepEqual(issue?.suggestion, { field: "room.name", value: "Grand Ballroom" });
   });
 
   /*
@@ -518,11 +544,15 @@ describe("the commit refuses a room the event does not have", () => {
    * check and then missed the lookup, and was created as a new room. Both ends now
    * use `normalise`.
    */
-  test("a name differing only in spacing joins the room, it does not fork it", async (t: TestContext) => {
+  test("a name differing only in spacing joins the location, it does not fork it", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
-    const response = await commitTo(await oneRow(session("Spaced", "Grand  Ballroom", "3:00 PM", "4:00 PM")));
+    // Measured against the locations this event happens to have by now, rather than a
+    // written-out list: the tests above add to it, and an expectation that counts them
+    // breaks whenever one is added.
+    const before = await roomsOf();
+    const response = await commitTo(await oneRow(session("Spaced", "Grand  Ballroom", "5:00 PM", "6:00 PM")));
     assert.equal(response.status, 200);
-    assert.deepEqual(await roomsOf(), ["Grand Ballroom"]);
+    assert.deepEqual(await roomsOf(), before, "the double space must not have created a second location");
   });
 });
 

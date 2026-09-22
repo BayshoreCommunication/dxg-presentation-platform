@@ -1104,7 +1104,8 @@ export function ImportView({
                   <tr>
                     <th>Row</th>
                     <th>Session</th>
-                    <th>Room</th>
+                    {/* The agenda's own word for it, and the row editor's (D-050). */}
+                    <th>Location</th>
                     <th>Date</th>
                     <th>Time</th>
                     <th>Presenter</th>
