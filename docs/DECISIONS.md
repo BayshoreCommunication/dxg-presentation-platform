@@ -976,3 +976,24 @@ typed agenda's final session therefore has to be deleted from elsewhere. Odd, an
 than guessed at.
 
 Four invariants, including the rename case that decided the design. Owner: Travis.
+
+## D-054 (2026-09-22): Four more things off the agenda screen — Status: ACCEPTED (Travis's call)
+Removed in one pass, all for the same reason — each said something the screen already showed, or
+something nobody could act on.
+
+- **`1 session is on the event. Saving a row adds it; there is no separate import step.`** Added one
+  change earlier to explain that a typed row saves itself (D-053). The row's own `on the event` chip
+  says it per row, where it matters; the sentence restated it under the table. In the wizard the
+  whole footer is gone with it, since its own Back and Save & continue sit directly below.
+- **`The event builds itself from the agenda — rooms, tracks and days are created from it, so there
+  is nothing to type twice.`** The wizard's step-2 intro. It described a mechanism rather than
+  telling the operator what to do, above a drop area that says exactly what to do.
+- **`N new · 0 updated · 0 unchanged — matched on room + start + title · times in America/New_York`**
+  The sessions card's meta line. Three facts, all available better elsewhere: the counts repeat the
+  KPI row directly above, the match key is machinery, and the timezone is already stated in the row
+  editor where times are actually typed. Its removal is also what stopped the table overflowing.
+- **The `Track` column.** DXG's sheet has no track column and the row editor offers no track field,
+  so it rendered an em dash on every row of every agenda. A file that does carry a `Track` column
+  still creates its tracks on commit — only the display went.
+
+SCREEN_SPECS §3 updated for the column list. Owner: Travis.

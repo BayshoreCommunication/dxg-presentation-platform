@@ -1101,11 +1101,6 @@ export function ImportView({
           <div className="card">
             <div className="chd">
               <h3>{preview.manual ? "Sessions" : `Sessions read from ${preview.file_name}`}</h3>
-              <span className="m">
-                {preview.counts.create} new · {preview.counts.update} updated ·{" "}
-                {preview.counts.unchanged} unchanged — matched on room + start + title · times in{" "}
-                {preview.timezone}
-              </span>
             </div>
             <div className="cbd" style={{ padding: "0 0 4px" }}>
               <table>
@@ -1118,7 +1113,6 @@ export function ImportView({
                     <th>Date</th>
                     <th>Time</th>
                     <th>Presenter</th>
-                    <th>Track</th>
                     <th>Action</th>
                   </tr>
                 </thead>
@@ -1201,7 +1195,6 @@ export function ImportView({
                             </div>
                           )}
                         </td>
-                        <td className="note">{row.cells["track.name"] || "—"}</td>
                         <td>
                           <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                             {/*
@@ -1324,21 +1317,21 @@ export function ImportView({
             A typed agenda has nothing to commit (D-053): each row is written when it
             is saved, so an "Import N sessions" button beside "+ Add session" promised
             a second, final step that no longer exists — which is the confusion it
-            caused. What is left is the way out of the screen.
+            caused. All that is left here is the way out of the screen; the row's own
+            "on the event" chip says what has been saved, without a sentence repeating
+            it under the table.
           */}
           {preview.manual ? (
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 24, alignItems: "center" }}>
-              {!embedded && (
+            // In the wizard there is nothing to add here at all: its own Back and
+            // Save & continue are already below, and an empty row of buttons would
+            // just be a gap.
+            !embedded && (
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 24 }}>
                 <button className="btn" onClick={() => router.push(`/events/${eventId}`)}>
                   Open command center →
                 </button>
-              )}
-              <span className="note">
-                {(preview.saved_rows?.length ?? 0) === 0
-                  ? "Nothing is on the event yet — a session is added when you save it."
-                  : `${preview.saved_rows!.length} session${preview.saved_rows!.length === 1 ? " is" : "s are"} on the event. Saving a row adds it; there is no separate import step.`}
-              </span>
-            </div>
+              </div>
+            )
           ) : committed ? (
             <div className="card" style={{ borderColor: "var(--ok)" }}>
               <div className="cbd">

@@ -192,11 +192,6 @@ export function CreateEventWizard({
 
           {step === 2 && draft && (
             <>
-              <div className="note" style={{ marginBottom: 12 }}>
-                The event builds itself from the agenda — rooms, tracks and days are created from it,
-                so there is nothing to type twice.
-              </div>
-
               <ImportView eventId={draft.id} embedded onCommitted={setImported} />
 
             </>

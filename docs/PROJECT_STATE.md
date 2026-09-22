@@ -2857,3 +2857,30 @@ confirmation, and checked for orphaned slots and assignments (none) and the audi
 (created → updated → created → deleted).
 
 CI green, 212 unit tests; invariants 133, up from 129.
+
+
+## 2026-09-22 (eighty-seventh) — four more things off the agenda screen
+
+Travis, in quick succession: drop the "1 session is on the event…" line, the wizard's "The event
+builds itself from the agenda…" intro, the "N new · 0 updated · 0 unchanged — matched on room +
+start + title · times in America/New_York" meta, and the Track column.
+
+Each said something the screen already showed. The first restated under the table what the row's own
+`on the event` chip says per row. The second described a mechanism above a drop area that already
+says what to do. The third repeated the KPI row directly above it, plus a match key that is
+machinery and a timezone the row editor states where times are actually typed — and taking it out is
+what stopped the table overflowing. The fourth rendered an em dash on every row of every agenda,
+because DXG's sheet has no track column and the row editor offers no track field. A file carrying a
+Track column still creates its tracks; only the column went.
+
+The typed-agenda footer went with the first one in the wizard, where Back and Save & continue are
+directly below and an empty row of buttons would just be a gap.
+
+Checked: seven headers, seven cells, no overflow; the typed path shows only "+ Add session" and
+"Open command center →"; wizard step 2 is the drop area and the two alternates and nothing else.
+
+CI green, 212 unit tests, 133 invariants.
+
+**Still there, not removed:** the *Draft so far* panel in the wizard lists a `Tracks` row, which is
+the same em dash for the same reason. Travis named the table column; this was left alone rather than
+assumed.
