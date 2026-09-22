@@ -2525,3 +2525,31 @@ with the time converted to the venue's zone (9:00 AM America/New_York → 13:00Z
 was re-run unchanged, and both new routes were confirmed to refuse a file import.
 
 CI green, 212 unit tests (4 new), 116 invariants.
+
+## 2026-09-22 (seventy-sixth) — the time list stops offering to scroll sideways
+
+Travis pointed at a horizontal scrollbar under every time dropdown. Two things made it.
+
+react-datepicker sets `overflow-y: scroll` on the time list and says nothing about the other axis,
+and CSS then computes `overflow-x` to `auto` rather than leaving it `visible` — an axis cannot stay
+visible while the one across from it scrolls. That is harmless until something overflows, and
+something did: the time-only column is the library's 85px, less a 15px scrollbar and the items' 10px
+padding either side, leaving 50px for a label like `02:00 AM` that measures 51. One pixel, on sixteen
+of the ninety-six rows.
+
+**The column is widened rather than the pixel clipped.** `overflow-x: hidden` alone would have
+removed the bar and left the label cut — invisibly here, visibly on any platform whose font renders a
+shade wider. The time-only box goes to 92px, which gives 57px for a 51px label; `overflow-x: hidden`
+stays as a guard against sub-pixel rounding putting the bar back.
+
+**Two specificity notes, both found by measuring rather than reading.** The library pins the box's
+85px through `__time-container __time __time-box`, which outranks a two-class rule — the override has
+to match that selector rather than reach for `!important`. And the `--with-time` block, which sets
+95px the same way, has the same problem and is unreached anyway: nothing in the app applies that
+class, since every picker here is date-only or time-only. Left in place, scoped around rather than
+deleted.
+
+Verified in the browser: list `scrollWidth` 77 against `clientWidth` 77 where it was 71 against 70,
+and zero items reporting a clipped label where sixteen did. The date picker is untouched.
+
+CI green, 212 unit tests. Invariants not re-run — nothing outside the stylesheet changed.

@@ -422,6 +422,46 @@ aside nav a:not(.on):hover { background: var(--ink2); }
   height: 252px !important;
 }
 
+/*
+ * No horizontal scrollbar under the times.
+ *
+ * Two things produced one: the library sets `overflow-y: scroll` on the list and says
+ * nothing about the other axis, and CSS then computes `overflow-x` to `auto` rather
+ * than leaving it `visible` — an axis cannot stay visible while the one across from it
+ * scrolls. That alone is harmless until something overflows, and something did: the
+ * time-only column is the library's 85px, less a 15px scrollbar and the items' 10px
+ * padding either side, which leaves 50px for a label like "02:00 AM" that measures 51.
+ * One pixel, on sixteen of the ninety-six rows, under every time field.
+ *
+ * So the column is widened to fit its widest label with room to spare rather than the
+ * pixel being clipped — a label that does not fit is the actual fault, and hiding the
+ * overflow would leave it clipped on any platform whose font renders a shade wider.
+ * `overflow-x: hidden` stays as the guard: it costs nothing, and it keeps a sub-pixel
+ * rounding anywhere in this column from putting the bar back.
+ *
+ * Scoped to `--time-only`, the class the field already carries. Every picker in the
+ * app is date-only or time-only today — nothing applies `--with-time`, so the block
+ * above it is currently unreached — but scoping keeps this from silently narrowing a
+ * date-and-time picker the day one appears.
+ */
+.dxg-datepicker--time-only .react-datepicker__time-container,
+.dxg-datepicker--time-only .react-datepicker__time,
+/*
+ * The long selector is the library's own, matched rather than out-specified by an
+ * `!important`: it sets the box's 85px through
+ * `__time-container __time __time-box`, which outranks a two-class rule.
+ */
+.dxg-datepicker--time-only
+  .react-datepicker__time-container
+  .react-datepicker__time
+  .react-datepicker__time-box {
+  width: 92px;
+}
+
+.dxg-datepicker .react-datepicker__time-list {
+  overflow-x: hidden;
+}
+
 .dxg-datepicker--with-time .react-datepicker__today-button {
   grid-column: 1 / -1;
   grid-row: 2;
