@@ -109,6 +109,25 @@ export type Recipient = {
  * when a batch is scheduled: a reminder must not chase someone who uploaded
  * yesterday (FR-COM-002).
  */
+/**
+ * How long the same template is withheld from the same speaker (FR-COM-002).
+ *
+ * This guard used to have no time bound at all: a speaker who had ever received a
+ * template was skipped from it forever. Right for an invitation, wrong for the thing
+ * the product is supposed to do — the SOW's reminder cadence is T-14, T-7 and T-2, and
+ * under "ever" only the first of the three could be sent. It also meant a speaker who
+ * lost their link could never be included in a batch again.
+ *
+ * SCREEN_SPECS §9 states the rule as idempotent by `(batch_id, speaker_id)` — re-running
+ * *a batch* must not re-send, while a later batch may reach the same person. There is no
+ * `batch_id` column, which is why "the same batch" was approximated as "this template,
+ * ever"; a day is the approximation that keeps the useful half. It is long enough that a
+ * double-click, a refresh or an impatient second press sends nothing twice, and short
+ * enough that every cadence anyone would write — the closest pair in the SOW's is five
+ * days apart — goes out as intended.
+ */
+export const RESEND_COOLDOWN_HOURS = 24;
+
 export async function recipientsFor(
   tx: pg.PoolClient,
   eventId: string,
@@ -137,7 +156,8 @@ export async function recipientsFor(
             EXISTS (SELECT 1 FROM pmp.communications c
                      WHERE c.speaker_id = sp.id AND c.status IN ('bounced','complained')) AS bounced,
             EXISTS (SELECT 1 FROM pmp.communications c
-                     WHERE c.speaker_id = sp.id AND c.template_id = $2) AS already_sent
+                     WHERE c.speaker_id = sp.id AND c.template_id = $2
+                       AND c.created_at > now() - make_interval(hours => $3)) AS already_sent
        FROM pmp.speakers sp
        JOIN pmp.speaker_assignments sa ON sa.speaker_id = sp.id
        JOIN pmp.slots s ON s.id = sa.slot_id
@@ -145,7 +165,7 @@ export async function recipientsFor(
        LEFT JOIN pmp.rooms r ON r.id = se.room_id
       WHERE sp.event_id = $1 AND sp.merged_into IS NULL
       ORDER BY sp.full_name`,
-    [eventId, templateId],
+    [eventId, templateId, RESEND_COOLDOWN_HOURS],
   );
 
   return rows
@@ -224,7 +244,9 @@ export async function sendBatch(
       continue;
     }
     if (recipient.already_sent) {
-      note("already received this batch");
+      // Named by what it is, so an operator can tell "I already did this" from
+      // "this address is dead" — the two reasons a chase list comes back empty.
+      note(`already emailed this in the last ${RESEND_COOLDOWN_HOURS} hours`);
       continue;
     }
 

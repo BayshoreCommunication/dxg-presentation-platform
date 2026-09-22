@@ -1028,7 +1028,7 @@ and erroring clearly when an event has none.
 template. That is right for an invitation and wrong for a reminder — the `T-14 · T-7 · T-2` the
 wizard describes needs three. Chasing the same speaker again currently means a second template.
 Changing it affects the Communications screen too and is a decision about emailing speakers
-repeatedly, so it is recorded rather than taken. Owner: Travis.
+repeatedly, so it is recorded rather than taken. **Taken in D-057.** Owner: Travis.
 
 ## D-056 (2026-09-22): `.env` is not loaded by anything — Status: NOTED
 Checked before triggering a send, because `.env` sets `MAIL_TRANSPORT=ses` and the dispatcher reports
@@ -1041,3 +1041,36 @@ match `docker-compose.yml` exactly, so the file looks loaded without being.
 but it is luck rather than design, and the SES configuration added on 2026-09-20 for the webhook test
 has never taken effect. Worth an `--env-file=.env` on the dev scripts, or deleting the misleading
 values.
+
+## D-057 (2026-09-22): The resend guard is a cooldown, not forever — Status: ACCEPTED (Travis's call)
+`already_sent` was `EXISTS (… WHERE speaker_id = … AND template_id = …)` with no time bound, so a
+speaker who had ever received a template was skipped from it forever. That made FR-COM-002 —
+*"Configurable event reminder cadence; SOW defaults T-14/T-7/T-2"* — unreachable even by hand: only
+the first of the three could ever be sent. It also meant a speaker who lost their link could never be
+put back in a batch.
+
+**The spec says the rule differently.** SCREEN_SPECS §9: idempotent by `(batch_id, speaker_id)` —
+re-running *a batch* must not re-send, a later batch may. There is no `batch_id` column, which is why
+"the same batch" had been approximated as "this template, ever". The approximation is now **24 hours
+on `(speaker, template)`**, which keeps the half that matters: long enough that a double-click, a
+refresh or an impatient second press sends nothing twice, short enough that any cadence anyone would
+write goes out — the closest pair in the SOW's is five days apart.
+
+**Not the column.** Adding `batch_id` without anything that re-runs a batch would be a column nothing
+reads, which is the mistake `settings.reminders` already makes on this screen. The cooldown is
+recorded in SCREEN_SPECS §9 as the approximation it is, so the gap is visible rather than assumed
+closed.
+
+**The skip reason changed with it** — "already received this batch" became "already emailed this in
+the last 24 hours", so an operator can tell *I already did this* from *this address is dead*, which
+are the two reasons a chase list comes back empty.
+
+Four invariants in `tests/invariants/comms-cadence.test.ts` cover both halves: a second press sends
+nothing, and the second and third reminders go out once the window has passed.
+
+**Two things the test surfaced, both fixed here.** `removeTestEvents` deleted the event's structure
+outside its savepoint, so a suite that sends mail — the first one to exist — failed the run instead
+of archiving the event; `speaker_tokens` was also missing from its list. And the probe event itself
+is reused rather than recreated: sending writes `communication_events`, which is append-only with
+DELETE refused to `pmp_app`, so a probe that has sent can only be archived. Creating one per run
+would leave a row behind every time.

@@ -2916,3 +2916,32 @@ the wizard describes cannot be sent even manually. It touches Communications too
 about emailing speakers repeatedly.
 
 CI green, 212 unit tests, 133 invariants.
+
+
+## 2026-09-22 (eighty-ninth) — the resend guard becomes a cooldown
+
+The guard that stops a speaker being emailed twice had no time bound: ever received this template,
+skipped forever. FR-COM-002 asks for a T-14/T-7/T-2 cadence, so only the first of the three could be
+sent — the product could not do the thing the SOW names, even by hand.
+
+SCREEN_SPECS §9 states the rule as idempotent by `(batch_id, speaker_id)`: re-running *a batch* must
+not re-send, a later one may. There is no `batch_id` column, which is why it had been approximated as
+"this template, ever". It is 24 hours on `(speaker, template)` now — long enough that a double-click
+or an impatient second press sends nothing twice, short enough that any real cadence goes out, the
+closest pair in the SOW's being five days apart. Recorded in SCREEN_SPECS as the approximation it is
+rather than left looking like the spec's rule.
+
+Adding the column was considered and rejected: nothing re-runs a batch, so it would be a column
+nothing reads — the same mistake `settings.reminders` already makes on this screen.
+
+Verified in the browser end to end: ten speakers reminded, a second press sending nothing and saying
+why, then the sends aged past the window and a second reminder going out to all ten. Four invariants
+cover both halves.
+
+**Two things writing that test surfaced.** `removeTestEvents` deleted an event's structure outside
+its savepoint, so the first suite that actually sends mail failed the whole run instead of archiving
+the event — and `speaker_tokens`, which sending mints, was missing from its delete list. Both fixed.
+And the probe event is reused rather than recreated each run: sending writes `communication_events`,
+append-only with DELETE refused to `pmp_app`, so a probe that has sent can only ever be archived.
+
+CI green, 212 unit tests; invariants 137, up from 133.

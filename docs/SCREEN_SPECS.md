@@ -208,7 +208,7 @@ Reading rules:
 
 **Acceptance**
 - Test send goes to the signed-in staff user only and is excluded from batch counters.
-- Re-running a batch never re-sends to a recipient who already received that batch (idempotent by `(batch_id, speaker_id)`).
+- Re-running a batch never re-sends to a recipient who already received that batch. **Approximated by a 24-hour cooldown on `(speaker, template)`** (D-057), because there is no `batch_id` column: pressing twice sends once, and the next reminder in a cadence still goes out. True `(batch_id, speaker_id)` idempotency needs the column and a way to re-run a batch, neither of which exists.
 - A bounced address is visible on the speaker row and excluded from subsequent automated reminders until corrected.
 
 ---

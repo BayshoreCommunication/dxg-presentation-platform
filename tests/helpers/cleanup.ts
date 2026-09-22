@@ -125,23 +125,36 @@ export async function removeTestEvents(namePrefixes: readonly string[]): Promise
        * wizard began importing an agenda (D-026) and test events started having a
        * schedule at all.
        */
-      for (const table of [
-        "event_roles",
-        "speaker_assignments",
-        "slots",
-        "sessions",
-        "speakers",
-        "schedule_imports",
-        "rooms",
-        "tracks",
-        "event_days",
-        "communication_templates",
-      ]) {
-        await tx.query(`DELETE FROM pmp.${table} WHERE event_id = $1`, [event.id]);
-      }
-
+      /*
+       * The whole structure under one savepoint, not just the event row.
+       *
+       * A suite that sends mail leaves `communications` behind — history, which this
+       * deliberately keeps — and `communications.speaker_id` references `speakers`, so
+       * the *speakers* delete fails and takes the surrounding transaction with it. The
+       * first suite to actually send (comms-cadence) turned that into a failing run
+       * rather than an archived event. Now anything history still holds falls back to
+       * archiving, which is what the fallback was always meant to express.
+       *
+       * `speaker_tokens` is on the list because a magic link is state about a speaker,
+       * not a record of anything: it means nothing once the speaker is gone.
+       */
       try {
         await tx.query("SAVEPOINT drop_event");
+        for (const table of [
+          "event_roles",
+          "speaker_assignments",
+          "slots",
+          "sessions",
+          "speaker_tokens",
+          "speakers",
+          "schedule_imports",
+          "rooms",
+          "tracks",
+          "event_days",
+          "communication_templates",
+        ]) {
+          await tx.query(`DELETE FROM pmp.${table} WHERE event_id = $1`, [event.id]);
+        }
         await tx.query(`DELETE FROM pmp.events WHERE id = $1`, [event.id]);
         await tx.query("RELEASE SAVEPOINT drop_event");
         deleted.push(event.name);
