@@ -2970,3 +2970,31 @@ re-renders with new props while React keeps component state — and editing, sav
 were walked end to end, then the seeded venue put back.
 
 CI green, 212 unit tests, 137 invariants.
+
+
+## 2026-09-23 (ninety-first) — a magic link signs the speaker in
+
+Travis asked how a speaker logs in. Answering it turned up that the main way they do — the link in an
+invitation or reminder mail — did not work at all: following it pre-filled the code and the portal
+then said the code was wrong, which is the worst shape of bug, because the speaker has no reason to
+doubt a link they were sent.
+
+A presenter has two kinds of credential and only one was looked up. An access code is typed, so it is
+stored normalised — case folded, grouping dashes dropped, O read as 0 and I and L as 1. A magic-link
+token is a UUID nobody types, stored exactly as minted. `presenterLogin` hashed only the normalised
+form, so the UUID was uppercased and stripped before hashing and matched nothing. Proved by hashing
+both and comparing, not inferred.
+
+The lookup tries both forms now. That repairs the links already in inboxes — including the ten
+reminder mails sent from this machine yesterday — where re-minting in the code alphabet would not,
+and would have traded a UUID's entropy for twelve characters on a credential that travels by email.
+
+Five invariants cover it, and the magic-link case was run against the unfixed lookup first to confirm
+it fails there. Walked the real journey afterwards: `/t/<uuid>` → `/login?code=<uuid>` with the field
+pre-filled → signed in as the presenter.
+
+**Left alone, recorded in D-059:** `npm run demo:link` has been broken since MFA became mandatory. It
+reads the `{"step":"mfa_required"}` 200 as a successful sign-in, never gets a session, and blames
+missing seed data for what is an auth failure.
+
+CI green, 212 unit tests; invariants 142, up from 137.

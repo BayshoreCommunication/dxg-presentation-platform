@@ -321,10 +321,32 @@ export async function presenterLogin(
   input: { email: string; code: string; ip?: string | undefined; userAgent?: string | undefined },
 ): Promise<Result<{ token: string; principal: Principal }, DomainError>> {
   const email = input.email.trim().toLowerCase();
-  const normalised = normaliseCode(input.code);
+  const raw = input.code.trim();
+  const normalised = normaliseCode(raw);
   if (!email || !normalised) {
     return err({ code: "auth.invalid_credentials", message: "Enter your email address and access code." });
   }
+
+  /*
+   * Both forms of the credential, because there are two kinds of them (D-059).
+   *
+   * An **access code** is read off a screen and typed, so it is stored normalised:
+   * `normaliseCode` folds case, strips the grouping dashes and repairs the characters
+   * people confuse — O for 0, I and L for 1. A **magic-link token** is a UUID that
+   * nobody types; the invitation and reminder mails carry it in the URL, and it is
+   * stored exactly as minted.
+   *
+   * Only the normalised form was looked up, so a magic link could never work: the
+   * UUID went through `normaliseCode` on the way in — uppercased, dashes stripped,
+   * every O and I rewritten — and hashed to something the row had never held. Following
+   * a link pre-filled the code and the portal then said the code was wrong, which is
+   * the worst version of a bug, because the speaker has no reason to doubt the link.
+   *
+   * Trying both costs one extra hash and repairs the links already in people's inboxes,
+   * where re-minting them in the code alphabet would not.
+   */
+  const candidates = [hashSecret(normalised)];
+  if (raw !== normalised) candidates.push(hashSecret(raw));
 
   const { rows } = await tx.query<{
     token_id: string;
@@ -340,8 +362,8 @@ export async function presenterLogin(
             st.event_id, st.client_id, st.expires_at, st.revoked_at
        FROM pmp.speaker_tokens st
        JOIN pmp.speakers sp ON sp.id = st.speaker_id
-      WHERE st.token_hash = $1 AND sp.merged_into IS NULL`,
-    [hashSecret(normalised)],
+      WHERE st.token_hash = ANY($1::bytea[]) AND sp.merged_into IS NULL`,
+    [candidates],
   );
   const token = rows[0];
 

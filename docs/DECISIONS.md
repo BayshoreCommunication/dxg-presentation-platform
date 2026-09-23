@@ -1099,3 +1099,32 @@ still goes to the wizard, whose four steps are its details.
 venue field survives the refresh, because `router.refresh()` re-renders with new props while React
 keeps the component's state. Editing and saving from the merged screen was walked end to end.
 Owner: Travis.
+
+## D-059 (2026-09-23): A magic link signs the speaker in — Status: ACCEPTED (Travis's call)
+Found while answering how a speaker logs in. Following the link in an invitation or reminder mail
+pre-filled the access-code field and the portal then refused it: *"That email and access code don't
+match. Check the details DXG sent you."* The primary way a speaker reaches the product did not work,
+and it failed by telling them their own credential was wrong.
+
+**A presenter has two kinds of credential and only one was being looked up.** An *access code* is
+read off a screen and typed, so it is stored normalised — `normaliseCode` folds case, drops the
+grouping dashes and repairs the characters people confuse (O for 0, I and L for 1). A *magic-link
+token* is a UUID nobody types, carried in the URL and stored exactly as minted by
+`POST /speakers/{id}/invite` and by `sendBatch`. `presenterLogin` hashed
+`normaliseCode(code)` and nothing else, so the UUID `25e3b629-facb-409e-…` was hashed as
+`25E3B629FACB409E…` — a string the row had never held. Proved by hashing both before changing
+anything, rather than inferred from reading.
+
+**The lookup now tries both forms.** One extra hash, and it repairs the links already sitting in
+people's inboxes, where re-minting invitations in the code alphabet would not — and would also have
+traded a UUID's entropy for twelve characters on a credential that travels by email.
+
+Five invariants in `tests/invariants/presenter-credentials.test.ts`: the magic link works, an access
+code works typed exactly and typed sloppily, a code that is neither is refused, and a real token
+paired with the wrong address is refused. The magic-link case was run against the unfixed lookup
+first and fails there, so it cannot pass for the wrong reason.
+
+**Still broken, separately:** `npm run demo:link` treats the `{"step":"mfa_required"}` 200 from
+`/auth/login` as a completed sign-in, never gets a session, and reports the misleading *"No events —
+run `npm run db:seed` first."* It is the documented way to get a speaker link and has not worked
+since MFA became mandatory. Not fixed here. Owner: Travis.
