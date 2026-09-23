@@ -770,10 +770,22 @@ export type ArchiveCandidate = {
 export type ArchivePackageRow = {
   id: string;
   archive_state: string;
-  manifest: { file_count?: number } | null;
+  manifest: { file_count?: number; pdf?: { file_count: number; eligible: number } } | null;
   link_expires_at: string | null;
   created_at: string;
   downloads: string;
+  /** False for a package built before PDF packages existed (D-067). */
+  has_pdf: boolean;
+};
+
+/** Where PDF conversion stands for the talks that belong in the PDF package (D-067). */
+export type PdfProgress = {
+  eligible: number;
+  converted: number;
+  in_progress: number;
+  not_started: number;
+  failed: { title: string; speaker: string | null; error: string }[];
+  converter_available: boolean;
 };
 
 export type ArchiveScope = {
@@ -782,6 +794,8 @@ export type ArchiveScope = {
   total_bytes: number;
   rooms: number;
   days: number;
+  pptx_count: number;
+  pdf: PdfProgress;
   latest_package: ArchivePackageRow | null;
   downloads: DownloadRecord[];
 };
@@ -797,7 +811,16 @@ export const buildArchive = (eventId: string) =>
     size_bytes: number;
     sha256: string;
     excluded: number;
+    pdf_file_count: number;
+    pdf_not_converted: number;
   }>(`/events/${eventId}/archive-packages`, { method: "POST" });
+
+/** Queue PDF conversion for everything not yet converted; `retry` re-runs failures. */
+export const convertArchivePdfs = (eventId: string, retry = false) =>
+  request<{ queued: number }>(`/events/${eventId}/archive/pdfs`, {
+    method: "POST",
+    body: JSON.stringify({ retry }),
+  });
 
 export const deliverArchive = (packageId: string, days = 7) =>
   request<{ link_expires_at: string }>(
@@ -805,11 +828,11 @@ export const deliverArchive = (packageId: string, days = 7) =>
     { method: "POST", body: JSON.stringify({ days }) },
   );
 
-export const archiveDownloadUrl = (packageId: string) =>
-  `${process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:4000/api/v1"}/archive-packages/${packageId}/download`;
+export const archiveDownloadUrl = (packageId: string, format: "pptx" | "pdf" = "pptx") =>
+  `${process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:4000/api/v1"}/archive-packages/${packageId}/download?format=${format}`;
 
 /** One download of an archive package — who and when (FR-ARCH-002). */
-export type DownloadRecord = { downloaded_at: string; downloaded_by: string | null };
+export type DownloadRecord = { downloaded_at: string; downloaded_by: string | null; format: "pptx" | "pdf" };
 
 export type ClientView = {
   event: { id: string; name: string; starts_on: string; ends_on: string; client_name: string };

@@ -15,6 +15,8 @@ export interface Storage {
   assemble(uploadId: string, prefix: string): Promise<StoredObject>;
   abort(uploadId: string): Promise<void>;
   read(key: string): Promise<Buffer>;
+  /** Stores a whole object the server made itself (a derivative, e.g. a PDF copy) under `key`. */
+  put(key: string, body: Buffer): Promise<StoredObject>;
 }
 
 const sha256 = (body: Buffer): string => createHash("sha256").update(body).digest("hex");
@@ -74,5 +76,12 @@ export class LocalStorage implements Storage {
 
   async read(key: string): Promise<Buffer> {
     return readFile(path.join(this.root, "library", key));
+  }
+
+  async put(key: string, body: Buffer): Promise<StoredObject> {
+    const target = path.join(this.root, "library", key);
+    await mkdir(path.dirname(target), { recursive: true });
+    await writeFile(target, body);
+    return { key, sha256: sha256(body), size: body.length };
   }
 }

@@ -34,6 +34,9 @@ export function DownloadLog({ downloads }: { downloads: DownloadRecord[] }) {
               {downloads.map((record, index) => (
                 <tr key={`${record.downloaded_at}-${index}`}>
                   <td>{record.downloaded_by ?? "Unknown user"}</td>
+                  <td>
+                    <span className="chip c-mut">{record.format === "pdf" ? "PDF package" : "PowerPoint package"}</span>
+                  </td>
                   <td className="mono num note" style={{ textAlign: "right" }}>
                     {when(record.downloaded_at)}
                   </td>

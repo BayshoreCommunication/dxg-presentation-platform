@@ -72,6 +72,7 @@ import {
   supportedTimezones,
 } from "./services/events.ts";
 import { eventAgenda } from "./services/agenda.ts";
+import { queuePdfs, resumePdfQueue } from "./services/pdf.ts";
 import {
   createSession,
   updateSession,
@@ -101,6 +102,7 @@ import {
   downloadPackage,
   latestPackage,
   packageDownloads,
+  pdfCandidates,
 } from "./services/archive.ts";
 import type { ImportField, StagedRow, RowOverrides, ImportPreview } from "./services/scheduleImport.ts";
 import type { PortalSession } from "./services/portal.ts";
@@ -772,6 +774,12 @@ app.post("/api/v1/file-versions/:versionAndAction", async (req, res) => {
       }),
     );
     if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+    // An approved version is what the archive ships, so its PDF copy is made now, in
+    // the background, rather than when someone is waiting on a package (D-067).
+    // After the commit: the queue reads the version on its own connection.
+    if ((result.value as { review_state?: string }).review_state === "approved") {
+      void queuePdfs([versionId]).catch((error: unknown) => console.error("pdf queue", error));
+    }
     return res.json(result.value);
   } catch (error) {
     console.error(error);
@@ -1823,6 +1831,23 @@ app.get("/api/v1/events/:eventId/archive/scope", async (req, res) => {
   return res.json({ ...scope, latest_package: latest, downloads });
 });
 
+/*
+ * Queue PDF conversion for every approved talk that belongs in the PDF package and has
+ * no PDF yet (D-067). `retry: true` also re-runs the ones that failed. Returns at once;
+ * the archive builder polls the scope for progress.
+ */
+app.post("/api/v1/events/:eventId/archive/pdfs", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  if (!actor.roles.some((role) => ["presentation_manager", "project_manager", "platform_admin"].includes(role))) {
+    return res.status(403).json({ code: "archive.forbidden", message: "Converting needs a presentation manager or above." });
+  }
+  const eventId = String(req.params.eventId);
+  const ids = await withScope(scopeFor(req, eventId), (tx) => pdfCandidates(tx, eventId));
+  const queued = await queuePdfs(ids, (req.body as { retry?: boolean } | undefined)?.retry === true);
+  return res.json({ queued });
+});
+
 app.post("/api/v1/events/:eventId/archive-packages", async (req, res) => {
   const actor = actorFrom(req);
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
@@ -1848,8 +1873,9 @@ app.post("/api/v1/archive-packages/:packageId/deliver", async (req, res) => {
 app.get("/api/v1/archive-packages/:packageId/download", async (req, res) => {
   const actor = actorFrom(req);
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  const format = req.query.format === "pdf" ? "pdf" : "pptx";
   const result = await withScope(scopeFor(req), (tx) =>
-    downloadPackage(tx, actor, String(req.params.packageId)),
+    downloadPackage(tx, actor, String(req.params.packageId), format),
   );
   if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
   res.setHeader("content-type", "application/zip");
@@ -2553,4 +2579,6 @@ app.use((err: unknown, _req: express.Request, res: express.Response, _next: expr
 const port = Number(process.env.PORT ?? 4000);
 app.listen(port, () => {
   console.error(`api listening on http://localhost:${port}`);
+  // Conversions interrupted by a restart go back in line (D-067).
+  resumePdfQueue().catch((error: unknown) => console.error("pdf queue resume failed", error));
 });

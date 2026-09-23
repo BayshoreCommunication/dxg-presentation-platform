@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { ArchiveScope } from "@/lib/api";
-import { buildArchive, deliverArchive, archiveDownloadUrl, ApiError } from "@/lib/api";
+import type { ArchiveScope, PdfProgress } from "@/lib/api";
+import { buildArchive, deliverArchive, archiveDownloadUrl, convertArchivePdfs, ApiError } from "@/lib/api";
 import { DownloadLog } from "@/components/DownloadLog";
 import { Chip } from "@/components/Chip";
 import { formatBytes } from "@pmp/format";
@@ -25,6 +25,15 @@ export function ArchiveView({ eventId, initial }: { eventId: string; initial: Ar
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const pkg = initial.latest_package;
+  const pdf = initial.pdf;
+
+  // While PDFs are converting, re-read every few seconds so the count moves on its own.
+  const converting = pdf.in_progress > 0;
+  useEffect(() => {
+    if (!converting) return;
+    const handle = setInterval(() => router.refresh(), 4000);
+    return () => clearInterval(handle);
+  }, [converting, router]);
 
   async function run(work: () => Promise<string>) {
     setBusy(true);
@@ -127,18 +136,17 @@ export function ArchiveView({ eventId, initial }: { eventId: string; initial: Ar
             <input type="checkbox" checked readOnly /> Include manifest (file · version · checksum ·
             approval record)
           </label>
-          <label style={{ display: "block", marginBottom: 6, opacity: 0.55 }}>
-            <input type="checkbox" disabled /> Convert to PDF where the speaker&rsquo;s release
-            permission allows — conversion lands in M6-2, so PDF-only talks are excluded for now
-          </label>
           <label style={{ display: "block", marginBottom: 12 }}>
             <input type="checkbox" checked readOnly /> Expiring client link · 7 days · every download
             logged
           </label>
 
+          <PdfStatus eventId={eventId} pdf={pdf} busy={busy} run={run} />
+
           {pkg && (
             <div className="note" style={{ marginBottom: 10 }}>
-              {pkg.manifest?.file_count ?? 0} files
+              PowerPoint package: {pkg.manifest?.file_count ?? 0} files
+              {pkg.has_pdf ? ` · PDF package: ${pkg.manifest?.pdf?.file_count ?? 0} files` : " · no PDF package (built before PDFs — rebuild)"}
               {pkg.link_expires_at ? ` · link expires ${pkg.link_expires_at.slice(0, 10)}` : ""} ·{" "}
               {pkg.downloads} download{pkg.downloads === "1" ? "" : "s"} logged
             </div>
@@ -152,7 +160,9 @@ export function ArchiveView({ eventId, initial }: { eventId: string; initial: Ar
               onClick={() =>
                 void run(async () => {
                   const result = await buildArchive(eventId);
-                  return `Built · ${result.file_count} files · ${formatBytes(result.size_bytes)} · ${result.excluded} excluded`;
+                  return `Built · PowerPoint ${result.file_count} files · PDF ${result.pdf_file_count} files${
+                    result.pdf_not_converted > 0 ? ` (${result.pdf_not_converted} not converted yet)` : ""
+                  } · ${result.excluded} excluded`;
                 })
               }
             >
@@ -171,9 +181,16 @@ export function ArchiveView({ eventId, initial }: { eventId: string; initial: Ar
               Deliver to client portal
             </button>
             {pkg?.archive_state === "delivered" && (
-              <a className="btn" href={archiveDownloadUrl(pkg.id)}>
-                Download package
-              </a>
+              <>
+                <a className="btn" href={archiveDownloadUrl(pkg.id, "pptx")}>
+                  Download PowerPoint package
+                </a>
+                {pkg.has_pdf && (
+                  <a className="btn" href={archiveDownloadUrl(pkg.id, "pdf")}>
+                    Download PDF package
+                  </a>
+                )}
+              </>
             )}
           </div>
 
@@ -188,5 +205,95 @@ export function ArchiveView({ eventId, initial }: { eventId: string; initial: Ar
 
       <div className={`toast ${toast ? "show" : ""}`}>{toast}</div>
     </>
+  );
+}
+
+/**
+ * Where PDF conversion stands (D-067): "141 of 187 converted", what is still running,
+ * and every failure by name with its reason — a talk missing from the PDF package is
+ * explained here before anyone builds, not discovered by the client afterwards.
+ */
+function PdfStatus({
+  eventId,
+  pdf,
+  busy,
+  run,
+}: {
+  eventId: string;
+  pdf: PdfProgress;
+  busy: boolean;
+  run: (work: () => Promise<string>) => Promise<void>;
+}) {
+  const remaining = pdf.not_started;
+  const done = pdf.eligible > 0 && pdf.converted === pdf.eligible;
+  return (
+    <div className="lane int" style={{ marginBottom: 12 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+        <span>
+          <b>PDF conversion</b> ·{" "}
+          <span className="num">
+            {pdf.converted} of {pdf.eligible}
+          </span>{" "}
+          converted
+          {pdf.in_progress > 0 && ` · ${pdf.in_progress} converting now`}
+          {pdf.failed.length > 0 && ` · ${pdf.failed.length} failed`}
+          {done && " · all done"}
+        </span>
+        <span style={{ display: "flex", gap: 6 }}>
+          {remaining > 0 && (
+            <button
+              type="button"
+              className="btn"
+              disabled={busy || !pdf.converter_available}
+              onClick={() =>
+                void run(async () => {
+                  const { queued } = await convertArchivePdfs(eventId);
+                  return `${queued} file${queued === 1 ? "" : "s"} queued for PDF conversion`;
+                })
+              }
+            >
+              Convert {remaining} to PDF
+            </button>
+          )}
+          {pdf.failed.length > 0 && (
+            <button
+              type="button"
+              className="btn"
+              disabled={busy || !pdf.converter_available}
+              onClick={() =>
+                void run(async () => {
+                  const { queued } = await convertArchivePdfs(eventId, true);
+                  return `${queued} failed file${queued === 1 ? "" : "s"} queued again`;
+                })
+              }
+            >
+              Retry failed
+            </button>
+          )}
+        </span>
+      </div>
+      <div className="bar" style={{ margin: "8px 0 4px" }}>
+        <i style={{ width: `${pdf.eligible === 0 ? 0 : Math.round((pdf.converted / pdf.eligible) * 100)}%` }} />
+      </div>
+      {!pdf.converter_available && (
+        <div className="note" style={{ color: "var(--block)" }}>
+          LibreOffice is not installed on the server, so nothing can be converted yet.
+        </div>
+      )}
+      <div className="note">
+        Approved files convert automatically in the background. Speakers with &ldquo;PDF only&rdquo; permission go in the
+        PDF package only. Build (or rebuild) the package once conversion finishes.
+      </div>
+      {pdf.failed.length > 0 && (
+        <ul style={{ margin: "6px 0 0", paddingLeft: 18, fontSize: 13 }}>
+          {pdf.failed.map((row, index) => (
+            <li key={`${row.title}-${index}`}>
+              {row.title}
+              {row.speaker ? ` — ${row.speaker}` : ""}: <span className="note">{row.error}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }

@@ -129,8 +129,9 @@ export function ClientPortalView({ data }: { data: ClientView }) {
         <div className="cbd">
           <div className="frow" style={{ borderTop: "none" }}>
             <span className="mono">
-              {data.event.name.replace(/\s+/g, "_")}_final_presentations.zip
-              {pkg?.manifest?.file_count ? ` · ${pkg.manifest.file_count} files` : ""}
+              {data.event.name.replace(/\s+/g, "_")}_final_presentations
+              {pkg?.manifest?.file_count ? ` · ${pkg.manifest.file_count} PowerPoint files` : ""}
+              {pkg?.has_pdf && pkg.manifest?.pdf ? ` · ${pkg.manifest.pdf.file_count} PDFs` : ""}
             </span>
             <span className={`chip ${delivered ? "c-ok" : "c-mut"}`}>
               {delivered ? "Delivered" : pkg ? pkg.archive_state : "Available after the event"}
@@ -141,15 +142,31 @@ export function ClientPortalView({ data }: { data: ClientView }) {
             talks are excluded. The link expires 7 days after delivery and every download is logged.
             {pkg?.link_expires_at && delivered ? ` This link expires ${pkg.link_expires_at.slice(0, 10)}.` : ""}
           </div>
-          {delivered ? (
-            <a className="btn pri" style={{ marginTop: 10, display: "inline-block" }} href={archiveDownloadUrl(pkg.id)}>
-              Download package
-            </a>
-          ) : (
-            <button className="btn pri" style={{ marginTop: 10 }} disabled>
-              Download package
-            </button>
-          )}
+          {/* Two packages (D-067): the original decks, and PDFs — which also carry the talks
+              whose speakers allowed a PDF only. */}
+          <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+            {delivered ? (
+              <>
+                <a className="btn pri" href={archiveDownloadUrl(pkg.id, "pptx")}>
+                  Download PowerPoint package
+                </a>
+                {pkg.has_pdf && (
+                  <a className="btn pri" href={archiveDownloadUrl(pkg.id, "pdf")}>
+                    Download PDF package
+                  </a>
+                )}
+              </>
+            ) : (
+              <>
+                <button className="btn pri" disabled>
+                  Download PowerPoint package
+                </button>
+                <button className="btn pri" disabled>
+                  Download PDF package
+                </button>
+              </>
+            )}
+          </div>
         </div>
       </div>
 

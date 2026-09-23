@@ -52,8 +52,8 @@ const GROUPS: { group: string; roles?: string[]; items: { label: string; href?: 
        * still exists for re-importing a revised agenda, reached from the command
        * centre — the event it would import into is the one you are looking at.
        */
-      { label: "Command center", href: "/events/:id" },
-      { label: "Speakers", href: "/events/:id/speakers" },
+      // No "Command center": an event opens from the portfolio or the switcher above.
+      // No "Speakers": they are a tab of the event details, which links to the full screen.
       { label: "Presentation detail" },
       { label: "Inspection" },
       { label: "Review & approval", href: "/events/:id/review" },

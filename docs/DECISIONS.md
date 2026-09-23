@@ -1302,3 +1302,44 @@ event showed that station "In session" on every other event. Now filtered by `ev
 
 Still hard-coded, pending the station-login design: the three station names, and the check-in button
 always recording "Station 2".
+
+## D-067 (2026-09-23): Archive PDF packages, converted with LibreOffice — Status: ACCEPTED (Travis's call)
+The review call asked for two downloads, a PowerPoint package and a PDF package. Travis chose LibreOffice
+(headless, on the server) over PowerPoint-on-Windows: it can ship now, where the Windows route waits on the
+G0-1 hardware. Fidelity is LibreOffice's — very good for ordinary decks, weaker for exotic fonts, embedded
+media and Keynote.
+
+**Conversion** (`services/pdf.ts`): one `soffice --headless --convert-to pdf` process per file, each with its
+own throwaway profile (shared profiles lock each other out), a 3-minute limit, and reasons an operator can act
+on (unsupported format, timeout, no output). A PDF original passes through untouched. The PDF is stored as a
+derivative and recorded in `derived_objects` (kind `pdf`) so certified deletion can enumerate it
+(SECURITY_MODEL §6.3).
+
+**Queue:** conversion never runs inside a request. `pdf_conversions` (migration 013) holds each version's state
+— queued, converting, done, failed + reason — and the API drains it one file at a time. Postgres, not memory:
+`resumePdfQueue` on start puts interrupted work back in line. Work is queued **automatically when a version is
+approved**, and from the archive builder's **Convert N to PDF** / **Retry failed** buttons (for files approved
+before this existed, and for failures).
+
+**Packages:** a build now writes two zips — `<id>.zip` (originals) and `<id>-pdf.zip` (PDFs), each with its own
+manifest. **"PDF only" release permission now goes in the PDF package** instead of being excluded; full release
+goes in both; none / undecided / restricted stay excluded. Talks not yet converted (or failed) are named in the PDF
+manifest's `not_converted`, never silently missing. Downloads take `?format=pptx|pdf` and the log records which.
+
+**Screens:** the archive builder shows "PDF conversion · X of N converted", what is converting, each failure with
+its reason, and refreshes itself while work runs; builder and client portal each have **Download PowerPoint
+package** and **Download PDF package**. A package built before this has no PDF zip and says to rebuild.
+
+**Deployment note:** the API's server image must include LibreOffice (e.g. `libreoffice-impress` +
+fonts) or set `LIBREOFFICE_PATH`. Without it the builder says "LibreOffice is not installed" and conversion is
+refused, not faked. Locally: `brew install --cask libreoffice` (installed on the dev Mac 2026-09-23, v26.8).
+
+Tests: `apps/api/src/services/pdf.test.ts` (4, including a real PPTX → PDF conversion that skips when
+LibreOffice is absent). Checked by hand: MedTech's approved file converted in the background from the builder;
+a build (rolled back) produced both zips with the right entries.
+
+## D-068 (2026-09-23): The event page is reached from the portfolio — Status: ACCEPTED (Travis's call)
+- The event page's **Archive** button is gone (archiving stays on the portfolio cards, D-061); in its place a
+  **← Back to portfolio** button (to the Archived list when the event is archived).
+- **Command center** and **Speakers** leave the sidebar: the event opens from the portfolio or the switcher, and
+  speakers are a tab of the event details (D-063), which links to the full Speakers screen.

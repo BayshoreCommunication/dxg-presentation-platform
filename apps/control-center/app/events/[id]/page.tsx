@@ -5,7 +5,6 @@ import { Chip } from "@/components/Chip";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { EventTabs } from "@/components/EventTabs";
 import { InfoTip } from "@/components/InfoTip";
-import { ArchiveEventButton } from "@/components/ArchiveEventButton";
 import { guard } from "@/lib/guard";
 
 export const dynamic = "force-dynamic";
@@ -148,14 +147,10 @@ export default async function CommandCenterPage({
           </span>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
-          {canConfigure && (
-            <ArchiveEventButton
-              eventId={id}
-              eventName={summary.event.name}
-              archived={archived}
-              redirectTo="/"
-            />
-          )}
+          {/* Archiving lives on the portfolio card; from here the way out is back to it. */}
+          <Link href={archived ? "/?archived=1" : "/"} className="btn">
+            ← Back to portfolio
+          </Link>
           <Link href={`/events/${id}/review`} className="btn pri">
             Open review queue →
           </Link>
@@ -166,7 +161,9 @@ export default async function CommandCenterPage({
         <div className="err" style={{ borderLeftColor: "var(--line)", background: "var(--mist)" }}>
           This event is archived and read-only — it is hidden from the portfolio and nothing in it can be
           changed. Everything is kept;
-          {canConfigure ? " Restore puts it back where it was." : " a presentation manager can restore it."}
+          {canConfigure
+            ? " Restore it from the portfolio’s Archived list."
+            : " a presentation manager can restore it from the portfolio."}
         </div>
       )}
 
