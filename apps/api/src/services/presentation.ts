@@ -27,6 +27,9 @@ export type VersionRow = {
   approved_by: string | null;
   finding_counts: { info: number; warning: number; blocking: number };
   room_states: string[];
+  /** The version's PDF copy for the archive (D-072); null until queued, which approval does. */
+  pdf_state: "queued" | "converting" | "done" | "failed" | null;
+  pdf_error: string | null;
 };
 
 export type PresentationDetail = {
@@ -88,14 +91,16 @@ export async function presentationDetail(
               'warning',  count(*) FILTER (WHERE inf.severity = 'warning'  AND inf.waived_at IS NULL),
               'blocking', count(*) FILTER (WHERE inf.severity = 'blocking' AND inf.waived_at IS NULL)
             ) AS finding_counts,
-            COALESCE(array_agg(DISTINCT rf.sync_state) FILTER (WHERE rf.sync_state IS NOT NULL), '{}') AS room_states
+            COALESCE(array_agg(DISTINCT rf.sync_state) FILTER (WHERE rf.sync_state IS NOT NULL), '{}') AS room_states,
+            pc.state AS pdf_state, pc.error AS pdf_error
        FROM pmp.file_versions fv
        JOIN pmp.files f ON f.id = fv.file_id
        LEFT JOIN pmp.users u ON u.id = fv.approved_by
+       LEFT JOIN pmp.pdf_conversions pc ON pc.file_version_id = fv.id
        LEFT JOIN pmp.inspection_findings inf ON inf.file_version_id = fv.id
        LEFT JOIN pmp.room_files rf ON rf.file_version_id = fv.id
       WHERE f.slot_id = $1
-      GROUP BY fv.id, u.display_name
+      GROUP BY fv.id, u.display_name, pc.state, pc.error
       ORDER BY fv.version_number DESC`,
     [slotId],
   );

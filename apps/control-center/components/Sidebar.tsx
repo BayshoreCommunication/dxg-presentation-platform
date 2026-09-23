@@ -54,8 +54,11 @@ const GROUPS: { group: string; roles?: string[]; items: { label: string; href?: 
        */
       // No "Command center": an event opens from the portfolio or the switcher above.
       // No "Speakers": they are a tab of the event details, which links to the full screen.
-      { label: "Presentation detail" },
-      { label: "Inspection" },
+      /*
+       * No "Presentation detail" or "Inspection": both are one talk's screens, opened
+       * from that talk (agenda, risk list, review queue). As sidebar items they had no
+       * talk to open and led nowhere.
+       */
       { label: "Review & approval", href: "/events/:id/review" },
       { label: "Communications", href: "/events/:id/comms" },
       { label: "Archive builder", href: "/events/:id/archive" },
@@ -85,7 +88,7 @@ const GROUPS: { group: string; roles?: string[]; items: { label: string; href?: 
   {
     group: "EXTERNAL",
     items: [
-      { label: "Speaker portal" },
+      // No "Speaker portal": it is a separate site speakers reach from their emailed link.
       // Open to clients, and to staff as a preview of what their client sees — the
       // screen bands itself accordingly. No `roles`, because nobody signed in is refused.
       { label: "Client portal", href: "/client/:id" },

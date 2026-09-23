@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { presenterLogout } from "@/lib/api";
 import type { CompleteResult, PortalSession, PortalTalk } from "@/lib/api";
 import { UploadPanel } from "./UploadPanel";
-import { formatBytes } from "@pmp/format";
+import { formatBytes, formatDeadline } from "@pmp/format";
 
 
 export function PortalView({
@@ -79,26 +79,12 @@ export function PortalView({
 }
 
 /**
- * The event's upload deadline as a speaker should read it: the end of that day, on the
- * event's clock, with the zone named (D-071). The date comes as a bare `YYYY-MM-DD`, so
- * it is formatted as a calendar date — never converted through the viewer's timezone,
- * which is how a date turns into the day before.
+ * The event's upload deadline as a speaker should read it (D-071) — worded by the same
+ * `formatDeadline` the emails use, so the portal and the reminder cannot disagree.
  */
 function deadlineText(deadline: string, timeZone: string): { label: string; passed: boolean } {
-  const day = new Date(`${deadline}T12:00:00Z`).toLocaleDateString("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    timeZone: "UTC",
-  });
-  const zone =
-    new Date(`${deadline}T12:00:00Z`)
-      .toLocaleTimeString("en-US", { timeZone, timeZoneName: "short" })
-      .split(" ")
-      .pop() ?? "";
   const todayThere = new Date().toLocaleDateString("en-CA", { timeZone });
-  return { label: `${day} · 23:59 ${zone}`, passed: todayThere > deadline };
+  return { label: formatDeadline(deadline, timeZone), passed: todayThere > deadline };
 }
 
 function TalkCard({

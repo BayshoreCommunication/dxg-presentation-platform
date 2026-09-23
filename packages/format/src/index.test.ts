@@ -1,6 +1,6 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { formatBytes, formatBytesDelta } from "./index.ts";
+import { formatBytes, formatBytesDelta, formatDeadline, formatSessionTime } from "./index.ts";
 
 describe("formatBytes", () => {
   // The bug this function exists to prevent: a real file must never read as "0".
@@ -53,5 +53,20 @@ describe("formatBytesDelta", () => {
 
   test("a small change is still visible, not rounded to zero", () => {
     assert.equal(formatBytesDelta(1_000_000, 1_068_912), "+68.9 KB");
+  });
+});
+
+describe("formatDeadline", () => {
+  test("the end of the day, on the event's clock, with the zone named", () => {
+    assert.equal(formatDeadline("2027-02-27", "America/New_York"), "Sat, Feb 27, 2027 · 23:59 EST");
+    assert.equal(formatDeadline("2027-07-15", "America/New_York"), "Thu, Jul 15, 2027 · 23:59 EDT");
+    assert.equal(formatDeadline("2027-03-01", "Europe/London"), "Mon, Mar 1, 2027 · 23:59 GMT");
+  });
+});
+
+describe("formatSessionTime", () => {
+  test("uses the event's timezone, not UTC", () => {
+    // 14:30 UTC is 10:30 in New York in March 2026 (EDT).
+    assert.equal(formatSessionTime("2026-03-11T14:30:00Z", "America/New_York"), "Wed, Mar 11, 10:30 EDT");
   });
 });

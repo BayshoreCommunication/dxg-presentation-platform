@@ -1412,3 +1412,16 @@ date, never passed through the viewer's timezone (checked from a UTC+6 machine: 
 With no deadline set it says "No deadline set — upload as soon as you can." After the deadline it says so and that
 uploads are still accepted — **the deadline is not enforced**; nothing in the API refuses a late upload. Whether it
 should close the portal is a product decision for DXG, not made here.
+
+## D-072 (2026-09-23): PDF status per version; honest times in email; sidebar holds only destinations — Status: ACCEPTED (Travis's call)
+- **PDF status per version.** The presentation page's version history shows each version's PDF copy — *PDF
+  ready*, *PDF converting*, or *PDF failed* with the reason and a **Retry PDF** button. (Not on the review queue:
+  conversion starts at approval, and the queue only holds versions awaiting it.)
+- **Email times on the event's clock.** Invitations and reminders stated the session time as the UTC instant with
+  no zone — a 10:30 New York session was mailed as "14:30". `{{session_time}}` is now "Wed, Mar 11, 10:30 EDT",
+  and `{{deadline}}` is worded exactly as the portal shows it ("Sat, Feb 27, 2027 · 23:59 EST") instead of
+  "2027-03-01". Both come from `@pmp/format` (`formatSessionTime`, `formatDeadline`), shared by the API and the
+  speaker portal so the two cannot disagree. With no deadline set, emails still say "the published deadline".
+- **Sidebar.** "Presentation detail" and "Inspection" (one talk's screens, opened from that talk) and "Speaker
+  portal" (a separate site speakers reach from their link) were greyed-out items that led nowhere; removed.
+- `comment-lanes.test.ts` closes its database pool: left open, it kept its process alive and held the suite ~70 s.

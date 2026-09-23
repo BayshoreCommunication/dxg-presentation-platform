@@ -1,7 +1,7 @@
 import { test, describe, before, after } from "node:test";
 import assert from "node:assert/strict";
 import type { TestContext } from "node:test";
-import { getOwnerPool } from "@pmp/db";
+import { getOwnerPool, closePool } from "@pmp/db";
 import { signInStaff, cookieFrom } from "../helpers/signIn.ts";
 
 /**
@@ -58,9 +58,11 @@ before(async () => {
 });
 
 after(async () => {
-  if (!up) return;
+  if (!up) return closePool();
   // Test notes on the seeded event would read as real ones on the review screen.
   await getOwnerPool().query(`DELETE FROM pmp.comments WHERE body LIKE $1`, [`${MARK}%`]);
+  // An open pool keeps this file's process alive and held the whole suite ~70 s.
+  await closePool();
 });
 
 describe("comment audiences", () => {

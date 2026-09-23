@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { CommentRow, PresentationDetail } from "@/lib/api";
-import { rollBackTalk, ApiError } from "@/lib/api";
+import { rollBackTalk, convertArchivePdfs, ApiError } from "@/lib/api";
 import { Chip } from "@/components/Chip";
 import { formatBytes } from "@pmp/format";
 
@@ -186,6 +186,46 @@ export function PresentationDetailView({
                       <>
                         {" "}
                         <span className="chip c-sync">in room</span>
+                      </>
+                    )}
+                    {/* Whether its PDF copy for the archive exists (D-072). */}
+                    {row.pdf_state && (
+                      <>
+                        {" "}
+                        <span
+                          className={`chip ${
+                            row.pdf_state === "done" ? "c-ok" : row.pdf_state === "failed" ? "c-bad" : "c-info"
+                          }`}
+                          title={row.pdf_state === "failed" ? (row.pdf_error ?? "Conversion failed") : undefined}
+                        >
+                          {row.pdf_state === "done"
+                            ? "PDF ready"
+                            : row.pdf_state === "failed"
+                              ? "PDF failed"
+                              : "PDF converting"}
+                        </span>
+                        {row.pdf_state === "failed" && (
+                          <>
+                            <div className="note" style={{ color: "var(--block)", marginTop: 3 }}>
+                              {row.pdf_error}
+                            </div>
+                            <button
+                              type="button"
+                              className="btn"
+                              style={{ padding: "3px 9px", fontSize: 12, marginTop: 3 }}
+                              disabled={busy}
+                              onClick={() =>
+                                void (async () => {
+                                  await convertArchivePdfs(eventId, true);
+                                  setToast("PDF conversion queued again");
+                                  router.refresh();
+                                })()
+                              }
+                            >
+                              Retry PDF
+                            </button>
+                          </>
+                        )}
                       </>
                     )}
                   </td>

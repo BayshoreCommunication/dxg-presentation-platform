@@ -4,6 +4,7 @@ import { appendAudit } from "@pmp/db";
 import { deriveTalkStatus } from "@pmp/domain";
 import type { Actor, DomainError, Result } from "@pmp/domain";
 import { err, ok } from "@pmp/domain";
+import { formatDeadline, formatSessionTime } from "@pmp/format";
 
 const hashToken = (token: string): Buffer => createHash("sha256").update(token).digest();
 
@@ -202,10 +203,17 @@ export async function sendBatch(
   actor: Actor,
   input: { eventId: string; templateId: string; missingOnly: boolean },
 ): Promise<Result<SendResult, DomainError>> {
-  const { rows: readiness } = await tx.query<{ rooms: string; days: string; client_id: string; name: string; deadline: string | null }>(
+  const { rows: readiness } = await tx.query<{
+    rooms: string;
+    days: string;
+    client_id: string;
+    name: string;
+    deadline: string | null;
+    timezone: string;
+  }>(
     `SELECT (SELECT count(*)::text FROM pmp.rooms WHERE event_id = e.id) AS rooms,
             (SELECT count(*)::text FROM pmp.event_days WHERE event_id = e.id) AS days,
-            e.client_id, e.name, (e.settings ->> 'upload_deadline') AS deadline
+            e.client_id, e.name, (e.settings ->> 'upload_deadline') AS deadline, e.timezone
        FROM pmp.events e WHERE e.id = $1`,
     [input.eventId],
   );
@@ -264,8 +272,11 @@ export async function sendBatch(
       event_name: event.name,
       talk_title: recipient.talk_title,
       room: recipient.room ?? "TBC",
-      session_time: new Date(recipient.starts_at).toISOString().slice(0, 16).replace("T", " "),
-      deadline: event.deadline ?? "the published deadline",
+      // On the event's clock (D-072). This was the UTC time with no zone, so a 10:30
+      // New York session was mailed out as "14:30".
+      session_time: formatSessionTime(recipient.starts_at, event.timezone),
+      // Worded exactly as the speaker portal shows it, not a raw "2027-03-01".
+      deadline: event.deadline ? formatDeadline(event.deadline, event.timezone) : "the published deadline",
       upload_link: `http://localhost:3001/t/${token}`,
     });
 

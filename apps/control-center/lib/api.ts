@@ -366,6 +366,9 @@ export type VersionRow = {
   approved_by: string | null;
   finding_counts: { info: number; warning: number; blocking: number };
   room_states: string[];
+  /** PDF copy of this version (D-072): null until it is queued, which happens on approval. */
+  pdf_state: "queued" | "converting" | "done" | "failed" | null;
+  pdf_error: string | null;
 };
 
 export type PresentationDetail = {

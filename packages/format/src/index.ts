@@ -48,3 +48,37 @@ export function formatBytesDelta(from: number | string, to: number | string): st
   if (difference === 0) return "unchanged";
   return `${difference > 0 ? "+" : ""}${formatBytes(difference)}`;
 }
+
+/**
+ * An upload deadline as speakers read it, in the portal and in email alike (D-071,
+ * D-072): the end of that day on the event's clock, with the zone named —
+ * "Sat, Feb 27, 2027 · 23:59 EST". The date is a bare `YYYY-MM-DD` and is formatted as
+ * a calendar date, never converted through the reader's timezone, which is how a date
+ * becomes the day before.
+ */
+export function formatDeadline(deadline: string, timeZone: string): string {
+  const noon = new Date(`${deadline}T12:00:00Z`);
+  const day = noon.toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+  const zone = noon.toLocaleTimeString("en-US", { timeZone, timeZoneName: "short" }).split(" ").pop() ?? "";
+  return `${day} · 23:59 ${zone}`;
+}
+
+/** A session's start as an email states it: day and time on the event's clock, zone named. */
+export function formatSessionTime(iso: string | Date, timeZone: string): string {
+  return new Date(iso).toLocaleString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone,
+    timeZoneName: "short",
+  });
+}
