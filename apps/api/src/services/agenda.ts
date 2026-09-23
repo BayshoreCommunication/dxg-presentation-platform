@@ -116,8 +116,10 @@ export async function eventAgenda(tx: pg.PoolClient, eventId: string): Promise<A
       return {
         slot_id: slot.slot_id,
         title: slot.title,
-        starts_at: slot.starts_at,
-        ends_at: slot.ends_at,
+        // Postgres's JSON renders a timestamptz as `…+00:00`; re-read so presentation
+        // times match session times (`…Z`) and a client comparing them compares like with like.
+        starts_at: slot.starts_at ? new Date(slot.starts_at).toISOString() : null,
+        ends_at: slot.ends_at ? new Date(slot.ends_at).toISOString() : null,
         speakers: slot.speakers ?? [],
         version_count: talk?.version_count ?? 0,
         status: talk?.status ?? "missing",
