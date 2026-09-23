@@ -8,7 +8,7 @@ import { Chip } from "@/components/Chip";
 import { EventDetails } from "@/components/EventDetails";
 import {
   ConfirmDelete,
-  MiniButton,
+  ActionMenu,
   PresentationForm,
   PresenterForm,
   ReasonForm,
@@ -284,7 +284,7 @@ function AgendaPanel({
                   border: "1px solid var(--line)",
                   borderRadius: 6,
                   marginBottom: 8,
-                  overflow: "hidden",
+                  // Not `overflow: hidden`: it clipped the row's action menu.
                   opacity: canceled ? 0.75 : 1,
                 }}
               >
@@ -295,6 +295,7 @@ function AgendaPanel({
                     gap: 12,
                     padding: "8px 12px",
                     background: "var(--mist)",
+                    borderRadius: "6px 6px 0 0",
                   }}
                 >
                   <div>
@@ -311,18 +312,24 @@ function AgendaPanel({
                   <div style={{ display: "flex", gap: 6, alignItems: "flex-start", flexWrap: "wrap", justifyContent: "flex-end" }}>
                     {state && <Chip status={state.status} label={state.label} />}
                     {canEdit && (
-                      <>
-                        <MiniButton onClick={() => toggle(`session:${session.id}`)}>Edit</MiniButton>
-                        {!canceled && (
-                          <MiniButton onClick={() => toggle(`add-talk:${session.id}`)}>+ Presentation</MiniButton>
-                        )}
-                        {session.state !== "completed" && (
-                          <MiniButton onClick={() => toggle(`cancel:${session.id}`)}>
-                            {canceled ? "Reinstate" : "Cancel"}
-                          </MiniButton>
-                        )}
-                        <MiniButton onClick={() => toggle(`delete-session:${session.id}`)}>Delete</MiniButton>
-                      </>
+                      <ActionMenu
+                        label={`Actions for session ${session.title}`}
+                        items={[
+                          { label: "Edit session", onSelect: () => toggle(`session:${session.id}`) },
+                          ...(canceled
+                            ? []
+                            : [{ label: "Add presentation", onSelect: () => toggle(`add-talk:${session.id}`) }]),
+                          ...(session.state === "completed"
+                            ? []
+                            : [
+                                {
+                                  label: canceled ? "Reinstate session" : "Cancel session",
+                                  onSelect: () => toggle(`cancel:${session.id}`),
+                                },
+                              ]),
+                          { label: "Delete session", onSelect: () => toggle(`delete-session:${session.id}`), danger: true },
+                        ]}
+                      />
                     )}
                   </div>
                 </div>
@@ -478,15 +485,18 @@ function PresentationRow({
         <td className="note num" style={{ width: 90 }}>
           {item.version_count === 0 ? "no file" : `${item.version_count} version${item.version_count === 1 ? "" : "s"}`}
         </td>
-        <td style={{ textAlign: "right", width: canEdit ? 260 : 170 }}>
-          <div style={{ display: "flex", gap: 6, justifyContent: "flex-end", alignItems: "center", flexWrap: "wrap" }}>
+        <td style={{ textAlign: "right", width: 200 }}>
+          <div style={{ display: "flex", gap: 6, justifyContent: "flex-end", alignItems: "center" }}>
             <Chip status={item.status} label={item.status_label} />
             {canEdit && (
-              <>
-                <MiniButton onClick={() => toggle(`talk:${item.slot_id}`)}>Edit</MiniButton>
-                <MiniButton onClick={() => toggle(`presenter:${item.slot_id}`)}>+ Presenter</MiniButton>
-                <MiniButton onClick={() => toggle(`delete-talk:${item.slot_id}`)}>Delete</MiniButton>
-              </>
+              <ActionMenu
+                label={`Actions for presentation ${item.title}`}
+                items={[
+                  { label: "Edit presentation", onSelect: () => toggle(`talk:${item.slot_id}`) },
+                  { label: "Add presenter", onSelect: () => toggle(`presenter:${item.slot_id}`) },
+                  { label: "Delete presentation", onSelect: () => toggle(`delete-talk:${item.slot_id}`), danger: true },
+                ]}
+              />
             )}
           </div>
         </td>

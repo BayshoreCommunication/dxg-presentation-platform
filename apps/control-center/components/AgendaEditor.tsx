@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { agendaApi, ApiError } from "@/lib/api";
 import type { PresentationInput, PresenterInput, SessionInput } from "@/lib/api";
@@ -410,12 +410,94 @@ export function ConfirmDelete({
   );
 }
 
-/** A small secondary button for the agenda rows. */
-export function MiniButton({ children, onClick }: { children: React.ReactNode; onClick: () => void }) {
+export type MenuItem = { label: string; onSelect: () => void; danger?: boolean };
+
+/**
+ * One "⋯" button per row instead of a row of buttons. A session carried four and a
+ * presentation three, which on a real agenda is hundreds of buttons competing with
+ * the titles and statuses the tab exists to show.
+ */
+export function ActionMenu({ label, items }: { label: string; items: MenuItem[] }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const outside = (event: MouseEvent) => {
+      if (!ref.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", outside);
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("mousedown", outside);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [open]);
+
   return (
-    <button type="button" className="btn" style={{ padding: "3px 9px", fontSize: 12 }} onClick={onClick}>
-      {children}
-    </button>
+    <span ref={ref} style={{ position: "relative", display: "inline-block" }}>
+      <button
+        type="button"
+        className="btn"
+        aria-label={label}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        title={label}
+        onClick={() => setOpen((current) => !current)}
+        style={{ padding: "2px 10px", fontSize: 15, lineHeight: 1.2 }}
+      >
+        ⋯
+      </button>
+      {open && (
+        <div
+          role="menu"
+          style={{
+            position: "absolute",
+            right: 0,
+            top: "calc(100% + 4px)",
+            zIndex: 20,
+            minWidth: 170,
+            background: "var(--white)",
+            border: "1px solid var(--line)",
+            borderRadius: 6,
+            boxShadow: "0 6px 20px rgba(20, 24, 27, .12)",
+            padding: 4,
+            textAlign: "left",
+          }}
+        >
+          {items.map((item) => (
+            <button
+              key={item.label}
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false);
+                item.onSelect();
+              }}
+              style={{
+                display: "block",
+                width: "100%",
+                textAlign: "left",
+                border: "none",
+                background: "none",
+                padding: "7px 10px",
+                borderRadius: 4,
+                fontSize: 13,
+                cursor: "pointer",
+                color: item.danger ? "var(--block)" : "var(--ink)",
+              }}
+              onMouseEnter={(event) => (event.currentTarget.style.background = "var(--mist)")}
+              onMouseLeave={(event) => (event.currentTarget.style.background = "none")}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </span>
   );
 }
 
