@@ -1229,11 +1229,20 @@ app.get("/api/v1/file-versions/:versionId/comments", async (req, res) => {
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   // Lane visibility: staff see every lane here; speaker and client surfaces are
   // filtered at their own endpoints (FR-REV-003).
+  //
+  // Every version of the same talk, not just this one (D-070): a reviewer opening v3
+  // needs the note that sent v2 back, or they review blind.
   const items = await withScope(scopeFor(req), async (tx) => {
     const { rows } = await tx.query(
-      `SELECT c.id, c.lane, c.body, c.created_at, u.display_name AS author
-         FROM pmp.comments c LEFT JOIN pmp.users u ON u.id = c.author_user_id
-        WHERE c.file_version_id = $1 ORDER BY c.created_at`,
+      `SELECT c.id, c.lane, c.body, c.created_at, fv.version_number,
+              COALESCE(u.display_name, sp.full_name) AS author,
+              (c.author_speaker_id IS NOT NULL) AS from_speaker
+         FROM pmp.comments c
+         JOIN pmp.file_versions fv ON fv.id = c.file_version_id
+         LEFT JOIN pmp.users u ON u.id = c.author_user_id
+         LEFT JOIN pmp.speakers sp ON sp.id = c.author_speaker_id
+        WHERE fv.file_id = (SELECT file_id FROM pmp.file_versions WHERE id = $1)
+        ORDER BY c.created_at`,
       [String(req.params.versionId)],
     );
     return rows;

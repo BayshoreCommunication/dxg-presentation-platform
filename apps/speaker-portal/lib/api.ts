@@ -57,6 +57,8 @@ export type PortalTalk = {
   status_label: string;
   versions: { version_number: number; size_bytes: string; created_at: string; state: string }[];
   findings: Finding[];
+  /** Notes the DXG team wrote to the speaker, newest first (D-070). */
+  feedback: { body: string; created_at: string; version_number: number }[];
 };
 
 export type PortalSession = {

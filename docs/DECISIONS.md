@@ -1374,3 +1374,30 @@ week from delivery instead, so a link is never dead on arrival. Screens now say 
 Tests: `apps/api/src/services/archive.test.ts` (retention). Checked by hand in rolled-back transactions: MedTech's
 earlier version lands in the PowerPoint package; the Comms Cadence Probe's 32 emails are included once its speakers
 have a release, and none when their permission is undecided.
+
+## D-070 (2026-09-23): Real comments on the review screen — Status: ACCEPTED (Travis's call)
+The review workspace showed two comments on **every** file — "M. Vega: Fallback behaviour acceptable — transcode
+pipeline covers the clip" and "To speaker: Approved with a note: export videos as H.264 .mp4 next time". They were
+prototype copy, not data, and read as real notes about whatever file was open. The comments table, lanes and
+POST/GET endpoints already existed; nothing on the screen used them, and the speaker portal never showed a
+speaker-lane note at all, so a note "to speaker" would have reached nobody.
+
+- **Review screen** (`CommentsPanel`): the talk's real thread — author, audience, which version it was left on,
+  when — across **every version of the talk** (GET `/file-versions/{id}/comments` now returns the whole file's
+  thread with `version_number`), so the note that sent v2 back is in front of whoever reviews v3. A composer offers
+  **Internal — DXG staff only** and **To speaker — shown in their portal**. The client lane exists in the data but
+  no client screen shows per-talk comments yet, so it is not offered: a note there would go nowhere while looking sent.
+- **Speaker portal:** each talk shows "Feedback from the DXG team" — speaker-lane notes only, newest first, with the
+  version. Enforced in the portal query, not the screen.
+- **Presentation detail** labels comments by version ("Comments · all versions").
+- Comments are trimmed and capped at 5,000 characters; on an archived event they are refused (D-062).
+
+**Bug fixed on the way:** the review screen's A / R shortcuts ignored only `<input>` elements, so typing an "a" in
+any multi-line text box would have **approved the file**, and Cmd/Ctrl+A (select-all) counted as approve too. The
+handler now ignores every text field and any modifier key.
+
+Tests: `tests/invariants/comment-lanes.test.ts` — staff see all three lanes with versions; a signed-in speaker's
+`/portal/talks` returns the speaker note and nothing else; empty comments are refused.
+
+**Noticed, not changed:** the speaker portal shows a hard-coded upload deadline, "Feb 27 · 23:59 ET", on every event
+instead of the event's own `settings.upload_deadline`.

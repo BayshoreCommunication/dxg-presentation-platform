@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { QueueItem } from "@/lib/api";
 import { transitionVersion, ApiError } from "@/lib/api";
 import { Chip, SeverityChip } from "@/components/Chip";
+import { CommentsPanel } from "@/components/CommentsPanel";
 import { formatBytes } from "@pmp/format";
 
 const FINDING_COPY: Record<string, (detail: Record<string, unknown>) => string> = {
@@ -104,7 +105,19 @@ export function ReviewWorkspace({ initialQueue }: { initialQueue: QueueItem[] })
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.target instanceof HTMLInputElement) return;
+      // Never while typing — any text field, not just <input>: an "a" typed into the
+      // comment box must not approve the file. And never with a modifier: Cmd/Ctrl+A is
+      // select-all, not "approve".
+      const target = event.target as HTMLElement | null;
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement ||
+        target?.isContentEditable
+      ) {
+        return;
+      }
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
       if (event.key === "a" || event.key === "A") void decide("approve");
       if (event.key === "r" || event.key === "R") void decide("request_changes");
     };
@@ -199,21 +212,8 @@ export function ReviewWorkspace({ initialQueue }: { initialQueue: QueueItem[] })
               </div>
             )}
 
-            <div className="note" style={{ margin: "12px 0 4px" }}>
-              Comment lanes:
-            </div>
-            <div className="lane int">
-              <b>M. Vega</b>
-              <span className="aud">Internal</span>
-              <br />
-              Fallback behaviour acceptable — transcode pipeline covers the clip.
-            </div>
-            <div className="lane spk">
-              <b>To speaker</b>
-              <span className="aud">Speaker</span>
-              <br />
-              Approved with a note: export videos as H.264 .mp4 next time.
-            </div>
+            {/* Real comments (D-070). Two invented ones used to sit here on every file. */}
+            <CommentsPanel versionId={selected.file_version_id} versionNumber={selected.version_number} />
 
             <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
               <button className="btn good" disabled={busy} onClick={() => void decide("approve")}>

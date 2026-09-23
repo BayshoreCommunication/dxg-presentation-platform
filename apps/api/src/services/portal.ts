@@ -43,6 +43,8 @@ export type PortalTalk = {
   status_label: string;
   versions: { version_number: number; size_bytes: string; created_at: string; state: string }[];
   findings: Finding[];
+  /** Notes the DXG team wrote to the speaker, newest first (D-070). Never internal or client-lane notes. */
+  feedback: { body: string; created_at: string; version_number: number }[];
 };
 
 /** A speaker sees only their own assignments, and only speaker-visible detail. */
@@ -57,6 +59,7 @@ export async function portalTalks(tx: pg.PoolClient, session: PortalSession): Pr
     versions: { processing: string; inspection: string; review: string }[] | null;
     version_rows: { version_number: number; size_bytes: string; created_at: string; state: string }[] | null;
     findings: Finding[] | null;
+    feedback: { body: string; created_at: string; version_number: number }[] | null;
   }>(
     `SELECT s.id AS slot_id, s.title, r.name AS room, se.starts_at, s.final_locked, se.session_state,
             (SELECT json_agg(json_build_object('processing', fv.processing_state,
@@ -80,7 +83,16 @@ export async function portalTalks(tx: pg.PoolClient, session: PortalSession): Pr
               WHERE f.slot_id = s.id AND inf.waived_at IS NULL
                 AND fv.version_number = (SELECT max(fv2.version_number) FROM pmp.file_versions fv2
                                            JOIN pmp.files f2 ON f2.id = fv2.file_id
-                                          WHERE f2.slot_id = s.id)) AS findings
+                                          WHERE f2.slot_id = s.id)) AS findings,
+            -- The speaker lane only (FR-REV-003, D-070): internal notes and client-lane
+            -- comments never reach a speaker, whichever version they were left on.
+            (SELECT json_agg(json_build_object('body', c.body, 'created_at', c.created_at,
+                                               'version_number', fv.version_number)
+                             ORDER BY c.created_at DESC)
+               FROM pmp.comments c
+               JOIN pmp.file_versions fv ON fv.id = c.file_version_id
+               JOIN pmp.files f ON f.id = fv.file_id
+              WHERE f.slot_id = s.id AND c.lane = 'speaker_visible') AS feedback
        FROM pmp.speaker_assignments sa
        JOIN pmp.slots s ON s.id = sa.slot_id
        JOIN pmp.sessions se ON se.id = s.session_id
@@ -107,6 +119,7 @@ export async function portalTalks(tx: pg.PoolClient, session: PortalSession): Pr
       status_label: TALK_STATUS_LABEL[status],
       versions: row.version_rows ?? [],
       findings: row.findings ?? [],
+      feedback: row.feedback ?? [],
     };
   });
 }

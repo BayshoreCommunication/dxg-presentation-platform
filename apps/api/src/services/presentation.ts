@@ -231,6 +231,9 @@ export async function addComment(
   if (!input.body.trim()) {
     return err({ code: "comments.empty", message: "A comment needs a body." });
   }
+  if (input.body.length > 5000) {
+    return err({ code: "comments.too_long", message: "Keep a comment under 5,000 characters." });
+  }
   const { rows: scope } = await tx.query<{ event_id: string; client_id: string }>(
     `SELECT event_id, client_id FROM pmp.file_versions WHERE id = $1`,
     [input.versionId],
@@ -240,7 +243,7 @@ export async function addComment(
   const { rows } = await tx.query<{ id: string }>(
     `INSERT INTO pmp.comments (event_id, client_id, file_version_id, lane, author_user_id, body)
      VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
-    [scope[0].event_id, scope[0].client_id, input.versionId, input.lane, actor.id, input.body],
+    [scope[0].event_id, scope[0].client_id, input.versionId, input.lane, actor.id, input.body.trim()],
   );
   return ok({ id: rows[0]!.id });
 }

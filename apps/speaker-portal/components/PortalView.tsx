@@ -145,6 +145,29 @@ function TalkCard({
           </div>
         )}
 
+        {/* Notes the team wrote to the speaker (D-070) — only the speaker lane, never internal notes. */}
+        {talk.feedback.length > 0 && (
+          <div style={{ marginTop: 14 }}>
+            <h3 style={{ fontSize: 13, marginBottom: 8 }}>Feedback from the DXG team</h3>
+            {talk.feedback.map((note, index) => (
+              <div className="lane cli" key={`${note.created_at}-${index}`} style={{ whiteSpace: "pre-wrap" }}>
+                <span className="note">
+                  On v{note.version_number} ·{" "}
+                  {new Date(note.created_at).toLocaleString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    timeZone: timezone,
+                  })}
+                </span>
+                <br />
+                {note.body}
+              </div>
+            ))}
+          </div>
+        )}
+
         {result && (
           <div style={{ marginTop: 12 }}>
             <div className={result.processing_state === "quarantined" ? "err" : "lane spk"}>

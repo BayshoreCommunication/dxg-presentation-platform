@@ -401,6 +401,9 @@ export type CommentRow = {
   body: string;
   created_at: string;
   author: string | null;
+  /** Which version of the talk the note was left on — the list covers them all (D-070). */
+  version_number: number;
+  from_speaker: boolean;
 };
 
 export const getPresentation = (slotId: string) => request<PresentationDetail>(`/slots/${slotId}`);
@@ -410,6 +413,13 @@ export const getFindings = (versionId: string) =>
 
 export const getComments = (versionId: string) =>
   request<{ items: CommentRow[] }>(`/file-versions/${versionId}/comments`);
+
+/** Add a comment. `internal` is DXG staff only; `speaker_visible` shows in the speaker portal. */
+export const addComment = (versionId: string, lane: "internal" | "speaker_visible", body: string) =>
+  request<{ id: string }>(`/file-versions/${versionId}/comments`, {
+    method: "POST",
+    body: JSON.stringify({ lane, body }),
+  });
 
 export const waiveFinding = (findingId: string, reason: string) =>
   request<{ waived: true }>(`/findings/${findingId}/waive`, {

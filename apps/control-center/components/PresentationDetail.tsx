@@ -211,7 +211,7 @@ export function PresentationDetailView({
       {comments.length > 0 && (
         <div className="card">
           <div className="chd">
-            <h3>Comments on v{latest?.version_number}</h3>
+            <h3>Comments · all versions</h3>
             <span className="m">audiences are enforced server-side</span>
           </div>
           <div className="cbd">
@@ -222,6 +222,7 @@ export function PresentationDetailView({
               >
                 <b>{comment.author ?? "—"}</b>
                 <span className="aud">{comment.lane.replace("_", " ")}</span>
+                <span className="note"> · v{comment.version_number}</span>
                 <br />
                 {comment.body}
               </div>
