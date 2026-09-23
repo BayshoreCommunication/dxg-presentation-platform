@@ -65,9 +65,12 @@ const GROUPS: { group: string; roles?: string[]; items: { label: string; href?: 
     group: "ONSITE",
     roles: STAFF_ROLES,
     items: [
+      /*
+       * Check-in and USB intake are not separate destinations: check-in opens from a
+       * speaker in the Speaker Ready Room, and USB intake from a button on check-in.
+       * Listing them here offered two greyed-out items that led nowhere.
+       */
       { label: "Speaker Ready Room", href: "/events/:id/srr" },
-      { label: "Check-in" },
-      { label: "USB intake" },
       { label: "Room sync", href: "/events/:id/sync" },
     ],
   },

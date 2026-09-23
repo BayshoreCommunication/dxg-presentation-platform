@@ -340,3 +340,23 @@ export async function latestPackage(tx: pg.PoolClient, eventId: string) {
   );
   return rows[0] ?? null;
 }
+
+export type DownloadRecord = { downloaded_at: string; downloaded_by: string | null };
+
+/**
+ * Who downloaded the event's latest package, and when, newest first. Every download
+ * was already recorded (FR-ARCH-002); this makes the record visible where the package
+ * is — the client portal and the archive builder both show it.
+ */
+export async function packageDownloads(tx: pg.PoolClient, eventId: string, limit = 100): Promise<DownloadRecord[]> {
+  const { rows } = await tx.query<DownloadRecord>(
+    `SELECT d.occurred_at AS downloaded_at, u.display_name AS downloaded_by
+       FROM pmp.archive_downloads d
+       LEFT JOIN pmp.users u ON u.id = d.downloaded_by
+      WHERE d.package_id = (SELECT id FROM pmp.archive_packages WHERE event_id = $1 ORDER BY created_at DESC LIMIT 1)
+      ORDER BY d.occurred_at DESC
+      LIMIT $2`,
+    [eventId, limit],
+  );
+  return rows;
+}

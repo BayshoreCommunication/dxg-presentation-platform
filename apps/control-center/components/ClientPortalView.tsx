@@ -2,6 +2,7 @@
 
 import type { ClientView } from "@/lib/api";
 import { archiveDownloadUrl } from "@/lib/api";
+import { DownloadLog } from "@/components/DownloadLog";
 
 const pct = (part: number, total: number) => (total === 0 ? 0 : Math.round((part / total) * 100));
 
@@ -65,9 +66,15 @@ export function ClientPortalView({ data }: { data: ClientView }) {
           <div className="kl">Collection</div>
           <div className="kv num">{pct(collected, total)}%</div>
           <div className="note">
-            {collected} of {total} talks
+            {collected} of {total} presentations
           </div>
         </div>
+        {/*
+          Three states that add up to the total, so none is counted twice: approved,
+          uploaded but not yet approved, and nothing uploaded. "Outstanding" used to be
+          total − approved, which lumped the second and third together — a client
+          reading it as "missing" would have chased speakers who had already delivered.
+        */}
         <div className="kpi">
           <div className="kl">Approved</div>
           <div className="kv num" style={{ color: "var(--ok)" }}>
@@ -75,10 +82,18 @@ export function ClientPortalView({ data }: { data: ClientView }) {
           </div>
         </div>
         <div className="kpi">
-          <div className="kl">Outstanding</div>
+          <div className="kl">Need review</div>
           <div className="kv num" style={{ color: "var(--warn)" }}>
-            {total - approved}
+            {collected - approved}
           </div>
+          <div className="note">uploaded, not yet approved</div>
+        </div>
+        <div className="kpi">
+          <div className="kl">Missing</div>
+          <div className="kv num" style={{ color: "var(--block)" }}>
+            {total - collected}
+          </div>
+          <div className="note">nothing uploaded yet</div>
         </div>
       </div>
 
@@ -96,8 +111,9 @@ export function ClientPortalView({ data }: { data: ClientView }) {
                 <div className={`bar ${percent < 80 ? "warn" : ""}`} style={{ flex: 1 }}>
                   <i style={{ width: `${percent}%` }} />
                 </div>
-                <span className="mono num" style={{ width: 40, textAlign: "right" }}>
-                  {percent}%
+                <span className="mono num" style={{ width: 120, textAlign: "right" }}>
+                  {track.collected}/{track.total}
+                  <span className="note"> · {percent}%</span>
                 </span>
               </div>
             );
@@ -136,6 +152,8 @@ export function ClientPortalView({ data }: { data: ClientView }) {
           )}
         </div>
       </div>
+
+      <DownloadLog downloads={data.downloads} />
     </>
   );
 }

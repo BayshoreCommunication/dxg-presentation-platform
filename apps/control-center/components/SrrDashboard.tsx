@@ -6,16 +6,34 @@ import type { SrrDashboard } from "@/lib/api";
 import { startCheckin, ApiError } from "@/lib/api";
 import { Chip } from "@/components/Chip";
 
-const time = (iso: string) =>
-  new Date(iso).toLocaleTimeString("en-US", {
+/**
+ * A session's day and time, on the event's clock. The day is spelled out rather than
+ * implied: on a three-day event "10:30" alone does not say which 10:30, and "today"
+ * is only true on one of them.
+ */
+const when = (iso: string, timeZone: string) =>
+  new Date(iso).toLocaleString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
-    timeZone: "America/New_York",
+    timeZone,
   });
 
 /** Screen 11 — the Speaker Ready Room's own view of who is coming and what is unresolved. */
-export function SrrDashboardView({ eventId, data }: { eventId: string; data: SrrDashboard }) {
+export function SrrDashboardView({
+  eventId,
+  eventName,
+  timezone,
+  data,
+}: {
+  eventId: string;
+  eventName: string;
+  timezone: string;
+  data: SrrDashboard;
+}) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -34,9 +52,22 @@ export function SrrDashboardView({ eventId, data }: { eventId: string; data: Srr
 
   return (
     <>
-      <h1 className="htitle">Speaker Ready Room · Room 118</h1>
+      {/*
+        This heading said "Speaker Ready Room · Room 118" and "Stations 1–3" on every
+        event. It now names the event, the actual date at the venue, and the stations
+        this room really has.
+      */}
+      <h1 className="htitle">Speaker Ready Room · {eventName}</h1>
       <div className="note" style={{ margin: "-8px 0 14px" }}>
-        Stations 1–3 · walk-ins and scheduled check-ins
+        {new Date().toLocaleDateString("en-US", {
+          weekday: "long",
+          month: "long",
+          day: "numeric",
+          year: "numeric",
+          timeZone: timezone,
+        })}
+        {data.stations.length > 0 && ` · ${data.stations.map((station) => station.station).join(", ")}`}
+        {" · walk-ins and scheduled check-ins"}
       </div>
 
       {error && <div className="err">{error}</div>}
@@ -55,7 +86,7 @@ export function SrrDashboardView({ eventId, data }: { eventId: string; data: Srr
                     <b>{row.speaker}</b>
                     <br />
                     <span className="note">
-                      {row.room} · {time(row.starts_at)} · {row.title}
+                      {row.room} · {when(row.starts_at, timezone)} · {row.title}
                     </span>
                   </td>
                   <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>

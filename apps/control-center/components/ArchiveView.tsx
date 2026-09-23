@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { ArchiveScope } from "@/lib/api";
 import { buildArchive, deliverArchive, archiveDownloadUrl, ApiError } from "@/lib/api";
+import { DownloadLog } from "@/components/DownloadLog";
 import { Chip } from "@/components/Chip";
 import { formatBytes } from "@pmp/format";
 
@@ -182,6 +183,8 @@ export function ArchiveView({ eventId, initial }: { eventId: string; initial: Ar
           </div>
         </div>
       </div>
+
+      <DownloadLog downloads={initial.downloads} />
 
       <div className={`toast ${toast ? "show" : ""}`}>{toast}</div>
     </>

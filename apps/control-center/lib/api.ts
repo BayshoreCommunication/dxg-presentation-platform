@@ -783,6 +783,7 @@ export type ArchiveScope = {
   rooms: number;
   days: number;
   latest_package: ArchivePackageRow | null;
+  downloads: DownloadRecord[];
 };
 
 export const getArchiveScope = (eventId: string) =>
@@ -807,11 +808,15 @@ export const deliverArchive = (packageId: string, days = 7) =>
 export const archiveDownloadUrl = (packageId: string) =>
   `${process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:4000/api/v1"}/archive-packages/${packageId}/download`;
 
+/** One download of an archive package — who and when (FR-ARCH-002). */
+export type DownloadRecord = { downloaded_at: string; downloaded_by: string | null };
+
 export type ClientView = {
   event: { id: string; name: string; starts_on: string; ends_on: string; client_name: string };
   totals: { total: string; collected: string; approved: string };
   tracks: { track: string; total: string; collected: string }[];
   package: ArchivePackageRow | null;
+  downloads: DownloadRecord[];
   /** Whose eyes this is through. Staff see the same filtered data, marked as a preview. */
   viewed_as: "client" | "staff_preview";
 };

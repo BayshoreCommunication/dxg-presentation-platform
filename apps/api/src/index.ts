@@ -100,6 +100,7 @@ import {
   deliverPackage,
   downloadPackage,
   latestPackage,
+  packageDownloads,
 } from "./services/archive.ts";
 import type { ImportField, StagedRow, RowOverrides, ImportPreview } from "./services/scheduleImport.ts";
 import type { PortalSession } from "./services/portal.ts";
@@ -1815,10 +1816,11 @@ app.get("/api/v1/events/:eventId/archive/scope", async (req, res) => {
   const scope = await withScope(scopeFor(req, eventId), (tx) =>
     scopePreview(tx, eventId),
   );
-  const latest = await withScope(scopeFor(req, eventId), (tx) =>
-    latestPackage(tx, eventId),
-  );
-  return res.json({ ...scope, latest_package: latest });
+  const [latest, downloads] = await withScope(scopeFor(req, eventId), async (tx) => [
+    await latestPackage(tx, eventId),
+    await packageDownloads(tx, eventId),
+  ] as const);
+  return res.json({ ...scope, latest_package: latest, downloads });
 });
 
 app.post("/api/v1/events/:eventId/archive-packages", async (req, res) => {
@@ -1917,7 +1919,13 @@ app.get("/api/v1/client/events/:eventId", async (req, res) => {
       [eventId],
     );
 
-    return { event: eventRows[0], totals: totals[0], tracks, package: await latestPackage(tx, eventId) };
+    return {
+      event: eventRows[0],
+      totals: totals[0],
+      tracks,
+      package: await latestPackage(tx, eventId),
+      downloads: await packageDownloads(tx, eventId),
+    };
   });
 
   // `viewed_as` is presentation, not permission — the filtering above already

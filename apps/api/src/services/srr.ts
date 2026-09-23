@@ -108,15 +108,18 @@ export async function srrDashboard(
     [eventId],
   );
 
+  // This event's check-ins only. Without `event_id` a station busy at one event showed
+  // as "In session", under that event's technician, on every other event's screen.
   const { rows: stations } = await tx.query<{ station: string; technician: string | null; busy: boolean }>(
     `SELECT st.station,
             (SELECT u.display_name FROM pmp.srr_checkins c
                JOIN pmp.users u ON u.id = c.technician_id
-              WHERE c.station = st.station AND c.departed_at IS NULL
+              WHERE c.event_id = $1 AND c.station = st.station AND c.departed_at IS NULL
               ORDER BY c.checked_in_at DESC LIMIT 1) AS technician,
             EXISTS (SELECT 1 FROM pmp.srr_checkins c
-                     WHERE c.station = st.station AND c.departed_at IS NULL) AS busy
+                     WHERE c.event_id = $1 AND c.station = st.station AND c.departed_at IS NULL) AS busy
        FROM (VALUES ('Station 1'), ('Station 2'), ('Station 3 · USB')) AS st(station)`,
+    [eventId],
   );
 
   return { expected, warnings, stations };

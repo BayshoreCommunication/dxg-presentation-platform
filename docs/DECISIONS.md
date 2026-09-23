@@ -1272,3 +1272,33 @@ the room on its computer), and none of that was written anywhere a user could re
 
 Opened by click, not hover (`components/InfoTip.tsx`): hover does not exist on the tablets used in the
 Speaker Ready Room.
+
+## D-066 (2026-09-23): Small changes from the archive / on-site / portal review call — Status: ACCEPTED (Travis's call)
+From the team's review notes (Archive Builder, on-site module, speaker and client portals), the items
+that needed no further decision. Larger items (archive scope, 30-day retention, PDF packages, station
+login, Room Sync, the Speaker Ready Room redesign) are open and not changed here.
+
+**Client portal**
+- "talks" → "presentations" in the collection card.
+- Three cards that add up to the total: **Approved**, **Need review** (uploaded, not yet approved) and
+  **Missing** (nothing uploaded, in red). "Outstanding" was total − approved, which lumped the last two
+  together — renaming it "Missing" alone would have shown the wrong number.
+- Collection by track shows counts (`97/100`) with the percentage beside them.
+
+**Download log** — every archive download was already recorded (FR-ARCH-002) but only counted.
+`packageDownloads` now returns who and when for the latest package, shown on the client portal and in the
+archive builder.
+
+**On-site**
+- The Speaker Ready Room heading said "Room 118" and "Stations 1–3" on every event; it now names the event,
+  the actual date at the venue and the stations the room has. Session times show their date.
+- Check-in shows full dates ("Tue, May 16, 08:00"), not a bare weekday.
+- Both screens used `America/New_York` for every event; they now use the event's timezone.
+- USB intake opens from a **USB intake** button on check-in instead of always sitting below it, and the
+  sidebar's inert "Check-in" and "USB intake" items are gone (they were never destinations).
+
+**Bug found while checking:** the stations panel ignored the event, so a technician's open check-in at one
+event showed that station "In session" on every other event. Now filtered by `event_id`.
+
+Still hard-coded, pending the station-login design: the three station names, and the check-in button
+always recording "Station 2".

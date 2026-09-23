@@ -14,27 +14,41 @@ import {
 } from "@/lib/api";
 import { Chip } from "@/components/Chip";
 
-const when = (iso: string) =>
+/**
+ * Day and time on the event's clock — the actual date, not just a weekday, and never
+ * the viewer's own zone. Both helpers used to assume New York for every event.
+ */
+const when = (iso: string, timeZone: string) =>
   new Date(iso).toLocaleString("en-US", {
     weekday: "short",
+    month: "short",
+    day: "numeric",
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
-    timeZone: "America/New_York",
+    timeZone,
   });
-
-const clock = (iso: string) =>
-  new Date(iso).toLocaleTimeString("en-US", { hour12: false, timeZone: "America/New_York" });
 
 /**
  * Screens 12 and 13 — check-in and the three-step USB intake. The steps are
  * ordered by the rules, not by the layout: nothing is compared or accepted
  * before the scan, and acceptance needs a reason (FR-SRR-002/003/004).
  */
-export function CheckinView({ eventId, initial }: { eventId: string; initial: CheckinDetail }) {
+export function CheckinView({
+  eventId,
+  timezone,
+  initial,
+}: {
+  eventId: string;
+  timezone: string;
+  initial: CheckinDetail;
+}) {
   const router = useRouter();
   const [detail, setDetail] = useState(initial);
   const [usb, setUsb] = useState<UsbResult | null>(null);
+  // USB intake opens from its own button rather than always sitting below check-in:
+  // most speakers arrive with nothing new, and the three steps are noise until one does.
+  const [intakeOpen, setIntakeOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
@@ -97,13 +111,13 @@ export function CheckinView({ eventId, initial }: { eventId: string; initial: Ch
         </div>
         <div className="cbd">
           <div className="note" style={{ marginBottom: 6 }}>
-            {detail.talk.room} · {when(detail.talk.starts_at)} · current approved:{" "}
+            {detail.talk.room} · {when(detail.talk.starts_at, timezone)} · current approved:{" "}
             <b className="mono">
               {detail.approved ? `v${detail.approved.version_number}` : "none"}
             </b>
           </div>
           <div className="note">
-            Checked in {clock(detail.checkin.checked_in_at)} · {detail.checkin.station} · Technician{" "}
+            Checked in {when(detail.checkin.checked_in_at, timezone)} · {detail.checkin.station} · Technician{" "}
             {detail.checkin.technician}
             {detail.talk.final_locked && (
               <>
@@ -129,7 +143,7 @@ export function CheckinView({ eventId, initial }: { eventId: string; initial: Ch
                     <tr>
                       <td className="note">Signed</td>
                       <td>
-                        {clock(detail.receipt.signed_at)} · {detail.receipt.station}
+                        {when(detail.receipt.signed_at, timezone)} · {detail.receipt.station}
                       </td>
                     </tr>
                     <tr>
@@ -190,10 +204,25 @@ export function CheckinView({ eventId, initial }: { eventId: string; initial: Ch
         </div>
       </div>
 
-      {/* ── USB intake (screen 13) ────────────────────────────────────────── */}
-      <h2 className="htitle" style={{ fontSize: 18, margin: "18px 0 10px" }}>
-        Last-minute intake · Station 3 (USB)
-      </h2>
+      {/* ── USB intake (screen 13), opened from check-in ─────────────────── */}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "18px 0 10px" }}>
+        <button
+          type="button"
+          className={intakeOpen ? "btn" : "btn pri"}
+          aria-expanded={intakeOpen}
+          onClick={() => setIntakeOpen((open) => !open)}
+        >
+          {intakeOpen ? "Close USB intake" : "USB intake"}
+        </button>
+        <span className="note">
+          {intakeOpen
+            ? "Scan the drive, compare with the approved version, then accept."
+            : "The speaker brought a new version on a USB drive? Bring it in here."}
+        </span>
+      </div>
+
+      {intakeOpen && (
+        <>
 
       <div className="card">
         <div className="chd">
@@ -302,6 +331,8 @@ export function CheckinView({ eventId, initial }: { eventId: string; initial: Ch
           )}
         </div>
       </div>
+        </>
+      )}
 
       <div className={`toast ${toast ? "show" : ""}`}>{toast}</div>
     </>

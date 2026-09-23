@@ -1,4 +1,4 @@
-import { getCheckin } from "@/lib/api";
+import { getCheckin, getSummary } from "@/lib/api";
 import { CheckinView } from "@/components/CheckinView";
 import { guard } from "@/lib/guard";
 
@@ -10,6 +10,9 @@ export default async function CheckinPage({
   params: Promise<{ id: string; checkinId: string }>;
 }) {
   const { id, checkinId } = await params;
-  const detail = await guard(getCheckin(checkinId), `/events/${id}/srr/${checkinId}`);
-  return <CheckinView eventId={id} initial={detail} />;
+  const [detail, summary] = await guard(
+    Promise.all([getCheckin(checkinId), getSummary(id)]),
+    `/events/${id}/srr/${checkinId}`,
+  );
+  return <CheckinView eventId={id} timezone={summary.event.timezone} initial={detail} />;
 }
