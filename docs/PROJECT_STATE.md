@@ -2993,8 +2993,13 @@ Five invariants cover it, and the magic-link case was run against the unfixed lo
 it fails there. Walked the real journey afterwards: `/t/<uuid>` → `/login?code=<uuid>` with the field
 pre-filled → signed in as the presenter.
 
-**Left alone, recorded in D-059:** `npm run demo:link` has been broken since MFA became mandatory. It
-reads the `{"step":"mfa_required"}` 200 as a successful sign-in, never gets a session, and blames
-missing seed data for what is an auth failure.
+**Then fixed too (D-060):** `npm run demo:link` had been broken since MFA became mandatory — it read
+the `{"step":"mfa_required"}` 200 as a completed sign-in, never got a session, and blamed missing seed
+data for an auth failure. It verifies the second factor now. Three details were needed to make it
+usable rather than just correct: cookies kept per name so the session replaces the MFA challenge
+rather than both being sent; a code with under three seconds left in its window deferred to the next
+one; and a `mfa.code_reused` refusal retried on the next step, because preparing a demo means running
+it several times in a row and a TOTP code may only be spent once. Its failure messages now name which
+step failed rather than pointing at the seed.
 
 CI green, 212 unit tests; invariants 142, up from 137.

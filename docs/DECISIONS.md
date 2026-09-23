@@ -1124,7 +1124,27 @@ code works typed exactly and typed sloppily, a code that is neither is refused, 
 paired with the wrong address is refused. The magic-link case was run against the unfixed lookup
 first and fails there, so it cannot pass for the wrong reason.
 
-**Still broken, separately:** `npm run demo:link` treats the `{"step":"mfa_required"}` 200 from
-`/auth/login` as a completed sign-in, never gets a session, and reports the misleading *"No events —
-run `npm run db:seed` first."* It is the documented way to get a speaker link and has not worked
-since MFA became mandatory. Not fixed here. Owner: Travis.
+**`npm run demo:link` was broken by the same area and is fixed in D-060.** Owner: Travis.
+
+## D-060 (2026-09-23): demo:link completes the second factor — Status: ACCEPTED (Travis's call)
+The documented way to get a speaker link had not worked since staff MFA became mandatory. A password
+alone answers `200 {"step":"mfa_required"}` with no session, and the script read `response.ok` as
+signed in — then failed on the next request and reported *"No events — run `npm run db:seed` first."*
+It sent people to re-seed a database that was fine, for an authentication that had never finished.
+
+It verifies the second factor now, with the development secret every seeded account shares, and three
+things that make it usable rather than merely correct:
+
+- **Cookies are kept in a map, newest per name.** Signing in is two requests setting different
+  cookies — a short-lived MFA challenge, then the session — and concatenating everything the server
+  ever sent would send both.
+- **A code with too little of its window left is not used.** TOTP steps every thirty seconds and one
+  generated in the last moment of a step is routinely refused by the time it lands; the script waits
+  for the next step instead.
+- **A spent code is retried on the next step.** Running `demo:link` twice inside one window was
+  refused with `mfa.code_reused` — the server being right and the script being unusable, since
+  preparing a demo means running it several times in a row.
+
+**The messages now say which thing failed.** A bad password reports the password, a bad secret reports
+the second factor, and a session that is somehow not valid says so instead of blaming the seed.
+Owner: Travis.
