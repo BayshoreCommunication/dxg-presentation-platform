@@ -482,9 +482,6 @@ function PresentationRow({
                 ))}
           </div>
         </td>
-        <td className="note num" style={{ width: 90 }}>
-          {item.version_count === 0 ? "no file" : `${item.version_count} version${item.version_count === 1 ? "" : "s"}`}
-        </td>
         <td style={{ textAlign: "right", width: 200 }}>
           <div style={{ display: "flex", gap: 6, justifyContent: "flex-end", alignItems: "center" }}>
             <Chip status={item.status} label={item.status_label} />
@@ -503,7 +500,7 @@ function PresentationRow({
       </tr>
       {editor && (
         <tr>
-          <td colSpan={4} style={{ borderTop: "none", paddingTop: 0 }}>
+          <td colSpan={3} style={{ borderTop: "none", paddingTop: 0 }}>
             {editor}
           </td>
         </tr>
