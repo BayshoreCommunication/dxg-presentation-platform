@@ -240,13 +240,6 @@ export function EventDetails({
               </tr>
             </tbody>
           </table>
-          {setup.status !== "archived" && (
-            <div className="cbd">
-              <Link href={`/events/${setup.id}/import`} className="btn">
-                Re-import agenda
-              </Link>
-            </div>
-          )}
         </div>
       </div>
 

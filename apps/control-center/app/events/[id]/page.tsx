@@ -5,7 +5,6 @@ import { Chip } from "@/components/Chip";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { EventTabs } from "@/components/EventTabs";
 import { InfoTip } from "@/components/InfoTip";
-import { StatusGuide } from "@/components/StatusGuide";
 import { ArchiveEventButton } from "@/components/ArchiveEventButton";
 import { guard } from "@/lib/guard";
 
@@ -157,17 +156,6 @@ export default async function CommandCenterPage({
               redirectTo="/"
             />
           )}
-          {/*
-            The only way into the standalone import screen now that it has left the
-            sidebar. Agendas are revised constantly before an event, and re-import
-            matches on (room, start, title) and updates rather than duplicating — a
-            capability with no entry point is a capability nobody has.
-          */}
-          {!archived && (
-            <Link href={`/events/${id}/import`} className="btn">
-              Re-import agenda
-            </Link>
-          )}
           <Link href={`/events/${id}/review`} className="btn pri">
             Open review queue →
           </Link>
@@ -219,7 +207,7 @@ export default async function CommandCenterPage({
         <div className="chd">
           <h3>Today&rsquo;s risk list</h3>
           <span className="m">
-            {risk.items.length} items · click to open · <StatusGuide align="right" />
+            {risk.items.length} items · click to open
           </span>
         </div>
         <div className="cbd" style={{ padding: "0 0 4px" }}>

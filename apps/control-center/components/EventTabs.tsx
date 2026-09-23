@@ -6,7 +6,6 @@ import type { AgendaPresentation, AgendaSession, EventDraft, SpeakerRow } from "
 import { agendaApi } from "@/lib/api";
 import { Chip } from "@/components/Chip";
 import { EventDetails } from "@/components/EventDetails";
-import { StatusGuide } from "@/components/StatusGuide";
 import {
   ConfirmDelete,
   ActionMenu,
@@ -164,7 +163,6 @@ function AgendaPanel({
   canEdit: boolean;
 }) {
   const [query, setQuery] = useState("");
-  const [room, setRoom] = useState("");
   /*
    * One editor open at a time, named by what it edits — `session:<id>`,
    * `talk:<slotId>`, `new-session` and so on. Two open forms on one agenda is two
@@ -175,16 +173,11 @@ function AgendaPanel({
   const close = () => setOpen(null);
   const toggle = (key: string) => setOpen((current) => (current === key ? null : key));
 
-  const rooms = useMemo(
-    () => [...new Set(agenda.map((session) => session.room).filter((name): name is string => Boolean(name)))].sort(),
-    [agenda],
-  );
   const eventWindow = { from: setup.starts_on, to: setup.ends_on };
 
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return agenda.filter((session) => {
-      if (room && session.room !== room) return false;
       if (!needle) return true;
       const haystack = [
         session.title,
@@ -198,7 +191,7 @@ function AgendaPanel({
         .toLowerCase();
       return haystack.includes(needle);
     });
-  }, [agenda, query, room]);
+  }, [agenda, query]);
 
   // Grouped by day, in the order the sessions already come in (start time).
   const days = useMemo(() => {
@@ -245,31 +238,15 @@ function AgendaPanel({
           onChange={(event) => setQuery(event.target.value)}
           style={{ flex: "1 1 240px" }}
         />
-        {rooms.length > 1 && (
-          <select aria-label="Filter by room" value={room} onChange={(event) => setRoom(event.target.value)}>
-            <option value="">All rooms</option>
-            {rooms.map((name) => (
-              <option key={name} value={name}>
-                {name}
-              </option>
-            ))}
-          </select>
-        )}
         {canEdit && (
           <button type="button" className="btn pri" onClick={() => toggle("new-session")}>
             + Add session
           </button>
         )}
       </div>
-      <div
-        className="note"
-        style={{ marginBottom: 6, display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}
-      >
-        <span>
-          {agenda.length} sessions · {presentations} presentations · times in {timezone}
-          {canEdit && " · changes save straight to the event"}
-        </span>
-        <StatusGuide align="right" />
+      <div className="note" style={{ marginBottom: 6 }}>
+        {agenda.length} sessions · {presentations} presentations · times in {timezone}
+        {canEdit && " · changes save straight to the event"}
       </div>
 
       {newSession}
