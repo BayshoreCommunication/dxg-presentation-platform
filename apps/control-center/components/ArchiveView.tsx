@@ -57,14 +57,14 @@ export function ArchiveView({ eventId, initial }: { eventId: string; initial: Ar
       <div className="card">
         <div className="chd">
           <h3>Scope</h3>
-          <span className="m">approved finals only</span>
+          <span className="m">whole event · 30-day retention</span>
         </div>
         <div className="cbd" style={{ padding: "0 0 4px" }}>
           <table>
             <tbody>
               <tr>
                 <td>Rule</td>
-                <td>Approved final version of each talk</td>
+                <td>Approved final of each talk, its earlier versions, and every email sent for the event</td>
               </tr>
               <tr>
                 <td>Rooms</td>
@@ -77,8 +77,19 @@ export function ArchiveView({ eventId, initial }: { eventId: string; initial: Ar
               <tr>
                 <td>Included</td>
                 <td>
-                  <b className="num">{initial.included.length}</b> files ·{" "}
+                  <b className="num">{initial.included.length}</b> final files ·{" "}
                   <span className="mono">{formatBytes(initial.total_bytes)}</span>
+                </td>
+              </tr>
+              <tr>
+                <td>Earlier versions</td>
+                <td className="num">{initial.earlier_versions}</td>
+              </tr>
+              <tr>
+                <td>Emails</td>
+                <td>
+                  <span className="num">{initial.emails}</span>{" "}
+                  <span className="note">personal sign-in links are removed</span>
                 </td>
               </tr>
               <tr>
@@ -137,8 +148,8 @@ export function ArchiveView({ eventId, initial }: { eventId: string; initial: Ar
             approval record)
           </label>
           <label style={{ display: "block", marginBottom: 12 }}>
-            <input type="checkbox" checked readOnly /> Expiring client link · 7 days · every download
-            logged
+            <input type="checkbox" checked readOnly /> Client link expires 30 days after the event ends ·
+            every download logged
           </label>
 
           <PdfStatus eventId={eventId} pdf={pdf} busy={busy} run={run} />
@@ -173,7 +184,7 @@ export function ArchiveView({ eventId, initial }: { eventId: string; initial: Ar
               disabled={busy || !pkg || pkg.archive_state !== "ready"}
               onClick={() =>
                 void run(async () => {
-                  const result = await deliverArchive(pkg!.id, 7);
+                  const result = await deliverArchive(pkg!.id);
                   return `Delivered to the client portal · link expires ${result.link_expires_at.slice(0, 10)}`;
                 })
               }

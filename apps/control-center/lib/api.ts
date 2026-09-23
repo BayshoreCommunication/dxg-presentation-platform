@@ -796,6 +796,8 @@ export type ArchiveScope = {
   days: number;
   pptx_count: number;
   pdf: PdfProgress;
+  emails: number;
+  earlier_versions: number;
   latest_package: ArchivePackageRow | null;
   downloads: DownloadRecord[];
 };
@@ -822,11 +824,9 @@ export const convertArchivePdfs = (eventId: string, retry = false) =>
     body: JSON.stringify({ retry }),
   });
 
-export const deliverArchive = (packageId: string, days = 7) =>
-  request<{ link_expires_at: string }>(
-    `/archive-packages/${packageId}/deliver`,
-    { method: "POST", body: JSON.stringify({ days }) },
-  );
+/** The link lasts 30 days from the event's end, set by the server (D-069). */
+export const deliverArchive = (packageId: string) =>
+  request<{ link_expires_at: string }>(`/archive-packages/${packageId}/deliver`, { method: "POST" });
 
 export const archiveDownloadUrl = (packageId: string, format: "pptx" | "pdf" = "pptx") =>
   `${process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:4000/api/v1"}/archive-packages/${packageId}/download?format=${format}`;

@@ -1862,9 +1862,9 @@ app.post("/api/v1/events/:eventId/archive-packages", async (req, res) => {
 app.post("/api/v1/archive-packages/:packageId/deliver", async (req, res) => {
   const actor = actorFrom(req);
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
-  const body = req.body as { days?: number };
+  // The link lasts 30 days from the event's end (D-069); the caller no longer picks it.
   const result = await withScope(scopeFor(req), (tx) =>
-    deliverPackage(tx, actor, String(req.params.packageId), body.days ?? 7),
+    deliverPackage(tx, actor, String(req.params.packageId)),
   );
   if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
   return res.json(result.value);

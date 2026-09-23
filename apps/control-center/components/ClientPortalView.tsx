@@ -138,8 +138,9 @@ export function ClientPortalView({ data }: { data: ClientView }) {
             </span>
           </div>
           <div className="note">
-            DXG publishes the approved-finals package here within 4 hours of event close. Restricted
-            talks are excluded. The link expires 7 days after delivery and every download is logged.
+            DXG publishes the event archive here within 4 hours of event close: every approved
+            presentation with its earlier versions, and the event&rsquo;s emails. Restricted talks are
+            excluded. The link expires 30 days after the event ends and every download is logged.
             {pkg?.link_expires_at && delivered ? ` This link expires ${pkg.link_expires_at.slice(0, 10)}.` : ""}
           </div>
           {/* Two packages (D-067): the original decks, and PDFs — which also carry the talks

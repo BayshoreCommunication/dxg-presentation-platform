@@ -270,9 +270,19 @@ export async function sendBatch(
     });
 
     const { rows: comm } = await tx.query<{ id: string }>(
-      `INSERT INTO pmp.communications (event_id, client_id, speaker_id, template_id, to_address, subject, status)
-       VALUES ($1,$2,$3,$4,$5::citext,$6,'queued') RETURNING id`,
-      [input.eventId, event.client_id, recipient.speaker_id, template.id, recipient.email, rendered.subject],
+      `INSERT INTO pmp.communications (event_id, client_id, speaker_id, template_id, to_address, subject, body, status)
+       VALUES ($1,$2,$3,$4,$5::citext,$6,$7,'queued') RETURNING id`,
+      [
+        input.eventId,
+        event.client_id,
+        recipient.speaker_id,
+        template.id,
+        recipient.email,
+        rendered.subject,
+        // Kept for the archive (D-069) without the sign-in link: the token in it logs the
+        // speaker in for 30 days, and the stored copy ends up in the client's package.
+        rendered.body.replaceAll(token, "[personal link removed]"),
+      ],
     );
 
     // Delivery is a side effect: it goes through the outbox, never the request.

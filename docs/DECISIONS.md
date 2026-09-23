@@ -1343,3 +1343,34 @@ a build (rolled back) produced both zips with the right entries.
   **← Back to portfolio** button (to the Archived list when the event is archived).
 - **Command center** and **Speakers** leave the sidebar: the event opens from the portfolio or the switcher, and
   speakers are a tab of the event details (D-063), which links to the full Speakers screen.
+
+## D-069 (2026-09-23): The archive covers the whole event, kept 30 days from its end — Status: ACCEPTED (Travis's call)
+From the review call: the archive is "global for the full event (all emails, files, slides, presentations)"
+and retention is "30 days from event end date". Travis approved both. **Both change the SRS baseline**
+(FR-ARCH-001 "approved finals only"; the archive-link limit of ≤7 days) and need recording in the SRS with
+DXG's sign-off — this entry is the record until then.
+
+**Contents**
+- **Earlier versions** of each talk now go in the PowerPoint package, under
+  `<room>/earlier versions/<talk>/v<n> <file>`, each checksum-verified like the finals. Only versions that
+  passed the malware scan (`processing_state = 'stored'`) — a quarantined file never leaves the platform.
+  The PDF package stays approved finals only: converting every old version is slow and adds little.
+- **Every email sent for the event** goes in both packages: one readable `.txt` per email (to, subject, sent,
+  status, text) and `emails/emails.csv` as a log.
+- **What stays out, unchanged:** talks whose speaker gave no release, has not set one, or that are restricted —
+  and now also the earlier versions of those talks and the emails to those speakers. Withholding someone's
+  files and shipping their correspondence would contradict itself.
+
+**Emails needed their text stored.** `communications` held recipient, subject and status; the body only ever
+went onto the outbox. Migration 014 adds `communications.body`, `sendBatch` writes it, and existing mail was
+backfilled from outbox rows. **The stored text has the speaker's personal upload link removed** — that link
+signs the speaker in for 30 days, and a copy in the client's archive would be a working login in someone else's
+hands. Verified on 32 real emails: 0 live tokens, 32 `[personal link removed]`.
+
+**Retention:** the client link now expires at the end of the event's last day + 30 days, set by the server
+(`linkExpiry`; the caller no longer chooses). A package delivered so late that under a week would remain gets a
+week from delivery instead, so a link is never dead on arrival. Screens now say "30 days after the event ends".
+
+Tests: `apps/api/src/services/archive.test.ts` (retention). Checked by hand in rolled-back transactions: MedTech's
+earlier version lands in the PowerPoint package; the Comms Cadence Probe's 32 emails are included once its speakers
+have a release, and none when their permission is undecided.

@@ -56,6 +56,10 @@ export type ScopePreview = {
   days: number;
   pptx_count: number;
   pdf: PdfProgress;
+  /** Emails included (D-069). */
+  emails: number;
+  /** Earlier versions included in the PowerPoint package (D-069). */
+  earlier_versions: number;
 };
 
 /**
@@ -135,7 +139,111 @@ export async function scopePreview(tx: pg.PoolClient, eventId: string): Promise<
     days: Number(counts[0]?.days ?? 0),
     pptx_count: included.filter((row) => row.formats.includes("pptx")).length,
     pdf,
+    emails: (await archiveEmails(tx, eventId)).length,
+    earlier_versions: (await earlierVersions(tx, included.filter((row) => row.formats.includes("pptx")))).length,
   };
+}
+
+/**
+ * The event's emails for the archive (D-069): everything sent, except mail about a
+ * speaker whose talks are kept out — no release permission, permission not set, or
+ * every talk restricted. Their files are withheld, so their correspondence is too.
+ * Bodies are stored with personal sign-in links already removed (migration 014).
+ */
+export type ArchiveEmail = {
+  sent_at: string | null;
+  to_address: string;
+  speaker: string | null;
+  subject: string;
+  status: string;
+  body: string | null;
+};
+
+export async function archiveEmails(tx: pg.PoolClient, eventId: string): Promise<ArchiveEmail[]> {
+  const { rows } = await tx.query<ArchiveEmail>(
+    `SELECT COALESCE(c.sent_at, c.created_at)::text AS sent_at, c.to_address::text AS to_address,
+            sp.full_name AS speaker, c.subject, c.status, c.body
+       FROM pmp.communications c
+       LEFT JOIN pmp.speakers sp ON sp.id = c.speaker_id
+      WHERE c.event_id = $1
+        AND (sp.id IS NULL OR (
+              sp.release_permission IN ('full', 'pdf_only')
+              AND EXISTS (SELECT 1 FROM pmp.speaker_assignments sa
+                            JOIN pmp.slots s ON s.id = sa.slot_id
+                           WHERE sa.speaker_id = sp.id AND s.restricted = false)))
+      ORDER BY COALESCE(c.sent_at, c.created_at)`,
+    [eventId],
+  );
+  return rows;
+}
+
+/**
+ * Every earlier version of the talks in the PowerPoint package (D-069) — the history,
+ * not just the final. Only versions that passed the malware scan (`stored`): a
+ * quarantined file never leaves the platform, archive or not.
+ */
+export type EarlierVersion = {
+  slot_id: string;
+  title: string;
+  room: string | null;
+  version_number: number;
+  review_state: string;
+  sha256: string;
+  s3_key: string;
+  original_filename: string | null;
+};
+
+export async function earlierVersions(
+  tx: pg.PoolClient,
+  finals: { slot_id: string; file_version_id: string | null }[],
+): Promise<EarlierVersion[]> {
+  if (finals.length === 0) return [];
+  const { rows } = await tx.query<EarlierVersion>(
+    `SELECT s.id AS slot_id, s.title, r.name AS room, fv.version_number, fv.review_state,
+            encode(fv.sha256, 'hex') AS sha256, fv.s3_key, fv.original_filename
+       FROM pmp.file_versions fv
+       JOIN pmp.files f ON f.id = fv.file_id
+       JOIN pmp.slots s ON s.id = f.slot_id
+       JOIN pmp.sessions se ON se.id = s.session_id
+       LEFT JOIN pmp.rooms r ON r.id = se.room_id
+      WHERE s.id = ANY($1::uuid[])
+        AND fv.id <> ALL($2::uuid[])
+        AND fv.processing_state = 'stored'
+        AND fv.s3_key IS NOT NULL
+      ORDER BY s.id, fv.version_number`,
+    [finals.map((row) => row.slot_id), finals.map((row) => row.file_version_id).filter(Boolean)],
+  );
+  return rows;
+}
+
+/** A name safe to use as a folder or file in a zip, from free text. */
+const safeName = (value: string) => value.replace(/[\\/:*?"<>|]+/g, "-").replace(/\s+/g, " ").trim().slice(0, 80) || "untitled";
+
+/** The emails as zip entries: one readable text file each, plus a spreadsheet log. */
+function emailEntries(emails: ArchiveEmail[]): { name: string; body: Buffer }[] {
+  if (emails.length === 0) return [];
+  const csv = (value: string | null) => `"${(value ?? "").replace(/"/g, '""')}"`;
+  const log = [
+    "sent_at,to,speaker,subject,status",
+    ...emails.map((mail) => [mail.sent_at, mail.to_address, mail.speaker, mail.subject, mail.status].map(csv).join(",")),
+  ].join("\n");
+  const entries = [{ name: "emails/emails.csv", body: Buffer.from(log) }];
+  emails.forEach((mail, index) => {
+    const text = [
+      `To: ${mail.speaker ? `${mail.speaker} <${mail.to_address}>` : mail.to_address}`,
+      `Subject: ${mail.subject}`,
+      `Sent: ${mail.sent_at ?? "not sent"}`,
+      `Status: ${mail.status}`,
+      "",
+      mail.body ?? "(The text of this email was not recorded.)",
+    ].join("\n");
+    const stamp = (mail.sent_at ?? "").slice(0, 16).replace(/[:T ]/g, "-");
+    entries.push({
+      name: `emails/${String(index + 1).padStart(3, "0")} ${stamp} ${safeName(mail.speaker ?? mail.to_address)} - ${safeName(mail.subject)}.txt`,
+      body: Buffer.from(text),
+    });
+  });
+  return entries;
 }
 
 /** The approved versions that belong in the PDF package — what "Convert to PDF" queues. */
@@ -223,6 +331,47 @@ export async function buildPackage(
   }
 
   /*
+   * Earlier versions, in the PowerPoint package only (D-069): the history of each talk,
+   * each checked against its recorded checksum like the finals. A version that fails
+   * the check stops the build — nothing unverified is shipped.
+   */
+  const history = await earlierVersions(tx, scope.included.filter((row) => row.formats.includes("pptx")));
+  const historyFiles: Record<string, unknown>[] = [];
+  for (const version of history) {
+    let body: Buffer;
+    try {
+      body = await storage.read(version.s3_key);
+    } catch {
+      await tx.query(`UPDATE pmp.archive_packages SET archive_state = 'draft' WHERE id = $1`, [packageId]);
+      return err({
+        code: "archive.object_missing",
+        message: `Version ${version.version_number} of “${version.title}” could not be read from storage. Nothing was packaged.`,
+      });
+    }
+    if (sha256Of(body) !== version.sha256) {
+      await tx.query(`UPDATE pmp.archive_packages SET archive_state = 'draft' WHERE id = $1`, [packageId]);
+      return err({
+        code: "archive.checksum_mismatch",
+        message: `Version ${version.version_number} of “${version.title}” no longer matches its checksum. Nothing was packaged.`,
+      });
+    }
+    const entryName = `${version.room ?? "Unassigned"}/earlier versions/${safeName(version.title)}/v${version.version_number} ${version.original_filename ?? "presentation.pptx"}`;
+    entries.push({ name: entryName, body });
+    historyFiles.push({
+      path: entryName,
+      talk: version.title,
+      version: version.version_number,
+      review_state: version.review_state,
+      sha256: version.sha256,
+      size_bytes: body.length,
+    });
+  }
+
+  // The event's emails go in both packages (D-069).
+  const emails = await archiveEmails(tx, eventId);
+  const mailEntries = emailEntries(emails);
+
+  /*
    * The PDF package: every talk whose permission allows a PDF and whose PDF exists.
    * Talks still converting, or whose conversion failed, are named in its manifest
    * rather than silently missing — the same rule the exclusions follow.
@@ -276,9 +425,12 @@ export async function buildPackage(
     file_count: manifestFiles.length,
     excluded: scope.excluded,
     files: manifestFiles,
+    earlier_versions: historyFiles,
+    emails: emails.length,
     pdf: { file_count: pdfFiles.length, eligible: forPdf.length, not_converted: notConverted },
   };
   entries.unshift({ name: "manifest.json", body: Buffer.from(JSON.stringify(manifest, null, 2)) });
+  entries.push(...mailEntries);
   const pdfManifest = {
     event: eventRows[0].name,
     built_at: manifest.built_at,
@@ -287,8 +439,10 @@ export async function buildPackage(
     excluded: scope.excluded,
     not_converted: notConverted,
     files: pdfFiles,
+    emails: emails.length,
   };
   pdfEntries.unshift({ name: "manifest.json", body: Buffer.from(JSON.stringify(pdfManifest, null, 2)) });
+  pdfEntries.push(...mailEntries);
 
   const zip = writeZip(entries);
   const key = `${packageId}.zip`;
@@ -341,14 +495,32 @@ export async function buildPackage(
 }
 
 /** Delivery issues an expiring link; every download is logged (FR-ARCH-002). */
+/** How long the client's download link lasts: 30 days from the event's end (D-069). */
+export const RETENTION_DAYS = 30;
+/** A package delivered late still gets at least this long. */
+const MINIMUM_DAYS = 7;
+
+/**
+ * When the link expires: the end of the event's last day plus 30 days. If the package
+ * is delivered so late that less than a week of that remains, it gets a week from
+ * delivery instead — a link that dies the day it arrives is not a delivery.
+ */
+export function linkExpiry(endsOn: string, now = new Date()): Date {
+  const fromEvent = new Date(`${endsOn}T23:59:59Z`);
+  fromEvent.setUTCDate(fromEvent.getUTCDate() + RETENTION_DAYS);
+  const floor = new Date(now.getTime() + MINIMUM_DAYS * 86_400_000);
+  return fromEvent > floor ? fromEvent : floor;
+}
+
 export async function deliverPackage(
   tx: pg.PoolClient,
   actor: Actor,
   packageId: string,
-  days = 7,
 ): Promise<Result<{ link_expires_at: string; token: string }, DomainError>> {
-  const { rows } = await tx.query<{ archive_state: string; event_id: string; client_id: string }>(
-    `SELECT archive_state, event_id, client_id FROM pmp.archive_packages WHERE id = $1 FOR UPDATE`,
+  const { rows } = await tx.query<{ archive_state: string; event_id: string; client_id: string; ends_on: string }>(
+    `SELECT p.archive_state, p.event_id, p.client_id, e.ends_on::text AS ends_on
+       FROM pmp.archive_packages p JOIN pmp.events e ON e.id = p.event_id
+      WHERE p.id = $1 FOR UPDATE OF p`,
     [packageId],
   );
   if (!rows[0]) return err({ code: "archive.not_found", message: "No such package." });
@@ -361,7 +533,7 @@ export async function deliverPackage(
   if (!decision.ok) return err(decision.error);
 
   const token = randomUUID();
-  const expires = new Date(Date.now() + days * 86_400_000).toISOString();
+  const expires = linkExpiry(rows[0].ends_on).toISOString();
   await tx.query(
     `UPDATE pmp.archive_packages
         SET archive_state = $1, link_expires_at = $2, lock_version = lock_version + 1
@@ -375,7 +547,7 @@ export async function deliverPackage(
     action: "archive.delivered",
     subjectType: "archive_package",
     subjectId: packageId,
-    detail: { link_expires_at: expires, retention_days: days },
+    detail: { link_expires_at: expires, retention: `${RETENTION_DAYS} days from event end (${rows[0].ends_on})` },
   });
   return ok({ link_expires_at: expires, token });
 }
