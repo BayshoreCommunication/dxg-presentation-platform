@@ -1192,3 +1192,27 @@ refused), and `/admin/users/{id}/roles` (people may still need to be given read 
 The UI hides the edit, re-import and save controls on an archived event, and the sidebar shows
 "Archived · read-only" on every screen of one. `comms-cadence.test.ts` now restores its reused archived
 probe through the API before sending. Tests: 7 more cases in `tests/invariants/event-archive.test.ts`.
+
+## D-063 (2026-09-23): The event details are tabbed — Overview, Agenda, Speakers — Status: ACCEPTED (Travis's call)
+Travis: *"we need to optimize the event details section. we need to show details info of the agenda and
+the speaker. make a tab system to show them."* The details block on the command centre (D-058) showed
+the event's setup and only *counts* of what the agenda produced — days, sessions, talks — so reading the
+actual schedule or who is speaking meant leaving the event for the Speakers or Review screens.
+
+- **Overview** is the setup exactly as it was (basics, agenda counts, deadlines, branding, save).
+- **Agenda** lists every session grouped by day, in the event's timezone: time, title, room, track,
+  kind, session state (moved/replaced/canceled/completed), and each presentation in it with its own time
+  (D-031), speakers with organisation and role, file version count and derived status. Search across
+  sessions, talks and speakers; filter by room. Each talk links to its presentation detail.
+- **Speakers** lists every speaker with organisation and email, the talks they give (with status),
+  files uploaded/approved and release permission; search, and a link to the full Speakers screen.
+
+**New endpoint `GET /events/{id}/agenda`** (`services/agenda.ts`). A presentation's status is taken
+from `listTalks`, never re-derived, so the Agenda tab, the risk list and the review queue cannot
+disagree — `tests/invariants/event-agenda.test.ts` checks exactly that. The Speakers tab reuses
+`GET /events/{id}/speakers` and maps talks from the agenda already loaded, so it adds no endpoint.
+
+**Tabs rather than one long page** because an agenda runs to hundreds of rows and would push the KPIs,
+risk list and room readiness out of reach. The tab is kept in `?tab=` so a link or reload lands on it,
+and it survives the command centre's five-second refresh. The baseline prototype has no tab component,
+so `.tabs` is new CSS in the baseline's own tokens.

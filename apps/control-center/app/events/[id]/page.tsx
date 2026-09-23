@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { getSummary, getRiskList, getFleet, getDraft, getSession } from "@/lib/api";
+import { getSummary, getRiskList, getFleet, getDraft, getSession, getAgenda, getSpeakers } from "@/lib/api";
 import { Chip } from "@/components/Chip";
 import { AutoRefresh } from "@/components/AutoRefresh";
-import { EventDetails } from "@/components/EventDetails";
+import { EventTabs } from "@/components/EventTabs";
 import { ArchiveEventButton } from "@/components/ArchiveEventButton";
 import { guard } from "@/lib/guard";
 
@@ -21,10 +21,25 @@ const time = (iso: string, timeZone: string) =>
 /** Who may change an event's setup. A hint for the UI; `services/events.ts` decides. */
 const CONFIGURERS = ["presentation_manager", "project_manager", "platform_admin"];
 
-export default async function CommandCenterPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function CommandCenterPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ tab?: string }>;
+}) {
   const { id } = await params;
-  const [summary, risk, fleet, setup, session] = await guard(
-    Promise.all([getSummary(id), getRiskList(id), getFleet(id), getDraft(id), getSession()]),
+  const { tab } = await searchParams;
+  const [summary, risk, fleet, setup, session, agenda, speakers] = await guard(
+    Promise.all([
+      getSummary(id),
+      getRiskList(id),
+      getFleet(id),
+      getDraft(id),
+      getSession(),
+      getAgenda(id),
+      getSpeakers(id),
+    ]),
     `/events/${id}`,
   );
 
@@ -139,11 +154,15 @@ export default async function CommandCenterPage({ params }: { params: Promise<{ 
         away, so the timezone every time on this page is rendered in — and the deadline
         that closes the speaker portal — could only be read by leaving the event.
       */}
-      <EventDetails
+      <EventTabs
+        eventId={id}
+        timezone={summary.event.timezone}
         setup={setup}
         talks={{ total: summary.total, collected: summary.collected }}
         canEdit={canConfigure && !archived}
-        embedded
+        agenda={agenda.items}
+        speakers={speakers.items}
+        initialTab={tab}
       />
 
       <div className="krow">

@@ -455,6 +455,36 @@ export type DuplicatePair = {
 export const getSpeakers = (eventId: string, q = "") =>
   request<{ items: SpeakerRow[] }>(`/events/${eventId}/speakers?q=${encodeURIComponent(q)}`);
 
+/* ── event details tabs (D-063) ────────────────────────────────────────── */
+
+export type AgendaSpeaker = { id: string; name: string; organization: string | null; role: string };
+
+export type AgendaPresentation = {
+  slot_id: string;
+  title: string;
+  starts_at: string | null;
+  ends_at: string | null;
+  speakers: AgendaSpeaker[];
+  version_count: number;
+  status: string;
+  status_label: string;
+};
+
+export type AgendaSession = {
+  id: string;
+  title: string;
+  kind: string;
+  state: string;
+  day: string | null;
+  room: string | null;
+  track: string | null;
+  starts_at: string;
+  ends_at: string;
+  presentations: AgendaPresentation[];
+};
+
+export const getAgenda = (eventId: string) => request<{ items: AgendaSession[] }>(`/events/${eventId}/agenda`);
+
 export const getDuplicates = (eventId: string) =>
   request<{ items: DuplicatePair[] }>(`/events/${eventId}/speaker-duplicates`);
 

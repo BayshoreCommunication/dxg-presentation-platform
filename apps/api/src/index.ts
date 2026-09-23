@@ -71,6 +71,7 @@ import {
   duplicateEvent,
   supportedTimezones,
 } from "./services/events.ts";
+import { eventAgenda } from "./services/agenda.ts";
 import {
   ensureTemplates,
   recipientsFor,
@@ -618,6 +619,15 @@ app.get("/api/v1/events", async (req, res) => {
     return rows;
   });
   return res.json({ items, next_cursor: null });
+});
+
+// The Agenda tab of the event details (D-063): sessions with their presentations.
+app.get("/api/v1/events/:eventId/agenda", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  const eventId = String(req.params.eventId);
+  const items = await withScope(scopeFor(req, eventId), (tx) => eventAgenda(tx, eventId));
+  return res.json({ items });
 });
 
 app.get("/api/v1/events/:eventId/talks", async (req, res) => {

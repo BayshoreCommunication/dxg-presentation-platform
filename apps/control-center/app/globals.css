@@ -473,3 +473,10 @@ aside nav a:not(.on):hover { background: var(--ink2); }
   background: var(--blueDark) !important;
   color: var(--white) !important;
 }
+/* Event details tabs (D-063) — underline tabs in the baseline's tokens; the baseline itself has none. */
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);margin-bottom:14px}
+.tabs button{border:none;background:none;padding:9px 14px;font-weight:600;font-size:13.5px;color:var(--slate);border-bottom:2px solid transparent;margin-bottom:-1px;cursor:pointer}
+.tabs button:hover{color:var(--ink)}
+.tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--blue)}
+.tabs button:focus-visible{outline:2px solid var(--blue);outline-offset:-2px}
+.tabs .count{font-family:"IBM Plex Mono";font-size:11px;color:var(--dim);margin-left:6px;font-weight:500}
