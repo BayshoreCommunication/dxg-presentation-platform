@@ -211,7 +211,7 @@ function AgendaPanel({
 
   const newSession =
     open === "new-session" ? (
-      <SessionForm eventId={eventId} window={eventWindow} rooms={setup.rooms} tracks={setup.tracks} onClose={close} />
+      <SessionForm eventId={eventId} window={eventWindow} onClose={close} />
     ) : null;
 
   if (agenda.length === 0) {
@@ -332,8 +332,6 @@ function AgendaPanel({
                     <SessionForm
                       eventId={eventId}
                       window={eventWindow}
-                      rooms={setup.rooms}
-                      tracks={setup.tracks}
                       sessionId={session.id}
                       initial={{
                         title: session.title,

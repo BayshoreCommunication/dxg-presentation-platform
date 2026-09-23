@@ -75,16 +75,12 @@ function Actions({
 export function SessionForm({
   eventId,
   window: range,
-  rooms,
-  tracks,
   sessionId,
   initial,
   onClose,
 }: {
   eventId: string;
   window: { from: string; to: string };
-  rooms: string[];
-  tracks: string[];
   /** Given, the form edits that session; absent, it adds one. */
   sessionId?: string;
   initial?: SessionInput;
@@ -128,34 +124,22 @@ export function SessionForm({
           <label htmlFor="session-room">Location</label>
           <input
             id="session-room"
-            list="agenda-rooms"
             style={{ width: "100%" }}
             value={value.room}
-            placeholder="Existing room, or a new one"
+            placeholder="e.g. Ballroom A"
             onChange={(event) => set({ room: event.target.value })}
             required
           />
-          <datalist id="agenda-rooms">
-            {rooms.map((name) => (
-              <option key={name} value={name} />
-            ))}
-          </datalist>
         </div>
         <div className="field">
           <label htmlFor="session-track">Track</label>
           <input
             id="session-track"
-            list="agenda-tracks"
             style={{ width: "100%" }}
             value={value.track}
             placeholder="Optional"
             onChange={(event) => set({ track: event.target.value })}
           />
-          <datalist id="agenda-tracks">
-            {tracks.map((name) => (
-              <option key={name} value={name} />
-            ))}
-          </datalist>
         </div>
         <div className="field">
           <label htmlFor="session-date">Day</label>
