@@ -1401,3 +1401,14 @@ Tests: `tests/invariants/comment-lanes.test.ts` — staff see all three lanes wi
 
 **Noticed, not changed:** the speaker portal shows a hard-coded upload deadline, "Feb 27 · 23:59 ET", on every event
 instead of the event's own `settings.upload_deadline`.
+
+## D-071 (2026-09-23): The speaker portal shows the event's real upload deadline — Status: ACCEPTED (Travis's call)
+The portal's "Upload deadline" was the literal text "Feb 27 · 23:59 ET" on every event, whatever its date or
+timezone — a wrong date told to speakers. `GET /portal/session` now returns the event's own
+`settings.upload_deadline` (set on the Overview tab), and the portal shows it as the end of that day on the event's
+clock with the zone named — "Sat, Feb 27, 2027 · 23:59 EST", "…EDT" in summer. The date is formatted as a calendar
+date, never passed through the viewer's timezone (checked from a UTC+6 machine: no day-before shift).
+
+With no deadline set it says "No deadline set — upload as soon as you can." After the deadline it says so and that
+uploads are still accepted — **the deadline is not enforced**; nothing in the API refuses a late upload. Whether it
+should close the portal is a product decision for DXG, not made here.

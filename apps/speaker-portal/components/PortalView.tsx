@@ -66,19 +66,50 @@ export function PortalView({
       )}
 
       {talks.map((talk) => (
-        <TalkCard key={talk.slot_id} talk={talk} timezone={session.event.timezone} onChange={reload} />
+        <TalkCard
+          key={talk.slot_id}
+          talk={talk}
+          timezone={session.event.timezone}
+          deadline={session.event.upload_deadline}
+          onChange={reload}
+        />
       ))}
     </>
   );
 }
 
+/**
+ * The event's upload deadline as a speaker should read it: the end of that day, on the
+ * event's clock, with the zone named (D-071). The date comes as a bare `YYYY-MM-DD`, so
+ * it is formatted as a calendar date — never converted through the viewer's timezone,
+ * which is how a date turns into the day before.
+ */
+function deadlineText(deadline: string, timeZone: string): { label: string; passed: boolean } {
+  const day = new Date(`${deadline}T12:00:00Z`).toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+  const zone =
+    new Date(`${deadline}T12:00:00Z`)
+      .toLocaleTimeString("en-US", { timeZone, timeZoneName: "short" })
+      .split(" ")
+      .pop() ?? "";
+  const todayThere = new Date().toLocaleDateString("en-CA", { timeZone });
+  return { label: `${day} · 23:59 ${zone}`, passed: todayThere > deadline };
+}
+
 function TalkCard({
   talk,
   timezone,
+  deadline,
   onChange,
 }: {
   talk: PortalTalk;
   timezone: string;
+  deadline: string | null;
   onChange: () => Promise<void>;
 }) {
   const [result, setResult] = useState<CompleteResult | null>(null);
@@ -109,7 +140,21 @@ function TalkCard({
         <div className="grid2" style={{ marginBottom: 12 }}>
           <div>
             <div className="kl">Upload deadline</div>
-            <b>Feb 27 · 23:59 ET</b>
+            {deadline ? (
+              (() => {
+                const { label, passed } = deadlineText(deadline, timezone);
+                return (
+                  <>
+                    <b>{label}</b>
+                    {passed && (
+                      <div className="note">The deadline has passed — you can still upload; the team will review it.</div>
+                    )}
+                  </>
+                );
+              })()
+            ) : (
+              <span className="note">No deadline set — upload as soon as you can.</span>
+            )}
           </div>
           <div>
             <div className="kl">Requirements</div>

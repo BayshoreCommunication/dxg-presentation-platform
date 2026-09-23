@@ -1023,12 +1023,23 @@ app.post("/api/v1/speakers/:speakerId/invite", async (req, res) => {
 });
 
 app.get("/api/v1/portal/session", (req, res) =>
-  withPortalSession(req, res, async (session) =>
-    res.json({
+  withPortalSession(req, res, async (session, tx) => {
+    // The event's own upload deadline (D-071). The portal showed "Feb 27 · 23:59 ET" on
+    // every event; it now shows this, or says none is set.
+    const { rows } = await tx.query<{ deadline: string | null }>(
+      `SELECT settings ->> 'upload_deadline' AS deadline FROM pmp.events WHERE id = $1`,
+      [session.event_id],
+    );
+    return res.json({
       speaker: { id: session.speaker_id, name: session.speaker_name },
-      event: { id: session.event_id, name: session.event_name, timezone: session.timezone },
-    }),
-  ),
+      event: {
+        id: session.event_id,
+        name: session.event_name,
+        timezone: session.timezone,
+        upload_deadline: rows[0]?.deadline || null,
+      },
+    });
+  }),
 );
 
 app.get("/api/v1/portal/talks", (req, res) =>

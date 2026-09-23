@@ -63,7 +63,8 @@ export type PortalTalk = {
 
 export type PortalSession = {
   speaker: { id: string; name: string };
-  event: { id: string; name: string; timezone: string };
+  /** `upload_deadline` is the event's own `YYYY-MM-DD`, or null when none is set (D-071). */
+  event: { id: string; name: string; timezone: string; upload_deadline: string | null };
 };
 
 export type UploadSession = {
