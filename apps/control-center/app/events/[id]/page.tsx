@@ -4,6 +4,8 @@ import { getSummary, getRiskList, getFleet, getDraft, getSession, getAgenda, get
 import { Chip } from "@/components/Chip";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { EventTabs } from "@/components/EventTabs";
+import { InfoTip } from "@/components/InfoTip";
+import { StatusGuide } from "@/components/StatusGuide";
 import { ArchiveEventButton } from "@/components/ArchiveEventButton";
 import { guard } from "@/lib/guard";
 
@@ -89,12 +91,43 @@ export default async function CommandCenterPage({
   const canConfigure = session.principal.roles.some((role) => CONFIGURERS.includes(role));
   const header = [summary.event.venue, days ?? dateRange].filter(Boolean) as string[];
 
-  const kpis = [
-    { label: "Collected", value: `${summary.collected} / ${summary.total}`, note: `${summary.total === 0 ? 0 : Math.round((summary.collected / summary.total) * 100)}% of talks` },
-    { label: "Approved", value: summary.approved, color: "var(--ok)" },
-    { label: "Warnings open", value: summary.warnings_open, color: "var(--warn)" },
-    { label: "Missing", value: summary.missing, color: summary.missing > 0 ? "var(--block)" : undefined },
-    { label: "Rooms ready", value: `${summary.rooms_ready} / ${summary.rooms_total}`, color: summary.rooms_ready === summary.rooms_total ? "var(--ok)" : "var(--warn)" },
+  /*
+   * Each number carries its own explanation (D-065). They are computed, never typed,
+   * and several mean something narrower than their label suggests — "Rooms ready" is
+   * a heartbeat *and* every talk on the room's computer — so the rule is stated where
+   * the number is read rather than left for someone to ask.
+   */
+  const kpis: { label: string; value: string | number; color?: string; note?: string; help: string }[] = [
+    {
+      label: "Collected",
+      value: `${summary.collected} / ${summary.total}`,
+      note: `${summary.total === 0 ? 0 : Math.round((summary.collected / summary.total) * 100)}% of talks`,
+      help: "Presentations with at least one file uploaded, out of every presentation on the agenda.",
+    },
+    {
+      label: "Approved",
+      value: summary.approved,
+      color: "var(--ok)",
+      help: "Presentations whose latest file a reviewer has approved. Uploaded files wait in the review queue until then.",
+    },
+    {
+      label: "Warnings open",
+      value: summary.warnings_open,
+      color: "var(--warn)",
+      help: "Problems the automatic inspection found in uploaded files — a missing font, an oversized video — that nobody has fixed or waived yet. Resolve them from the review queue.",
+    },
+    {
+      label: "Missing",
+      value: summary.missing,
+      color: summary.missing > 0 ? "var(--block)" : undefined,
+      help: "Presentations with nothing uploaded yet. These are the speakers to chase from Communications.",
+    },
+    {
+      label: "Rooms ready",
+      value: `${summary.rooms_ready} / ${summary.rooms_total}`,
+      color: summary.rooms_ready === summary.rooms_total ? "var(--ok)" : "var(--warn)",
+      help: "A room is ready when its presentation computer has checked in within the last 5 minutes and every talk scheduled there is on that computer and ready to play (or cancelled). Rooms with no talks still count in the total.",
+    },
   ];
 
   return (
@@ -166,9 +199,14 @@ export default async function CommandCenterPage({
       />
 
       <div className="krow">
-        {kpis.map((kpi) => (
+        {kpis.map((kpi, index) => (
           <div className="kpi" key={kpi.label}>
-            <div className="kl">{kpi.label}</div>
+            <div className="kl">
+              {kpi.label}
+              <InfoTip label={kpi.label} align={index === kpis.length - 1 ? "right" : "left"}>
+                {kpi.help}
+              </InfoTip>
+            </div>
             <div className="kv num" style={kpi.color ? { color: kpi.color } : undefined}>
               {kpi.value}
             </div>
@@ -180,7 +218,9 @@ export default async function CommandCenterPage({
       <div className="card">
         <div className="chd">
           <h3>Today&rsquo;s risk list</h3>
-          <span className="m">{risk.items.length} items · statuses derived live; click to open</span>
+          <span className="m">
+            {risk.items.length} items · click to open · <StatusGuide align="right" />
+          </span>
         </div>
         <div className="cbd" style={{ padding: "0 0 4px" }}>
           {risk.items.length === 0 ? (

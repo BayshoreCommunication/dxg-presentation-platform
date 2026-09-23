@@ -1254,3 +1254,21 @@ still matches on (room, start, title), so a hand-renamed session can be duplicat
 the old spreadsheet; the typed-agenda path (D-053) has the same property.
 
 Tests: `tests/invariants/agenda-edit.test.ts` (14 cases).
+
+## D-065 (2026-09-23): The numbers and statuses explain themselves — Status: ACCEPTED (Travis's call)
+Travis, after asking what the KPI row and the "Synchronized onsite" / "Submitted" pills meant: *"i think
+this information should need to know the user also."* Every one of those values is derived, several mean
+something narrower than their label ("Rooms ready" needs a heartbeat within 5 minutes *and* every talk in
+the room on its computer), and none of that was written anywhere a user could read it.
+
+- **Each KPI box has an ⓘ** that opens a plain-language explanation of how the number is computed.
+- **"What do the statuses mean?"** sits beside the Agenda tab's summary and the risk list header, and
+  lists every presentation status in the order a talk moves through them.
+- **Every talk status pill has hover text** with its meaning — only when the pill shows that status's own
+  label, so pills that borrow a tone for something else (portfolio "Planning", room readiness) do not
+  inherit a wrong explanation.
+- Meanings live once, in `lib/statusHelp.ts`. The labels themselves are unchanged fixed copy
+  (VISUAL_ACCEPTANCE §2.2); only explanations were added.
+
+Opened by click, not hover (`components/InfoTip.tsx`): hover does not exist on the tablets used in the
+Speaker Ready Room.

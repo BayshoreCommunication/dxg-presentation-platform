@@ -1,3 +1,7 @@
+import { STATUS_HELP, statusMeaning } from "@/lib/statusHelp";
+
+const labelOf = (status: string) => STATUS_HELP.find((entry) => entry.status === status)?.label;
+
 /** Status pills. Labels come from the API (derived by @pmp/domain), never invented here. */
 const TONE: Record<string, string> = {
   synchronized_onsite: "c-ok",
@@ -16,7 +20,14 @@ const TONE: Record<string, string> = {
 };
 
 export function Chip({ status, label }: { status: string; label: string }) {
-  return <span className={`chip ${TONE[status] ?? "c-mut"}`}>{label}</span>;
+  // Hover explains the pill (D-065). Only talk statuses have a meaning recorded; other
+  // pills (room readiness, event status) share tones but not this vocabulary.
+  const meaning = statusMeaning(status);
+  return (
+    <span className={`chip ${TONE[status] ?? "c-mut"}`} title={meaning && label === labelOf(status) ? meaning : undefined}>
+      {label}
+    </span>
+  );
 }
 
 export function SeverityChip({ severity }: { severity: string }) {

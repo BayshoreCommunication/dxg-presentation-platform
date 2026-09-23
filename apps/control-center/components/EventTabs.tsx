@@ -6,6 +6,7 @@ import type { AgendaPresentation, AgendaSession, EventDraft, SpeakerRow } from "
 import { agendaApi } from "@/lib/api";
 import { Chip } from "@/components/Chip";
 import { EventDetails } from "@/components/EventDetails";
+import { StatusGuide } from "@/components/StatusGuide";
 import {
   ConfirmDelete,
   ActionMenu,
@@ -260,9 +261,15 @@ function AgendaPanel({
           </button>
         )}
       </div>
-      <div className="note" style={{ marginBottom: 6 }}>
-        {agenda.length} sessions · {presentations} presentations · times in {timezone}
-        {canEdit && " · changes save straight to the event"}
+      <div
+        className="note"
+        style={{ marginBottom: 6, display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}
+      >
+        <span>
+          {agenda.length} sessions · {presentations} presentations · times in {timezone}
+          {canEdit && " · changes save straight to the event"}
+        </span>
+        <StatusGuide align="right" />
       </div>
 
       {newSession}
