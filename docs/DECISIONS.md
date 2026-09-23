@@ -1168,3 +1168,27 @@ allowed `archived` since migration 002, but nothing set it except test cleanup w
   archived event are still accepted if reached directly; making it read-only is a separate change.
 
 Tests: `tests/invariants/event-archive.test.ts` (6 cases).
+
+## D-062 (2026-09-23): An archived event is read-only — Status: ACCEPTED (Travis's call)
+Travis: *"make archived events read-only too."* Closes the gap D-061 left open.
+
+**Reads pass; every write is refused with `409 events.archived`**, checked where the API already
+knows the event rather than in each handler:
+- **Staff routes** — in the D-034 event resolver, after the role check (so an outsider still hears only
+  "not yours"). Every `/events/{id}/…`, `/slots/…`, `/file-versions/…`, `/rooms/…`, `/speakers/…`,
+  `/srr/checkins/…`, `/findings/…`, `/archive-packages/…` write inherits it.
+- **Agenda import** — `/imports/{uploadId}/…` names no event, so a small middleware reads it from the
+  upload cache. An import staged before archiving cannot be committed after.
+- **Speaker portal** — `withPortalSession` refuses writes (uploads) for either credential. Presenters can
+  still sign in and read.
+
+**Exempt:** `restore` (the way out), `duplicate` (only reads its source; the copy is a new event), and a
+repeat `archive` (so the service's clearer `events.archive_conflict` still answers).
+
+**Deliberately not covered:** `/agent/heartbeat` (device telemetry, not event content), SES delivery
+webhooks (external facts that must be recorded), `/srr/uploads` staging (inert until ingested, which is
+refused), and `/admin/users/{id}/roles` (people may still need to be given read access).
+
+The UI hides the edit, re-import and save controls on an archived event, and the sidebar shows
+"Archived · read-only" on every screen of one. `comms-cadence.test.ts` now restores its reused archived
+probe through the API before sending. Tests: 7 more cases in `tests/invariants/event-archive.test.ts`.

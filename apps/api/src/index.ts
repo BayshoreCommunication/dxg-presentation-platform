@@ -254,6 +254,42 @@ app.use(async (req, _res, next) => {
   return next();
 });
 
+/* ── archived events are read-only (D-062) ──────────────────────────────── */
+
+/**
+ * An archived event can be read but not changed. Reads are the only methods that
+ * pass; every write is refused with one code, whichever door it came through — the
+ * staff routes (via the event resolver below), the agenda import's upload-cache
+ * routes, and the speaker portal. Restore is the way out and duplicate only reads its
+ * source, so those are exempt (as is archive, whose own refusal says more).
+ */
+const READ_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+const WRITES_ALLOWED_WHEN_ARCHIVED = [
+  /^\/api\/v1\/events\/[^/]+\/restore$/,
+  /^\/api\/v1\/events\/[^/]+\/duplicate$/,
+  // Archiving again reaches the service, which answers with its own clearer conflict.
+  /^\/api\/v1\/events\/[^/]+\/archive$/,
+];
+
+const ARCHIVED_REFUSAL = {
+  code: "events.archived",
+  message: "This event is archived, so it is read-only. Restore it to make changes.",
+};
+
+const isArchived = async (eventId: string): Promise<boolean> => {
+  const { rows } = await withSystemScope((tx) =>
+    tx.query<{ status: string }>(`SELECT status FROM pmp.events WHERE id = $1`, [eventId]),
+  );
+  return rows[0]?.status === "archived";
+};
+
+/** True when this request would change an archived event and must be refused. */
+const writesToArchived = async (req: express.Request, eventId: string): Promise<boolean> => {
+  if (READ_METHODS.has(req.method)) return false;
+  if (WRITES_ALLOWED_WHEN_ARCHIVED.some((pattern) => pattern.test(req.path))) return false;
+  return isArchived(eventId);
+};
+
 /* ── which event does this URL belong to? ─────────────────────────────────── */
 
 /**
@@ -383,7 +419,11 @@ app.use(async (req, res, next) => {
 
   const platformWide = principal.roles.some((role) => PLATFORM_WIDE_ROLES.includes(role));
   const onThisEvent = principal.event_roles.some((held) => held.event_id === owner.event_id);
-  if (platformWide || onThisEvent) return next();
+  if (platformWide || onThisEvent) {
+    // Checked after the role check, so an outsider still learns only "not yours".
+    if (await writesToArchived(req, owner.event_id)) return res.status(409).json(ARCHIVED_REFUSAL);
+    return next();
+  }
 
   await withSystemScope((tx) =>
     appendAuditRecord(tx, {
@@ -401,6 +441,17 @@ app.use(async (req, res, next) => {
     code: "auth.not_on_this_event",
     message: "Your account has no role on this event.",
   });
+});
+
+/**
+ * `/imports/{uploadId}/…` names no event in its path — the id is an upload-cache key —
+ * so the resolver above cannot see it. The cache entry knows the event, and an import
+ * started before the event was archived must not be committed after.
+ */
+app.use("/api/v1/imports/:uploadId", async (req, res, next) => {
+  const cached = importCache.get(String(req.params.uploadId));
+  if (cached && (await writesToArchived(req, cached.eventId))) return res.status(409).json(ARCHIVED_REFUSAL);
+  return next();
 });
 
 /**
@@ -802,6 +853,7 @@ async function withPortalSession(
   // (the emailed link) — the same credential, arriving by a different door.
   const principal = (req as express.Request & { principal?: Principal }).principal;
   if (principal?.kind === "presenter") {
+    if (await writesToArchived(req, principal.event_id)) return res.status(409).json(ARCHIVED_REFUSAL);
     return withSystemScope(async (tx) => {
       const { rows } = await tx.query<{ name: string; timezone: string }>(
         `SELECT name, timezone FROM pmp.events WHERE id = $1`,
@@ -831,6 +883,7 @@ async function withPortalSession(
         message: "This link has expired or been revoked. Ask the DXG team for a new one.",
       });
     }
+    if (await writesToArchived(req, session.event_id)) return res.status(409).json(ARCHIVED_REFUSAL);
     return fn(session, tx);
   });
 }

@@ -174,7 +174,8 @@ export function Sidebar({ principal, events }: { principal: Principal | null; ev
             </select>
             {current && (
               <div className="note" style={{ marginTop: 3, fontSize: 11 }}>
-                {dayLabel(current)}
+                {/* Every screen of an archived event is read-only (D-062); say so on all of them. */}
+                {current.status === "archived" ? "Archived · read-only" : dayLabel(current)}
               </div>
             )}
           </>

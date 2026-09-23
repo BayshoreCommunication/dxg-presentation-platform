@@ -115,9 +115,11 @@ export default async function CommandCenterPage({ params }: { params: Promise<{ 
             matches on (room, start, title) and updates rather than duplicating — a
             capability with no entry point is a capability nobody has.
           */}
-          <Link href={`/events/${id}/import`} className="btn">
-            Re-import agenda
-          </Link>
+          {!archived && (
+            <Link href={`/events/${id}/import`} className="btn">
+              Re-import agenda
+            </Link>
+          )}
           <Link href={`/events/${id}/review`} className="btn pri">
             Open review queue →
           </Link>
@@ -126,7 +128,8 @@ export default async function CommandCenterPage({ params }: { params: Promise<{ 
 
       {archived && (
         <div className="err" style={{ borderLeftColor: "var(--line)", background: "var(--mist)" }}>
-          This event is archived — it is hidden from the portfolio. Everything in it is kept;
+          This event is archived and read-only — it is hidden from the portfolio and nothing in it can be
+          changed. Everything is kept;
           {canConfigure ? " Restore puts it back where it was." : " a presentation manager can restore it."}
         </div>
       )}
@@ -139,7 +142,7 @@ export default async function CommandCenterPage({ params }: { params: Promise<{ 
       <EventDetails
         setup={setup}
         talks={{ total: summary.total, collected: summary.collected }}
-        canEdit={canConfigure}
+        canEdit={canConfigure && !archived}
         embedded
       />
 

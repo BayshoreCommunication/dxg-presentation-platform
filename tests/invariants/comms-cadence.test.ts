@@ -89,8 +89,15 @@ before(async () => {
    */
   const existing = (await (
     await fetch(`${API}/events`, { headers: json(admin) })
-  ).json()) as { items?: { id: string; name: string }[] };
-  eventId = existing.items?.find((candidate) => candidate.name === EVENT_NAME)?.id ?? "";
+  ).json()) as { items?: { id: string; name: string; status: string }[] };
+  const probe = existing.items?.find((candidate) => candidate.name === EVENT_NAME);
+  eventId = probe?.id ?? "";
+  // The last run left it archived, and an archived event is read-only (D-062) — it
+  // cannot send. Restore it through the API, the same way an operator would.
+  if (probe?.status === "archived") {
+    const restored = await fetch(`${API}/events/${eventId}/restore`, { method: "POST", headers: json(admin) });
+    assert.equal(restored.status, 200, "the archived probe is restored before it is reused");
+  }
 
   if (!eventId) {
     const created = (await (

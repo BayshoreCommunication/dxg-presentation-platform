@@ -135,7 +135,8 @@ export function EventDetails({
       )}
 
       {error && <div className="err">{error}</div>}
-      {readOnly && (
+      {/* An archived event explains itself in the page's own banner (D-062). */}
+      {readOnly && setup.status !== "archived" && (
         <div className="note" style={{ marginBottom: 12 }}>
           You can read this event&rsquo;s setup. Changing it needs a presentation manager, project
           manager or administrator.
@@ -239,11 +240,13 @@ export function EventDetails({
               </tr>
             </tbody>
           </table>
-          <div className="cbd">
-            <Link href={`/events/${setup.id}/import`} className="btn">
-              Re-import agenda
-            </Link>
-          </div>
+          {setup.status !== "archived" && (
+            <div className="cbd">
+              <Link href={`/events/${setup.id}/import`} className="btn">
+                Re-import agenda
+              </Link>
+            </div>
+          )}
         </div>
       </div>
 
