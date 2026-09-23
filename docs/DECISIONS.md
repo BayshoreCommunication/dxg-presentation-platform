@@ -1216,3 +1216,41 @@ disagree — `tests/invariants/event-agenda.test.ts` checks exactly that. The Sp
 risk list and room readiness out of reach. The tab is kept in `?tab=` so a link or reload lands on it,
 and it survives the command centre's five-second refresh. The baseline prototype has no tab component,
 so `.tabs` is new CSS in the baseline's own tokens.
+
+## D-064 (2026-09-23): The agenda can be edited from the event details — Status: ACCEPTED (Travis's call)
+Travis: *"we need to give option to update the agenda on the event details."* Until now the agenda changed
+only by re-importing the whole spreadsheet (D-026/D-027), which is the wrong tool for the change that
+actually happens on the day: one session moves room, one title is corrected, one presenter is added.
+
+**The Agenda tab (D-063) now edits in place**, for presentation managers and above, on a non-archived
+event. One form open at a time; each save is immediate and re-reads the page.
+- **Sessions** — add (optionally with a first presenter), edit title / location / track / day / start /
+  end, cancel or reinstate (**reason required both ways**; recorded in `workflow_transitions` with
+  reinstate as the override, WORKFLOW_STATES §5), delete.
+- **Presentations** — add to a session, edit title and optional own times (empty = runs with its
+  session, D-031), delete.
+- **Presenters** — add (matched to an existing speaker by email, else name, else created — the import's
+  own rule), remove from a talk (the speaker record stays).
+
+**Endpoints** under `/events/{id}/sessions/…` and `/events/{id}/presentations/…`
+(`services/agendaEdit.ts`), so the D-034 resolver scopes them and D-062 refuses them on an archived event
+without anything new. Location, track, day and presenter resolution reuse the import's helpers
+(`resolveRoom`, `resolveTrack`, `resolveDay`, `syncPresenters`, now exported), so a room typed here and a
+room in the next spreadsheet are the same room.
+
+**Rules that keep it safe:**
+- Times are wall-clock `HH:MM` converted *in the event's timezone by Postgres* — never the server's clock
+  (the D-026 lesson). Day must fall within the event; end must follow start.
+- **Delete is only for mistakes:** refused with `409 agenda.files_conflict` once any file has been
+  uploaded to the session/presentation — cancel instead, which keeps them.
+- **A session that changes location takes its approved files with it:** copies in the old room go
+  `obsolete` and each approved version is queued for the new room exactly as approval queues it
+  (`sync.rebuild_manifest`), so nothing plays in the wrong room.
+- Everything is audited (`session.created|updated|canceled|reinstated|deleted`, `slot.*`).
+
+**Not in this change:** replacing a speaker *with history* (`speaker_assignments.replaced_by`, SRS §18.9)
+— removing and adding is available, the audited replacement flow is not. A re-import after hand edits
+still matches on (room, start, title), so a hand-renamed session can be duplicated by a later import of
+the old spreadsheet; the typed-agenda path (D-053) has the same property.
+
+Tests: `tests/invariants/agenda-edit.test.ts` (14 cases).

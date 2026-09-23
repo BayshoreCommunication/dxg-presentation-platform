@@ -2,9 +2,21 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import type { AgendaSession, EventDraft, SpeakerRow } from "@/lib/api";
+import type { AgendaPresentation, AgendaSession, EventDraft, SpeakerRow } from "@/lib/api";
+import { agendaApi } from "@/lib/api";
 import { Chip } from "@/components/Chip";
 import { EventDetails } from "@/components/EventDetails";
+import {
+  ConfirmDelete,
+  MiniButton,
+  PresentationForm,
+  PresenterForm,
+  ReasonForm,
+  RemovePresenter,
+  SessionForm,
+  localClock,
+  localDate,
+} from "@/components/AgendaEditor";
 
 type Tab = "overview" | "agenda" | "speakers";
 
@@ -112,7 +124,14 @@ export function EventTabs({
         {tab === "agenda" && (
           <div className="card">
             <div className="cbd">
-              <AgendaPanel eventId={eventId} timezone={timezone} agenda={agenda} presentations={presentationCount} />
+              <AgendaPanel
+                eventId={eventId}
+                timezone={timezone}
+                agenda={agenda}
+                presentations={presentationCount}
+                setup={setup}
+                canEdit={canEdit}
+              />
             </div>
           </div>
         )}
@@ -133,19 +152,33 @@ function AgendaPanel({
   timezone,
   agenda,
   presentations,
+  setup,
+  canEdit,
 }: {
   eventId: string;
   timezone: string;
   agenda: AgendaSession[];
   presentations: number;
+  setup: EventDraft;
+  canEdit: boolean;
 }) {
   const [query, setQuery] = useState("");
   const [room, setRoom] = useState("");
+  /*
+   * One editor open at a time, named by what it edits — `session:<id>`,
+   * `talk:<slotId>`, `new-session` and so on. Two open forms on one agenda is two
+   * half-finished changes, and the page's refresh would re-render both under the
+   * operator's cursor.
+   */
+  const [open, setOpen] = useState<string | null>(null);
+  const close = () => setOpen(null);
+  const toggle = (key: string) => setOpen((current) => (current === key ? null : key));
 
   const rooms = useMemo(
     () => [...new Set(agenda.map((session) => session.room).filter((name): name is string => Boolean(name)))].sort(),
     [agenda],
   );
+  const eventWindow = { from: setup.starts_on, to: setup.ends_on };
 
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -176,11 +209,26 @@ function AgendaPanel({
     return [...grouped.entries()];
   }, [visible]);
 
+  const newSession =
+    open === "new-session" ? (
+      <SessionForm eventId={eventId} window={eventWindow} rooms={setup.rooms} tracks={setup.tracks} onClose={close} />
+    ) : null;
+
   if (agenda.length === 0) {
     return (
-      <div className="empty" style={{ padding: "18px 0" }}>
-        No agenda yet — sessions come from the schedule import.{" "}
-        <Link href={`/events/${eventId}/import`}>Import an agenda →</Link>
+      <div style={{ padding: "12px 0" }}>
+        <div className="empty">
+          No agenda yet — sessions come from the schedule import.{" "}
+          <Link href={`/events/${eventId}/import`}>Import an agenda →</Link>
+        </div>
+        {canEdit && !newSession && (
+          <div style={{ marginTop: 10 }}>
+            <button type="button" className="btn" onClick={() => setOpen("new-session")}>
+              + Add a session by hand
+            </button>
+          </div>
+        )}
+        {newSession}
       </div>
     );
   }
@@ -206,10 +254,18 @@ function AgendaPanel({
             ))}
           </select>
         )}
-        <span className="note">
-          {agenda.length} sessions · {presentations} presentations · times in {timezone}
-        </span>
+        {canEdit && (
+          <button type="button" className="btn pri" onClick={() => toggle("new-session")}>
+            + Add session
+          </button>
+        )}
       </div>
+      <div className="note" style={{ marginBottom: 6 }}>
+        {agenda.length} sessions · {presentations} presentations · times in {timezone}
+        {canEdit && " · changes save straight to the event"}
+      </div>
+
+      {newSession}
 
       {days.length === 0 && <div className="empty">Nothing matches.</div>}
 
@@ -220,10 +276,17 @@ function AgendaPanel({
           </h4>
           {sessions.map((session) => {
             const state = SESSION_STATE[session.state];
+            const canceled = session.state === "canceled";
             return (
               <div
                 key={session.id}
-                style={{ border: "1px solid var(--line)", borderRadius: 6, marginBottom: 8, overflow: "hidden" }}
+                style={{
+                  border: "1px solid var(--line)",
+                  borderRadius: 6,
+                  marginBottom: 8,
+                  overflow: "hidden",
+                  opacity: canceled ? 0.75 : 1,
+                }}
               >
                 <div
                   style={{
@@ -238,19 +301,80 @@ function AgendaPanel({
                     <span className="mono num" style={{ marginRight: 10 }}>
                       {clock(session.starts_at, timezone)}–{clock(session.ends_at, timezone)}
                     </span>
-                    <b>{session.title}</b>
+                    <b style={canceled ? { textDecoration: "line-through" } : undefined}>{session.title}</b>
                     <div className="note">
                       {[session.room ?? "No room", session.track, session.kind !== "session" ? session.kind : null]
                         .filter(Boolean)
                         .join(" · ")}
                     </div>
                   </div>
-                  {state && (
-                    <span>
-                      <Chip status={state.status} label={state.label} />
-                    </span>
-                  )}
+                  <div style={{ display: "flex", gap: 6, alignItems: "flex-start", flexWrap: "wrap", justifyContent: "flex-end" }}>
+                    {state && <Chip status={state.status} label={state.label} />}
+                    {canEdit && (
+                      <>
+                        <MiniButton onClick={() => toggle(`session:${session.id}`)}>Edit</MiniButton>
+                        {!canceled && (
+                          <MiniButton onClick={() => toggle(`add-talk:${session.id}`)}>+ Presentation</MiniButton>
+                        )}
+                        {session.state !== "completed" && (
+                          <MiniButton onClick={() => toggle(`cancel:${session.id}`)}>
+                            {canceled ? "Reinstate" : "Cancel"}
+                          </MiniButton>
+                        )}
+                        <MiniButton onClick={() => toggle(`delete-session:${session.id}`)}>Delete</MiniButton>
+                      </>
+                    )}
+                  </div>
                 </div>
+
+                {open === `session:${session.id}` && (
+                  <div style={{ padding: "0 12px" }}>
+                    <SessionForm
+                      eventId={eventId}
+                      window={eventWindow}
+                      rooms={setup.rooms}
+                      tracks={setup.tracks}
+                      sessionId={session.id}
+                      initial={{
+                        title: session.title,
+                        room: session.room ?? "",
+                        track: session.track ?? "",
+                        date: session.day ?? localDate(session.starts_at, timezone),
+                        start: localClock(session.starts_at, timezone),
+                        end: localClock(session.ends_at, timezone),
+                      }}
+                      onClose={close}
+                    />
+                  </div>
+                )}
+                {open === `cancel:${session.id}` && (
+                  <div style={{ padding: "0 12px" }}>
+                    <ReasonForm
+                      label={canceled ? "Reinstate session" : "Cancel session"}
+                      onSubmit={(reason) =>
+                        canceled
+                          ? agendaApi.reinstateSession(eventId, session.id, reason)
+                          : agendaApi.cancelSession(eventId, session.id, reason)
+                      }
+                      onClose={close}
+                    />
+                  </div>
+                )}
+                {open === `delete-session:${session.id}` && (
+                  <div style={{ padding: "0 12px" }}>
+                    <ConfirmDelete
+                      what={`the session "${session.title}" and its presentations`}
+                      onConfirm={() => agendaApi.deleteSession(eventId, session.id)}
+                      onClose={close}
+                    />
+                  </div>
+                )}
+                {open === `add-talk:${session.id}` && (
+                  <div style={{ padding: "0 12px" }}>
+                    <PresentationForm eventId={eventId} sessionId={session.id} onClose={close} />
+                  </div>
+                )}
+
                 {session.presentations.length === 0 ? (
                   <div className="note" style={{ padding: "8px 12px" }}>
                     No presentations in this session.
@@ -259,37 +383,16 @@ function AgendaPanel({
                   <table>
                     <tbody>
                       {session.presentations.map((item) => (
-                        <tr key={item.slot_id}>
-                          {/* A presentation with no time of its own runs with its session (D-031). */}
-                          <td style={{ width: 110 }} className="mono num note">
-                            {item.starts_at
-                              ? `${clock(item.starts_at, timezone)}${item.ends_at ? `–${clock(item.ends_at, timezone)}` : ""}`
-                              : ""}
-                          </td>
-                          <td>
-                            <Link href={`/events/${eventId}/talks/${item.slot_id}`}>{item.title}</Link>
-                            <div className="note">
-                              {item.speakers.length === 0
-                                ? "No speaker assigned"
-                                : item.speakers
-                                    .map(
-                                      (person) =>
-                                        `${person.name}${person.organization ? ` (${person.organization})` : ""}${
-                                          person.role !== "speaker" ? ` · ${person.role}` : ""
-                                        }`,
-                                    )
-                                    .join(", ")}
-                            </div>
-                          </td>
-                          <td className="note num" style={{ width: 90 }}>
-                            {item.version_count === 0
-                              ? "no file"
-                              : `${item.version_count} version${item.version_count === 1 ? "" : "s"}`}
-                          </td>
-                          <td style={{ textAlign: "right", width: 170 }}>
-                            <Chip status={item.status} label={item.status_label} />
-                          </td>
-                        </tr>
+                        <PresentationRow
+                          key={item.slot_id}
+                          eventId={eventId}
+                          timezone={timezone}
+                          item={item}
+                          canEdit={canEdit}
+                          open={open}
+                          toggle={toggle}
+                          close={close}
+                        />
                       ))}
                     </tbody>
                   </table>
@@ -300,6 +403,104 @@ function AgendaPanel({
         </section>
       ))}
     </div>
+  );
+}
+
+function PresentationRow({
+  eventId,
+  timezone,
+  item,
+  canEdit,
+  open,
+  toggle,
+  close,
+}: {
+  eventId: string;
+  timezone: string;
+  item: AgendaPresentation;
+  canEdit: boolean;
+  open: string | null;
+  toggle: (key: string) => void;
+  close: () => void;
+}) {
+  const editor =
+    open === `talk:${item.slot_id}` ? (
+      <PresentationForm
+        eventId={eventId}
+        slotId={item.slot_id}
+        initial={{
+          title: item.title,
+          start: localClock(item.starts_at, timezone),
+          end: localClock(item.ends_at, timezone),
+        }}
+        onClose={close}
+      />
+    ) : open === `presenter:${item.slot_id}` ? (
+      <PresenterForm eventId={eventId} slotId={item.slot_id} onClose={close} />
+    ) : open === `delete-talk:${item.slot_id}` ? (
+      <ConfirmDelete
+        what={`the presentation "${item.title}"`}
+        onConfirm={() => agendaApi.deletePresentation(eventId, item.slot_id)}
+        onClose={close}
+      />
+    ) : null;
+
+  return (
+    <>
+      <tr>
+        {/* A presentation with no time of its own runs with its session (D-031). */}
+        <td style={{ width: 110 }} className="mono num note">
+          {item.starts_at
+            ? `${clock(item.starts_at, timezone)}${item.ends_at ? `–${clock(item.ends_at, timezone)}` : ""}`
+            : ""}
+        </td>
+        <td>
+          <Link href={`/events/${eventId}/talks/${item.slot_id}`}>{item.title}</Link>
+          <div className="note">
+            {item.speakers.length === 0
+              ? "No speaker assigned"
+              : item.speakers.map((person, index) => (
+                  <span key={person.id}>
+                    {index > 0 && ", "}
+                    {person.name}
+                    {person.organization ? ` (${person.organization})` : ""}
+                    {person.role !== "speaker" ? ` · ${person.role}` : ""}
+                    {canEdit && (
+                      <RemovePresenter
+                        eventId={eventId}
+                        slotId={item.slot_id}
+                        speakerId={person.id}
+                        name={person.name}
+                      />
+                    )}
+                  </span>
+                ))}
+          </div>
+        </td>
+        <td className="note num" style={{ width: 90 }}>
+          {item.version_count === 0 ? "no file" : `${item.version_count} version${item.version_count === 1 ? "" : "s"}`}
+        </td>
+        <td style={{ textAlign: "right", width: canEdit ? 260 : 170 }}>
+          <div style={{ display: "flex", gap: 6, justifyContent: "flex-end", alignItems: "center", flexWrap: "wrap" }}>
+            <Chip status={item.status} label={item.status_label} />
+            {canEdit && (
+              <>
+                <MiniButton onClick={() => toggle(`talk:${item.slot_id}`)}>Edit</MiniButton>
+                <MiniButton onClick={() => toggle(`presenter:${item.slot_id}`)}>+ Presenter</MiniButton>
+                <MiniButton onClick={() => toggle(`delete-talk:${item.slot_id}`)}>Delete</MiniButton>
+              </>
+            )}
+          </div>
+        </td>
+      </tr>
+      {editor && (
+        <tr>
+          <td colSpan={4} style={{ borderTop: "none", paddingTop: 0 }}>
+            {editor}
+          </td>
+        </tr>
+      )}
+    </>
   );
 }
 

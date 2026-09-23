@@ -73,6 +73,17 @@ import {
 } from "./services/events.ts";
 import { eventAgenda } from "./services/agenda.ts";
 import {
+  createSession,
+  updateSession,
+  setSessionCanceled,
+  deleteSession,
+  addPresentation,
+  updatePresentation,
+  deletePresentation,
+  addPresenter,
+  removePresenter,
+} from "./services/agendaEdit.ts";
+import {
   ensureTemplates,
   recipientsFor,
   sendBatch,
@@ -568,7 +579,8 @@ const statusFor = (error: DomainError): number => {
     error.code.endsWith(".bad_dates") ||
     error.code.endsWith(".name_required") ||
     error.code.endsWith(".not_a_draft") ||
-    error.code.endsWith(".unknown_timezone")
+    error.code.endsWith(".unknown_timezone") ||
+    error.code.endsWith(".bad_times")
   ) {
     return 422;
   }
@@ -629,6 +641,86 @@ app.get("/api/v1/events/:eventId/agenda", async (req, res) => {
   const items = await withScope(scopeFor(req, eventId), (tx) => eventAgenda(tx, eventId));
   return res.json({ items });
 });
+
+/*
+ * Editing the agenda from the event details (D-064). All under `/events/{id}/…`, so
+ * the event resolver scopes them, refuses outsiders, and refuses every write on an
+ * archived event (D-062) before a handler runs.
+ */
+const agendaRoute =
+  <T>(
+    status: number,
+    run: (
+      tx: Parameters<Parameters<typeof withScope>[1]>[0],
+      actor: Actor,
+      req: express.Request,
+    ) => Promise<Result<T, DomainError>>,
+  ) =>
+  async (req: express.Request, res: express.Response) => {
+    const actor = actorFrom(req);
+    if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+    const result = await withScope(scopeFor(req, String(req.params.eventId)), (tx) => run(tx, actor, req));
+    if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+    return res.status(status).json(result.value);
+  };
+
+// The services validate every field; this only names the shape they expect.
+const bodyOf = <T = { reason?: string }>(req: express.Request): T => (req.body ?? {}) as T;
+
+app.post(
+  "/api/v1/events/:eventId/sessions",
+  agendaRoute(201, (tx, actor, req) => createSession(tx, actor, String(req.params.eventId), bodyOf(req))),
+);
+app.patch(
+  "/api/v1/events/:eventId/sessions/:sessionId",
+  agendaRoute(200, (tx, actor, req) =>
+    updateSession(tx, actor, String(req.params.eventId), String(req.params.sessionId), bodyOf(req)),
+  ),
+);
+app.post(
+  "/api/v1/events/:eventId/sessions/:sessionId/cancel",
+  agendaRoute(200, (tx, actor, req) =>
+    setSessionCanceled(tx, actor, String(req.params.eventId), String(req.params.sessionId), true, String(bodyOf(req).reason ?? "")),
+  ),
+);
+app.post(
+  "/api/v1/events/:eventId/sessions/:sessionId/reinstate",
+  agendaRoute(200, (tx, actor, req) =>
+    setSessionCanceled(tx, actor, String(req.params.eventId), String(req.params.sessionId), false, String(bodyOf(req).reason ?? "")),
+  ),
+);
+app.delete(
+  "/api/v1/events/:eventId/sessions/:sessionId",
+  agendaRoute(200, (tx, actor, req) => deleteSession(tx, actor, String(req.params.eventId), String(req.params.sessionId))),
+);
+app.post(
+  "/api/v1/events/:eventId/sessions/:sessionId/presentations",
+  agendaRoute(201, (tx, actor, req) =>
+    addPresentation(tx, actor, String(req.params.eventId), String(req.params.sessionId), bodyOf(req)),
+  ),
+);
+app.patch(
+  "/api/v1/events/:eventId/presentations/:slotId",
+  agendaRoute(200, (tx, actor, req) =>
+    updatePresentation(tx, actor, String(req.params.eventId), String(req.params.slotId), bodyOf(req)),
+  ),
+);
+app.delete(
+  "/api/v1/events/:eventId/presentations/:slotId",
+  agendaRoute(200, (tx, actor, req) => deletePresentation(tx, actor, String(req.params.eventId), String(req.params.slotId))),
+);
+app.post(
+  "/api/v1/events/:eventId/presentations/:slotId/presenters",
+  agendaRoute(201, (tx, actor, req) =>
+    addPresenter(tx, actor, String(req.params.eventId), String(req.params.slotId), bodyOf(req)),
+  ),
+);
+app.delete(
+  "/api/v1/events/:eventId/presentations/:slotId/presenters/:speakerId",
+  agendaRoute(200, (tx, actor, req) =>
+    removePresenter(tx, actor, String(req.params.eventId), String(req.params.slotId), String(req.params.speakerId)),
+  ),
+);
 
 app.get("/api/v1/events/:eventId/talks", async (req, res) => {
   const actor = actorFrom(req);

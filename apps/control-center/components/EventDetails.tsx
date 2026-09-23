@@ -208,7 +208,7 @@ export function EventDetails({
       <div className="card">
         <div className="chd">
           <h3>Agenda</h3>
-          <span className="m">created by the schedule import — not typed here (D-026)</span>
+          <span className="m">from the schedule import · edit it in the Agenda tab (D-064)</span>
         </div>
         <div className="cbd" style={{ padding: "0 0 4px" }}>
           <table>

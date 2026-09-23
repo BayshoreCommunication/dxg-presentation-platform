@@ -88,7 +88,7 @@ const SYNONYMS: Record<ImportField, string[]> = {
   "speaker6.email": ["presenter 6 email", "speaker 6 email"],
 };
 
-const normalise = (value: string): string => value.trim().toLowerCase().replace(/[_\-.]+/g, " ").replace(/\s+/g, " ");
+export const normalise = (value: string): string => value.trim().toLowerCase().replace(/[_\-.]+/g, " ").replace(/\s+/g, " ");
 
 /**
  * Some words settle a column on their own, and must be checked before anything else.
@@ -1007,7 +1007,7 @@ export function provisionalName(email: string): string {
  */
 
 /** The event's location of this name, created if the event does not have it yet. */
-async function resolveRoom(
+export async function resolveRoom(
   tx: pg.PoolClient,
   eventId: string,
   clientId: string,
@@ -1027,7 +1027,7 @@ async function resolveRoom(
   return id;
 }
 
-async function resolveTrack(
+export async function resolveTrack(
   tx: pg.PoolClient,
   eventId: string,
   clientId: string,
@@ -1046,7 +1046,7 @@ async function resolveTrack(
   return inserted[0]!.id;
 }
 
-async function resolveDay(
+export async function resolveDay(
   tx: pg.PoolClient,
   eventId: string,
   clientId: string,
@@ -1079,7 +1079,7 @@ async function resolveDay(
  * which is the entire point of the import. `speakers.full_name` is NOT NULL, so a
  * provisional name is derived from the address rather than the row dropped.
  */
-async function syncPresenters(
+export async function syncPresenters(
   tx: pg.PoolClient,
   input: {
     eventId: string;

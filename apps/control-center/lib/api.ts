@@ -485,6 +485,35 @@ export type AgendaSession = {
 
 export const getAgenda = (eventId: string) => request<{ items: AgendaSession[] }>(`/events/${eventId}/agenda`);
 
+/* Editing the agenda from the event details (D-064). Times are `HH:MM` in the event's timezone. */
+export type SessionInput = { title: string; room: string; track: string; date: string; start: string; end: string };
+export type PresentationInput = { title: string; start: string; end: string };
+export type PresenterInput = { name: string; email: string; organization: string };
+
+const send = <T>(path: string, method: string, body?: unknown) =>
+  request<T>(path, { method, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+
+export const agendaApi = {
+  createSession: (eventId: string, input: SessionInput & { presenter?: PresenterInput }) =>
+    send<{ session_id: string }>(`/events/${eventId}/sessions`, "POST", input),
+  updateSession: (eventId: string, sessionId: string, input: SessionInput) =>
+    send<{ rooms_rerouted: number }>(`/events/${eventId}/sessions/${sessionId}`, "PATCH", input),
+  cancelSession: (eventId: string, sessionId: string, reason: string) =>
+    send(`/events/${eventId}/sessions/${sessionId}/cancel`, "POST", { reason }),
+  reinstateSession: (eventId: string, sessionId: string, reason: string) =>
+    send(`/events/${eventId}/sessions/${sessionId}/reinstate`, "POST", { reason }),
+  deleteSession: (eventId: string, sessionId: string) => send(`/events/${eventId}/sessions/${sessionId}`, "DELETE"),
+  addPresentation: (eventId: string, sessionId: string, input: PresentationInput & { presenter?: PresenterInput }) =>
+    send(`/events/${eventId}/sessions/${sessionId}/presentations`, "POST", input),
+  updatePresentation: (eventId: string, slotId: string, input: PresentationInput) =>
+    send(`/events/${eventId}/presentations/${slotId}`, "PATCH", input),
+  deletePresentation: (eventId: string, slotId: string) => send(`/events/${eventId}/presentations/${slotId}`, "DELETE"),
+  addPresenter: (eventId: string, slotId: string, input: PresenterInput) =>
+    send(`/events/${eventId}/presentations/${slotId}/presenters`, "POST", input),
+  removePresenter: (eventId: string, slotId: string, speakerId: string) =>
+    send(`/events/${eventId}/presentations/${slotId}/presenters/${speakerId}`, "DELETE"),
+};
+
 export const getDuplicates = (eventId: string) =>
   request<{ items: DuplicatePair[] }>(`/events/${eventId}/speaker-duplicates`);
 
