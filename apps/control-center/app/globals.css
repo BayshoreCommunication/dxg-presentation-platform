@@ -16,7 +16,9 @@ h1,h2,h3,h4{font-family:"Barlow Semi Condensed",sans-serif;margin:0;letter-spaci
 .mono{font-family:"IBM Plex Mono",monospace}
 button{font:inherit;cursor:pointer}
 .shell{display:flex;flex:1;min-height:0}
-aside{width:216px;flex-shrink:0;background:var(--ink);color:var(--paneink);display:flex;flex-direction:column;overflow-y:auto}
+/* The sidebar stays put while the page scrolls: pinned to the top at the window's height,
+   scrolling on its own only if its own menu is taller than the screen. */
+aside{width:216px;flex-shrink:0;background:var(--ink);color:var(--paneink);display:flex;flex-direction:column;overflow-y:auto;position:sticky;top:0;height:100vh;align-self:flex-start}
 .logo{display:flex;justify-content:space-between;align-items:center;padding:14px 16px 8px}
 .logo b{font-family:"Barlow Semi Condensed";font-weight:700;font-size:19px;color:var(--white);letter-spacing:.02em}
 .logo .clock{font-family:"IBM Plex Mono";font-size:13px;color:var(--blue)}
