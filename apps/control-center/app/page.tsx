@@ -4,6 +4,10 @@ import { listEvents, getSummary, getSession } from "@/lib/api";
 import { Chip } from "@/components/Chip";
 import { guard } from "@/lib/guard";
 import { eventStatusChip } from "@/lib/eventStatus";
+import { ArchiveEventButton } from "@/components/ArchiveEventButton";
+
+/** Who may archive an event. A hint for the UI; `services/events.ts` decides. */
+const CONFIGURERS = ["presentation_manager", "project_manager", "platform_admin"];
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +18,12 @@ const formatRange = (from: string, to: string) => {
   return `${start}–${end}`;
 };
 
-export default async function PortfolioPage() {
+export default async function PortfolioPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ archived?: string }>;
+}) {
+  const showArchived = (await searchParams).archived === "1";
   // A client account is refused on every staff route, so the portfolio is not its
   // front door. Send it where it belongs before it is bounced off this one.
   const { principal } = await getSession().catch(() => ({ principal: null }));
@@ -22,21 +31,45 @@ export default async function PortfolioPage() {
     redirect(principal.client_events.length === 1 ? `/client/${principal.client_events[0]!.id}` : "/client");
   }
 
-  const { items } = await guard(listEvents(), "/");
+  const { items: all } = await guard(listEvents(), "/");
+  /*
+   * Archived events leave the portfolio (D-061) but are one click away: the list is
+   * either the working events or the archived ones, never both mixed together.
+   */
+  const archivedCount = all.filter((event) => event.status === "archived").length;
+  const items = all.filter((event) => (event.status === "archived") === showArchived);
+  const canArchive = principal?.kind === "staff" && principal.roles.some((role) => CONFIGURERS.includes(role));
   const summaries = await guard(Promise.all(items.map((event) => getSummary(event.id))), "/");
 
   return (
     <>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
         <h1 className="htitle" style={{ margin: 0 }}>
-          Event portfolio
+          {showArchived ? "Archived events" : "Event portfolio"}
         </h1>
-        <Link href="/events/new" className="btn pri">
-          + Create event
-        </Link>
+        <span style={{ display: "flex", gap: 8 }}>
+          {showArchived ? (
+            <Link href="/" className="btn">
+              ← Back to portfolio
+            </Link>
+          ) : (
+            archivedCount > 0 && (
+              <Link href="/?archived=1" className="btn">
+                Archived ({archivedCount})
+              </Link>
+            )
+          )}
+          <Link href="/events/new" className="btn pri">
+            + Create event
+          </Link>
+        </span>
       </div>
 
-      {items.length === 0 && <div className="card"><div className="empty">No events yet.</div></div>}
+      {items.length === 0 && (
+        <div className="card">
+          <div className="empty">{showArchived ? "No archived events." : "No events yet."}</div>
+        </div>
+      )}
 
       {items.map((event, index) => {
         const summary = summaries[index]!;
@@ -59,8 +92,15 @@ export default async function PortfolioPage() {
                     ? `${summary.warnings_open} unresolved warnings`
                     : "No unresolved warnings"}
                 </span>
-                <span>
-                  <span className="mono num">{collected}%</span>{" "}
+                <span style={{ display: "inline-flex", alignItems: "flex-start", gap: 8 }}>
+                  <span className="mono num" style={{ alignSelf: "center" }}>{collected}%</span>
+                  {canArchive && (
+                    <ArchiveEventButton
+                      eventId={event.id}
+                      eventName={event.name}
+                      archived={event.status === "archived"}
+                    />
+                  )}
                   {/*
                     An event opens on one screen showing both what it is and how it is
                     going (D-058); they used to be a click apart. A draft has no rooms,

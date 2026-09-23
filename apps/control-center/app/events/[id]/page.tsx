@@ -4,6 +4,7 @@ import { getSummary, getRiskList, getFleet, getDraft, getSession } from "@/lib/a
 import { Chip } from "@/components/Chip";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { EventDetails } from "@/components/EventDetails";
+import { ArchiveEventButton } from "@/components/ArchiveEventButton";
 import { guard } from "@/lib/guard";
 
 export const dynamic = "force-dynamic";
@@ -69,6 +70,8 @@ export default async function CommandCenterPage({ params }: { params: Promise<{ 
     timeZone: "UTC",
   })}`;
 
+  const archived = summary.event.status === "archived";
+  const canConfigure = session.principal.roles.some((role) => CONFIGURERS.includes(role));
   const header = [summary.event.venue, days ?? dateRange].filter(Boolean) as string[];
 
   const kpis = [
@@ -90,12 +93,22 @@ export default async function CommandCenterPage({ params }: { params: Promise<{ 
           <span className="note">
             {header.join(" · ")}
             {header.length > 0 && <>&nbsp;</>}
-            <span className="live">
-              <i /> live
-            </span>
+            {!archived && (
+              <span className="live">
+                <i /> live
+              </span>
+            )}
           </span>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+          {canConfigure && (
+            <ArchiveEventButton
+              eventId={id}
+              eventName={summary.event.name}
+              archived={archived}
+              redirectTo="/"
+            />
+          )}
           {/*
             The only way into the standalone import screen now that it has left the
             sidebar. Agendas are revised constantly before an event, and re-import
@@ -111,6 +124,13 @@ export default async function CommandCenterPage({ params }: { params: Promise<{ 
         </div>
       </div>
 
+      {archived && (
+        <div className="err" style={{ borderLeftColor: "var(--line)", background: "var(--mist)" }}>
+          This event is archived — it is hidden from the portfolio. Everything in it is kept;
+          {canConfigure ? " Restore puts it back where it was." : " a presentation manager can restore it."}
+        </div>
+      )}
+
       {/*
         What the event is, above how it is going (D-058). This was screen 18, a click
         away, so the timezone every time on this page is rendered in — and the deadline
@@ -119,7 +139,7 @@ export default async function CommandCenterPage({ params }: { params: Promise<{ 
       <EventDetails
         setup={setup}
         talks={{ total: summary.total, collected: summary.collected }}
-        canEdit={session.principal.roles.some((role) => CONFIGURERS.includes(role))}
+        canEdit={canConfigure}
         embedded
       />
 

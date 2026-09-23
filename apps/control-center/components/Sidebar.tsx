@@ -162,7 +162,11 @@ export function Sidebar({ principal, events }: { principal: Principal | null; ev
               <option value="" disabled>
                 Choose an event…
               </option>
-              {events.map((event) => (
+              {/* Archived events leave the switcher as they leave the portfolio (D-061),
+                  except the one you are standing in, which the select must still name. */}
+              {events
+                .filter((event) => event.status !== "archived" || event.id === eventId)
+                .map((event) => (
                 <option key={event.id} value={event.id}>
                   {event.name}
                 </option>

@@ -1148,3 +1148,23 @@ things that make it usable rather than merely correct:
 **The messages now say which thing failed.** A bad password reports the password, a bad secret reports
 the second factor, and a session that is somehow not valid says so instead of blaming the seed.
 Owner: Travis.
+
+## D-061 (2026-09-23): Any event can be archived, and restored — Status: ACCEPTED (Travis's call)
+Travis: *"add the archived event functionality so that we can archive any event."* `events.status` has
+allowed `archived` since migration 002, but nothing set it except test cleanup writing SQL.
+
+- **Archiving is a status, not a deletion.** Files, talks, audit and communications all stay — much of
+  that history is append-only and could not be removed anyway. `POST /events/{id}/archive` (optional
+  `reason`) and `POST /events/{id}/restore`; both need a presentation manager or above and both are
+  audited (`events.archived` with the prior status, `events.restored`).
+- **Any status can be archived**, drafts included — an abandoned setup is the commonest thing to tidy.
+  Migration 012 records `archived_from`, so restore returns the event to exactly that status; an event
+  archived before the column existed restores as `closed`. Archiving twice or restoring a non-archived
+  event is `409 events.archive_conflict`.
+- **The portfolio shows either working events or archived ones** (`/?archived=1`, reached by an
+  "Archived (N)" button), and the sidebar switcher drops archived events except the one you are in.
+  The command centre shows an archived banner, hides the live indicator, and offers Restore.
+- **Not done here:** archiving does not freeze writes to the event. Uploads, imports and comms on an
+  archived event are still accepted if reached directly; making it read-only is a separate change.
+
+Tests: `tests/invariants/event-archive.test.ts` (6 cases).

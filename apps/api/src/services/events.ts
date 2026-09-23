@@ -458,6 +458,92 @@ export async function activateEvent(
 }
 
 /**
+ * Archiving takes an event off the portfolio without deleting anything (D-061). It
+ * is a status, not a removal: files, talks, audit and communications all stay, and
+ * much of that history is append-only and could not be removed anyway. Any status
+ * may be archived — a draft abandoned half-way through setup is exactly the thing an
+ * operator wants out of the list — and the status it had is kept so that restoring
+ * puts it back where it was.
+ */
+export async function archiveEvent(
+  tx: pg.PoolClient,
+  actor: Actor,
+  eventId: string,
+  reason: string,
+): Promise<Result<EventDraft, DomainError>> {
+  if (!hasAnyRole(actor, CONFIGURERS)) return err(forbidden("Archiving an event"));
+  const { rows } = await tx.query<{ status: string; client_id: string }>(
+    `SELECT status, client_id FROM pmp.events WHERE id = $1 FOR UPDATE`,
+    [eventId],
+  );
+  const event = rows[0];
+  if (!event) return err({ code: "events.not_found", message: "No such event." });
+  if (event.status === "archived") {
+    return err({ code: "events.archive_conflict", message: "This event is already archived." });
+  }
+  await tx.query(
+    `UPDATE pmp.events
+        SET status = 'archived', archived_from = status, archived_at = now(), archived_by = $2,
+            lock_version = lock_version + 1, updated_at = now()
+      WHERE id = $1`,
+    [eventId, actor.id],
+  );
+  const why = reason.trim();
+  await appendAudit(tx, {
+    partitionId: eventId,
+    clientId: event.client_id,
+    actorUserId: actor.id,
+    action: "events.archived",
+    subjectType: "event",
+    subjectId: eventId,
+    detail: { from: event.status },
+    ...(why ? { reason: why } : {}),
+  });
+  return draftOf(tx, eventId);
+}
+
+/**
+ * Restoring returns an archived event to the status it was archived from. An event
+ * archived before that was recorded (test cleanup wrote the status directly) goes back
+ * as `closed` — the one status that claims neither that setup is unfinished nor that
+ * the event is running.
+ */
+export async function restoreEvent(
+  tx: pg.PoolClient,
+  actor: Actor,
+  eventId: string,
+): Promise<Result<EventDraft, DomainError>> {
+  if (!hasAnyRole(actor, CONFIGURERS)) return err(forbidden("Restoring an archived event"));
+  const { rows } = await tx.query<{ status: string; archived_from: string | null; client_id: string }>(
+    `SELECT status, archived_from, client_id FROM pmp.events WHERE id = $1 FOR UPDATE`,
+    [eventId],
+  );
+  const event = rows[0];
+  if (!event) return err({ code: "events.not_found", message: "No such event." });
+  if (event.status !== "archived") {
+    return err({ code: "events.archive_conflict", message: "Only an archived event can be restored." });
+  }
+  const target = event.archived_from ?? "closed";
+  await tx.query(
+    `UPDATE pmp.events
+        SET status = $2, archived_from = NULL, archived_at = NULL, archived_by = NULL,
+            lock_version = lock_version + 1, updated_at = now()
+      WHERE id = $1`,
+    [eventId, target],
+  );
+  await appendAudit(tx, {
+    partitionId: eventId,
+    clientId: event.client_id,
+    actorUserId: actor.id,
+    action: "events.restored",
+    subjectType: "event",
+    subjectId: eventId,
+    detail: { to: target },
+  });
+  return draftOf(tx, eventId);
+}
+
+/**
  * FR-EVT-002: duplication copies structure and settings — rooms, tracks, days,
  * deadlines, branding, templates — and copies no speakers, files or
  * communications. Last year's decks must not appear in this year's event.

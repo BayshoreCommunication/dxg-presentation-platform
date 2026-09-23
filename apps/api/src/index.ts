@@ -66,6 +66,8 @@ import {
   configureEvent,
   draftOf,
   activateEvent,
+  archiveEvent,
+  restoreEvent,
   duplicateEvent,
   supportedTimezones,
 } from "./services/events.ts";
@@ -1847,6 +1849,28 @@ app.post("/api/v1/events/:eventId/activate", async (req, res) => {
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   const result = await withScope(scopeFor(req), (tx) =>
     activateEvent(tx, actor, String(req.params.eventId)),
+  );
+  if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+  return res.json(result.value);
+});
+
+// Archive and restore (D-061). Reversible statuses, not deletions; audited both ways.
+app.post("/api/v1/events/:eventId/archive", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  const body = (req.body ?? {}) as { reason?: string };
+  const result = await withScope(scopeFor(req), (tx) =>
+    archiveEvent(tx, actor, String(req.params.eventId), typeof body.reason === "string" ? body.reason : ""),
+  );
+  if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+  return res.json(result.value);
+});
+
+app.post("/api/v1/events/:eventId/restore", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  const result = await withScope(scopeFor(req), (tx) =>
+    restoreEvent(tx, actor, String(req.params.eventId)),
   );
   if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
   return res.json(result.value);

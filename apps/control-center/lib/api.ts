@@ -809,6 +809,13 @@ export const configureEvent = (
 export const activateEvent = (eventId: string) =>
   request<EventDraft>(`/events/${eventId}/activate`, { method: "POST" });
 
+/** Archiving hides an event from the portfolio; restoring puts it back as it was (D-061). */
+export const archiveEvent = (eventId: string, reason = "") =>
+  request<EventDraft>(`/events/${eventId}/archive`, { method: "POST", body: JSON.stringify({ reason }) });
+
+export const restoreEvent = (eventId: string) =>
+  request<EventDraft>(`/events/${eventId}/restore`, { method: "POST" });
+
 export type CommRecipient = {
   speaker_id: string;
   name: string;
