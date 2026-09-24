@@ -832,3 +832,247 @@ input[type=time]:invalid,input[type=date]:invalid{border-color:var(--block)}
 .vtext small{max-width:100%;font-size:11px;color:var(--muted-foreground);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .versions .ibtn{margin:0}
 @media (max-width:760px){.search{width:100%}.files-tools{width:100%}}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   Dark theme (D-082), after the reference "Modulix" dashboard: a black canvas, a
+   near-black sidebar, flat #1a1a1a cards edged in #2a2a2a, white line icons, white
+   primary actions, outline status pills. Chosen per browser from the settings menu
+   (Light / Dark / Match system); `data-theme` is set on <html> before first paint.
+   ════════════════════════════════════════════════════════════════════════════ */
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --background:#000; --foreground:#fff;
+  --card:#1a1a1a; --card-foreground:#fff; --popover:#1a1a1a; --popover-foreground:#fff;
+  --primary:#fff; --primary-foreground:#0a0a0a;
+  --secondary:#262626; --secondary-foreground:#d4d4d4;
+  --muted:#1a1a1a; --muted-foreground:#a3a3a3; --subtle-foreground:#737373; --cell-foreground:#e5e5e5;
+  --accent:#262626; --accent-foreground:#fff;
+  --success:#22c55e; --destructive:#ef4444; --amber:#f59e0b; --amber-text:#f59e0b; --indigo:#818cf8;
+  --border:#2a2a2a; --input:#2a2a2a; --ring:#525252;
+  --hover-border:#3f3f3f; --hover-bg:#141414; --hover-row:#141414;
+  --gradient-primary:linear-gradient(#fff,#fff);
+  --shadow-nav-active:none; --shadow-input:none; --shadow-dark:none; --shadow-knob:none;
+  --shadow-lift:0 0 0 1px #3a3a3a;
+  --shadow-popover:0 0 0 1px #2a2a2a,0 18px 40px rgba(0,0,0,.6);
+  --focus-ring:0 0 0 3px rgba(255,255,255,.18); --focus-input:0 0 0 3px rgba(255,255,255,.08);
+  --hatch:none;
+  /* baseline names, re-aliased for a dark ground */
+  --white:#1a1a1a; --ink2:#262626; --mist:#1a1a1a; --line:#2a2a2a; --slate:#d4d4d4;
+  --dim:#a3a3a3; --paneink:#d4d4d4;
+  --ok-soft:rgba(34,197,94,.12); --warn-soft:rgba(245,158,11,.12); --bad-soft:rgba(239,68,68,.12);
+  --info-soft:#262626; --sync-soft:rgba(129,140,248,.15);
+}
+[data-theme="dark"] body{background:#000;color:#fff}
+[data-theme="dark"] option{background:#1a1a1a;color:#fff}
+
+/* icons: the two-tone greys become white line work */
+[data-theme="dark"] svg [fill="#D9D9D9"],[data-theme="dark"] svg [fill="#F7F7F7"]{fill:transparent}
+[data-theme="dark"] svg [stroke="#4B5563"]{stroke:#e5e5e5}
+[data-theme="dark"] svg [stroke="#9CA3AF"]{stroke:#a3a3a3}
+[data-theme="dark"] svg [stroke="#6B7280"]{stroke:#737373}
+[data-theme="dark"] aside nav a.on svg [stroke="#4B5563"]{stroke:#fff}
+
+/* shell */
+[data-theme="dark"] .shell{background:#000}
+[data-theme="dark"] aside{background:#1a1a1a;box-shadow:inset -1px 0 0 #262626}
+[data-theme="dark"] .logo::after{border-top-color:#3a3a3a}
+[data-theme="dark"] .logo .mark{background:linear-gradient(180deg,#3f3f46,#18181b);box-shadow:inset 0 0 0 1px #52525b}
+[data-theme="dark"] .logo b{color:#fff}
+[data-theme="dark"] .grp{color:#8a8a8a}
+[data-theme="dark"] aside nav a,[data-theme="dark"] aside nav button{color:#d4d4d4}
+[data-theme="dark"] aside nav a:not(.on):not([aria-disabled="true"]):hover{background:#212121;color:#fff}
+[data-theme="dark"] aside nav a.on{background:#262626;border-color:#333;color:#fff}
+[data-theme="dark"] .account>button{background:#232323;border-color:#333;filter:none}
+[data-theme="dark"] .account .who b{color:#fff}
+[data-theme="dark"] .avatar{background:#262626;border-color:#3a3a3a;color:#e5e5e5}
+[data-theme="dark"] .avatar .dot{box-shadow:0 0 0 2px #232323}
+[data-theme="dark"] main{background:#000;box-shadow:none}
+[data-theme="dark"] .topbar{border-bottom-color:#262626}
+[data-theme="dark"] .crumbs a,[data-theme="dark"] .crumbs .here{color:#a3a3a3}
+[data-theme="dark"] .crumbs a:hover,[data-theme="dark"] .crumbs [aria-current="page"]{color:#fff}
+[data-theme="dark"] .htitle{color:#fff}
+[data-theme="dark"] .note{color:#a3a3a3}
+[data-theme="dark"] .ibtn:hover,[data-theme="dark"] .ibtn[data-state="open"]{background:rgba(255,255,255,.08)}
+
+/* cards: one flat surface, a ruled header, no inner panel */
+[data-theme="dark"] .card{background:#1a1a1a;box-shadow:inset 0 0 0 1px #2a2a2a}
+[data-theme="dark"] .card .chd{border-bottom-color:#262626}
+[data-theme="dark"] .card .chd h2,[data-theme="dark"] .card .chd h3{color:#fff}
+[data-theme="dark"] .card .chd .m{color:#737373}
+
+/* KPI tiles: icon tile before the title, dashed rule, big white figure */
+[data-theme="dark"] .kpi{background:#1a1a1a;box-shadow:inset 0 0 0 1px #2a2a2a}
+[data-theme="dark"] .kpi-head h3{color:#fff}
+[data-theme="dark"] .kpi-ico{background:#262626;box-shadow:inset 0 0 0 1px #333}
+[data-theme="dark"] .kpi-body{border-top-color:#333}
+[data-theme="dark"] .kpi .kv{color:#fff}
+[data-theme="dark"] .kpi-ring .track{stroke:#262626}
+
+/* tables */
+[data-theme="dark"] th{background:#262626;color:#e5e5e5;border-color:transparent}
+[data-theme="dark"] td{color:#e5e5e5;border-bottom-color:#262626}
+[data-theme="dark"] tbody tr:hover td,[data-theme="dark"] tr.rb:hover td{background:#141414}
+[data-theme="dark"] tr.sel td{background:#1f1f1f}
+[data-theme="dark"] td b,[data-theme="dark"] td strong{color:#fff}
+
+/* status pills: outlined, tinted, no dot */
+[data-theme="dark"] .chip{border-color:#3a3a3a;color:#d4d4d4}
+[data-theme="dark"] .c-ok{color:#22c55e;border-color:rgba(34,197,94,.45)}
+[data-theme="dark"] .c-warn{color:#f59e0b;border-color:rgba(245,158,11,.45)}
+[data-theme="dark"] .c-bad{color:#ef4444;border-color:rgba(239,68,68,.45)}
+[data-theme="dark"] .c-info{color:#e5e5e5;border-color:#4a4a4a}
+[data-theme="dark"] .c-sync{color:#a5b4fc;border-color:rgba(129,140,248,.45)}
+[data-theme="dark"] .c-mut{color:#a3a3a3}
+
+/* buttons */
+[data-theme="dark"] .btn{background:#000;border-color:#2a2a2a;color:#fff}
+[data-theme="dark"] .btn:hover{background:#111;border-color:#3f3f3f;box-shadow:none}
+[data-theme="dark"] .btn.pri{background:#fff;border-color:#fff;color:#0a0a0a;box-shadow:none}
+[data-theme="dark"] .btn.pri:hover{background:#e5e5e5;border-color:#e5e5e5;color:#0a0a0a;filter:none}
+[data-theme="dark"] .btn.good{color:#22c55e}
+[data-theme="dark"] .btn.danger{color:#ef4444}
+[data-theme="dark"] .btn.warnb{color:#f59e0b}
+[data-theme="dark"] .ibtn.bordered{background:#000;border-color:#2a2a2a}
+
+/* fields */
+[data-theme="dark"] input,[data-theme="dark"] select,[data-theme="dark"] textarea{background:#0a0a0a;border-color:#2a2a2a;color:#fff}
+[data-theme="dark"] input::placeholder,[data-theme="dark"] textarea::placeholder{color:#737373}
+[data-theme="dark"] input:hover,[data-theme="dark"] select:hover,[data-theme="dark"] textarea:hover{border-color:#3f3f3f}
+[data-theme="dark"] input:focus,[data-theme="dark"] select:focus,[data-theme="dark"] textarea:focus{border-color:#525252}
+[data-theme="dark"] input:disabled,[data-theme="dark"] select:disabled,[data-theme="dark"] textarea:disabled{background:#141414;color:#737373}
+[data-theme="dark"] label{color:#d4d4d4}
+
+/* menus, toast, states */
+[data-theme="dark"] .menu{background:#1a1a1a}
+[data-theme="dark"] .menu .item{color:#d4d4d4}
+[data-theme="dark"] .menu .item:hover,[data-theme="dark"] .menu .item:focus-visible{background:#262626;color:#fff}
+[data-theme="dark"] .menu .label{color:#737373}
+[data-theme="dark"] .menu .sep{background:#262626}
+[data-theme="dark"] .toast{background:#fff;color:#0a0a0a}
+[data-theme="dark"] .err{border-color:rgba(239,68,68,.35);background:rgba(239,68,68,.1);color:#fca5a5}
+[data-theme="dark"] .empty{color:#a3a3a3}
+[data-theme="dark"] .skeleton{background:linear-gradient(90deg,#1a1a1a,#262626,#1a1a1a)}
+[data-theme="dark"] .kbd{background:#1a1a1a;border-color:#333;color:#d4d4d4}
+[data-theme="dark"] .bar{background:#262626}
+[data-theme="dark"] .lane{background:#141414}
+[data-theme="dark"] .slides div{background:#141414;border-color:#2a2a2a}
+[data-theme="dark"] .roomcard{background:#1a1a1a;border-color:#2a2a2a}
+[data-theme="dark"] .frow{border-top-color:#262626;color:#e5e5e5}
+[data-theme="dark"] .login{background:#000}
+[data-theme="dark"] .login .box{background:#1a1a1a;border-color:#2a2a2a}
+[data-theme="dark"] .login .box b{color:#fff}
+[data-theme="dark"] .demo-bar{background:#1a1a1a;color:#d4d4d4;box-shadow:inset 0 1px 0 #262626}
+
+/* dark panes (Room Agent, email preview, client banner) keep their own dark ground */
+[data-theme="dark"] .darkpane{background:#111;box-shadow:inset 0 0 0 1px #2a2a2a;
+  --white:#fff; --ink:#0a0a0a; --ink2:#1c1c1c; --line:#2a2a2a; --paneink:#d4d4d4; --dim:#a3a3a3; --slate:#d4d4d4}
+
+/* event tabs and segmented controls */
+[data-theme="dark"] .tabs{background:#1a1a1a;box-shadow:inset 0 0 0 1px #2a2a2a}
+[data-theme="dark"] .tabs button{background:#000;border-color:#2a2a2a;color:#d4d4d4}
+[data-theme="dark"] .tabs button:hover{background:#111;color:#fff}
+[data-theme="dark"] .tabs button[aria-selected="true"]{background:#fff;border-color:#fff;color:#0a0a0a}
+[data-theme="dark"] .tabs button[aria-selected="true"] .count{color:#525252}
+[data-theme="dark"] .seg-tabs{background:#1a1a1a;box-shadow:inset 0 0 0 1px #2a2a2a}
+[data-theme="dark"] .seg-tabs button{color:#a3a3a3}
+[data-theme="dark"] .seg-tabs button[aria-selected="true"]{background:#262626;border-color:#333;color:#fff}
+
+/* checkbox: grey square, white when ticked */
+[data-theme="dark"] .cb .track{background:#3a3a3a}
+[data-theme="dark"] .cb:hover .track{background:#4a4a4a}
+[data-theme="dark"] .cb .knob{background:#3a3a3a}
+[data-theme="dark"] .cb input:checked~.track{background:rgba(255,255,255,.2)}
+[data-theme="dark"] .cb input:checked~.knob{background:#fff;color:#0a0a0a}
+
+/* Files screen */
+[data-theme="dark"] .folder,[data-theme="dark"] .recent-card{background:#1a1a1a;border-color:#2a2a2a}
+[data-theme="dark"] .folder.on{border-color:#fff;box-shadow:none}
+[data-theme="dark"] .folder-name,[data-theme="dark"] .recent-text b,[data-theme="dark"] .fname b,[data-theme="dark"] .fcard-body b{color:#fff}
+[data-theme="dark"] .folder-art [fill="#E5E7EB"]{fill:#2e2e2e}
+[data-theme="dark"] .folder-art [fill="#D9D9D9"]{fill:#3a3a3a}
+[data-theme="dark"] .folder-art [fill="#F7F7F7"]{fill:#525252}
+[data-theme="dark"] .files-section{color:#fff}
+[data-theme="dark"] .search{background:#0a0a0a;border-color:#2a2a2a;box-shadow:none}
+[data-theme="dark"] .search input{background:transparent;border:0}
+[data-theme="dark"] .viewtoggle{background:#000;border-color:#2a2a2a}
+[data-theme="dark"] .viewtoggle button[aria-pressed="true"]{background:#262626;color:#fff}
+[data-theme="dark"] .files-panel{background:#1a1a1a;box-shadow:inset 0 0 0 1px #2a2a2a}
+[data-theme="dark"] .files-scroll,[data-theme="dark"] .files-grid{background:transparent;box-shadow:none}
+[data-theme="dark"] .fcard{background:#141414;border-color:#2a2a2a}
+[data-theme="dark"] .fcard.sel{border-color:#fff}
+[data-theme="dark"] .ftype{background:#262626;box-shadow:inset 0 0 0 1px #333}
+[data-theme="dark"] .ftype .sheet{fill:#1a1a1a;stroke:#737373}
+[data-theme="dark"] .ftype .fold{stroke:#737373}
+[data-theme="dark"] .ftype.ppt{background:rgba(210,71,38,.16)}
+[data-theme="dark"] .ftype.pdf{background:rgba(229,72,77,.16)}
+[data-theme="dark"] .ftype.key{background:rgba(37,99,235,.18)}
+[data-theme="dark"] .ftype.vid{background:rgba(124,58,237,.18)}
+[data-theme="dark"] .loc{color:#d4d4d4;text-decoration-color:#3a3a3a}
+[data-theme="dark"] .pagerbtn{background:#000;border-color:#2a2a2a;color:#d4d4d4}
+[data-theme="dark"] .drawer{background:#1a1a1a;box-shadow:-1px 0 0 #2a2a2a,0 0 60px rgba(0,0,0,.7)}
+[data-theme="dark"] .drawer-backdrop{background:rgba(0,0,0,.55)}
+[data-theme="dark"] .drawer-head h2,[data-theme="dark"] .drawer-file b,[data-theme="dark"] .drawer-sub,[data-theme="dark"] .drawer-facts dd,[data-theme="dark"] .vtext b{color:#fff}
+[data-theme="dark"] .drawer-file{background:#141414;box-shadow:inset 0 0 0 1px #2a2a2a}
+[data-theme="dark"] .drawer-facts,[data-theme="dark"] .drawer-facts>div{border-color:#262626}
+
+/* date picker */
+[data-theme="dark"] .dxg-datepicker .react-datepicker__time,
+[data-theme="dark"] .dxg-datepicker .react-datepicker__time-container,
+[data-theme="dark"] .dxg-datepicker .react-datepicker__time-box,
+[data-theme="dark"] .dxg-datepicker__years{background:#1a1a1a}
+[data-theme="dark"] .dxg-datepicker .react-datepicker__day-name{color:#a3a3a3}
+[data-theme="dark"] .dxg-datepicker .react-datepicker__day,
+[data-theme="dark"] .dxg-datepicker .react-datepicker__time-list-item,
+[data-theme="dark"] .dxg-datepicker__view-toggle,
+[data-theme="dark"] .dxg-datepicker__year-option{color:#fff}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   Shared geometry (D-083). One set of sizes for both themes — the dark theme's, which
+   Travis preferred — so toggling Light / Dark only ever changes colour, never moves
+   anything. Theme blocks above and below this may set colours; they must not set a
+   height, padding, margin, font size, weight or border width.
+   ════════════════════════════════════════════════════════════════════════════ */
+.logo{position:relative;height:72px;padding:20px 12px}
+.logo::after{content:"";position:absolute;left:12px;right:12px;bottom:0;border-top:1px dashed var(--border)}
+.sidebody{padding-top:16px}
+.logo .mark{width:32px;height:32px;border-radius:9px;font-size:15px;font-weight:600}
+.logo b{font-size:20px;font-weight:600}
+aside nav a,aside nav button{height:40px;padding:0 12px;font-size:14px}
+.account .avatar{width:36px;height:36px;border-radius:8px;background:var(--primary);border-color:var(--primary);color:var(--primary-foreground)}
+.topbar{height:64px;margin:0 -12px;padding:14px 24px;border-bottom:1px solid var(--border)}
+.content{padding:24px 12px}
+.htitle{font-size:26px;font-weight:600}
+
+/* cards: one surface, a ruled header, no inner panel */
+.card{border-radius:16px;padding:0;background:var(--card);box-shadow:inset 0 0 0 1px var(--border)}
+.card::before,.kpi::before{content:none}
+.card .chd{padding:16px 18px;border-bottom:1px solid var(--border)}
+.card .chd:last-child{border-bottom:0}
+.card .chd h2,.card .chd h3{font-size:16px;font-weight:600;color:var(--foreground)}
+.card>:not(.chd){background:transparent;border-width:0!important;border-radius:0}
+.cbd{padding:16px 18px}
+.card>table{padding:10px 14px}
+
+/* KPI tiles: icon tile before the title, dashed rule, large figure */
+.kpi{height:auto;min-height:156px;border-radius:16px;background:var(--card);padding:0;box-shadow:inset 0 0 0 1px var(--border)}
+.kpi-head{flex-direction:row-reverse;justify-content:flex-end;gap:12px;padding:16px 18px 14px}
+.kpi-head h3{font-size:16px;font-weight:600;color:var(--foreground)}
+.kpi-ico{width:36px;height:36px;align-items:center;justify-content:center;border-radius:9px;background:var(--muted);box-shadow:inset 0 0 0 1px var(--border)}
+.kpi-body{margin:0 18px;padding:18px 0 16px;border:0;border-top:1px dashed var(--border);border-radius:0;background:transparent}
+.kpi:hover .kpi-body{transform:none;box-shadow:none}
+.kpi .kv{font-size:32px;font-weight:600}
+
+th{font-weight:500}
+
+/* status pills: outlined, no dot */
+.chip{height:24px;padding:0 10px;border-radius:9999px;border-width:1px;background:transparent}
+.chip::before{content:none}
+:root:not([data-theme="dark"]) .c-ok{border-color:rgba(5,150,105,.4)}
+:root:not([data-theme="dark"]) .c-warn{border-color:rgba(217,119,6,.45)}
+:root:not([data-theme="dark"]) .c-bad{border-color:rgba(239,68,68,.4)}
+:root:not([data-theme="dark"]) .c-info{border-color:#d1d5db}
+:root:not([data-theme="dark"]) .c-sync{border-color:rgba(99,102,241,.4)}
+
+.btn{height:36px;padding:0 14px;font-size:13px;border-width:1px}
+input,select,textarea{border-width:1px}
+.search{border-width:1px}

@@ -1630,3 +1630,38 @@ product (Files, Room Agent library, review queue) was invented for the demo even
   adding superseded versions on top ("1 file · 1.0 GB" was one file plus its replaced predecessor).
 
 Test: `event-files.test.ts` now checks every file's shown size against the bytes it downloads.
+
+## D-082 (2026-09-24): A dark theme after the "Modulix" reference — Status: ACCEPTED (Travis's call)
+Travis supplied a dark dashboard reference ("Modulix") and asked for the dark theme to look exactly like it. It is a
+second theme of the control center, not a replacement: Light stays the default, and the settings menu offers
+Light / Dark / Match system, remembered per browser (`dxg.theme`). An inline script in <head> sets `data-theme` on
+<html> before first paint, so a dark user never sees a light flash.
+
+What the dark theme does, all under `[data-theme="dark"]` in `globals.css`:
+- A black canvas and top bar with a hairline rule, a #1a1a1a sidebar with a dashed rule under the logo, 40 px nav rows,
+  the active one #262626 with a #333 edge, and a white rounded-square avatar on the account button.
+- Cards are one flat #1a1a1a surface edged #2a2a2a with a ruled header — the light theme's hatched tray and inner panel
+  are dropped. KPI tiles put the icon in a small tile *before* the title, rule the body off with a dashed line and set
+  the figure at 32 px white, as in the reference.
+- Icons become white line work: the two-tone greys are retargeted by attribute selectors, so no component changed.
+- Primary actions are white with black text; secondary buttons are black with a #2a2a2a edge; status chips are
+  outline pills tinted green / amber / red with no dot; table headers are a #262626 band; checkboxes are grey squares
+  that turn white when ticked.
+- The baseline token aliases are re-pointed for a dark ground (`--white` is the #1a1a1a surface), and `.darkpane`
+  re-defines them locally so the Room Agent, the email preview and the client banner stay legible.
+
+**Not copied:** the reference's typeface (it is not Inter, and the product is Inter-only by D-078), its global search box
+(the product has none to put there), and its chart (no screen has one). The speaker portal stays light.
+
+## D-083 (2026-09-24): Both themes share the dark theme's sizes — Status: ACCEPTED (Travis's call)
+Toggling Light / Dark moved things: the dark theme (D-082) had its own heights, paddings and type sizes. Travis
+preferred the dark theme's sizing and asked for the light theme to match it. All geometry now lives in one
+"Shared geometry" block at the end of the control center's `globals.css` — 72 px logo row with a dashed rule, 40 px nav
+rows, 64 px top bar, 26 px page title, flat 16 px-radius cards with a ruled header, KPI tiles with the icon tile before
+the title and a 32 px figure, 36 px buttons, 24 px outline status pills. The theme blocks set colour only. The light
+theme therefore gives up the Kravio "well" (hatched tray + inner panel) for the same flat card the dark theme uses,
+in light colours.
+
+Verified by measuring 18 elements on the command center and 15 on Files in both themes: identical position and size,
+and identical page height. **Rule going forward:** a theme block may set colours, shadows and radii, never a height,
+padding, margin, font size, weight or border width.

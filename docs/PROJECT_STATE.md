@@ -3068,3 +3068,11 @@ Open: `speaker_first` merge uses the last name.
 **Same day, D-081:** demo file sizes were invented by the seed (504 MB recorded for 1.9 KB fixtures). Seed now records
 the stored bytes; `npm run db:verify-sizes [-- --fix]` checks recorded sizes against storage (fix is dev-only) and
 corrected the 4 seeded rows; room folders sum current versions only. Files screen shows 1.9 KB / 87.3 KB / 2.0 KB.
+
+## 2026-09-24 — Dark theme (D-082)
+Control center has a dark theme after the "Modulix" reference: settings menu → Appearance → Light / Dark / Match
+system, remembered per browser, applied before first paint. Walked in dark: command center (KPIs, cards, tabs),
+Files, Room Agent, create event with its date picker, change password; switching back to Light restores the Kravio
+look unchanged. Speaker portal stays light.
+**Same day, D-083:** both themes now share the dark theme's sizes (one geometry block; theme blocks are colour-only),
+so toggling changes colour and nothing moves — measured identical on the command center and Files.

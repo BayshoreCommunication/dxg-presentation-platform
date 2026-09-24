@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { Shell } from "@/components/Shell";
+import { THEME_BOOT } from "@/lib/theme";
 import { getSession, listEvents } from "@/lib/api";
 import type { Principal, EventRow } from "@/lib/api";
 
@@ -38,7 +39,12 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   }
 
   return (
-    <html lang="en">
+    // The theme attribute is set by THEME_BOOT before React hydrates, so the server's
+    // markup and the browser's differ on purpose here (D-082).
+    <html lang="en" data-theme="light" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOT }} />
+      </head>
       <body>
         <Shell principal={principal} events={events}>{children}</Shell>
       </body>

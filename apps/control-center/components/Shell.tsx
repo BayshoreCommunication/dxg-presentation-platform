@@ -5,6 +5,8 @@ import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { Sidebar } from "@/components/Sidebar";
 import { Glyph } from "@/components/Icon";
+import { applyTheme, readThemeChoice, saveThemeChoice } from "@/lib/theme";
+import type { ThemeChoice } from "@/lib/theme";
 import type { Principal, EventRow } from "@/lib/api";
 
 /**
@@ -137,6 +139,9 @@ function StaffFrame({
               <Link href="/account/mfa" className="item" role="menuitem">
                 Two-factor authentication
               </Link>
+              <div className="sep" />
+              <div className="label">Appearance</div>
+              <ThemeItems />
             </HeaderMenu>
           </div>
         </header>
@@ -242,4 +247,48 @@ function breadcrumb(pathname: string, events: EventRow[]): { label: string; href
   // The command centre *is* the event, so its crumb is the event name, not a second one.
   if (screen && !(event && screen === "Command center")) crumbs.push({ label: screen });
   return crumbs;
+}
+
+/** Light / Dark / Match system (D-082), remembered per browser. */
+function ThemeItems() {
+  const [choice, setChoice] = useState<ThemeChoice>("light");
+
+  useEffect(() => {
+    setChoice(readThemeChoice());
+  }, []);
+
+  // "Match system" follows the operating system while the page is open.
+  useEffect(() => {
+    if (choice !== "system") return;
+    const query = window.matchMedia("(prefers-color-scheme: dark)");
+    const follow = () => applyTheme("system");
+    query.addEventListener("change", follow);
+    return () => query.removeEventListener("change", follow);
+  }, [choice]);
+
+  const options: { value: ThemeChoice; label: string }[] = [
+    { value: "light", label: "Light" },
+    { value: "dark", label: "Dark" },
+    { value: "system", label: "Match system" },
+  ];
+  return (
+    <>
+      {options.map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          className="item"
+          role="menuitemradio"
+          aria-checked={choice === option.value}
+          onClick={() => {
+            saveThemeChoice(option.value);
+            setChoice(option.value);
+          }}
+        >
+          {option.label}
+          {choice === option.value && <span className="tick">✓</span>}
+        </button>
+      ))}
+    </>
+  );
 }
