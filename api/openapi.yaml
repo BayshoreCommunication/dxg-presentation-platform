@@ -306,6 +306,9 @@ paths:
   /events/{eventId}/sync/fleet:
     parameters: [{$ref: '#/components/parameters/eventId'}]
     get: {tags: [sync], summary: 'Fleet status: agents, heartbeats, readiness per room', responses: {'200': {$ref: '#/components/responses/OK'}}}
+  /rooms/{roomId}/device-key:
+    parameters: [{$ref: '#/components/parameters/roomId'}]
+    post: {tags: [sync], summary: 'Issue or replace the room computer device key (shown once; replacing cancels the old one; D-077)', responses: {'201': {$ref: '#/components/responses/Created'}}}
   /rooms/{roomId}:force-sync:
     parameters: [{$ref: '#/components/parameters/roomId'}, {$ref: '#/components/parameters/idempotencyKey'}]
     post: {tags: [sync], summary: Force manifest rebuild + push notification, responses: {'202': {$ref: '#/components/responses/Accepted'}}}
@@ -399,7 +402,7 @@ components:
   securitySchemes:
     staffAuth: {type: openIdConnect, openIdConnectUrl: https://auth.example.com/.well-known/openid-configuration, description: Staff OIDC (MFA enforced)}
     speakerToken: {type: http, scheme: bearer, description: "Hashed, recipient-bound speaker portal token"}
-    agentAuth: {type: http, scheme: bearer, description: Room Agent device-credential signed token}
+    agentAuth: {type: http, scheme: bearer, description: 'Room Agent device key, `<agent id>.<secret>`, issued from Room sync (D-077). A signed device-credential token (SECURITY_MODEL §2) may replace it.'}
     serviceAuth: {type: http, scheme: bearer, description: Service-to-service short-lived token}
     webhookSignature: {type: apiKey, in: header, name: X-Webhook-Signature, description: Provider HMAC signature}
   parameters:

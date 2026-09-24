@@ -218,6 +218,8 @@ export type FleetRoom = {
   files_total: number;
   heartbeat_age: number | null;
   agent_version: string | null;
+  /** When the room's computer was given its device key; null if never (D-077). */
+  key_issued_at: string | null;
 };
 
 /** Room sync fleet view (screen 14, OBJ-6). */
@@ -228,10 +230,11 @@ export async function syncFleet(tx: pg.PoolClient, eventId: string): Promise<Fle
     room: string;
     heartbeat_age: number | null;
     agent_version: string | null;
+    key_issued_at: string | null;
   }>(
     `SELECT r.id AS room_id, r.name AS room,
             EXTRACT(EPOCH FROM (now() - ra.last_heartbeat_at))::int AS heartbeat_age,
-            ra.agent_version
+            ra.agent_version, ra.key_issued_at
        FROM pmp.rooms r
        LEFT JOIN pmp.room_agents ra ON ra.room_id = r.id AND ra.revoked_at IS NULL
       WHERE r.event_id = $1
@@ -253,6 +256,7 @@ export async function syncFleet(tx: pg.PoolClient, eventId: string): Promise<Fle
       files_total: snapshots.length,
       heartbeat_age: room.heartbeat_age,
       agent_version: room.agent_version,
+      key_issued_at: room.key_issued_at,
     };
   });
 }

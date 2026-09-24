@@ -72,6 +72,7 @@ import {
   supportedTimezones,
 } from "./services/events.ts";
 import { eventAgenda } from "./services/agenda.ts";
+import { agentForKey, issueDeviceKey } from "./services/deviceKeys.ts";
 import { pdfStates, queuePdfs, resumePdfQueue } from "./services/pdf.ts";
 import {
   createSession,
@@ -847,23 +848,44 @@ app.get("/api/v1/events/:eventId/sync/fleet", async (req, res) => {
  * Agent heartbeat (FR-AGT-001). Device-credential auth arrives with M5-1; for now
  * the agent identifies itself by room, which is enough to drive room readiness.
  */
+/*
+ * A room computer's check-in (D-077). It must carry its device key as
+ * `Authorization: Bearer <agent id>.<secret>`; the room it counts for is the key's own,
+ * never a `room_id` in the body. It used to accept a bare room id, so anyone who knew
+ * one could report that room online and "Rooms ready" would count it.
+ */
 app.post("/api/v1/agent/heartbeat", async (req, res) => {
-  const body = req.body as { room_id?: string; agent_version?: string };
-  if (typeof body.room_id !== "string") {
-    return res.status(400).json({ code: "request.invalid", message: "`room_id` is required." });
-  }
-  const updated = await withSystemScope(async (tx) => {
-    const { rowCount } = await tx.query(
+  const body = (req.body ?? {}) as { agent_version?: string };
+  const key = /^Bearer\s+(.+)$/i.exec(req.headers.authorization ?? "")?.[1]?.trim();
+  const result = await withSystemScope(async (tx) => {
+    const agent = await agentForKey(tx, key);
+    if (!agent) return null;
+    await tx.query(
       `UPDATE pmp.room_agents SET last_heartbeat_at = now(), agent_version = COALESCE($2, agent_version)
-        WHERE room_id = $1 AND revoked_at IS NULL`,
-      [body.room_id, body.agent_version ?? null],
+        WHERE id = $1`,
+      [agent.id, typeof body.agent_version === "string" ? body.agent_version.slice(0, 40) : null],
     );
-    return rowCount ?? 0;
+    return agent;
   });
-  if (updated === 0) {
-    return res.status(404).json({ code: "agent.not_registered", message: "No agent for that room." });
+  if (!result) {
+    // One answer for no key, a malformed key, an unknown agent and a wrong secret.
+    return res.status(401).json({
+      code: "agent.unauthenticated",
+      message: "This computer needs a valid device key. Issue one from Room sync and enter it on the computer.",
+    });
   }
-  return res.json({ acknowledged: true, at: new Date().toISOString() });
+  return res.json({ acknowledged: true, room_id: result.room_id, at: new Date().toISOString() });
+});
+
+/** Issue (or replace) the device key for a room's computer (D-077). Staff; shown once. */
+app.post("/api/v1/rooms/:roomId/device-key", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  const result = await withScope(scopeFor(req), (tx) => issueDeviceKey(tx, actor, String(req.params.roomId)));
+  if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+  // Never cached anywhere between here and the operator's screen.
+  res.setHeader("cache-control", "no-store");
+  return res.status(201).json(result.value);
 });
 
 /* ── room agent (screen 15; M5 builds the Windows client itself) ──────────── */

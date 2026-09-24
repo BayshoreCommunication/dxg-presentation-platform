@@ -183,6 +183,15 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:4000/
 /** The version's slide preview as a PDF, for an <iframe> (D-074). */
 export const previewUrl = (versionId: string) => `${API_BASE_URL}/file-versions/${versionId}/preview`;
 
+/**
+ * Issue a new device key for a room's presentation computer (D-077). The key is shown
+ * once; issuing another cancels the previous one.
+ */
+export const issueDeviceKey = (roomId: string) =>
+  request<{ agent_id: string; device_key: string; issued_at: string }>(`/rooms/${roomId}/device-key`, {
+    method: "POST",
+  });
+
 /** Queue (or retry) a version's slide preview. */
 export const requestPreview = (versionId: string) =>
   request<{ queued: number }>(`/file-versions/${versionId}/preview`, { method: "POST" });
@@ -194,6 +203,8 @@ export type FleetRoom = {
   files_current: number;
   files_total: number;
   heartbeat_age: number | null;
+  /** When this room's computer was last given a device key; null if it never was (D-077). */
+  key_issued_at: string | null;
   agent_version: string | null;
 };
 

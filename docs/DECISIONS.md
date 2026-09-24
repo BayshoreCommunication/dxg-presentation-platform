@@ -1501,3 +1501,25 @@ Osei's Sensor Talk showed twice), and a reviewer could approve the stale file.
 Tests: `tests/invariants/stale-versions.test.ts` — v1 then v2 through the real speaker portal leaves one entry, the
 newest; after approving it, rolling back to the never-approved v1 is refused. The probe event is reused and left archived
 between runs (it holds files, so it cannot be deleted).
+
+## D-077 (2026-09-24): Room computers authenticate their check-ins — Status: ACCEPTED (Travis's call)
+`POST /agent/heartbeat` took a bare `room_id` and no credential, though the OpenAPI spec already required `agentAuth`.
+Anyone who knew a room's id could report its computer online, and "Rooms ready" would count it.
+
+- **Device keys.** Staff issue a key per room from **Room sync** (presentation manager or above; audited as
+  `agent.key_issued`). The key is `<agent id>.<secret>`, shown once; only the secret's SHA-256 is stored (migration
+  016: `room_agents.key_hash`, `key_issued_at`, `key_issued_by`), so it cannot be read back, only replaced. Issuing a
+  new key cancels the old — the answer to a lost laptop. A room with no computer registered gets one on first issue.
+- **Check-ins require it** as `Authorization: Bearer <key>`, compared in constant time. The room counted is the key's
+  own agent's room; a `room_id` in the body is ignored, so one room's key cannot vouch for another. No key, a malformed
+  key, an unknown or revoked agent and a wrong secret all get the same 401.
+- Room sync shows each room's key status ("no device key — cannot check in"), and its title no longer says "Day 2" on
+  every event.
+- **Kept for later design (Rakibul):** the signed device-credential scheme of SECURITY_MODEL §2 (`public_key` is still a
+  placeholder) and station login; this closes the open door now without committing to either. `npm run db:heartbeat`
+  still fakes check-ins for demos by writing to the database directly.
+- **Noticed, not changed:** Room sync's "Manual sync" button is disabled and does nothing.
+
+Tests: `tests/invariants/device-keys.test.ts` (no key refused; issued key accepted for its own room only; wrong secret
+refused; re-issuing cancels the old key; issuing needs a session). `room_agents` joined the test cleanup list so probe
+events with a registered computer are deleted, not archived.

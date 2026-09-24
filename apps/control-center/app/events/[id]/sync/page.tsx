@@ -1,6 +1,7 @@
 import { getFleet } from "@/lib/api";
 import { Chip } from "@/components/Chip";
 import { AutoRefresh } from "@/components/AutoRefresh";
+import { DeviceKeyButton } from "@/components/DeviceKeyButton";
 import { guard } from "@/lib/guard";
 
 export const dynamic = "force-dynamic";
@@ -15,7 +16,8 @@ export default async function RoomSyncPage({ params }: { params: Promise<{ id: s
   return (
     <>
       <AutoRefresh seconds={5} />
-      <h1 className="htitle">Room synchronization · Day 2</h1>
+      {/* Was "· Day 2" on every event, whatever its dates. */}
+      <h1 className="htitle">Room synchronization</h1>
       <div className="note" style={{ margin: "-8px 0 14px" }}>
         <b className="num">
           {ready} / {items.length}
@@ -39,10 +41,13 @@ export default async function RoomSyncPage({ params }: { params: Promise<{ id: s
                         : room.heartbeat_age > 300
                           ? `no heartbeat for ${Math.round(room.heartbeat_age / 60)} min`
                           : `sync ${room.heartbeat_age}s ago`}
+                      {" · "}
+                      {room.key_issued_at ? "device key issued" : "no device key — cannot check in"}
                     </span>
                   </td>
                   <td style={{ textAlign: "right" }}>
                     <Chip status={room.readiness} label={LABEL[room.readiness]} />{" "}
+                    <DeviceKeyButton roomId={room.room_id} room={room.room} issuedAt={room.key_issued_at} />{" "}
                     <button className="btn" style={{ padding: "4px 10px" }} disabled title="M5-5">
                       Manual sync
                     </button>
