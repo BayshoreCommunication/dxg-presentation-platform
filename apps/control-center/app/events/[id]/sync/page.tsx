@@ -1,4 +1,4 @@
-import { getFleet } from "@/lib/api";
+import { getFleet, getSummary } from "@/lib/api";
 import { Chip } from "@/components/Chip";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { DeviceKeyButton } from "@/components/DeviceKeyButton";
@@ -10,7 +10,7 @@ const LABEL = { ready: "Ready", attention: "Attention", agent_offline: "Agent of
 
 export default async function RoomSyncPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { items } = await guard(getFleet(id), `/events/${id}/sync`);
+  const [{ items }, summary] = await guard(Promise.all([getFleet(id), getSummary(id)]), `/events/${id}/sync`);
   const ready = items.filter((room) => room.readiness === "ready").length;
 
   return (
@@ -47,7 +47,12 @@ export default async function RoomSyncPage({ params }: { params: Promise<{ id: s
                   </td>
                   <td style={{ textAlign: "right" }}>
                     <Chip status={room.readiness} label={LABEL[room.readiness]} />{" "}
-                    <DeviceKeyButton roomId={room.room_id} room={room.room} issuedAt={room.key_issued_at} />{" "}
+                    <DeviceKeyButton
+                      roomId={room.room_id}
+                      room={room.room}
+                      issuedAt={room.key_issued_at}
+                      timezone={summary.event.timezone}
+                    />{" "}
                     <button className="btn" style={{ padding: "4px 10px" }} disabled title="M5-5">
                       Manual sync
                     </button>

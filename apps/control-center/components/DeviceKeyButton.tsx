@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { formatSessionTime } from "@pmp/format";
 import { issueDeviceKey, ApiError } from "@/lib/api";
 
 /**
@@ -9,8 +10,21 @@ import { issueDeviceKey, ApiError } from "@/lib/api";
  * are refused, so nobody who merely knows a room's id can report it online. The key is
  * shown once, here, to be entered on that computer; a new one cancels the old — which is
  * also what to do if a laptop goes missing.
+ *
+ * The issue time is on the event's clock with a fixed locale: the server and the
+ * browser must render the same string, or React reports a hydration mismatch.
  */
-export function DeviceKeyButton({ roomId, room, issuedAt }: { roomId: string; room: string; issuedAt: string | null }) {
+export function DeviceKeyButton({
+  roomId,
+  room,
+  issuedAt,
+  timezone,
+}: {
+  roomId: string;
+  room: string;
+  issuedAt: string | null;
+  timezone: string;
+}) {
   const router = useRouter();
   const [confirming, setConfirming] = useState(false);
   const [key, setKey] = useState<string | null>(null);
@@ -85,7 +99,7 @@ export function DeviceKeyButton({ roomId, room, issuedAt }: { roomId: string; ro
       type="button"
       className="btn"
       style={{ padding: "4px 10px" }}
-      title={issuedAt ? `Key issued ${new Date(issuedAt).toLocaleString()}` : "This room's computer has no key and cannot check in"}
+      title={issuedAt ? `Key issued ${formatSessionTime(issuedAt, timezone)}` : "This room's computer has no key and cannot check in"}
       onClick={() => setConfirming(true)}
     >
       {issuedAt ? "New device key" : "Issue device key"}
