@@ -56,7 +56,7 @@ export function ClientPortalView({ data }: { data: ClientView }) {
         }}
       >
         <b style={{ color: "var(--white)" }}>
-          {data.event.client_name} · <span style={{ color: "var(--blue)" }}>Client Oversight</span>
+          {data.event.client_name} · <span style={{ color: "var(--white)", fontWeight: 600 }}>Client Oversight</span>
         </b>
         <span style={{ fontSize: 12.5 }}>{data.event.name}</span>
       </div>

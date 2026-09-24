@@ -71,7 +71,9 @@ export function RoomAgentView({ initial }: { initial: AgentView }) {
   return (
     <div
       className="darkpane"
-      style={{ margin: -24, minHeight: "calc(100% + 48px)", borderRadius: 0, padding: "18px 22px" }}
+      // A room computer's screen, framed as one dark panel inside the page rather than
+      // bleeding to the edges of the old padded <main> (D-078).
+      style={{ minHeight: "calc(100vh - 100px)", padding: "18px 22px" }}
     >
       <div
         style={{
@@ -85,7 +87,7 @@ export function RoomAgentView({ initial }: { initial: AgentView }) {
       >
         <div>
           <h1 style={{ fontSize: 20, color: "var(--white)" }}>
-            Room Agent · <span style={{ color: "var(--blue)" }}>{view.room.name}</span>
+            Room Agent · <span style={{ color: "var(--white)", fontWeight: 600 }}>{view.room.name}</span>
           </h1>
           <div className="mono" style={{ fontSize: 12, color: "var(--dim)" }}>
             {view.agent.fingerprint ?? "no agent registered"} · agent {view.agent.version ?? "—"} ·{" "}
@@ -94,7 +96,7 @@ export function RoomAgentView({ initial }: { initial: AgentView }) {
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <span className="mono" style={{ fontSize: 16, color: "var(--blue)" }}>
+          <span className="mono" style={{ fontSize: 16, color: "var(--white)" }}>
             {clock}
           </span>
           <span className="chip c-ok">OFFLINE-SAFE ✓</span>
@@ -164,7 +166,7 @@ export function RoomAgentView({ initial }: { initial: AgentView }) {
             >
               <span
                 className="mono"
-                style={{ color: row.launchable ? "var(--blue)" : "var(--dim)", width: 44 }}
+                style={{ color: row.launchable ? "var(--white)" : "var(--paneink)", width: 44 }}
               >
                 {time(row.starts_at)}
               </span>
@@ -283,9 +285,8 @@ export function RoomAgentView({ initial }: { initial: AgentView }) {
             >
               <span
                 style={{
-                  fontFamily: "'Barlow Semi Condensed'",
                   fontWeight: 700,
-                  color: "var(--blue)",
+                  color: "var(--white)",
                   letterSpacing: ".06em",
                 }}
               >

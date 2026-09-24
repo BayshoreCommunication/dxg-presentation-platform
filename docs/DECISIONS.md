@@ -1523,3 +1523,26 @@ Anyone who knew a room's id could report its computer online, and "Rooms ready" 
 Tests: `tests/invariants/device-keys.test.ts` (no key refused; issued key accepted for its own room only; wrong secret
 refused; re-issuing cancels the old key; issuing needs a session). `room_agents` joined the test cleanup list so probe
 events with a registered computer are deleted, not archived.
+
+## D-078 (2026-09-24): Kravio design system replaces the baseline's colours and type — Status: ACCEPTED (Travis's call)
+Travis asked for the exact design system of kravio-dashboard.vercel.app on the control center and the speaker
+portal. It was extracted from the live site (computed styles and the compiled stylesheet) into
+`docs/design-system/KRAVIO_DESIGN_SYSTEM.md`, with a standalone theme and preview beside it.
+
+- **What changes:** colours and typography only, which **supersedes VISUAL_ACCEPTANCE §4 and §5**. The ground is
+  light (`#f8f8f8` page, white main sheet), there is no accent colour, and emphasis is Kravio's near-black
+  gradient. Inter is the one typeface; Barlow Semi Condensed and IBM Plex Mono are gone (`.mono` keeps
+  tabular figures in Inter). Every border is 0.8 px. Cards are Kravio "wells": a hatched grey tray, a header
+  row, and one white panel. The event tabs are its segmented toggle, and the sidebar gains 16 px outline icons
+  and an account menu that holds Password, 2FA and Sign out.
+- **What does not change:** screen structure, navigation groups and order, terminology and states (§1–3, §6, §7,
+  and D-010). The top bar's breadcrumb only restates names the sidebar and page titles already use.
+- **How:** both apps' `globals.css` now open with the Kravio tokens, and the baseline token names (`--blue`,
+  `--ink`, `--line` …) are kept as aliases onto them, so the inline styles written against those names follow
+  the new look without being rewritten. Inside `.darkpane` the secondary-text and hairline tokens flip, so the
+  Room Agent screen, the email preview and the client banner stay dark and legible.
+- **Extrapolated, because Kravio has no such thing:** a filled primary button (its toggle-thumb gradient),
+  coloured status chips (a neutral pill with a status dot), and amber/indigo for warning and sync states.
+- **The per-event accent colour is untouched.** It brands speaker and client emails, not this UI; its default
+  stays `#44C7F4`.
+- **Needs:** G0-6b visual approval re-run against this look, since the approved baseline was the dark one.

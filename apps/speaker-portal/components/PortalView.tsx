@@ -23,27 +23,26 @@ export function PortalView({
   return (
     <>
       <div
-        className="darkpane"
+        className="animate-rise"
         style={{
-          padding: "16px 20px",
-          marginBottom: 16,
+          marginBottom: 24,
           display: "flex",
           justifyContent: "space-between",
           alignItems: "flex-start",
-          gap: 12,
+          gap: 16,
           flexWrap: "wrap",
         }}
       >
-        <div>
-          <b style={{ color: "var(--white)", fontFamily: "'Barlow Semi Condensed'", fontSize: 18 }}>
-            {session.event.name} · <span style={{ color: "var(--blue)" }}>Speaker Upload</span>
-          </b>
-          <br />
-          <span style={{ fontSize: 13 }}>{session.speaker.name}</span>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <h1 className="htitle" style={{ marginBottom: 0 }}>
+            {session.event.name}
+          </h1>
+          <span className="note">
+            Speaker Upload · {session.speaker.name}
+          </span>
         </div>
         <button
           className="btn"
-          style={{ background: "var(--ink2)", color: "var(--paneink)", borderColor: "#33414B" }}
           onClick={() => {
             void presenterLogout()
               .catch(() => undefined)

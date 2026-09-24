@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kravio theme preview</title>
+<link rel="stylesheet" href="kravio-theme.css">
+<style>
+  /* preview-only helpers */
+  .row2 { display: flex; flex-direction: column; gap: 16px; width: 100%; }
+  @media (min-width: 1400px) { .row2 { flex-direction: row; } .row2 .well.updates { width: 332px; flex-shrink: 0; } }
+  .well.chartwell { height: 404px; }
+  .well.updates { height: 560px; }
+  .well.updates .body { gap: 16px; }
+  .stack { display: flex; flex-direction: column; gap: 12px; width: 100%; }
+  .swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; width: 100%; }
+  .sw { height: 56px; border-radius: 8px; box-shadow: inset 0 0 0 .8px var(--border); display: flex; align-items: flex-end; padding: 6px; font-size: 11px; color: var(--secondary-foreground); }
+  .demo-grid { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; width: 100%; }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <linearGradient id="spark-up" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#059669" stop-opacity=".3"/><stop offset="1" stop-color="#059669" stop-opacity="0"/></linearGradient>
+    <linearGradient id="spark-down" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F00606" stop-opacity=".3"/><stop offset="1" stop-color="#F00606" stop-opacity="0"/></linearGradient>
+    <symbol id="i-grid" viewBox="0 0 16 16"><rect x="2" y="2" width="5" height="5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.2"/><rect x="9" y="2" width="5" height="5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.2"/><rect x="2" y="9" width="5" height="5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.2"/><rect x="9" y="9" width="5" height="5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.2"/></symbol>
+    <symbol id="i-file" viewBox="0 0 16 16"><path d="M9 2H5.5A2 2 0 0 0 3.5 4v8a2 2 0 0 0 2 2h5a2 2 0 0 0 2-2V5.5L9 2Z M9 2v3.5h3.5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-users" viewBox="0 0 16 16"><circle cx="6" cy="5.5" r="2.5" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M1.8 13.5c.4-2.4 2.1-3.7 4.2-3.7s3.8 1.3 4.2 3.7M10.5 3.3a2.5 2.5 0 0 1 0 4.4M12 9.9c1.3.4 2.1 1.5 2.3 3.6" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></symbol>
+    <symbol id="i-search" viewBox="0 0 16 16"><path d="M11.3 11.3 14 14" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/><circle cx="7.3" cy="7.3" r="5.3" fill="none" stroke="currentColor" stroke-width="1.2"/></symbol>
+    <symbol id="i-chev" viewBox="0 0 12 12"><path d="M9 7.5 6 4.5 3 7.5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-sort" viewBox="0 0 12 12"><path d="M4 2v8M4 2 2.2 3.8M4 2l1.8 1.8M8 10V2M8 10l1.8-1.8M8 10 6.2 8.2" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-check" viewBox="0 0 10 10"><path d="M2.1 5.8 3.5 7.3 7.9 2.7" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-cal" viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="11" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M2 6.5h12M5.5 1.8v2.4M10.5 1.8v2.4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></symbol>
+    <symbol id="i-bell" viewBox="0 0 16 16"><path d="M4 6.3a4 4 0 0 1 8 0v2.4l1.2 2H2.8L4 8.7Z M6.5 12.7a1.5 1.5 0 0 0 3 0" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-gear" viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.2" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M8 1.8v1.6M8 12.6v1.6M1.8 8h1.6M12.6 8h1.6M3.6 3.6l1.1 1.1M11.3 11.3l1.1 1.1M3.6 12.4l1.1-1.1M11.3 4.7l1.1-1.1" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></symbol>
+    <symbol id="i-more" viewBox="0 0 16 16"><circle cx="8" cy="3" r="1.2" fill="currentColor"/><circle cx="8" cy="8" r="1.2" fill="currentColor"/><circle cx="8" cy="13" r="1.2" fill="currentColor"/></symbol>
+    <symbol id="i-signal" viewBox="0 0 16 16"><path d="M3 12v-2M6.5 12V7M10 12V4.5M13.5 12V2.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+    <symbol id="i-bolt" viewBox="0 0 16 16"><path d="M9 1.5 3.5 9h4L7 14.5 12.5 7h-4Z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></symbol>
+    <symbol id="i-ticket" viewBox="0 0 16 16"><path d="M2 5.5a1.5 1.5 0 0 1 1.5-1.5h9A1.5 1.5 0 0 1 14 5.5v1a1.5 1.5 0 0 0 0 3v1a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 10.5v-1a1.5 1.5 0 0 0 0-3Z" fill="none" stroke="currentColor" stroke-width="1.2"/></symbol>
+    <symbol id="i-book" viewBox="0 0 16 16"><path d="M3 3.2A1.2 1.2 0 0 1 4.2 2h8.3v10.5H4.2A1.2 1.2 0 0 0 3 13.7Z M3 3.2v10.5M4.2 12.5H12.5V14H4.2A1.2 1.2 0 0 1 3 13.7" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></symbol>
+    <symbol id="i-sidebar" viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M10 3v10" stroke="currentColor" stroke-width="1.2"/></symbol>
+    <symbol id="i-filter" viewBox="0 0 16 16"><path d="M2.5 3.5h11L9.5 8.5v4l-3 1.5V8.5Z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></symbol>
+    <symbol id="i-updown" viewBox="0 0 12 12"><path d="M3.5 4.5 6 2l2.5 2.5M3.5 7.5 6 10l2.5-2.5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  </defs>
+</svg>
+
+<div class="shell">
+  <aside>
+    <div class="logo">
+      <a class="brand" href="#"><span class="mark">D</span><b>DXG Events</b></a>
+      <button class="ibtn" aria-label="Collapse sidebar"><svg class="ico"><use href="#i-sidebar"/></svg></button>
+    </div>
+    <div class="sidebody">
+      <label class="input-group shadow"><svg class="ico"><use href="#i-search"/></svg><input type="search" placeholder="Search anything" aria-label="Search anything"><span class="addon"><span class="kbd">⌘</span><span class="kbd">K</span></span></label>
+      <nav>
+        <div class="navgroups">
+          <div class="navgroup">
+            <p class="grp">Main navigation</p>
+            <div class="navitems">
+              <button class="on" aria-current="page"><span><span class="ico"><svg><use href="#i-grid"/></svg></span><span>Overview</span></span></button>
+              <div>
+                <button aria-expanded="true"><span><span class="ico"><svg><use href="#i-ticket"/></svg></span><span>Presentations</span></span><span class="chev"><svg><use href="#i-chev"/></svg></span></button>
+                <div class="subnav"><div><div class="items">
+                  <button><span class="lbl">All / My queue</span></button>
+                  <button><span class="lbl">Awaiting review</span></button>
+                  <button><span class="lbl">Escalations</span></button>
+                </div></div></div>
+              </div>
+              <button><span><span class="ico"><svg><use href="#i-users"/></svg></span><span>Speakers</span></span></button>
+              <button aria-expanded="false"><span><span class="ico"><svg><use href="#i-users"/></svg></span><span>Rooms &amp; teams</span></span><span class="chev"><svg><use href="#i-chev"/></svg></span></button>
+              <button><span><span class="ico"><svg><use href="#i-book"/></svg></span><span>Knowledge base</span></span></button>
+            </div>
+          </div>
+          <div class="navgroup">
+            <p class="grp">Analytics &amp; insights</p>
+            <div class="navitems">
+              <button><span><span class="ico"><svg><use href="#i-file"/></svg></span><span>Readiness</span></span></button>
+              <button><span><span class="ico"><svg><use href="#i-file"/></svg></span><span>Reports</span></span></button>
+            </div>
+          </div>
+          <div class="navgroup">
+            <p class="grp">Support</p>
+          </div>
+        </div>
+        <button class="account"><span class="avatar">AH<span class="dot"></span></span><span class="who"><b>Alex Hartman</b><small>alex@example.invalid</small></span><svg class="chev"><use href="#i-updown"/></svg></button>
+      </nav>
+    </div>
+  </aside>
+
+  <main>
+    <header class="topbar">
+      <div class="left">
+        <nav class="crumbs" aria-label="Breadcrumb"><a href="#"><svg class="ico" width="16" height="16"><use href="#i-grid"/></svg>Overview</a><svg class="sep" viewBox="0 0 7 11"><path d="M1.5 1.5 5 5.5 1.5 9.5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg><span aria-current="page">Dashboard</span></nav>
+      </div>
+      <div class="right">
+        <button class="ibtn bell" aria-label="Notifications"><svg class="ico"><use href="#i-bell"/></svg></button>
+        <button class="ibtn" aria-label="Settings"><svg class="ico"><use href="#i-gear"/></svg></button>
+      </div>
+    </header>
+
+    <div class="content">
+      <div class="pagehead">
+        <div class="titles animate-rise">
+          <h1 class="htitle">Hello, Alex Hartman <span class="animate-wave">👋</span></h1>
+          <p class="subtitle">Here are the latest insights from your event pipeline.</p>
+        </div>
+        <div class="actions animate-rise" style="animation-delay:60ms">
+          <button class="btn select" aria-expanded="false"><span style="display:flex;align-items:center;gap:6px"><svg class="ico"><use href="#i-cal"/></svg><span>Last week</span></span><svg class="chev"><use href="#i-chev"/></svg></button>
+          <button class="ibtn bordered" aria-label="Dashboard options"><svg class="ico"><use href="#i-more"/></svg></button>
+        </div>
+      </div>
+
+      <div class="krow">
+        <section class="well kpi animate-rise">
+          <div class="chd"><h2>Decks in review</h2><svg class="ico"><use href="#i-file"/></svg></div>
+          <div class="body">
+            <div class="stat"><p class="kv">3,484</p><p class="delta"><b>+7.1%</b><span>vs last week</span></p></div>
+            <div class="spark animate-draw" style="animation-delay:300ms"><svg viewBox="0 0 92 38"><polygon points="10.5,9.7 0.5,37.1 91.5,37.1 91.5,26.1 81.5,15.7 71.5,31.3 61.3,15 50.9,19.6 41.1,1.1 31.1,22.5 21.1,11.4"/><polyline points="0.5,37.1 10.5,9.7 21.1,11.4 31.1,22.5 41.1,1.1 50.9,19.6 61.3,15 71.5,31.3 81.5,15.7 91.5,26.1"/></svg></div>
+          </div>
+        </section>
+        <section class="well kpi animate-rise" style="animation-delay:40ms">
+          <div class="chd"><h2>Avg. turnaround</h2><svg class="ico"><use href="#i-bolt"/></svg></div>
+          <div class="body">
+            <div class="stat"><p class="kv">486</p><p class="delta"><b>+2%</b><span>vs last week</span></p></div>
+            <div class="spark animate-draw" style="animation-delay:340ms"><svg viewBox="0 0 92 38"><polygon points="10.5,20 0.5,37.1 91.5,37.1 91.5,18 81.5,24 71.5,12 61.3,16 50.9,9 41.1,15 31.1,6 21.1,14"/><polyline points="0.5,30 10.5,20 21.1,14 31.1,6 41.1,15 50.9,9 61.3,16 71.5,12 81.5,24 91.5,18"/></svg></div>
+          </div>
+        </section>
+        <section class="well kpi animate-rise" style="animation-delay:80ms">
+          <div class="chd"><h2>On-time rate</h2><svg class="ico"><use href="#i-signal"/></svg></div>
+          <div class="body">
+            <div class="stat"><p class="kv">92%</p><p class="delta down"><b>-1.3%</b><span>vs last week</span></p></div>
+            <div class="spark down animate-draw" style="animation-delay:380ms"><svg viewBox="0 0 92 38"><polygon points="21,20.7 10.4,29 0.4,16.5 0.4,36.5 91.4,36.5 91.4,15.5 81.4,25 71.4,0.6 61.2,4.3 50.8,19 41,20.4 31,1.9"/><polyline points="0.4,16.5 10.4,29 21,20.7 31,1.9 41,20.4 50.8,19 61.2,4.3 71.4,0.6 81.4,25 91.4,15.5"/></svg></div>
+          </div>
+        </section>
+      </div>
+
+      <div class="row2">
+        <section class="well chartwell animate-rise" style="animation-delay:260ms">
+          <div class="chd"><h2><svg class="ico"><use href="#i-signal"/></svg>Upload volume</h2><div class="tools"><button class="btn select in-card"><span style="display:flex;align-items:center;gap:6px"><svg class="ico"><use href="#i-cal"/></svg><span>Last week</span></span><svg class="chev"><use href="#i-chev"/></svg></button></div></div>
+          <div class="body" style="justify-content:space-between">
+            <div class="stat" style="flex-direction:row;align-items:flex-end;gap:12px"><p class="kv xl">4,790</p><p class="delta"><b>+8%</b><span>vs last week</span></p></div>
+            <div style="display:flex;width:100%;gap:12px;align-items:center">
+              <div class="stack" style="flex:1;min-width:0">
+                <div class="chart" id="chart"></div>
+                <div class="axis"><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span></div>
+              </div>
+              <div class="yaxis"><span>800</span><span>600</span><span>400</span><span>200</span><span>0</span></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="well updates animate-rise" style="animation-delay:200ms">
+          <div class="chd"><h2>Latest updates</h2><svg class="ico"><use href="#i-file"/></svg></div>
+          <div class="body">
+            <div class="stack">
+              <div class="seg" id="seg"><span class="thumb" style="width:calc(33.3333% - 5.33px);left:0"></span><button class="on">Today</button><button>Yesterday</button><button>This week</button></div>
+              <label class="input-group in-card"><svg class="ico"><use href="#i-search"/></svg><input type="search" placeholder="Search activities"></label>
+            </div>
+            <div class="stack" style="gap:16px"><p class="countline"><b>8</b> new activities today</p><div class="dash-x"></div></div>
+            <ol class="feed">
+              <li class="animate-rise"><span class="tile"><svg class="ico"><use href="#i-file"/></svg></span><div class="txt"><div class="row"><p>Deck updated</p><time>11:20 AM</time></div><p class="desc">Slot <b>#2319</b> version 3 uploaded</p></div></li>
+              <li class="animate-rise" style="animation-delay:45ms"><span class="tile"><svg class="ico"><use href="#i-users"/></svg></span><div class="txt"><div class="row"><p>New speaker added</p><time>11:15 AM</time></div><p class="desc"><b>Kwame Osei</b> registered</p></div></li>
+              <li class="animate-rise" style="animation-delay:90ms"><span class="tile"><svg class="ico"><use href="#i-bolt"/></svg></span><div class="txt"><div class="row"><p>Revision requested</p><time>11:00 AM</time></div><p class="desc">Slot <b>#2322</b> "<b>Sensor talk</b>"</p></div></li>
+              <li class="animate-rise" style="animation-delay:135ms"><span class="tile"><svg class="ico"><use href="#i-check"/></svg></span><div class="txt"><div class="row"><p>Deck approved</p><time>10:45 AM</time></div><p class="desc">Slot <b>#2311</b> approved by <b>Sarah Lee</b></p></div></li>
+              <li class="animate-rise" style="animation-delay:180ms"><span class="tile"><svg class="ico"><use href="#i-book"/></svg></span><div class="txt"><div class="row"><p>Knowledge base</p><time>10:30 AM</time></div><p class="desc">New article: "<b>Aspect ratio checklist</b>"</p></div></li>
+            </ol>
+          </div>
+        </section>
+      </div>
+
+      <section class="well animate-rise" style="animation-delay:340ms">
+        <div class="chd"><h2><svg class="ico"><use href="#i-signal"/></svg>Review queue</h2><div class="tools"><label class="input-group in-card" style="width:240px"><svg class="ico"><use href="#i-search"/></svg><input type="search" placeholder="Slot"></label><button class="btn in-card"><svg class="ico"><use href="#i-filter"/></svg>Filter</button><button class="ibtn bordered" aria-label="More"><svg class="ico"><use href="#i-more"/></svg></button></div></div>
+        <div class="tablewrap">
+          <table>
+            <thead><tr>
+              <th><span class="sort"><label class="cb"><input type="checkbox"><span class="track"></span><span class="knob"><svg><use href="#i-check"/></svg></span></label><span>Slot</span><svg class="ico"><use href="#i-sort"/></svg></span></th>
+              <th><span class="sort">Title<svg class="ico"><use href="#i-sort"/></svg></span></th>
+              <th><span class="sort">Priority<svg class="ico"><use href="#i-sort"/></svg></span></th>
+              <th><span class="sort">Reviewer<svg class="ico"><use href="#i-sort"/></svg></span></th>
+              <th><span class="sort">Status<svg class="ico"><use href="#i-sort"/></svg></span></th>
+              <th><span class="sort">Uploaded<svg class="ico"><use href="#i-sort"/></svg></span></th>
+              <th><span class="sort">Due<svg class="ico"><use href="#i-sort"/></svg></span></th>
+              <th style="width:40px"></th>
+            </tr></thead>
+            <tbody>
+              <tr class="animate-rise" style="animation-delay:420ms"><td><span class="cell"><label class="cb"><input type="checkbox" checked><span class="track"></span><span class="knob"><svg><use href="#i-check"/></svg></span></label>#2319</span></td><td class="subject">Payment gateway keynote</td><td><span class="cell"><svg class="ico" style="color:var(--destructive)"><use href="#i-signal"/></svg>High</span></td><td><span class="cell"><span class="avatar sm">JD</span>John Doe</span></td><td><span class="cell"><svg class="ico animate-pop" style="color:var(--secondary-foreground)"><use href="#i-file"/></svg>In review</span></td><td>2025-08-18</td><td>2h left</td><td><button class="ibtn" aria-label="Actions"><svg class="ico"><use href="#i-more"/></svg></button></td></tr>
+              <tr class="animate-rise" style="animation-delay:465ms"><td><span class="cell"><label class="cb"><input type="checkbox"><span class="track"></span><span class="knob"><svg><use href="#i-check"/></svg></span></label>#2320</span></td><td class="subject">Login troubleshooting</td><td><span class="cell"><svg class="ico" style="color:#f59e0b"><use href="#i-signal"/></svg>Medium</span></td><td><span class="cell"><span class="avatar sm">SL</span>Sarah Lee</span></td><td><span class="cell"><svg class="ico animate-pop" style="color:var(--success)"><use href="#i-check"/></svg>Delivered</span></td><td>2025-08-19</td><td>1h left</td><td><button class="ibtn" aria-label="Actions"><svg class="ico"><use href="#i-more"/></svg></button></td></tr>
+              <tr class="animate-rise" style="animation-delay:510ms"><td><span class="cell"><label class="cb"><input type="checkbox"><span class="track"></span><span class="knob"><svg><use href="#i-check"/></svg></span></label>#2321</span></td><td class="subject">Feature request export</td><td><span class="cell"><svg class="ico" style="color:var(--subtle-foreground)"><use href="#i-signal"/></svg>Low</span></td><td><span class="cell"><span class="avatar sm">JD</span>John Doe</span></td><td><span class="cell"><svg class="ico animate-pop" style="color:#f59e0b"><use href="#i-bolt"/></svg>In progress</span></td><td>2025-08-19</td><td>1d left</td><td><button class="ibtn" aria-label="Actions"><svg class="ico"><use href="#i-more"/></svg></button></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="well animate-rise" style="animation-delay:400ms">
+        <div class="chd"><h2>Primitives not on the Kravio page (extrapolated)</h2></div>
+        <div class="body" style="gap:16px">
+          <div class="demo-grid">
+            <button class="btn pri">Primary (extrapolated)</button>
+            <button class="btn">Secondary</button>
+            <button class="btn good">Approve</button>
+            <button class="btn danger">Reject</button>
+            <button class="btn" disabled>Disabled</button>
+            <span class="chip">Neutral</span><span class="chip c-ok">Approved</span><span class="chip c-warn">Revision</span><span class="chip c-bad">Rejected</span><span class="chip c-info">In review</span>
+          </div>
+          <div class="menu" style="position:static"><div class="label">Time range</div><button class="item">Last week<svg class="check"><use href="#i-check"/></svg></button><button class="item">Last month</button><button class="item">Last quarter</button></div>
+          <div class="swatches">
+            <div class="sw" style="background:var(--background)">background</div><div class="sw" style="background:var(--muted)">muted</div><div class="sw" style="background:var(--secondary)">secondary</div><div class="sw" style="background:var(--accent)">accent</div><div class="sw" style="background:var(--border)">border</div><div class="sw" style="background:var(--subtle-foreground);color:#fff">subtle</div><div class="sw" style="background:var(--muted-foreground);color:#fff">muted-fg</div><div class="sw" style="background:var(--cell-foreground);color:#fff">cell-fg</div><div class="sw" style="background:var(--secondary-foreground);color:#fff">secondary-fg</div><div class="sw" style="background:var(--gradient-primary);color:#fff">primary</div><div class="sw" style="background:var(--success);color:#fff">success</div><div class="sw" style="background:var(--destructive);color:#fff">destructive</div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<script>
+  // bar chart: 14 half-day bars like the source (width 5.42%, 45ms stagger)
+  const heights = [68,139,161,95,128,145,162,135,196,174,125,152,108,172];
+  const chart = document.getElementById('chart');
+  heights.forEach((h, i) => {
+    const bar = document.createElement('div');
+    bar.className = 'bar' + (i === 4 ? ' on' : '');
+    bar.style.left = (-2.98 + i * 7.72) + '%';
+    bar.style.height = h + 'px';
+    bar.innerHTML = '<div class="animate-grow" style="position:absolute;inset:0;animation-delay:' + (380 + i * 45) + 'ms"><i></i></div>';
+    chart.appendChild(bar);
+  });
+  const tip = document.createElement('div'); tip.className = 'tip animate-fade'; tip.style.animationDelay = '1100ms';
+  tip.textContent = 'Tue : 584'; tip.style.left = 'calc(-2.98% + 4 * 7.72% - 80px)'; tip.style.top = (216 - 128 - 12) + 'px'; chart.appendChild(tip);
+  const guide = document.createElement('div'); guide.className = 'guide animate-fade'; guide.style.animationDelay = '1100ms';
+  guide.style.left = 'calc(-2.98% + 4 * 7.72% + 5.42%)'; guide.style.right = '0'; guide.style.top = (216 - 128) + 'px'; chart.appendChild(guide);
+
+  // segmented toggle thumb
+  const seg = document.getElementById('seg'); const thumb = seg.querySelector('.thumb'); const items = [...seg.querySelectorAll('button')];
+  items.forEach((b, i) => b.addEventListener('click', () => { items.forEach(x => x.classList.remove('on')); b.classList.add('on'); thumb.style.left = 'calc(' + (i * 33.3333) + '% + ' + (i * 2.67) + 'px)'; }));
+
+  // nav collapse toggle
+  document.querySelectorAll('aside nav button[aria-expanded]').forEach(b => b.addEventListener('click', () => { const open = b.getAttribute('aria-expanded') === 'true'; b.setAttribute('aria-expanded', String(!open)); const sub = b.nextElementSibling; if (sub) sub.classList.toggle('closed', open); }));
+</script>
+</body>
+</html>

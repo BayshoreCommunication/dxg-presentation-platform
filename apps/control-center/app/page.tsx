@@ -76,7 +76,7 @@ export default async function PortfolioPage({
         const collected = summary.total === 0 ? 0 : Math.round((summary.collected / summary.total) * 100);
         const chip = eventStatusChip(event.status);
         return (
-          <div key={event.id} className="card" style={event.status === "active" ? { borderColor: "var(--blue)" } : undefined}>
+          <div key={event.id} className="card" style={event.status === "active" ? { boxShadow: "inset 0 0 0 .8px var(--ring)" } : undefined}>
             <div className="cbd">
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
                 <h3 style={{ fontSize: 17 }}>{event.name}</h3>

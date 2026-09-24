@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
 import { usePathname, useParams, useRouter } from "next/navigation";
+import { Icon } from "@/components/Icon";
 import { logout } from "@/lib/api";
 import type { Principal, EventRow } from "@/lib/api";
 
@@ -39,13 +41,17 @@ const STAFF_ROLES = [
   "content_reviewer",
 ];
 const ADMIN_ROLES = ["platform_admin", "project_manager"];
-const GROUPS: { group: string; roles?: string[]; items: { label: string; href?: string; roles?: string[] }[] }[] = [
+export const GROUPS: {
+  group: string;
+  roles?: string[];
+  items: { label: string; href?: string; roles?: string[]; icon: string }[];
+}[] = [
   {
     group: "CONTROL CENTER",
     roles: STAFF_ROLES,
     items: [
-      { label: "Portfolio", href: "/" },
-      { label: "Create event", href: "/events/new" },
+      { label: "Portfolio", href: "/", icon: "grid" },
+      { label: "Create event", href: "/events/new", icon: "plus" },
       /*
        * Schedule import is step 2 of Create event (D-027), so listing it here offered
        * it as somewhere to go when it is really somewhere you are taken. The screen
@@ -59,9 +65,9 @@ const GROUPS: { group: string; roles?: string[]; items: { label: string; href?: 
        * from that talk (agenda, risk list, review queue). As sidebar items they had no
        * talk to open and led nowhere.
        */
-      { label: "Review presentations", href: "/events/:id/review" },
-      { label: "Communications", href: "/events/:id/comms" },
-      { label: "Archive builder", href: "/events/:id/archive" },
+      { label: "Review presentations", href: "/events/:id/review", icon: "review" },
+      { label: "Communications", href: "/events/:id/comms", icon: "mail" },
+      { label: "Archive builder", href: "/events/:id/archive", icon: "archive" },
     ],
   },
   {
@@ -73,16 +79,16 @@ const GROUPS: { group: string; roles?: string[]; items: { label: string; href?: 
        * speaker in the Speaker Ready Room, and USB intake from a button on check-in.
        * Listing them here offered two greyed-out items that led nowhere.
        */
-      { label: "Speaker Ready Room", href: "/events/:id/srr" },
-      { label: "Room sync", href: "/events/:id/sync" },
+      { label: "Speaker Ready Room", href: "/events/:id/srr", icon: "users" },
+      { label: "Room sync", href: "/events/:id/sync", icon: "sync" },
     ],
   },
-  { group: "DEVICE", roles: STAFF_ROLES, items: [{ label: "Room Agent", href: "/events/:id/agent" }] },
+  { group: "DEVICE", roles: STAFF_ROLES, items: [{ label: "Room Agent", href: "/events/:id/agent", icon: "monitor" }] },
   {
     group: "ADMIN",
     items: [
-      { label: "Staff accounts", href: "/admin/users", roles: ADMIN_ROLES },
-      { label: "Event assignments", href: "/admin/assignments", roles: ADMIN_ROLES },
+      { label: "Staff accounts", href: "/admin/users", roles: ADMIN_ROLES, icon: "shield" },
+      { label: "Event assignments", href: "/admin/assignments", roles: ADMIN_ROLES, icon: "clipboard" },
     ],
   },
   {
@@ -91,7 +97,7 @@ const GROUPS: { group: string; roles?: string[]; items: { label: string; href?: 
       // No "Speaker portal": it is a separate site speakers reach from their emailed link.
       // Open to clients, and to staff as a preview of what their client sees — the
       // screen bands itself accordingly. No `roles`, because nobody signed in is refused.
-      { label: "Client portal", href: "/client/:id" },
+      { label: "Client portal", href: "/client/:id", icon: "globe" },
     ],
   },
 ];
@@ -134,133 +140,170 @@ export function Sidebar({ principal, events }: { principal: Principal | null; ev
   return (
     <aside>
       <div className="logo">
-        <b>DXG·PM</b>
+        <Link href="/" className="brand">
+          <span className="mark" aria-hidden="true">D</span>
+          <b>DXG·PM</b>
+        </Link>
       </div>
-      {/*
-        The event context slot from the baseline (VISUAL_ACCEPTANCE §2.1), which used
-        to be a hardcoded string naming the seeded event — correct exactly once, and a
-        lie on every other event. It now names the event you are actually in and lets
-        you change it, which is the only way five events are workable without going
-        back to the portfolio each time.
-      */}
-      <div className="evtctx">
-        {events.length === 0 ? (
-          <span className="note">No events yet</span>
-        ) : (
-          <>
-            <select
-              aria-label="Switch event"
-              value={eventId ?? ""}
-              onChange={(event) => {
-                const chosen = event.target.value;
-                if (chosen) router.push(`/events/${chosen}`);
-              }}
-              style={{
-                width: "100%",
-                background: "transparent",
-                color: "var(--white)",
-                border: "1px solid #22303A",
-                borderRadius: 4,
-                padding: "3px 6px",
-                fontSize: 12,
-              }}
-            >
-              <option value="" disabled>
-                Choose an event…
-              </option>
-              {/* Archived events leave the switcher as they leave the portfolio (D-061),
-                  except the one you are standing in, which the select must still name. */}
-              {events
-                .filter((event) => event.status !== "archived" || event.id === eventId)
-                .map((event) => (
-                <option key={event.id} value={event.id}>
-                  {event.name}
+      <div className="sidebody">
+        {/*
+          The event context slot from the baseline (VISUAL_ACCEPTANCE §2.1), which used
+          to be a hardcoded string naming the seeded event — correct exactly once, and a
+          lie on every other event. It now names the event you are actually in and lets
+          you change it, which is the only way five events are workable without going
+          back to the portfolio each time.
+        */}
+        <div className="evtctx">
+          {events.length === 0 ? (
+            <span className="note">No events yet</span>
+          ) : (
+            <>
+              <select
+                aria-label="Switch event"
+                value={eventId ?? ""}
+                onChange={(event) => {
+                  const chosen = event.target.value;
+                  if (chosen) router.push(`/events/${chosen}`);
+                }}
+              >
+                <option value="" disabled>
+                  Choose an event…
                 </option>
-              ))}
-            </select>
-            {current && (
-              <div className="note" style={{ marginTop: 3, fontSize: 11 }}>
-                {/* Every screen of an archived event is read-only (D-062); say so on all of them. */}
-                {current.status === "archived" ? "Archived · read-only" : dayLabel(current)}
+                {/* Archived events leave the switcher as they leave the portfolio (D-061),
+                    except the one you are standing in, which the select must still name. */}
+                {events
+                  .filter((event) => event.status !== "archived" || event.id === eventId)
+                  .map((event) => (
+                  <option key={event.id} value={event.id}>
+                    {event.name}
+                  </option>
+                ))}
+              </select>
+              {current && (
+                <div className="note">
+                  {/* Every screen of an archived event is read-only (D-062); say so on all of them. */}
+                  {current.status === "archived" ? "Archived · read-only" : dayLabel(current)}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+        <nav>
+          {GROUPS.map(({ group, roles, items }) => {
+            const held = principal?.roles ?? [];
+            const allowed = (needed?: string[]) => !needed || needed.some((role) => held.includes(role));
+            // A whole group can be out of reach, and an item within a reachable one.
+            const visible = allowed(roles) ? items.filter((item) => allowed(item.roles)) : [];
+            // A group whose every entry is hidden would otherwise leave a stray heading.
+            if (visible.length === 0) return null;
+            return (
+            <div key={group} className="navgroup">
+              <div className="grp">{group}</div>
+              <div className="navitems">
+                {visible.map((item) => {
+                  // An ":id" link has nowhere to go until an event is chosen.
+                  const needsEvent = item.href?.includes(":id") ?? false;
+                  const href = needsEvent && !eventId ? undefined : item.href?.replace(":id", eventId ?? "");
+                  if (!href) {
+                    return (
+                      <a key={item.label} aria-disabled="true" title="Choose an event first">
+                        <span className="ico"><Icon name={item.icon} /></span>
+                        {item.label}
+                      </a>
+                    );
+                  }
+                  return (
+                    <Link key={item.label} href={href} className={pathname === href ? "on" : ""}>
+                      <span className="ico"><Icon name={item.icon} /></span>
+                      {item.label}
+                    </Link>
+                  );
+                })}
               </div>
-            )}
-          </>
-        )}
+            </div>
+            );
+          })}
+        </nav>
+        {principal && <AccountMenu principal={principal} />}
       </div>
-      <nav>
-        {GROUPS.map(({ group, roles, items }) => {
-          const held = principal?.roles ?? [];
-          const allowed = (needed?: string[]) => !needed || needed.some((role) => held.includes(role));
-          // A whole group can be out of reach, and an item within a reachable one.
-          const visible = allowed(roles) ? items.filter((item) => allowed(item.roles)) : [];
-          // A group whose every entry is hidden would otherwise leave a stray heading.
-          if (visible.length === 0) return null;
-          return (
-          <div key={group}>
-            <div className="grp">{group}</div>
-            {visible.map((item) => {
-              // An ":id" link has nowhere to go until an event is chosen.
-              const needsEvent = item.href?.includes(":id") ?? false;
-              const href = needsEvent && !eventId ? undefined : item.href?.replace(":id", eventId ?? "");
-              if (!href) {
-                return (
-                  <a key={item.label} className="" style={{ opacity: 0.38, cursor: "default" }}>
-                    {item.label}
-                  </a>
-                );
-              }
-              return (
-                <Link key={item.label} href={href} className={pathname === href ? "on" : ""}>
-                  {item.label}
-                </Link>
-              );
-            })}
-          </div>
-          );
-        })}
-      </nav>
-      {principal && (
-        <div
-          style={{
-            marginTop: "auto",
-            padding: "12px 16px",
-            borderTop: "1px solid #22303A",
-            fontSize: 12.5,
-          }}
-        >
-          <div style={{ color: "var(--white)" }}>{principal.display_name}</div>
-          <div className="mono" style={{ color: "var(--dim)", fontSize: 11 }}>
-            {principal.roles.join(", ") || "no event role"}
-          </div>
-          <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
-            <Link href="/account/password" style={{ color: "var(--blue)" }}>
-              Password
-            </Link>
-            <Link href="/account/mfa" style={{ color: "var(--blue)" }}>
-              2FA
-            </Link>
-            <button
-              style={{
-                background: "none",
-                border: "none",
-                color: "var(--blue)",
-                padding: 0,
-                fontSize: 12.5,
-              }}
-              onClick={() => {
-                void logout()
-                  .catch(() => undefined)
-                  .then(() => {
-                    router.replace("/login?reason=signed_out");
-                    router.refresh();
-                  });
-              }}
-            >
-              Sign out
-            </button>
-          </div>
+    </aside>
+  );
+}
+
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  const letters = parts.length > 1 ? parts[0][0] + parts[parts.length - 1][0] : (parts[0] ?? "?").slice(0, 2);
+  return letters.toUpperCase();
+}
+
+/**
+ * Kravio's account button: who is signed in, with password, 2FA and sign-out behind it
+ * rather than three bare links. Closes on Escape and on any click outside it.
+ */
+function AccountMenu({ principal }: { principal: Principal }) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const root = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (event: MouseEvent) => {
+      if (root.current && !root.current.contains(event.target as Node)) setOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  return (
+    <div className="account" ref={root}>
+      {open && (
+        <div className="menu" role="menu">
+          <div className="label">Account</div>
+          <Link href="/account/password" className="item" role="menuitem" onClick={() => setOpen(false)}>
+            <Icon name="lock" /> Password
+          </Link>
+          <Link href="/account/mfa" className="item" role="menuitem" onClick={() => setOpen(false)}>
+            <Icon name="key" /> 2FA
+          </Link>
+          <div className="sep" />
+          <button
+            type="button"
+            className="item"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              void logout()
+                .catch(() => undefined)
+                .then(() => {
+                  router.replace("/login?reason=signed_out");
+                  router.refresh();
+                });
+            }}
+          >
+            <Icon name="logout" /> Sign out
+          </button>
         </div>
       )}
-    </aside>
+      <button type="button" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
+        <span className="avatar">
+          {initials(principal.display_name)}
+          <span className="dot" />
+        </span>
+        <span className="who">
+          <b>{principal.display_name}</b>
+          <small>{principal.roles.join(", ") || "no event role"}</small>
+        </span>
+        <span style={{ color: "var(--subtle-foreground)", display: "flex" }}>
+          <Icon name="chevrons" size={12} />
+        </span>
+      </button>
+    </div>
   );
 }

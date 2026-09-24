@@ -3003,3 +3003,23 @@ it several times in a row and a TOTP code may only be spent once. Its failure me
 step failed rather than pointing at the seed.
 
 CI green, 212 unit tests; invariants 142, up from 137.
+
+## 2026-09-24 — Kravio design system on the control center and speaker portal (D-078)
+Both apps now wear the design system of kravio-dashboard.vercel.app: light ground, white main sheet with a
+breadcrumb top bar, hatched card wells, 0.8 px hairlines, Inter only, no accent colour. Navigation,
+screen names and states are unchanged (D-010). The baseline token names survive as aliases, so no screen's
+inline styles had to be rewritten; the few that put cyan text on a dark surface now use white, and the Room
+Agent screen is a framed dark panel instead of bleeding into the old page padding. Sidebar has icons and an
+account menu (Password / 2FA / Sign out); the speaker portal's dark header band is a plain page header.
+Walked in the browser: portfolio, command center, event details and tabs, review, communications, SRR,
+room sync, Room Agent, speakers, archive builder, create event with its date picker, staff accounts, client
+portal, change password, speaker sign-in. The signed-in speaker page was type-checked, not walked (needs a
+presenter code). **Open:** G0-6b visual approval must be re-run on this look.
+**Noticed, not changed:** Room sync logs a hydration mismatch — `DeviceKeyButton` formats "Key issued …"
+with the browser's locale on the client and the server's on first render.
+**Same day, top bar matched to Kravio's:** sidebar toggle at the left (collapses the rail, remembered per
+browser), the first crumb carries Kravio's two-tone grid glyph, crumbs are split by its thin slanted stroke,
+and the right side has its bell and settings glyphs (copied path for path). Settings opens Change password
+and Two-factor authentication. **The bell has nothing behind it** — the product raises no notifications —
+so it opens a panel saying "No notifications yet" rather than a made-up feed.
+Then the bell was hidden at Travis's request until notifications exist; its glyph and styles stay for then.

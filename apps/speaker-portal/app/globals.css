@@ -1,106 +1,265 @@
-/* Design tokens and primitives extracted verbatim from prototype/client-baseline.html
-   via prototype/enhanced.html (D-010, VISUAL_ACCEPTANCE §2.4/§2.5). No component
-   declares a raw colour: everything derives from the tokens below. */
-@import url("https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap");
+/* Visual language: the Kravio design system (D-078), extracted from
+   kravio-dashboard.vercel.app into docs/design-system/KRAVIO_DESIGN_SYSTEM.md.
+   Screen structure, navigation and terminology still follow the client
+   baseline (D-010); only the look changed.
 
-/* Faithful to prototype/client-baseline.html tokens (D-010). Single-theme by design, matching the baseline. */
+   Components never declare a raw colour: everything derives from the tokens
+   below. The client-baseline token names (--blue, --ink, --line …) are kept as
+   aliases onto the Kravio palette, so the inline styles written against them
+   follow the new look without being rewritten. */
+@import url("https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..700&display=swap");
+
 :root{
-  --blue:#44C7F4; --blueDark:#1793C4; --ink:#14181B; --ink2:#1F262B; --slate:#4D4D4D;
-  --mist:#F2F5F7; --line:#E2E8EC; --white:#FFFFFF; --ok:#1FA971; --warn:#E8A13C; --block:#D64545;
-  --sync:#7A6FF0; --dim:#8A9AA5; --paneink:#B9C6CE;
-  --ok-soft:#E7F7F0; --warn-soft:#FCF3E3; --bad-soft:#FBEAEA; --info-soft:#E6F6FC; --sync-soft:#EFEDFC;
+  /* Kravio tokens, verbatim */
+  --radius:.5rem;
+  --background:#f8f8f8; --foreground:#1f2937;
+  --card:#fff; --card-foreground:#1f2937;
+  --popover:#fff; --popover-foreground:#1f2937;
+  --primary:#1f2937; --primary-foreground:#fff;
+  --secondary:#f7f7f7; --secondary-foreground:#4b5563;
+  --muted:#f6f6f6; --muted-foreground:#6b7280; --subtle-foreground:#9ca3af; --cell-foreground:#52525b;
+  --accent:#f3f4f6; --accent-foreground:#1f2937;
+  --success:#059669; --destructive:#ef4444;
+  --border:#e5e7eb; --input:rgba(0,0,0,.1); --ring:#9ca3af;
+  --chart-bar:#e6e6e6; --chart-bar-border:#d8d8d8; --chart-grid:#f2f2f3;
+  --ease-out-expo:cubic-bezier(.16,1,.3,1); --ease-in-out:cubic-bezier(.65,0,.35,1);
+
+  /* literals Kravio uses outside its token set */
+  --hover-border:#d1d5db; --hover-bg:#fcfcfc; --hover-row:#fafafa;
+  --gradient-primary:linear-gradient(180deg,#37475d 0%,#1f2937 64.7%);
+  --shadow-nav-active:0 4px 7px rgba(0,0,0,.04);
+  --shadow-input:0 4px 14px rgba(0,0,0,.04);
+  --shadow-lift:0 2px 3px -1px rgba(0,0,0,.1),0 1px 0 0 rgba(25,28,33,.02),0 0 0 1px rgba(25,28,33,.08);
+  --shadow-popover:0 0 0 1px rgba(0,0,0,.06),0 1px 1px -.5px rgba(0,0,0,.06),0 3px 3px -1.5px rgba(0,0,0,.06),0 6px 6px -3px rgba(0,0,0,.06),0 12px 12px -6px rgba(0,0,0,.06),0 24px 24px -12px rgba(0,0,0,.06);
+  --shadow-knob:0 2.2px 3px rgba(27,28,29,.12);
+  --shadow-dark:inset 0 0 0 .44px #1f2937,0 2px 10px rgba(31,41,55,.08);
+  --focus-ring:0 0 0 3px rgba(156,163,175,.4);
+  --focus-input:0 0 0 3px rgba(156,163,175,.18);
+  --hatch:repeating-linear-gradient(117.4deg,rgba(0,0,0,.03) 0 .8px,transparent .8px 9.6px);
+  --font-sans:"Inter",ui-sans-serif,system-ui,sans-serif;
+
+  /* status tints (Kravio has none; derived from its success/destructive and Tailwind's amber/indigo) */
+  --amber:#d97706; --amber-text:#b45309; --indigo:#6366f1;
+
+  /* client-baseline names, aliased onto the palette above */
+  --blue:var(--primary); --blueDark:var(--primary);
+  --ink:var(--primary); --ink2:#37475d; --slate:var(--secondary-foreground);
+  --mist:var(--muted); --line:var(--border); --white:#fff;
+  --ok:var(--success); --warn:var(--amber); --block:var(--destructive); --sync:var(--indigo);
+  --dim:var(--muted-foreground); --paneink:#d1d5db;
+  --ok-soft:#ecfdf5; --warn-soft:#fffbeb; --bad-soft:#fef2f2; --info-soft:var(--accent); --sync-soft:#eef2ff;
 }
-*{box-sizing:border-box} html,body{height:100%}
-body{margin:0;background:var(--mist);color:var(--ink);font:14px/1.5 Inter,system-ui,sans-serif;}
-h1,h2,h3,h4{font-family:"Barlow Semi Condensed",sans-serif;margin:0;letter-spacing:.005em}
-.mono{font-family:"IBM Plex Mono",monospace}
+
+/* ── base ── */
+*,*::before,*::after{box-sizing:border-box;border-color:var(--border)}
+html,body{height:100%}
+html{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-rendering:optimizeLegibility}
+body{margin:0;background:var(--background);color:var(--foreground);font:14px/1.5 var(--font-sans)}
+h1,h2,h3,h4{font-family:inherit;margin:0;font-weight:500;letter-spacing:0}
+.mono{font-family:inherit;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
 button{font:inherit;cursor:pointer}
-.shell{display:flex;flex:1;min-height:0}
-aside{width:216px;flex-shrink:0;background:var(--ink);color:var(--paneink);display:flex;flex-direction:column;overflow-y:auto}
-.logo{display:flex;justify-content:space-between;align-items:center;padding:14px 16px 8px}
-.logo b{font-family:"Barlow Semi Condensed";font-weight:700;font-size:19px;color:var(--white);letter-spacing:.02em}
-.logo .clock{font-family:"IBM Plex Mono";font-size:13px;color:var(--blue)}
-.evtctx{padding:2px 16px 10px;font-family:"IBM Plex Mono";font-size:11px;color:var(--dim);letter-spacing:.08em;text-transform:uppercase}
-.grp{padding:10px 16px 4px;font-size:10.5px;letter-spacing:.14em;color:var(--dim);text-transform:uppercase}
-aside nav button{display:flex;align-items:center;gap:8px;width:100%;text-align:left;background:none;border:none;color:var(--paneink);padding:8px 16px;font-size:13.5px}
-aside nav button::before{content:"";width:5px;height:5px;border-radius:50%;background:var(--slate)}
-aside nav button.on{background:#22303A;color:var(--white)} aside nav button.on::before{background:var(--blue)}
-aside nav button:not(.on):hover{background:var(--ink2)}
-.demo-btn{margin:12px;padding:9px;border:none;border-radius:6px;background:var(--blue);color:var(--ink);font-weight:700;font-size:13.5px}
-.demo-btn.stop{background:#22303A;color:var(--paneink)}
-main{flex:1;min-width:0;overflow-y:auto;padding:24px}
-.htitle{font-size:23px;font-weight:700;margin-bottom:14px}
-.card{background:var(--white);border:1px solid var(--line);border-radius:8px;margin-bottom:14px}
-.card .chd{display:flex;align-items:baseline;justify-content:space-between;padding:11px 16px;border-bottom:1px solid var(--line)}
-.card .chd h3{font-size:15px;font-weight:600}
-.card .chd .m{font-family:"IBM Plex Mono";font-size:12px;color:var(--dim)}
-.cbd{padding:14px 16px}
-.krow{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:14px}
-.kpi{background:var(--white);border:1px solid var(--line);border-radius:8px;padding:12px 14px}
-.kpi .kl{font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);font-weight:600}
-.kpi .kv{font-family:"Barlow Semi Condensed";font-weight:700;font-size:24px;margin-top:2px}
-table{width:100%;border-collapse:collapse;font-size:13.5px}
-th{text-align:left;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);padding:2px 12px 8px;font-weight:600}
-td{padding:9px 12px;border-top:1px solid var(--line);vertical-align:middle}
-tr.rb{cursor:pointer} tr.rb:hover td{background:var(--mist)} tr.sel td{background:var(--info-soft)}
+a{color:inherit;text-decoration:none}
+:focus-visible{outline:none;box-shadow:var(--focus-ring)}
+
+/* ── motion (Kravio keyframes) ── */
+@keyframes rise-in{0%{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes fade-in{0%{opacity:0}to{opacity:1}}
+@keyframes pop{0%{opacity:0;transform:scale(.6)}60%{opacity:1;transform:scale(1.12)}to{transform:scale(1)}}
+@keyframes dd-in{0%{opacity:0;transform:translateY(-4px) scale(.97)}to{opacity:1;transform:none}}
+.animate-rise{animation:rise-in .52s var(--ease-out-expo) both}
+.animate-fade{animation:fade-in .3s ease-out both}
+
+/* ── shell ── */
+.shell{display:flex;flex:1;min-height:100vh;background:var(--background)}
+aside{width:250px;flex-shrink:0;background:transparent;color:var(--foreground);display:flex;flex-direction:column;position:sticky;top:0;height:100vh;align-self:flex-start}
+.logo{display:flex;align-items:center;justify-content:space-between;gap:12px;height:52px;padding:14px 12px}
+.logo .brand{display:flex;align-items:center;gap:12px;min-width:0}
+.logo .mark{width:24px;height:24px;flex-shrink:0;border-radius:7px;background:var(--gradient-primary);box-shadow:var(--shadow-dark);color:#fff;display:grid;place-items:center;font-size:11px;font-weight:600;transition:transform .3s var(--ease-out-expo)}
+.logo .brand:hover .mark{transform:rotate(-8deg) scale(1.05)}
+.logo b{font-size:18px;font-weight:600;line-height:1;color:var(--foreground);letter-spacing:0}
+.logo .clock{font-size:12px;color:var(--muted-foreground);font-variant-numeric:tabular-nums}
+.sidebody{display:flex;flex-direction:column;flex:1;min-height:0;gap:16px;padding:0 12px 16px}
+.evtctx{display:flex;flex-direction:column;gap:6px;padding:0;font-size:12px;color:var(--muted-foreground);text-transform:none;letter-spacing:0}
+.evtctx select{width:100%;height:32px;box-shadow:var(--shadow-input)}
+.evtctx .note{font-size:12px;color:var(--subtle-foreground);padding-left:2px}
+aside nav{display:flex;flex-direction:column;gap:20px;flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;scrollbar-width:none}
+aside nav::-webkit-scrollbar{display:none}
+.navgroup{display:flex;flex-direction:column;gap:12px}
+.navitems{display:flex;flex-direction:column;gap:2px}
+.grp{padding:0;font-size:12px;line-height:1.6;letter-spacing:0;text-transform:uppercase;color:var(--muted-foreground);white-space:nowrap}
+aside nav a,aside nav button{display:flex;align-items:center;gap:10px;width:100%;height:32px;padding:0 10px;border-radius:8px;border:.8px solid transparent;background:transparent;font-size:13px;line-height:1;text-align:left;color:var(--secondary-foreground);transition:background-color .15s,box-shadow .15s,border-color .15s,color .15s}
+aside nav a::before,aside nav button::before{content:none}
+aside nav .ico{display:flex;width:16px;height:16px;flex-shrink:0;transition:transform .2s ease-out}
+aside nav a:not(.on):not([aria-disabled="true"]):hover,aside nav button:not(.on):hover{background:rgba(255,255,255,.7);color:var(--foreground)}
+aside nav a:hover .ico{transform:scale(1.1)}
+aside nav a.on,aside nav button.on{background:var(--card);border-color:var(--border);box-shadow:var(--shadow-nav-active);color:var(--foreground)}
+aside nav a[aria-disabled="true"]{opacity:.45;cursor:default}
+.account{position:relative;flex-shrink:0}
+.account>button{display:flex;align-items:center;gap:8px;width:100%;min-height:50px;padding:8px 10px 8px 8px;border-radius:12px;border:.8px solid var(--border);background:var(--card);text-align:left;filter:drop-shadow(0 0 4px rgba(0,0,0,.03));transition:box-shadow .2s,transform .2s}
+.account>button:hover,.account>button[aria-expanded="true"]{box-shadow:var(--shadow-lift)}
+.account>button:active{transform:scale(.99)}
+.account .who{display:flex;flex-direction:column;gap:6px;min-width:0;flex:1;line-height:1;white-space:nowrap}
+.account .who b{font-size:14px;font-weight:500;color:var(--foreground);overflow:hidden;text-overflow:ellipsis}
+.account .who small{font-size:12px;color:var(--subtle-foreground);overflow:hidden;text-overflow:ellipsis}
+.account .menu{position:absolute;left:0;right:0;bottom:calc(100% + 6px);z-index:50}
+.avatar{position:relative;display:flex;align-items:center;justify-content:center;width:32px;height:32px;flex-shrink:0;border-radius:9999px;border:.8px solid #d9d9d9;background:#f7f7f7;font-size:12px;font-weight:600;line-height:1;letter-spacing:-.12px;color:var(--secondary-foreground)}
+.avatar .dot{position:absolute;right:-1px;bottom:-1px;width:9px;height:9px;border-radius:50%;background:var(--success);box-shadow:0 0 0 2px #fff}
+
+main{flex:1;min-width:0;min-height:100vh;background:var(--card);box-shadow:inset 0 0 0 .8px var(--border);padding:0 12px 24px}
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;height:52px;padding:14px 12px}
+.crumbs{display:flex;align-items:center;gap:12px;min-width:0;font-size:14px;line-height:1;white-space:nowrap}
+.crumbs a,.crumbs span{color:var(--muted-foreground);transition:color .15s;overflow:hidden;text-overflow:ellipsis}
+.crumbs a:hover{color:var(--foreground)}
+.crumbs .sep{color:var(--subtle-foreground);flex-shrink:0}
+.crumbs [aria-current="page"]{font-weight:500;color:var(--foreground)}
+.content{padding:16px 4px}
+.htitle{font-size:24px;font-weight:500;line-height:1.15;color:var(--foreground);margin-bottom:16px;letter-spacing:0}
+.note{font-size:13px;color:var(--secondary-foreground)}
+
+/* ── cards: Kravio "well" — a hatched tray holding a header row and one white panel ── */
+.card{position:relative;background:var(--muted);border:0;border-radius:12px;padding:4px;margin-bottom:16px;box-shadow:inset 0 0 0 .8px var(--border);animation:rise-in .52s var(--ease-out-expo) both}
+.card::before{content:"";position:absolute;inset:0;border-radius:inherit;background-image:var(--hatch);pointer-events:none}
+.card>*{position:relative}
+.card .chd{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:8px;border:0}
+.card .chd h2,.card .chd h3{font-size:14px;font-weight:500;line-height:1.2;color:var(--secondary-foreground)}
+.card .chd .m{font-size:12px;color:var(--muted-foreground);font-variant-numeric:tabular-nums}
+/* everything after the header is one continuous white panel, however many siblings it spans */
+.card>:not(.chd){background:var(--card);border:0 solid var(--input);border-left-width:.8px;border-right-width:.8px}
+.card>.chd+*,.card>:first-child:not(.chd){border-top-width:.8px;border-top-left-radius:12px;border-top-right-radius:12px}
+.card>:last-child:not(.chd){border-bottom-width:.8px;border-bottom-left-radius:12px;border-bottom-right-radius:12px}
+.card>.chd:last-child{padding-bottom:8px}
+.cbd{padding:16px 14px 14px}
+
+/* ── KPI tiles: tray, label row, white value panel ── */
+.krow{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:16px;margin-bottom:16px}
+.kpi{position:relative;background:var(--muted);border:0;border-radius:12px;padding:4px;box-shadow:inset 0 0 0 .8px var(--border);display:flex;flex-direction:column;animation:rise-in .52s var(--ease-out-expo) both}
+.kpi::before{content:"";position:absolute;inset:0;border-radius:inherit;background-image:var(--hatch);pointer-events:none}
+.kpi>*{position:relative}
+.kpi .kl{padding:8px;font-size:14px;font-weight:500;line-height:1.2;letter-spacing:0;text-transform:none;color:var(--secondary-foreground)}
+.kpi>:not(.kl){background:var(--card);border:0 solid var(--border);border-left-width:.8px;border-right-width:.8px;padding:0 12px;margin:0}
+.kpi>.kl+*{border-top-width:.8px;border-top-left-radius:10px;border-top-right-radius:10px;padding-top:16px;flex:1}
+.kpi>:last-child:not(.kl){border-bottom-width:.8px;border-bottom-left-radius:10px;border-bottom-right-radius:10px;padding-bottom:12px}
+.kpi>.kv+*{padding-top:10px}
+.kpi .kv{font-family:inherit;font-weight:500;font-size:24px;line-height:1;margin-top:0;color:var(--foreground)}
+.kpi .note{font-size:12px;color:var(--muted-foreground)}
+.kpi:hover>.kl+*{box-shadow:none}
+
+/* ── tables ── */
+table{width:100%;border-collapse:separate;border-spacing:0;font-size:13px}
+th{height:36px;text-align:left;font-size:13px;font-weight:400;line-height:1;letter-spacing:0;text-transform:none;color:var(--secondary-foreground);padding:10px 12px;background:var(--secondary);border-top:.8px solid rgba(0,0,0,.04);border-bottom:.8px solid rgba(0,0,0,.04);white-space:nowrap}
+th:first-child{border-left:.8px solid rgba(0,0,0,.04);border-radius:8px 0 0 8px}
+th:last-child{border-right:.8px solid rgba(0,0,0,.04);border-radius:0 8px 8px 0}
+.card table{margin:0}
+.card>table{padding:6px}
+td{padding:12px;border-top:0;border-bottom:1px solid rgba(0,0,0,.06);vertical-align:middle;color:var(--cell-foreground);font-weight:500;line-height:1.3}
+tbody tr:last-child td{border-bottom:0}
+tbody tr{transition:background-color .15s}
+tr.rb{cursor:pointer}
+tr.rb:hover td,tbody tr:hover td{background:var(--hover-row)}
+tr.sel td{background:var(--accent)}
+td b,td strong{color:var(--foreground);font-weight:500}
 .num{font-variant-numeric:tabular-nums}
-.chip{display:inline-block;border-radius:12px;padding:2px 10px;font-size:11.5px;font-weight:600;white-space:nowrap}
-.c-ok{background:var(--ok-soft);color:var(--ok)} .c-warn{background:var(--warn-soft);color:#8A5A12}
-.c-bad{background:var(--bad-soft);color:var(--block)} .c-info{background:var(--info-soft);color:var(--blueDark)}
-.c-sync{background:var(--sync-soft);color:var(--sync)} .c-mut{background:var(--mist);color:var(--slate)}
-.btn{border:1px solid var(--line);background:var(--white);color:var(--ink);padding:7px 14px;border-radius:6px;font-weight:600;font-size:13px}
-.btn:hover{background:var(--mist)}
-.btn.pri{background:var(--blue);border-color:var(--blue);color:var(--ink)} .btn.pri:hover{background:var(--blueDark);color:var(--white)}
-.btn.good{background:var(--ok);border-color:var(--ok);color:#fff}
-.btn.warnb{color:#8A5A12;border-color:var(--warn)}
-.btn.danger{color:var(--block);border-color:var(--block)}
-.btn:disabled{opacity:.45;cursor:default}
-.btn:focus-visible,aside nav button:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
-.bar{height:8px;border-radius:5px;background:var(--mist);overflow:hidden}
-.bar i{display:block;height:100%;background:var(--ok)} .bar.blue i{background:var(--blue)} .bar.warn i{background:var(--warn)}
-.lane{border-left:3px solid var(--line);background:var(--mist);border-radius:0 6px 6px 0;padding:8px 12px;margin:8px 0;font-size:13px}
-.lane b{font-size:12.5px} .lane .aud{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin-left:6px}
-.lane.int{border-color:var(--slate)} .lane.cli{border-color:var(--warn)} .lane.spk{border-color:var(--blue)}
-.slides{display:grid;grid-template-columns:repeat(auto-fill,minmax(86px,1fr));gap:8px}
-.slides div{aspect-ratio:16/9;background:var(--mist);border:1px solid var(--line);border-radius:4px;display:flex;align-items:center;justify-content:center;color:var(--dim);font-family:"IBM Plex Mono";font-size:12px}
-.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-.roomcard{border:1px solid var(--line);border-radius:8px;background:var(--white);padding:12px 14px}
-.roomcard h4{font-size:15px;margin:0 0 2px}
-.frow{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-top:1px solid var(--line);font-size:13px;align-items:center}
-input,select{font:inherit;color:var(--ink);background:var(--white);border:1px solid var(--line);border-radius:6px;padding:8px 12px}
-label{font-size:12px;color:var(--slate);font-weight:600;display:block;margin-bottom:4px}
+
+/* ── chips: Kravio shows status as icon + text; a neutral pill with a status dot is the nearest shape ── */
+.chip{display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 8px;border-radius:6px;border:.8px solid var(--border);background:var(--card);font-size:12px;font-weight:500;line-height:1;white-space:nowrap;color:var(--cell-foreground)}
+.chip::before{content:"";width:6px;height:6px;flex-shrink:0;border-radius:50%;background:var(--subtle-foreground)}
+.c-ok{color:var(--success)} .c-ok::before{background:var(--success)}
+.c-warn{color:var(--amber-text)} .c-warn::before{background:var(--amber)}
+.c-bad{color:var(--destructive)} .c-bad::before{background:var(--destructive)}
+.c-info{color:var(--foreground)} .c-info::before{background:var(--primary)}
+.c-sync{color:#4f46e5} .c-sync::before{background:var(--indigo)}
+.c-mut{color:var(--muted-foreground)}
+
+/* ── buttons ── */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:32px;padding:0 10px;border-radius:8px;border:.8px solid var(--border);background:var(--card);color:var(--secondary-foreground);font-size:12px;font-weight:500;line-height:1;white-space:nowrap;user-select:none;transition:background-color .15s ease-out,border-color .15s ease-out,box-shadow .15s ease-out,transform .15s ease-out,color .15s ease-out}
+.btn:hover{border-color:var(--hover-border);background:var(--hover-bg);box-shadow:var(--shadow-lift)}
+.btn:active{transform:scale(.97)}
+.btn.pri{border-color:var(--primary);background:var(--gradient-primary);color:var(--primary-foreground);box-shadow:var(--shadow-dark)}
+.btn.pri:hover{border-color:var(--primary);background:var(--gradient-primary);color:var(--primary-foreground);filter:brightness(1.12)}
+.btn.good{color:var(--success)}
+.btn.good:hover{border-color:var(--success)}
+.btn.warnb{color:var(--amber-text)}
+.btn.warnb:hover{border-color:var(--amber)}
+.btn.danger{color:var(--destructive)}
+.btn.danger:hover{border-color:var(--destructive)}
+.btn:disabled{opacity:.5;cursor:default;pointer-events:none}
+.btn:focus-visible,aside nav a:focus-visible{outline:none;box-shadow:var(--focus-ring)}
+
+/* ── fields ── */
+input,select,textarea{font:inherit;font-size:13px;color:var(--foreground);background:var(--card);border:.8px solid var(--border);border-radius:8px;padding:0 10px;height:32px;transition:border-color .15s,box-shadow .15s}
+textarea{height:auto;padding:8px 10px;line-height:1.45}
+input[type=checkbox],input[type=radio]{height:auto;padding:0;accent-color:var(--primary)}
+input[type=file]{height:auto;padding:6px}
+input::placeholder,textarea::placeholder{color:var(--muted-foreground)}
+input:hover,select:hover,textarea:hover{border-color:var(--hover-border)}
+input:focus,select:focus,textarea:focus{outline:none;border-color:#9ca3af;box-shadow:var(--focus-input)}
+input:disabled,select:disabled,textarea:disabled{background:var(--muted);color:var(--muted-foreground)}
+label{display:block;margin-bottom:6px;font-size:12px;font-weight:500;color:var(--secondary-foreground)}
 .field{margin-bottom:12px}
-.darkpane{background:var(--ink);color:var(--paneink);border-radius:8px}
-.demo-bar{flex-shrink:0;display:flex;align-items:center;gap:12px;background:var(--ink);color:var(--paneink);padding:10px 16px;font-size:13.5px;border-top:2px solid var(--blue)}
-.demo-bar b{color:var(--blue);font-family:"IBM Plex Mono"}
-.toast{position:fixed;bottom:64px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--white);padding:9px 16px;border-radius:6px;font-size:13px;opacity:0;transition:opacity .25s;pointer-events:none;z-index:60}
+
+/* ── progress, lanes, slides, rooms ── */
+.bar{height:6px;border-radius:4px;background:var(--accent);overflow:hidden}
+.bar i{display:block;height:100%;border-radius:inherit;background:var(--success)}
+.bar.blue i{background:var(--primary)}
+.bar.warn i{background:var(--amber)}
+.lane{border-left:2px solid var(--border);background:var(--muted);border-radius:0 8px 8px 0;padding:8px 12px;margin:8px 0;font-size:13px}
+.lane b{font-size:12px;font-weight:500;color:var(--foreground)}
+.lane .aud{font-size:11px;font-weight:500;letter-spacing:.025em;text-transform:uppercase;color:var(--subtle-foreground);margin-left:6px}
+.lane.int{border-color:var(--secondary-foreground)} .lane.cli{border-color:var(--amber)} .lane.spk{border-color:var(--primary)}
+.slides{display:grid;grid-template-columns:repeat(auto-fill,minmax(86px,1fr));gap:8px}
+.slides div{aspect-ratio:16/9;background:var(--muted);border:.8px solid var(--border);border-radius:6px;display:flex;align-items:center;justify-content:center;color:var(--subtle-foreground);font-size:12px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.roomcard{border:.8px solid var(--input);border-radius:12px;background:var(--card);padding:12px 14px;transition:box-shadow .2s var(--ease-out-expo),transform .2s var(--ease-out-expo)}
+.roomcard:hover{transform:translateY(-1px);box-shadow:var(--shadow-lift)}
+.roomcard h4{font-size:14px;font-weight:500;margin:0 0 4px}
+.frow{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 0;border-top:1px solid rgba(0,0,0,.06);font-size:13px;color:var(--cell-foreground)}
+
+/* ── dark surfaces: Kravio's one dark treatment is the primary gradient ── */
+.darkpane{background:var(--gradient-primary);color:var(--paneink);border-radius:12px;box-shadow:var(--shadow-dark)}
+/* Inside a dark pane the secondary-text and hairline tokens flip, so inline styles written
+   against them stay legible without knowing which surface they sit on. */
+.darkpane{--dim:#9ca3af;--line:#37475d;--slate:#d1d5db}
+.darkpane .note{color:var(--paneink)}
+.demo-bar{flex-shrink:0;display:flex;align-items:center;gap:12px;background:var(--card);color:var(--secondary-foreground);padding:10px 16px;font-size:13px;box-shadow:inset 0 .8px 0 var(--border)}
+.demo-bar b{color:var(--foreground);font-weight:500}
+.demo-btn{margin:12px;height:32px;border:.8px solid var(--primary);border-radius:8px;background:var(--gradient-primary);color:#fff;font-weight:500;font-size:12px}
+.demo-btn.stop{border-color:var(--border);background:var(--card);color:var(--secondary-foreground)}
+.toast{position:fixed;bottom:64px;left:50%;transform:translateX(-50%);background:var(--gradient-primary);color:#fff;padding:10px 14px;border-radius:8px;font-size:12px;font-weight:500;box-shadow:var(--shadow-popover);opacity:0;transition:opacity .25s;pointer-events:none;z-index:60}
 .toast.show{opacity:1}
 .hidden{display:none!important}
-.note{font-size:12.5px;color:var(--slate)}
-/* login */
-.login{min-height:100%;display:flex;align-items:center;justify-content:center;background:var(--ink);flex:1}
-.login .box{background:var(--ink2);border:1px solid #2A3B46;border-radius:10px;padding:28px 30px;width:360px;color:var(--paneink)}
-.login .box b{font-family:"Barlow Semi Condensed";font-weight:700;font-size:22px;color:var(--white);letter-spacing:.02em}
-.login input{width:100%;background:var(--ink);border-color:#2A3B46;color:var(--white)}
-.login label{color:var(--dim)}
-@media (max-width:560px){aside{width:64px}.logo b{font-size:12px}.evtctx,.grp,.logo .clock{display:none}aside nav button{padding:8px 10px;font-size:11px}}
-@media (prefers-reduced-motion:reduce){*{transition:none!important}}
 
-/* ── additions for the real application (not in the prototype) ────────────── */
-a { color: inherit; text-decoration: none; }
-.shell { min-height: 100vh; }
-aside nav a {
-  display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
-  background: none; border: none; color: var(--paneink); padding: 8px 16px; font-size: 13.5px;
+/* ── dropdown menu (Radix-style panel) ── */
+.menu{min-width:10rem;padding:4px;border-radius:12px;background:var(--popover);color:var(--popover-foreground);box-shadow:var(--shadow-popover);animation:dd-in .18s var(--ease-out-expo)}
+.menu .label{padding:6px 8px 4px;font-size:11px;font-weight:500;line-height:1;text-transform:uppercase;letter-spacing:.025em;color:var(--subtle-foreground)}
+.menu .item{display:flex;align-items:center;gap:8px;width:100%;padding:8px;border:0;border-radius:8px;background:none;font-size:13px;line-height:1;text-align:left;color:var(--secondary-foreground);transition:background-color .15s,color .15s}
+.menu .item:hover,.menu .item:focus-visible{background:var(--accent);color:var(--foreground);box-shadow:none}
+.menu .sep{height:1px;margin:4px 0;background:rgba(0,0,0,.06)}
+
+/* ── sign-in screens ── */
+.login{min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--background);flex:1;padding:24px 16px}
+.login .box{position:relative;background:var(--card);border:.8px solid var(--input);border-radius:12px;padding:28px 28px 24px;width:380px;max-width:100%;color:var(--secondary-foreground);box-shadow:var(--shadow-popover);animation:rise-in .52s var(--ease-out-expo) both}
+.login .box b{font-weight:600;font-size:18px;color:var(--foreground);letter-spacing:0}
+.login input{width:100%}
+.login label{color:var(--secondary-foreground)}
+
+/* ── states ── */
+.empty{padding:28px;text-align:center;color:var(--muted-foreground);font-size:13px}
+.err{border:.8px solid #fecaca;background:var(--bad-soft);color:#b91c1c;padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:12px}
+.skeleton{background:linear-gradient(90deg,var(--muted),var(--accent),var(--muted));border-radius:6px;height:14px;animation:sk 1.2s infinite}
+@keyframes sk{0%{opacity:.6}50%{opacity:1}100%{opacity:.6}}
+.kbd{display:inline-flex;align-items:center;justify-content:center;min-width:16px;height:16px;padding:0 4px;border:.8px solid var(--border);border-radius:4px;background:var(--card);font-size:11px;font-weight:500;line-height:1;color:#565d76}
+.live{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted-foreground)}
+.live i{width:7px;height:7px;border-radius:50%;background:var(--success);display:inline-block;box-shadow:0 0 0 3px rgba(5,150,105,.15)}
+
+@media (max-width:760px){
+  .shell{flex-direction:column}
+  aside{position:static;width:100%;height:auto}
+  aside nav{max-height:none}
+  .account{display:none}
+  .grid2{grid-template-columns:1fr}
 }
-aside nav a::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--slate); }
-aside nav a.on { background: #22303A; color: var(--white); }
-aside nav a.on::before { background: var(--blue); }
-aside nav a:not(.on):hover { background: var(--ink2); }
-.empty { padding: 28px; text-align: center; color: var(--dim); font-size: 13.5px; }
-.err { border-left: 3px solid var(--block); background: var(--bad-soft); padding: 10px 14px; border-radius: 0 6px 6px 0; font-size: 13px; margin-bottom: 12px; }
-.skeleton { background: linear-gradient(90deg, var(--mist), #E9EEF1, var(--mist)); border-radius: 6px; height: 14px; animation: sk 1.2s infinite; }
-@keyframes sk { 0% { opacity: .6 } 50% { opacity: 1 } 100% { opacity: .6 } }
-.kbd { font-family: "IBM Plex Mono", monospace; font-size: 11px; border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; background: var(--mist); }
-.live { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); }
-.live i { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); display: inline-block; }
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+
+/* Links set in running text. With no accent colour they need an underline to read as links. */
+.login .box a,.note a,.err a{text-decoration:underline;text-underline-offset:2px;text-decoration-color:var(--hover-border)}
+.login .box a:hover,.note a:hover{text-decoration-color:currentColor}

@@ -15,6 +15,11 @@ The application (and any enhanced prototype) must match the baseline on all of:
 3. **Branding** — DXG·PM wordmark treatment, event-context header (event name · day), client branding surfaces where the baseline shows them.
 4. **Colors** — extract the baseline's palette (dark UI ground, cyan/blue primary action, green/amber/red semantic states, per-track progress bars) into design tokens; the app derives every color from those tokens.
 5. **Typography** — same face roles and hierarchy as the baseline (system/Segoe-stack UI text, monospaced time/code accents); type scale documented as tokens.
+
+   > **Amended 2026-09-24 (D-078):** items 4 and 5 are superseded by the Kravio design system
+   > (`docs/design-system/KRAVIO_DESIGN_SYSTEM.md`): light ground, no accent colour, near-black gradient for
+   > emphasis, Inter only. Items 1–3, 6 and 7 still bind.
+
 6. **Layout** — same regional structure per screen (sidebar + content, KPI card rows, queue-plus-preview split in Review, readiness grid in Room sync, portal card layouts).
 7. **States** — every state the baseline renders exists visually in the app: empty, loading, warning, error, offline (Room Agent), pending-ack, and the status pills above.
 

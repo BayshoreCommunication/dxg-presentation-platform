@@ -85,7 +85,7 @@ export function CommsView({ eventId, data }: { eventId: string; data: CommsData 
           {template && (
             <>
               <div className="darkpane" style={{ padding: "14px 18px", marginBottom: 12 }}>
-                <b style={{ color: "var(--white)", fontFamily: "'Barlow Semi Condensed'", fontSize: 16 }}>
+                <b style={{ color: "var(--white)", fontWeight: 500, fontSize: 15 }}>
                   {template.subject}
                 </b>
                 <pre
