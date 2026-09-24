@@ -72,7 +72,7 @@ import {
   supportedTimezones,
 } from "./services/events.ts";
 import { eventAgenda } from "./services/agenda.ts";
-import { queuePdfs, resumePdfQueue } from "./services/pdf.ts";
+import { pdfStates, queuePdfs, resumePdfQueue } from "./services/pdf.ts";
 import {
   createSession,
   updateSession,
@@ -1234,6 +1234,39 @@ app.post("/api/v1/findings/:findingId/waive", async (req, res) => {
   );
   if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
   return res.json(result.value);
+});
+
+/*
+ * Slide preview (D-074): the version's PDF copy, shown inline on the review screen.
+ * Staff only — `/file-versions/` is resolved to its event and scoped like every route
+ * under it. Until the PDF exists the answer is its state, so the screen can say
+ * "preparing" or show why it failed rather than a broken frame.
+ */
+app.get("/api/v1/file-versions/:versionId/preview", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  const versionId = String(req.params.versionId);
+  const state = await withScope(scopeFor(req), async (tx) => (await pdfStates(tx, [versionId])).get(versionId));
+  if (!state || state.state !== "done" || !state.s3_key) {
+    return res.status(409).json({
+      code: "preview.not_ready",
+      message: state?.state === "failed" ? `The preview could not be made: ${state.error}` : "The preview is still being prepared.",
+      state: state?.state ?? null,
+    });
+  }
+  const body = await storage.read(state.s3_key);
+  res.setHeader("content-type", "application/pdf");
+  res.setHeader("content-disposition", "inline");
+  res.setHeader("cache-control", "private, max-age=300");
+  return res.send(body);
+});
+
+/** Queue a preview for a version uploaded before previews existed, or retry a failed one. */
+app.post("/api/v1/file-versions/:versionId/preview", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  const queued = await queuePdfs([String(req.params.versionId)], true);
+  return res.json({ queued });
 });
 
 app.get("/api/v1/file-versions/:versionId/comments", async (req, res) => {

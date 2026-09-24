@@ -151,12 +151,22 @@ export async function queuePdfs(fileVersionIds: string[], retry = false): Promis
   return queued;
 }
 
-/** Work interrupted by a restart goes back in line; then the worker starts. */
+/**
+ * Work interrupted by a restart goes back in line; then the worker starts, and keeps
+ * looking every few seconds (D-074). Uploads queue their PDF inside the upload's own
+ * transaction, which the queue cannot see until it commits — the poll is what picks
+ * those up, a cheap indexed query when there is nothing to do.
+ */
+const POLL_MS = Number(process.env.PDF_POLL_MS ?? 5000);
+let polling: NodeJS.Timeout | undefined;
+
 export async function resumePdfQueue(): Promise<void> {
   await withSystemScope((tx) =>
     tx.query(`UPDATE pmp.pdf_conversions SET state = 'queued', updated_at = now() WHERE state = 'converting'`),
   );
   void drain();
+  polling ??= setInterval(() => void drain(), POLL_MS);
+  polling.unref();
 }
 
 async function drain(): Promise<void> {

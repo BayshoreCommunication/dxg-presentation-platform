@@ -172,7 +172,20 @@ export type QueueItem = {
   starts_at: string;
   size_bytes: string;
   findings: Finding[];
+  /** The slide preview (a PDF made at upload, D-074); null when never queued. */
+  pdf_state: "queued" | "converting" | "done" | "failed" | null;
+  pdf_error: string | null;
+  original_filename: string | null;
 };
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:4000/api/v1";
+
+/** The version's slide preview as a PDF, for an <iframe> (D-074). */
+export const previewUrl = (versionId: string) => `${API_BASE_URL}/file-versions/${versionId}/preview`;
+
+/** Queue (or retry) a version's slide preview. */
+export const requestPreview = (versionId: string) =>
+  request<{ queued: number }>(`/file-versions/${versionId}/preview`, { method: "POST" });
 
 export type FleetRoom = {
   room_id: string;

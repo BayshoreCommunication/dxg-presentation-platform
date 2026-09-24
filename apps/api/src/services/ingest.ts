@@ -111,6 +111,17 @@ export async function ingestVersion(
     versionId,
   ]);
 
+  // A clean file is queued for its PDF straight away (D-074): the reviewer previews it as
+  // slides, and the archive's PDF is ready before anyone approves. Queued in this
+  // transaction; the PDF worker polls, so it starts within seconds of the commit.
+  if (processingState === "stored") {
+    await tx.query(
+      `INSERT INTO pmp.pdf_conversions (file_version_id, event_id, client_id)
+       VALUES ($1, $2, $3) ON CONFLICT (file_version_id) DO NOTHING`,
+      [versionId, input.eventId, input.clientId],
+    );
+  }
+
   await appendAudit(tx, {
     partitionId: input.eventId,
     clientId: input.clientId,

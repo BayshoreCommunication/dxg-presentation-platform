@@ -6,6 +6,7 @@ import type { QueueItem } from "@/lib/api";
 import { transitionVersion, ApiError } from "@/lib/api";
 import { Chip, SeverityChip } from "@/components/Chip";
 import { CommentsPanel } from "@/components/CommentsPanel";
+import { SlidePreview } from "@/components/SlidePreview";
 import { formatBytes } from "@pmp/format";
 
 const FINDING_COPY: Record<string, (detail: Record<string, unknown>) => string> = {
@@ -196,14 +197,8 @@ export function ReviewWorkspace({ initialQueue }: { initialQueue: QueueItem[] })
             </span>
           </div>
           <div className="cbd">
-            <div className="slides">
-              {Array.from({ length: 8 }, (_, index) => (
-                <div key={index}>{index + 1}</div>
-              ))}
-            </div>
-            <div className="note" style={{ margin: "10px 0 4px" }}>
-              Slide previews render in M2-7; the decision path below is live.
-            </div>
+            {/* The real slides (D-074); eight numbered placeholders used to sit here. */}
+            <SlidePreview item={selected} />
 
             {/* Only findings that need a decision are shown here; the informational
                 ones are counted, with the full report a click away. */}

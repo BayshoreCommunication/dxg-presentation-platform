@@ -1446,3 +1446,24 @@ have known what to fix; Reject asked through `window.prompt`, which the desktop 
 
 Checked in a rolled-back transaction on MedTech: no message → refused; with one → state `changes_requested`, a
 speaker comment, one email to the speaker with a live link in the outbox and a redacted stored copy.
+
+## D-074 (2026-09-24): Reviewers see the real slides — Status: ACCEPTED (Travis's call)
+The review workspace showed eight numbered grey boxes — the prototype's placeholder, the same whatever was
+uploaded — over the note "Slide previews render in M2-7". Reviewers approved files they could not see there.
+
+- **Preview = the version's PDF**, made by the LibreOffice converter (D-067). Conversion is now queued **at upload**,
+  inside `ingestVersion` the moment a file is scanned clean (`stored`) — every route in (portal, USB intake) gets it —
+  not only at approval. So the preview is usually ready before the reviewer opens the file, and the archive's PDF is
+  usually ready before approval. Approval still queues it (no-op if it exists).
+- The PDF worker now **polls every 5 s** as well as being kicked: an upload queues inside its own transaction, which the
+  worker cannot see until it commits.
+- `GET /file-versions/{id}/preview` serves the PDF inline (staff only, event-scoped like every `/file-versions/` route;
+  409 with the state while it is not ready). `POST` queues or retries one — the screen does this automatically for a
+  version uploaded before previews existed.
+- **Review screen** (`SlidePreview`): the slides in an embedded viewer (pages, zoom, full screen); "Preparing the slide
+  preview…" that updates itself while converting; or, if conversion failed, the reason and **Try again**. The review
+  queue carries each version's preview state.
+- Stated on screen: fonts and video can differ slightly from PowerPoint — it is LibreOffice's rendering.
+
+Checked: MedTech's CardioNext opened in the viewer (its seeded file is placeholder text, so the "slides" are that
+text); a real `.pptx` pushed through `ingestVersion` (rolled back) was queued for preview at upload.

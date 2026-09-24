@@ -175,6 +175,10 @@ export type QueueItem = {
   starts_at: string;
   size_bytes: string;
   findings: { check_code: string; severity: string; detail: Record<string, unknown> }[];
+  /** The slide preview (a PDF made at upload, D-074); null when never queued. */
+  pdf_state: "queued" | "converting" | "done" | "failed" | null;
+  pdf_error: string | null;
+  original_filename: string | null;
 };
 
 /** Review queue, oldest first (screen 8, FR-REV-001). */
@@ -191,8 +195,10 @@ export async function reviewQueue(tx: pg.PoolClient, eventId: string): Promise<Q
             COALESCE((SELECT json_agg(json_build_object(
                         'check_code', inf.check_code, 'severity', inf.severity, 'detail', inf.detail))
                         FROM pmp.inspection_findings inf
-                       WHERE inf.file_version_id = fv.id AND inf.waived_at IS NULL), '[]'::json) AS findings
+                       WHERE inf.file_version_id = fv.id AND inf.waived_at IS NULL), '[]'::json) AS findings,
+            pc.state AS pdf_state, pc.error AS pdf_error, fv.original_filename
        FROM pmp.file_versions fv
+       LEFT JOIN pmp.pdf_conversions pc ON pc.file_version_id = fv.id
        JOIN pmp.files f ON f.id = fv.file_id
        JOIN pmp.slots s ON s.id = f.slot_id
        JOIN pmp.sessions se ON se.id = s.session_id
