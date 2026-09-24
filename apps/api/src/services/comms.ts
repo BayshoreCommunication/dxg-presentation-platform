@@ -572,8 +572,9 @@ export async function sendUploadLink(
     });
   }
 
-  const { rows: history } = await tx.query<{ status: string; at: string; to_address: string }>(
-    `SELECT status, COALESCE(sent_at, created_at)::text AS at, to_address::text
+  const { rows: history } = await tx.query<{ status: string; at: string; to_address: string; upload_link: boolean }>(
+    `SELECT status, COALESCE(sent_at, created_at)::text AS at, to_address::text,
+            template_id IS NOT NULL AS upload_link
        FROM pmp.communications WHERE speaker_id = $1 ORDER BY created_at DESC`,
     [input.speakerId],
   );
@@ -583,7 +584,9 @@ export async function sendUploadLink(
       message: `An earlier email to ${speaker.name} bounced. Check the address before sending again.`,
     });
   }
-  const reached = history.find((row) => !UNDELIVERED.includes(row.status));
+  // Only an upload-link email counts as "sent" (D-090) — a review decision's email is
+  // not one — while a bounce on any email to them counts: the address is the problem.
+  const reached = history.find((row) => row.upload_link && !UNDELIVERED.includes(row.status));
   if (reached) {
     return err({
       code: "comms.already_sent_conflict",

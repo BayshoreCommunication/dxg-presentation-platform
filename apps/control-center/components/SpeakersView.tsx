@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { DuplicatePair, SpeakerRow } from "@/lib/api";
+import type { DuplicatePair, ReleasePermission, SpeakerRow } from "@/lib/api";
 import {
   getSpeakers,
   mergeSpeakers,
@@ -10,6 +10,7 @@ import {
   remindSpeakersWithoutFiles,
   addSpeaker,
   sendUploadLink,
+  setReleasePermission,
   ApiError,
 } from "@/lib/api";
 import { Chip } from "@/components/Chip";
@@ -58,7 +59,41 @@ export function SpeakersView({
   }
 
   // Anyone with a presentation still missing a file — what "Bulk remind" chases.
-  const missing = rows.filter((row) => row.talks > 0 && row.talks_with_files < row.talks);
+  const missing = rows.filter(
+    (row) => row.talks > 0 && row.talks_with_files < row.talks,
+  );
+
+  // What the archive may share for this speaker (D-089). Until it is set, their
+  // presentations are left out of the client's package.
+  async function changeRelease(row: SpeakerRow, value: ReleasePermission) {
+    const before = row.release_permission;
+    setPending(`${row.id}:release`);
+    setError(null);
+    setRows((current) =>
+      current.map((item) =>
+        item.id === row.id ? { ...item, release_permission: value } : item,
+      ),
+    );
+    try {
+      await setReleasePermission(eventId, row.id, value);
+      setToast(
+        `${row.full_name}: ${RELEASE_OPTIONS.find(([key]) => key === value)?.[1] ?? value}`,
+      );
+    } catch (caught) {
+      setRows((current) =>
+        current.map((item) =>
+          item.id === row.id ? { ...item, release_permission: before } : item,
+        ),
+      );
+      setError(
+        caught instanceof ApiError
+          ? caught.message
+          : "The release permission could not be saved.",
+      );
+    } finally {
+      setPending(null);
+    }
+  }
 
   async function emailLink(row: SpeakerRow) {
     setPending(`${row.id}:send`);
@@ -82,16 +117,31 @@ export function SpeakersView({
   }
 
   function statusOf(row: SpeakerRow): { status: string; label: string } {
-    if (row.talks === 0) return { status: "canceled", label: "No presentations" };
-    if (row.talks_with_files === 0) return { status: "missing", label: "Not submitted" };
+    if (row.talks === 0)
+      return { status: "canceled", label: "No presentations" };
+    if (row.talks_with_files === 0)
+      return { status: "missing", label: "Not submitted" };
+    // Sent back by a reviewer (D-090) — the portal says "Needs revision", so this does too.
+    if (row.talks_needing_revision > 0) {
+      return {
+        status: "needs_revision",
+        label:
+          row.talks > 1
+            ? `${row.talks_needing_revision} of ${row.talks} need revision`
+            : "Needs revision",
+      };
+    }
     // Some presentations have a file and some do not (D-087) — "Submitted" hid the gap.
     if (row.talks_with_files < row.talks) {
-      return { status: "needs_revision", label: `${row.talks_with_files} of ${row.talks} submitted` };
+      return {
+        status: "needs_revision",
+        label: `${row.talks_with_files} of ${row.talks} submitted`,
+      };
     }
-    if (row.talks_approved >= row.talks) return { status: "synchronized_onsite", label: "Approved" };
+    if (row.talks_approved >= row.talks)
+      return { status: "synchronized_onsite", label: "Approved" };
     return { status: "submitted", label: "Submitted" };
   }
-
 
   return (
     <>
@@ -234,9 +284,9 @@ export function SpeakersView({
               <thead>
                 <tr>
                   <th>Speaker</th>
-                  <th>Organization</th>
                   <th>Presentations</th>
                   <th>Status</th>
+                  <th>Release</th>
                   <th>Upload link</th>
                   <th style={{ textAlign: "right" }}>Action</th>
                 </tr>
@@ -248,6 +298,13 @@ export function SpeakersView({
                     <tr key={row.id}>
                       <td>
                         <b>{row.full_name}</b>
+                        {/* Organization sits under the name: its own column pushed the table wider than the card. */}
+                        {row.organization && (
+                          <>
+                            <br />
+                            <span className="note">{row.organization}</span>
+                          </>
+                        )}
                         <br />
                         <span
                           className="note mono"
@@ -256,10 +313,29 @@ export function SpeakersView({
                           {row.email ?? "no email"}
                         </span>
                       </td>
-                      <td>{row.organization ?? "—"}</td>
                       <td className="num">{row.talks}</td>
                       <td>
                         <Chip status={status.status} label={status.label} />
+                      </td>
+                      <td>
+                        <select
+                          aria-label={`Release permission for ${row.full_name}`}
+                          value={row.release_permission}
+                          disabled={pending === `${row.id}:release`}
+                          style={{ minWidth: 0, maxWidth: 124 }}
+                          onChange={(event) =>
+                            void changeRelease(
+                              row,
+                              event.target.value as ReleasePermission,
+                            )
+                          }
+                        >
+                          {RELEASE_OPTIONS.map(([value, label]) => (
+                            <option key={value} value={value}>
+                              {label}
+                            </option>
+                          ))}
+                        </select>
                       </td>
                       <td>
                         <EmailStatus email={row.last_email} />
@@ -530,6 +606,14 @@ function AddSpeakerDialog({
  */
 const emailedAlready = (row: SpeakerRow) =>
   row.last_email && row.last_email.status !== "failed" ? row.last_email : null;
+
+/** What the archive may share (FR-SPK-003); "Not set" leaves the speaker's talks out. */
+const RELEASE_OPTIONS: [ReleasePermission, string][] = [
+  ["undecided", "Not set"],
+  ["full", "Full release"],
+  ["pdf_only", "PDF only"],
+  ["none", "No release"],
+];
 
 const ICON_BUTTON: React.CSSProperties = {
   width: 32,

@@ -222,23 +222,9 @@ export function UploadPanel({
     );
   }
 
-  if (phase === "done") {
-    return (
-      <div>
-        <button
-          className="btn"
-          onClick={() => {
-            setPhase("idle");
-            setUpload(null);
-            setSent(0);
-            setFile(null);
-          }}
-        >
-          Replace file
-        </button>
-      </div>
-    );
-  }
+  // The card shows the uploaded file once the list reloads; there is nothing to offer here.
+  if (phase === "done") return null;
+
 
   return (
     <div>

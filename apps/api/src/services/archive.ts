@@ -69,11 +69,21 @@ export type ScopePreview = {
 export async function scopePreview(tx: pg.PoolClient, eventId: string): Promise<ScopePreview> {
   const { rows } = await tx.query<Omit<Candidate, "formats">>(
     `SELECT s.id AS slot_id, s.title, r.name AS room, s.restricted,
-            (SELECT sp.full_name FROM pmp.speaker_assignments sa
-               JOIN pmp.speakers sp ON sp.id = sa.speaker_id WHERE sa.slot_id = s.id LIMIT 1) AS speaker,
-            COALESCE((SELECT sp.release_permission FROM pmp.speaker_assignments sa
-               JOIN pmp.speakers sp ON sp.id = sa.speaker_id WHERE sa.slot_id = s.id LIMIT 1),
-              'undecided') AS release_permission,
+            -- Every presenter, and the most restrictive of their permissions (D-089): a
+            -- co-presented talk is shared only as far as *each* presenter agreed. This read
+            -- one presenter with LIMIT 1 and no order, so which of them decided was chance.
+            (SELECT string_agg(sp.full_name, ', ' ORDER BY sp.full_name)
+               FROM pmp.speaker_assignments sa JOIN pmp.speakers sp ON sp.id = sa.speaker_id
+              WHERE sa.slot_id = s.id) AS speaker,
+            (SELECT CASE
+                      WHEN count(*) = 0 THEN 'undecided'
+                      WHEN bool_or(sp.release_permission = 'none') THEN 'none'
+                      WHEN bool_or(sp.release_permission = 'undecided') THEN 'undecided'
+                      WHEN bool_or(sp.release_permission = 'pdf_only') THEN 'pdf_only'
+                      ELSE 'full'
+                    END
+               FROM pmp.speaker_assignments sa JOIN pmp.speakers sp ON sp.id = sa.speaker_id
+              WHERE sa.slot_id = s.id) AS release_permission,
             fv.id AS file_version_id, fv.version_number, fv.size_bytes::text,
             encode(fv.sha256, 'hex') AS sha256, fv.s3_key, fv.original_filename,
             fv.approved_at, u.display_name AS approved_by

@@ -88,6 +88,7 @@ import {
   addPresenter,
   removePresenter,
   addSpeaker,
+  setReleasePermission,
 } from "./services/agendaEdit.ts";
 import {
   ensureTemplates, updateTemplate, MERGE_FIELDS,
@@ -747,6 +748,14 @@ app.post(
   agendaRoute(201, (tx, actor, req) => addSpeaker(tx, actor, String(req.params.eventId), bodyOf(req))),
 );
 
+/** What the speaker allows the archive to share (D-089). */
+app.put(
+  "/api/v1/events/:eventId/speakers/:speakerId/release-permission",
+  agendaRoute(200, (tx, actor, req) =>
+    setReleasePermission(tx, actor, String(req.params.eventId), String(req.params.speakerId), bodyOf(req)),
+  ),
+);
+
 app.get("/api/v1/events/:eventId/talks", async (req, res) => {
   const actor = actorFrom(req);
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
@@ -1046,12 +1055,29 @@ app.get("/api/v1/events/:eventId/speakers", async (req, res) => {
               -- Presentations with a file, as against files: "2 of 3 submitted" (D-087).
               count(DISTINCT sa.slot_id) FILTER (WHERE f.id IS NOT NULL)::int AS talks_with_files,
               count(DISTINCT sa.slot_id) FILTER (WHERE fv.review_state = 'approved')::int AS talks_approved,
-              -- The last email this speaker was sent, so nobody is emailed twice by accident (D-086).
+              -- The last *upload-link* email (D-086, D-090): one sent from a template —
+              -- invitation or reminder. A review decision's email (no template) is not the
+              -- speaker's upload link, and showing its status here read as if it were.
               (SELECT json_build_object('status', c.status, 'at', COALESCE(c.sent_at, c.created_at),
                                         'to', c.to_address::text,
-                                        'count', (SELECT count(*) FROM pmp.communications x WHERE x.speaker_id = sp.id))
-                 FROM pmp.communications c WHERE c.speaker_id = sp.id
-                ORDER BY c.created_at DESC LIMIT 1) AS last_email
+                                        'count', (SELECT count(*) FROM pmp.communications x
+                                                   WHERE x.speaker_id = sp.id AND x.template_id IS NOT NULL))
+                 FROM pmp.communications c WHERE c.speaker_id = sp.id AND c.template_id IS NOT NULL
+                ORDER BY c.created_at DESC LIMIT 1) AS last_email,
+              -- Presentations whose newest version was sent back — changes requested, rejected,
+              -- or failed inspection — so the list says "Needs revision" as the portal does (D-090).
+              (SELECT count(*)::int
+                 FROM pmp.speaker_assignments sa2
+                 JOIN LATERAL (
+                   SELECT fv2.review_state, fv2.inspection_state
+                     FROM pmp.files f2 JOIN pmp.file_versions fv2 ON fv2.file_id = f2.id
+                    WHERE f2.slot_id = sa2.slot_id
+                    ORDER BY fv2.version_number DESC, fv2.created_at DESC
+                    LIMIT 1
+                 ) latest ON true
+                WHERE sa2.speaker_id = sp.id
+                  AND (latest.review_state IN ('changes_requested', 'rejected') OR latest.inspection_state = 'failed')
+              ) AS talks_needing_revision
          FROM pmp.speakers sp
          LEFT JOIN pmp.speaker_assignments sa ON sa.speaker_id = sp.id
          LEFT JOIN pmp.files f ON f.slot_id = sa.slot_id

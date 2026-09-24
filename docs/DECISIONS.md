@@ -1753,3 +1753,46 @@ Tests: 5 cases in `tests/invariants/auth-separation.test.ts` ("side by side").
 Also 2026-09-24, speaker portal: choosing or dropping a file only *selects* it — name, size, "Nothing has been
 uploaded yet" — and **Submit presentation** starts the upload (with Choose a different file / Cancel). It used to
 upload the moment a file was picked, and "Drag your presentation here" had no drop handler.
+
+## D-089 (2026-09-24): Release permission is settable, and a co-presented talk needs every presenter's — Status: ACCEPTED (Travis's call)
+Found reviewing the Archive builder on a new event:
+
+1. **Nothing could set a release permission.** The archive (FR-SPK-003) leaves out any talk whose speaker is
+   `undecided`, every speaker starts `undecided` (Add speaker, agenda editor, import), and no screen or route changed
+   it — only the seed's MedTech speakers were `full`. So a speaker added any other way could never reach the client's
+   package. Now `PUT /events/{id}/speakers/{speakerId}/release-permission` `{release_permission}` (presentation manager
+   or above, audited as `speakers.release_permission_set` with before/after, 400 on an unknown value, 404 for another
+   event's speaker), and a **Release** select on the Speakers screen: Not set / Full release / PDF only / No release.
+   "Undecided" is shown as "Not set" everywhere (it matches the archive's "release permission not set"). Organization
+   moved under the speaker's name so the extra column fits.
+2. **A co-presented talk used one presenter's permission, chosen by chance** (`LIMIT 1`, no order). The scope now
+   takes the most restrictive of all presenters — any `none` → excluded; any `undecided` → excluded; any `pdf_only`
+   → PDF only; all `full` → PowerPoint and PDF — and names every presenter ("Kwame Osei, Rakibul").
+3. **Archive buttons explain themselves:** Deliver says "Build a package first" / "still being built" / "last build
+   failed"; Build says "see Excluded for why" when approved talks are all excluded (it said "Nothing is approved yet").
+
+Tests: `tests/invariants/release-permission.test.ts` (10 cases, a real portal upload approved through the review
+queue; reused probe event "Release Permission Probe", left archived). Removing the `undecided` rule makes the
+co-presenter case fail.
+
+## D-090 (2026-09-24): Revision status and upload-link status are told apart; dev mail can be real — Status: ACCEPTED (Travis's call)
+Tracing "Request revision" (D-073) showed two mismatches and one gap:
+
+1. **"Upload link" showed a review decision's email.** The column (D-086) read the speaker's last email of any kind,
+   so a revision email appeared as "Sent" and hid the send icon. It now counts only emails sent from a template
+   (invitation or reminder) — `template_id IS NOT NULL`; decision notices have none. The send-once guard counts the
+   same way; a bounce on *any* email still blocks, since then the address is the problem.
+2. **The Speakers screen said "Submitted" while the portal said "Needs revision".** The list now returns
+   `talks_needing_revision` — presentations whose newest version is `changes_requested`, `rejected`, or failed
+   inspection — and shows **Needs revision** / "1 of 2 need revision" (after "Not submitted", before partial counts).
+3. **Real email in development.** `npm run dev`'s dispatcher never read `.env`, so it always wrote mail to disk even
+   though `.env` says `MAIL_TRANSPORT=ses`. `dev:dispatcher` is now `node --env-file-if-exists=.env …`; the local `.env`
+   gains `AWS_PROFILE=rfpilot` (SES for av-rfpilot.com lives in that account). **Guard:** the SES transport never sends
+   to reserved test domains (RFC 2606/6761 — `.invalid`, `.test`, `.example`, `.localhost`, `example.com/net/org`);
+   those are written to disk and recorded as `suppressed: "reserved test domain"`. Every seeded speaker and test probe
+   uses one, and their bounces would count against the sending domain.
+
+Verified 2026-09-24: request revision on Rakibul's "Opening Keynote" (Multi-Session Test 2026) → SES accepted the email
+to irakibul568@gmail.com (status `sent`, message id recorded); Speakers shows "1 of 2 need revision" with Upload link
+still "Not sent"; the portal shows Needs revision, the feedback and the upload box. Links in dev mail still point at
+`PORTAL_BASE` (localhost:3001) and open only on the machine running the stack.

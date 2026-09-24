@@ -625,6 +625,57 @@ export async function addSpeaker(
   return ok({ speaker_id: speakerId, created: !existing, slot_id: slotId });
 }
 
+/** What a speaker allows the archive to share (FR-SPK-003). */
+export const RELEASE_PERMISSIONS = ["undecided", "full", "pdf_only", "none"] as const;
+export type ReleasePermission = (typeof RELEASE_PERMISSIONS)[number];
+
+/**
+ * Records what a speaker agreed the archive may share (D-089).
+ *
+ * The archive leaves out any presentation whose speaker is "undecided", and every
+ * speaker starts undecided — but nothing could set it, so a speaker added after the
+ * seed could never reach the client's package. Changing it is audited with the old
+ * and new value: it is the speaker's consent, and the archive acts on it.
+ */
+export async function setReleasePermission(
+  tx: pg.PoolClient,
+  actor: Actor,
+  eventId: string,
+  speakerId: string,
+  input: { release_permission?: unknown },
+): Promise<Result<{ speaker_id: string; release_permission: ReleasePermission }, DomainError>> {
+  if (!hasAnyRole(actor, EDITORS)) return err(forbidden("Setting a release permission"));
+  const value = input.release_permission;
+  if (typeof value !== "string" || !(RELEASE_PERMISSIONS as readonly string[]).includes(value)) {
+    return err({
+      code: "speakers.bad_release_permission",
+      message: "Release permission must be one of: undecided, full, pdf_only, none.",
+    });
+  }
+  const { rows } = await tx.query<{ client_id: string; before: string }>(
+    `UPDATE pmp.speakers sp
+        SET release_permission = $3, lock_version = sp.lock_version + 1, updated_at = now()
+       FROM pmp.speakers prior
+      WHERE sp.id = prior.id AND sp.id = $1 AND sp.event_id = $2 AND sp.merged_into IS NULL
+      RETURNING sp.client_id, prior.release_permission AS before`,
+    [speakerId, eventId, value],
+  );
+  const row = rows[0];
+  if (!row) return err(notFound("speaker"));
+  if (row.before !== value) {
+    await appendAudit(tx, {
+      partitionId: eventId,
+      clientId: row.client_id,
+      actorUserId: actor.id,
+      action: "speakers.release_permission_set",
+      subjectType: "speaker",
+      subjectId: speakerId,
+      detail: { before: row.before, after: value },
+    });
+  }
+  return ok({ speaker_id: speakerId, release_permission: value as ReleasePermission });
+}
+
 /**
  * Takes a presenter off a presentation. The speaker record stays — they may give
  * other talks, and their history is theirs — only this assignment goes.

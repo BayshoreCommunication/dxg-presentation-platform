@@ -176,7 +176,13 @@ export function ArchiveView({ eventId, initial }: { eventId: string; initial: Ar
             <button
               className="btn pri"
               disabled={busy || initial.included.length === 0}
-              title={initial.included.length === 0 ? "Nothing is approved yet" : undefined}
+              title={
+                initial.included.length === 0
+                  ? initial.excluded.length > 0
+                    ? "Nothing can be packaged yet — see Excluded for why"
+                    : "Nothing is approved yet"
+                  : undefined
+              }
               onClick={() =>
                 void run(async () => {
                   const result = await buildArchive(eventId);
@@ -191,6 +197,15 @@ export function ArchiveView({ eventId, initial }: { eventId: string; initial: Ar
             <button
               className="btn"
               disabled={busy || !pkg || pkg.archive_state !== "ready"}
+              title={
+                !pkg
+                  ? "Build a package first"
+                  : pkg.archive_state === "failed"
+                    ? "The last build failed — rebuild the package"
+                    : pkg.archive_state !== "ready"
+                      ? "The package is still being built"
+                      : undefined
+              }
               onClick={() =>
                 void run(async () => {
                   const result = await deliverArchive(pkg!.id);

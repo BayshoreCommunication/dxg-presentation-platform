@@ -43,6 +43,21 @@ export class FileSender implements EmailSender {
   }
 }
 
+/**
+ * Addresses that can never receive mail (RFC 2606/6761: `.invalid`, `.test`, `.example`,
+ * `.localhost`, and `example.com/.net/.org`). Every seeded speaker and every test probe
+ * uses one. Handing them to SES would only produce bounces, and bounces count against
+ * the sending domain's reputation — so the SES transport writes them to disk instead.
+ */
+export function isReservedAddress(address: string): boolean {
+  const domain = address.split("@").pop()?.toLowerCase().trim() ?? "";
+  return (
+    /\.(invalid|test|example|localhost)$/.test(domain) ||
+    ["invalid", "test", "example", "localhost"].includes(domain) ||
+    /(^|\.)example\.(com|net|org)$/.test(domain)
+  );
+}
+
 export type SesConfig = {
   region: string;
   from: string;
@@ -85,6 +100,7 @@ export class SesSender implements EmailSender {
   readonly name = "ses";
   private readonly config: SesConfig;
   private client: SESv2Client | undefined;
+  private readonly reserved = new FileSender();
 
   constructor(config: SesConfig = sesConfigFromEnv()) {
     this.config = config;
@@ -99,6 +115,10 @@ export class SesSender implements EmailSender {
   }
 
   async send(message: Message): Promise<Delivery> {
+    if (isReservedAddress(message.to)) {
+      const kept = await this.reserved.send(message);
+      return { ...kept, detail: { ...kept.detail, transport: "ses", suppressed: "reserved test domain" } };
+    }
     const { SendEmailCommand } = await import("@aws-sdk/client-sesv2");
     const client = await this.clientFor();
 

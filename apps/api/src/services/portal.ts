@@ -41,7 +41,7 @@ export type PortalTalk = {
   final_locked: boolean;
   status: string;
   status_label: string;
-  versions: { version_number: number; size_bytes: string; created_at: string; state: string }[];
+  versions: { version_number: number; file_name: string; size_bytes: string; created_at: string; state: string }[];
   findings: Finding[];
   /** Notes the DXG team wrote to the speaker, newest first (D-070). Never internal or client-lane notes. */
   feedback: { body: string; created_at: string; version_number: number }[];
@@ -57,7 +57,9 @@ export async function portalTalks(tx: pg.PoolClient, session: PortalSession): Pr
     final_locked: boolean;
     session_state: string;
     versions: { processing: string; inspection: string; review: string }[] | null;
-    version_rows: { version_number: number; size_bytes: string; created_at: string; state: string }[] | null;
+    version_rows:
+      | { version_number: number; file_name: string; size_bytes: string; created_at: string; state: string }[]
+      | null;
     findings: Finding[] | null;
     feedback: { body: string; created_at: string; version_number: number }[] | null;
   }>(
@@ -69,6 +71,7 @@ export async function portalTalks(tx: pg.PoolClient, session: PortalSession): Pr
                FROM pmp.file_versions fv JOIN pmp.files f ON f.id = fv.file_id
               WHERE f.slot_id = s.id) AS versions,
             (SELECT json_agg(json_build_object('version_number', fv.version_number,
+                                               'file_name', fv.original_filename,
                                                'size_bytes', fv.size_bytes::text,
                                                'created_at', fv.created_at,
                                                'state', fv.processing_state)

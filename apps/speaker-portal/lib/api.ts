@@ -55,7 +55,7 @@ export type PortalTalk = {
   final_locked: boolean;
   status: string;
   status_label: string;
-  versions: { version_number: number; size_bytes: string; created_at: string; state: string }[];
+  versions: { version_number: number; file_name: string; size_bytes: string; created_at: string; state: string }[];
   findings: Finding[];
   /** Notes the DXG team wrote to the speaker, newest first (D-070). */
   feedback: { body: string; created_at: string; version_number: number }[];

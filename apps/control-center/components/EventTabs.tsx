@@ -39,7 +39,7 @@ const dayHeading = (day: string) =>
   });
 
 const RELEASE: Record<string, string> = {
-  undecided: "Undecided",
+  undecided: "Not set",
   full: "Full release",
   pdf_only: "PDF only",
   none: "No release",

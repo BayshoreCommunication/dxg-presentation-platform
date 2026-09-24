@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 
 /**
@@ -16,7 +17,44 @@ export function SlideViewer({ url, title }: { url: string; title: string }) {
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [current, setCurrent] = useState(1);
+  const [expanded, setExpanded] = useState(false);
   const shell = useRef<HTMLDivElement>(null);
+
+  /*
+   * Full screen is the viewer covering the window, which always works; the browser's
+   * own full screen is asked for on top of that where it is allowed. Relying on the
+   * browser alone did nothing in embedded browsers, which leave the request unanswered —
+   * and the slide area was a fixed 520 px, so even a granted request left it small.
+   */
+  const enter = () => {
+    setExpanded(true);
+    // The whole page, not the viewer: the viewer's element is replaced when it moves to
+    // <body>, and a full-screen element that leaves the page ends full screen.
+    const request = document.documentElement.requestFullscreen?.();
+    if (request) request.catch(() => undefined);
+  };
+  const leave = useCallback(() => {
+    setExpanded(false);
+    if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
+  }, []);
+
+  // Keyboard paging keeps working after the viewer moves in or out of full screen
+  // (not on first render — opening the page must not take focus).
+  const wasExpanded = useRef(expanded);
+  useEffect(() => {
+    if (wasExpanded.current === expanded) return;
+    wasExpanded.current = expanded;
+    shell.current?.focus({ preventScroll: true });
+  }, [expanded]);
+
+  // Leaving the browser's full screen (its own Esc) leaves ours too.
+  useEffect(() => {
+    const onChange = () => {
+      if (!document.fullscreenElement) setExpanded(false);
+    };
+    document.addEventListener("fullscreenchange", onChange);
+    return () => document.removeEventListener("fullscreenchange", onChange);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -52,6 +90,11 @@ export function SlideViewer({ url, title }: { url: string; title: string }) {
   const go = useCallback((page: number) => setCurrent((now) => Math.min(Math.max(1, page), count || now)), [count]);
 
   const onKeyDown = (event: React.KeyboardEvent) => {
+    if (event.key === "Escape" && expanded) {
+      event.preventDefault();
+      leave();
+      return;
+    }
     const moves: Record<string, number> = {
       ArrowRight: current + 1,
       ArrowDown: current + 1,
@@ -76,14 +119,23 @@ export function SlideViewer({ url, title }: { url: string; title: string }) {
     );
   }
 
-  return (
+  const viewer = (
     <div
       ref={shell}
       tabIndex={0}
       role="region"
       aria-label={`Slides of ${title}`}
       onKeyDown={onKeyDown}
-      style={{ border: "1px solid var(--line)", borderRadius: 8, overflow: "hidden", background: "var(--white)", outline: "none" }}
+      style={{
+        border: "1px solid var(--line)",
+        borderRadius: expanded ? 0 : 8,
+        overflow: "hidden",
+        background: "var(--white)",
+        outline: "none",
+        display: "flex",
+        flexDirection: "column",
+        ...(expanded ? { position: "fixed", inset: 0, zIndex: 900 } : {}),
+      }}
     >
       <div
         style={{
@@ -109,13 +161,14 @@ export function SlideViewer({ url, title }: { url: string; title: string }) {
           type="button"
           className="btn"
           style={{ padding: "2px 10px", fontSize: 12 }}
-          onClick={() => void shell.current?.requestFullscreen?.()}
+          aria-pressed={expanded}
+          onClick={() => (expanded ? leave() : enter())}
         >
-          Full screen
+          {expanded ? "Exit full screen" : "Full screen"}
         </button>
       </div>
 
-      <div style={{ display: "flex", height: 520 }}>
+      <div style={{ display: "flex", ...(expanded ? { flex: 1, minHeight: 0 } : { height: 520 }) }}>
         <div
           style={{
             width: 190,
@@ -148,6 +201,10 @@ export function SlideViewer({ url, title }: { url: string; title: string }) {
       </div>
     </div>
   );
+
+  // Covering the window needs <body> as the parent: inside the review card, whose
+  // entry animation leaves a transform, `position: fixed` covers only the card.
+  return expanded ? createPortal(viewer, document.body) : viewer;
 }
 
 /** Draws one page into a canvas at the given CSS width, sharp on high-density screens. */

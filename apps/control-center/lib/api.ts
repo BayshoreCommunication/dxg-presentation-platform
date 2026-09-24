@@ -507,6 +507,8 @@ export type SpeakerRow = {
   /** Presentations with at least one file / with an approved file (D-087). */
   talks_with_files: number;
   talks_approved: number;
+  /** Presentations whose newest version was sent back for changes (D-090). */
+  talks_needing_revision: number;
   /** The last email this speaker was sent (D-086); null when never emailed. */
   last_email: { status: string; at: string; to: string; count: number } | null;
 };
@@ -598,6 +600,15 @@ export const mergeSpeakers = (speakerId: string, into: string) =>
   request<{ merged_into: string }>(
     `/speakers/${speakerId}/merge`,
     { method: "POST", body: JSON.stringify({ into }) },
+  );
+
+export type ReleasePermission = "undecided" | "full" | "pdf_only" | "none";
+
+/** What a speaker allows the archive to share (D-089). */
+export const setReleasePermission = (eventId: string, speakerId: string, release_permission: ReleasePermission) =>
+  request<{ speaker_id: string; release_permission: ReleasePermission }>(
+    `/events/${eventId}/speakers/${speakerId}/release-permission`,
+    { method: "PUT", body: JSON.stringify({ release_permission }) },
   );
 
 /** Emails one speaker their upload link — once; a second call is refused (D-086). */

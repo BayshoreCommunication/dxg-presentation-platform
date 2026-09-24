@@ -99,6 +99,12 @@ function TalkCard({
 }) {
   const [result, setResult] = useState<CompleteResult | null>(null);
   const latest = talk.versions[0];
+  // The upload box is for a first file, or a new one the team has asked for.
+  const needsUpload =
+    !latest ||
+    latest.state === "quarantined" ||
+    talk.status === "needs_revision" ||
+    talk.status === "attention";
   const when = new Date(talk.starts_at).toLocaleString("en-US", {
     weekday: "short",
     month: "short",
@@ -153,26 +159,48 @@ function TalkCard({
 
         <h3 style={{ fontSize: 13, marginBottom: 8 }}>Your presentation</h3>
 
+        {/*
+          Once a file is in, the card shows that file — its name and size — and no upload
+          box. A new file is taken only when the team asks for one (a requested revision or
+          a problem found) or when the last one was quarantined.
+        */}
+        {latest && (
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              gap: 12,
+              alignItems: "center",
+              border: "1px solid var(--line)",
+              borderRadius: 10,
+              padding: "12px 14px",
+              marginBottom: needsUpload ? 12 : 0,
+            }}
+          >
+            <span className="mono" style={{ overflowWrap: "anywhere" }}>
+              {latest.file_name}
+            </span>
+            <span className="mono num" style={{ whiteSpace: "nowrap" }}>
+              {formatBytes(Number(latest.size_bytes))}
+            </span>
+          </div>
+        )}
+
         {talk.final_locked ? (
-          <div className="lane cli">
+          <div className="lane cli" style={{ marginTop: 10 }}>
             <b>Locked as the final onsite version.</b> Your presentation was confirmed in the Speaker
             Ready Room, so it can no longer be replaced here. Please speak to the team onsite.
           </div>
         ) : (
-          <UploadPanel
-            slotId={talk.slot_id}
-            onComplete={async (completed) => {
-              setResult(completed);
-              await onChange();
-            }}
-          />
-        )}
-
-        {latest && !result && (
-          <div className="lane spk" style={{ marginTop: 10 }}>
-            <b>v{latest.version_number} received.</b> Checksum verified — earlier versions are kept
-            safe. {formatBytes(latest.size_bytes)}.
-          </div>
+          needsUpload && (
+            <UploadPanel
+              slotId={talk.slot_id}
+              onComplete={async (completed) => {
+                setResult(completed);
+                await onChange();
+              }}
+            />
+          )
         )}
 
         {/* Notes the team wrote to the speaker (D-070) — only the speaker lane, never internal notes. */}
@@ -200,21 +228,13 @@ function TalkCard({
 
         {result && (
           <div style={{ marginTop: 12 }}>
-            <div className={result.processing_state === "quarantined" ? "err" : "lane spk"}>
-              {result.processing_state === "quarantined" ? (
-                <>
-                  <b>This file could not be accepted.</b> Our security scan flagged it, so it has been
-                  quarantined and your previous version is untouched. Please check the file and upload
-                  again.
-                </>
-              ) : (
-                <>
-                  <b>v{result.version_number} received.</b> Checksum verified —{" "}
-                  <span className="mono">{result.sha256.slice(0, 8)}…{result.sha256.slice(-4)}</span>.
-                  Automated checks have run; we&rsquo;ll email you if anything needs attention.
-                </>
-              )}
-            </div>
+            {result.processing_state === "quarantined" && (
+              <div className="err">
+                <b>This file could not be accepted.</b> Our security scan flagged it, so it has been
+                quarantined and your previous version is untouched. Please check the file and upload
+                again.
+              </div>
+            )}
             {result.findings
               .filter((finding) => finding.severity !== "info")
               .map((finding, index) => (
