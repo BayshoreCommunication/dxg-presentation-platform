@@ -11,6 +11,7 @@ import {
 } from "@pmp/domain";
 import type { Actor, DomainError, Result } from "@pmp/domain";
 import { err, ok } from "@pmp/domain";
+import { noticeToSpeakers } from "./decisionNotice.ts";
 
 export type VersionRow = {
   file_version_id: string;
@@ -292,12 +293,16 @@ export async function requestRevisionFromFinding(
     `UPDATE pmp.file_versions SET review_state = $1, lock_version = lock_version + 1 WHERE id = $2`,
     [decision.value.to, input.versionId],
   );
-  const comment = await addComment(tx, actor, {
+  // The same notice as the review screen's "Request revision" (D-073): a speaker-lane
+  // comment *and* an email, not a comment the speaker only sees if they happen to look.
+  if (!input.note.trim()) {
+    return err({ code: "comments.empty", message: "Write a message to the speaker saying what to change." });
+  }
+  await noticeToSpeakers(tx, actor, {
     versionId: input.versionId,
-    lane: "speaker_visible",
-    body: input.note,
+    outcome: "changes_requested",
+    message: input.note.trim(),
   });
-  if (!comment.ok) return err(comment.error);
 
   const { rows: scope } = await tx.query<{ event_id: string; client_id: string }>(
     `SELECT event_id, client_id FROM pmp.file_versions WHERE id = $1`,

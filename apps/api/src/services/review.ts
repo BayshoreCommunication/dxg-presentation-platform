@@ -3,6 +3,8 @@ import { appendAudit } from "@pmp/db";
 import { reviewLifecycle, transition, requiresAcknowledgment } from "@pmp/domain";
 import type { Actor, DomainError, ReviewAction, ReviewState, Result } from "@pmp/domain";
 import { err, ok } from "@pmp/domain";
+import { noticeToSpeakers } from "./decisionNotice.ts";
+import type { DecisionNoticeResult } from "./decisionNotice.ts";
 
 export type DecideInput = {
   readonly versionId: string;
@@ -10,6 +12,11 @@ export type DecideInput = {
   readonly actor: Actor;
   readonly lockVersion: number;
   readonly reason?: string;
+  /**
+   * What the speaker is told (D-073). Required for `request_changes` and `reject`: a
+   * file sent back with no reason cannot be fixed. Also the recorded reason for a reject.
+   */
+  readonly note?: string;
 };
 
 export type DecideOutput = {
@@ -17,6 +24,8 @@ export type DecideOutput = {
   readonly review_state: ReviewState;
   readonly lock_version: number;
   readonly rooms_queued: number;
+  /** Who was told, for `request_changes` and `reject` (D-073). */
+  readonly notice?: DecisionNoticeResult;
 };
 
 type VersionRow = {
@@ -57,11 +66,24 @@ export async function decide(
     });
   }
 
+  const tellsSpeaker = input.action === "request_changes" || input.action === "reject";
+  const note = input.note?.trim() ?? "";
+  if (tellsSpeaker && !note) {
+    return err({
+      code: "review.reason_required",
+      message: "Write a message to the speaker saying what to change — it is emailed to them and shown in their portal.",
+    });
+  }
+  if (note.length > 5000) {
+    return err({ code: "review.reason_required", message: "Keep the message to the speaker under 5,000 characters." });
+  }
+  const reason = input.reason ?? (input.action === "reject" ? note : undefined);
+
   const decision = transition(reviewLifecycle, {
     from: version.review_state,
     action: input.action,
     actor: input.actor,
-    ...(input.reason === undefined ? {} : { reason: input.reason }),
+    ...(reason === undefined ? {} : { reason }),
   });
   if (!decision.ok) return err(decision.error);
 
@@ -160,10 +182,19 @@ export async function decide(
     }),
   ]);
 
+  const notice = tellsSpeaker
+    ? await noticeToSpeakers(tx, input.actor, {
+        versionId: version.id,
+        outcome: input.action === "reject" ? "rejected" : "changes_requested",
+        message: note,
+      })
+    : undefined;
+
   return ok({
     file_version_id: version.id,
     review_state: decision.value.to,
     lock_version: nextLock,
     rooms_queued: roomsQueued,
+    ...(notice ? { notice } : {}),
   });
 }

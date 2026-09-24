@@ -24,6 +24,13 @@ export function ReviewWorkspace({ initialQueue }: { initialQueue: QueueItem[] })
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  /*
+   * Sending a file back asks, on the page, what the speaker should change (D-073). It
+   * used to act at once with no reason — and "Reject" asked through window.prompt, which
+   * embedded browsers answer with an instant cancel.
+   */
+  const [pending, setPending] = useState<"request_changes" | "reject" | null>(null);
+  const [message, setMessage] = useState("");
 
   useEffect(() => {
     setQueue(initialQueue);
@@ -36,20 +43,18 @@ export function ReviewWorkspace({ initialQueue }: { initialQueue: QueueItem[] })
 
   const selected = queue.find((item) => item.file_version_id === selectedId) ?? null;
 
+  // A half-written message belongs to the file it was written for.
+  useEffect(() => {
+    setPending(null);
+    setMessage("");
+  }, [selectedId]);
+
   const decide = useCallback(
-    async (action: "claim" | "approve" | "request_changes" | "reject") => {
+    async (action: "claim" | "approve" | "request_changes" | "reject", note?: string) => {
       if (!selected || busy) return;
       setBusy(true);
       setError(null);
       try {
-        let reason: string | undefined;
-        if (action === "reject") {
-          reason = window.prompt("Reason (required):") ?? "";
-          if (!reason.trim()) {
-            setError("A rejection must record a reason — nothing was changed.");
-            return;
-          }
-        }
 
         // A decision needs the item claimed first (WORKFLOW_STATES §3).
         let lockVersion = selected.lock_version;
@@ -64,18 +69,30 @@ export function ReviewWorkspace({ initialQueue }: { initialQueue: QueueItem[] })
         const result = await transitionVersion(selected.file_version_id, {
           action,
           lock_version: lockVersion,
-          ...(reason ? { reason } : {}),
+          ...(note ? { note } : {}),
         });
 
+        // Says what actually happened — who was emailed, and who could not be.
+        const told = (notice: typeof result.notice) => {
+          if (!notice) return "";
+          const parts: string[] = [];
+          if (notice.emailed.length > 0) parts.push(`emailed ${notice.emailed.join(", ")}`);
+          if (notice.without_email.length > 0) {
+            parts.push(`no email address for ${notice.without_email.join(", ")} — they'll see it in their portal`);
+          }
+          return parts.length > 0 ? ` · ${parts.join(" · ")}` : " · no speaker on this talk to tell";
+        };
         setToast(
           result.review_state === "approved"
-            ? `Approved — delta manifest queued for ${result.rooms_queued} room${result.rooms_queued === 1 ? "" : "s"}`
+            ? `Approved — queued for ${result.rooms_queued} room${result.rooms_queued === 1 ? "" : "s"}`
             : result.review_state === "changes_requested"
-              ? "Revision requested — speaker notified via speaker-visible comment"
+              ? `Sent back for revision${told(result.notice)}`
               : result.review_state === "rejected"
-                ? "Rejected — speaker and client admin notified"
+                ? `Rejected${told(result.notice)}`
                 : `Claimed · now ${result.review_state.replace("_", " ")}`,
         );
+        setPending(null);
+        setMessage("");
 
         if (result.review_state === "in_review") {
           setQueue((items) =>
@@ -97,7 +114,7 @@ export function ReviewWorkspace({ initialQueue }: { initialQueue: QueueItem[] })
         );
       } finally {
         setBusy(false);
-        setTimeout(() => setToast(null), 3200);
+        setTimeout(() => setToast(null), 6000);
       }
     },
     [selected, busy, router],
@@ -119,7 +136,8 @@ export function ReviewWorkspace({ initialQueue }: { initialQueue: QueueItem[] })
       }
       if (event.metaKey || event.ctrlKey || event.altKey) return;
       if (event.key === "a" || event.key === "A") void decide("approve");
-      if (event.key === "r" || event.key === "R") void decide("request_changes");
+      // R opens the message form rather than acting: a revision needs a reason.
+      if (event.key === "r" || event.key === "R") setPending("request_changes");
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -219,10 +237,10 @@ export function ReviewWorkspace({ initialQueue }: { initialQueue: QueueItem[] })
               <button className="btn good" disabled={busy} onClick={() => void decide("approve")}>
                 Approve (A)
               </button>
-              <button className="btn warnb" disabled={busy} onClick={() => void decide("request_changes")}>
+              <button className="btn warnb" disabled={busy} onClick={() => setPending("request_changes")}>
                 Request revision (R)
               </button>
-              <button className="btn danger" disabled={busy} onClick={() => void decide("reject")}>
+              <button className="btn danger" disabled={busy} onClick={() => setPending("reject")}>
                 Reject…
               </button>
               <span className="note" style={{ alignSelf: "center" }}>
@@ -230,6 +248,63 @@ export function ReviewWorkspace({ initialQueue }: { initialQueue: QueueItem[] })
                 <span className="mono">{selected.lock_version}</span>
               </span>
             </div>
+
+            {pending && (
+              <form
+                style={{
+                  border: `1px solid ${pending === "reject" ? "var(--block)" : "var(--warn)"}`,
+                  borderRadius: 6,
+                  padding: 12,
+                  marginTop: 10,
+                }}
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  if (message.trim()) void decide(pending, message.trim());
+                }}
+              >
+                <label htmlFor="speaker-message" style={{ display: "block", fontWeight: 600, marginBottom: 4 }}>
+                  {pending === "reject" ? "Why is it rejected?" : "What should the speaker change?"}
+                </label>
+                <div className="note" style={{ marginBottom: 6 }}>
+                  Emailed to the speaker with a link to upload again, and shown in their portal. Required.
+                </div>
+                <textarea
+                  id="speaker-message"
+                  autoFocus
+                  rows={4}
+                  maxLength={5000}
+                  value={message}
+                  onChange={(event) => setMessage(event.target.value)}
+                  onKeyDown={(event) => event.stopPropagation()}
+                  placeholder={
+                    pending === "reject"
+                      ? "e.g. This is last year's deck — please upload the version for this event."
+                      : "e.g. Please embed your fonts and export the video on slide 12 as H.264 .mp4."
+                  }
+                  style={{ width: "100%", resize: "vertical", font: "inherit" }}
+                />
+                <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                  <button
+                    type="submit"
+                    className={pending === "reject" ? "btn danger" : "btn warnb"}
+                    disabled={busy || !message.trim()}
+                  >
+                    {busy ? "Sending…" : pending === "reject" ? "Reject and tell the speaker" : "Send back to the speaker"}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn"
+                    disabled={busy}
+                    onClick={() => {
+                      setPending(null);
+                      setMessage("");
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}

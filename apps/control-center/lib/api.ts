@@ -198,11 +198,13 @@ export type TransitionResult = {
   review_state: string;
   lock_version: number;
   rooms_queued: number;
+  /** For request revision / reject: who was emailed, and who has no address (D-073). */
+  notice?: { emailed: string[]; without_email: string[] };
 };
 
 export const transitionVersion = (
   versionId: string,
-  body: { action: string; lock_version: number; reason?: string },
+  body: { action: string; lock_version: number; reason?: string; note?: string },
 ) =>
   request<TransitionResult>(`/file-versions/${versionId}:transition`, {
     method: "POST",

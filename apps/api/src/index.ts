@@ -755,7 +755,7 @@ app.post("/api/v1/file-versions/:versionAndAction", async (req, res) => {
   const actor = actorFrom(req);
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
 
-  const body = req.body as { action?: string; lock_version?: number; reason?: string };
+  const body = req.body as { action?: string; lock_version?: number; reason?: string; note?: string };
   if (typeof body.action !== "string" || typeof body.lock_version !== "number") {
     return res.status(400).json({
       code: "request.invalid",
@@ -771,6 +771,7 @@ app.post("/api/v1/file-versions/:versionAndAction", async (req, res) => {
         actor,
         lockVersion: body.lock_version as number,
         ...(body.reason === undefined ? {} : { reason: body.reason }),
+        ...(typeof body.note === "string" ? { note: body.note } : {}),
       }),
     );
     if (!result.ok) return res.status(statusFor(result.error)).json(result.error);

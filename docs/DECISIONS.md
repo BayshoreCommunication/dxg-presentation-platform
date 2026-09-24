@@ -1425,3 +1425,24 @@ should close the portal is a product decision for DXG, not made here.
 - **Sidebar.** "Presentation detail" and "Inspection" (one talk's screens, opened from that talk) and "Speaker
   portal" (a separate site speakers reach from their link) were greyed-out items that led nowhere; removed.
 - `comment-lanes.test.ts` closes its database pool: left open, it kept its process alive and held the suite ~70 s.
+
+## D-073 (2026-09-24): Sending a file back tells the speaker, and says why — Status: ACCEPTED (Travis's call)
+"Request revision" and "Reject" reported "speaker notified" / "speaker and client admin notified" and notified
+nobody. The only thing they raised was a `file_version.state_changed` outbox event, which the dispatcher skips
+("belongs to the worker") and no worker exists. Request revision also asked for no reason, so a speaker would not
+have known what to fix; Reject asked through `window.prompt`, which the desktop app's browser cancels unseen.
+
+- **A message to the speaker is required** for request revision and reject (`review.reason_required`, 422), and is
+  the recorded reason for a reject. Asked on the page, not in a native dialog; the **R** key opens the form rather
+  than acting.
+- **In the decision's transaction** (`services/decisionNotice.ts`): the message becomes a speaker-lane comment (shown
+  in the portal, D-070), and each speaker on the talk with an address gets an email — what to change, and their own
+  sign-in link to upload again — recorded in `communications` (stored body with the link removed, D-069) and sent
+  via the outbox. Speakers without an address are named back to the reviewer.
+- The inspection report's "request revision from a finding" uses the same notice, so the two paths match.
+- **Confirmations say what happened:** "Sent back for revision · emailed Alicia Fontaine", or "…no email address
+  for X — they'll see it in their portal". The unfounded "client admin notified" is gone: nothing notifies a
+  client admin, and adding it is a separate decision.
+
+Checked in a rolled-back transaction on MedTech: no message → refused; with one → state `changes_requested`, a
+speaker comment, one email to the speaker with a live link in the outbox and a redacted stored copy.
