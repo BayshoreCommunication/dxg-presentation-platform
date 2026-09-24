@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { getSummary, getRiskList, getFleet, getDraft, getSession, getAgenda, getSpeakers } from "@/lib/api";
+import { getSummary, getRiskList, getFleet, getDraft, getSession, getAgenda, getSpeakers, getReviewQueue } from "@/lib/api";
 import { Chip } from "@/components/Chip";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { EventTabs } from "@/components/EventTabs";
@@ -30,7 +30,7 @@ export default async function CommandCenterPage({
 }) {
   const { id } = await params;
   const { tab } = await searchParams;
-  const [summary, risk, fleet, setup, session, agenda, speakers] = await guard(
+  const [summary, risk, fleet, setup, session, agenda, speakers, review] = await guard(
     Promise.all([
       getSummary(id),
       getRiskList(id),
@@ -39,6 +39,7 @@ export default async function CommandCenterPage({
       getSession(),
       getAgenda(id),
       getSpeakers(id),
+      getReviewQueue(id),
     ]),
     `/events/${id}`,
   );
@@ -106,13 +107,13 @@ export default async function CommandCenterPage({
       label: "Approved",
       value: summary.approved,
       color: "var(--ok)",
-      help: "Presentations whose latest file a reviewer has approved. Uploaded files wait in the review queue until then.",
+      help: "Presentations whose latest file a reviewer has approved. Uploaded files wait in Review presentations until then.",
     },
     {
       label: "Warnings open",
       value: summary.warnings_open,
       color: "var(--warn)",
-      help: "Problems the automatic inspection found in uploaded files — a missing font, an oversized video — that nobody has fixed or waived yet. Resolve them from the review queue.",
+      help: "Problems the automatic inspection found in uploaded files — a missing font, an oversized video — that nobody has fixed or waived yet. Resolve them from Review presentations.",
     },
     {
       label: "Missing",
@@ -151,8 +152,15 @@ export default async function CommandCenterPage({
           <Link href={archived ? "/?archived=1" : "/"} className="btn">
             ← Back to portfolio
           </Link>
+          {/*
+            Was "Open review queue" — a name for the mechanism, not the job. It says what
+            the screen is for and how many are waiting, so an empty one is visible
+            before anyone clicks.
+          */}
           <Link href={`/events/${id}/review`} className="btn pri">
-            Open review queue →
+            {review.items.length > 0
+              ? `Review presentations (${review.items.length}) →`
+              : "Review presentations · none waiting"}
           </Link>
         </div>
       </div>

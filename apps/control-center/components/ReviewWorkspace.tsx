@@ -127,13 +127,13 @@ export function ReviewWorkspace({ initialQueue }: { initialQueue: QueueItem[] })
 
   return (
     <>
-      <h1 className="htitle">Review &amp; approval</h1>
+      <h1 className="htitle">Review presentations</h1>
 
       {error && <div className="err">{error}</div>}
 
       <div className="card">
         <div className="chd">
-          <h3>Queue · {queue.length}</h3>
+          <h3>Waiting for review · {queue.length}</h3>
           <span className="m">
             oldest first · <span className="kbd">A</span> approve ·{" "}
             <span className="kbd">R</span> request revision
@@ -141,7 +141,7 @@ export function ReviewWorkspace({ initialQueue }: { initialQueue: QueueItem[] })
         </div>
         <div className="cbd" style={{ padding: "0 0 4px" }}>
           {queue.length === 0 ? (
-            <div className="empty">Queue clear — every submitted presentation has been decided.</div>
+            <div className="empty">Nothing waiting — every uploaded presentation has been reviewed.</div>
           ) : (
             <table>
               <tbody>

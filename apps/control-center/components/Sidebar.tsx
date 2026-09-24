@@ -59,7 +59,7 @@ const GROUPS: { group: string; roles?: string[]; items: { label: string; href?: 
        * from that talk (agenda, risk list, review queue). As sidebar items they had no
        * talk to open and led nowhere.
        */
-      { label: "Review & approval", href: "/events/:id/review" },
+      { label: "Review presentations", href: "/events/:id/review" },
       { label: "Communications", href: "/events/:id/comms" },
       { label: "Archive builder", href: "/events/:id/archive" },
     ],

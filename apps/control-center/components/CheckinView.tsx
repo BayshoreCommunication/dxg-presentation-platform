@@ -323,7 +323,7 @@ export function CheckinView({
           {usb?.scan_result === "clean" ? (
             <div className="lane spk">
               <b>v{usb.version_number} accepted</b> · inspection: {usb.inspection_state} · now in the
-              review queue. Sign off above once DXG has approved it, or send the speaker back to the
+              Review presentations. Sign off above once DXG has approved it, or send the speaker back to the
               room with the current approved version.
             </div>
           ) : (
