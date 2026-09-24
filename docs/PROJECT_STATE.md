@@ -3064,7 +3064,8 @@ email links (now `PORTAL_BASE` — **set it in production**); read-only email te
 archive builder's fake checkboxes; speaker portal tab title; data-like placeholders. Walked in the browser: station
 add/rename/duplicate/remove, check-in at a chosen station and check-out, other events' Room Agent names and Chicago
 clock, template edit with both refusals, archive rules with real dates. Invariants 196/196 (6 new), unit 221/221.
-Open: `speaker_first` merge uses the last name.
+~~Open: `speaker_first` merge uses the last name.~~ Fixed the same day, see below.
+
 **Same day, D-081:** demo file sizes were invented by the seed (504 MB recorded for 1.9 KB fixtures). Seed now records
 the stored bytes; `npm run db:verify-sizes [-- --fix]` checks recorded sizes against storage (fix is dev-only) and
 corrected the 4 seeded rows; room folders sum current versions only. Files screen shows 1.9 KB / 87.3 KB / 2.0 KB.
@@ -3078,3 +3079,11 @@ look unchanged. Speaker portal stays light.
 so toggling changes colour and nothing moves — measured identical on the command center and Files.
 **Same day, D-084:** the speaker portal has the same dark theme and shared sizes; a Light / Dark / Match system switch
 pinned bottom-left on every portal page. Checked on sign-in (identical geometry, choice persists); upload page type-checked only.
+
+## 2026-09-24 — `{{speaker_first}}` greets speakers by their first name
+The batch send in `apps/api/src/services/comms.ts` filled `{{speaker_first}}` with the *last* word of the name, so the
+default invitation opened "Hi Raman" for "Dr. Priya Raman" and "Hi Osei" for "Kwame Osei". It now uses `firstName()`
+(`apps/api/src/services/firstName.ts`): the first word left after dropping leading honorifics (Dr, Prof, Mr, Mrs, Ms,
+Mx, Sir, Dame, with or without a full stop, any case), falling back to the full name when nothing else is left, and
+unchanged for single-word names. No other code had the bug; `decisionNotice.ts` greets with the full name and was left
+as is. Unit tests in `firstName.test.ts` (7 cases). Mail already sent keeps the greeting it was sent with.

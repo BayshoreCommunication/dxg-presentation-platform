@@ -5,6 +5,7 @@ import { deriveTalkStatus } from "@pmp/domain";
 import type { Actor, DomainError, Result } from "@pmp/domain";
 import { atLeast, err, hasAnyRole, ok } from "@pmp/domain";
 import { formatDeadline, formatSessionTime } from "@pmp/format";
+import { firstName } from "./firstName.ts";
 
 const hashToken = (token: string): Buffer => createHash("sha256").update(token).digest();
 
@@ -345,7 +346,7 @@ export async function sendBatch(
     );
 
     const rendered = renderTemplate(template, {
-      speaker_first: recipient.name.split(" ").slice(-1)[0] ?? recipient.name,
+      speaker_first: firstName(recipient.name),
       speaker_name: recipient.name,
       event_name: event.name,
       talk_title: recipient.talk_title,
