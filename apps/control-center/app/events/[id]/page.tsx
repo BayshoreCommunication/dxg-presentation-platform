@@ -5,6 +5,8 @@ import { Chip } from "@/components/Chip";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { EventTabs } from "@/components/EventTabs";
 import { InfoTip } from "@/components/InfoTip";
+import { Kpi } from "@/components/Kpi";
+import type { KpiTone } from "@/components/Kpi";
 import { guard } from "@/lib/guard";
 
 export const dynamic = "force-dynamic";
@@ -96,35 +98,56 @@ export default async function CommandCenterPage({
    * a heartbeat *and* every talk on the room's computer — so the rule is stated where
    * the number is read rather than left for someone to ask.
    */
-  const kpis: { label: string; value: string | number; color?: string; note?: string; help: string }[] = [
+  const share = (part: number, whole: number) => (whole === 0 ? 0 : part / whole);
+  const kpis: {
+    label: string;
+    icon: string;
+    value: string | number;
+    caption?: string;
+    tone?: KpiTone;
+    progress?: number;
+    help: string;
+  }[] = [
     {
       label: "Collected",
+      icon: "upload",
       value: `${summary.collected} / ${summary.total}`,
-      note: `${summary.total === 0 ? 0 : Math.round((summary.collected / summary.total) * 100)}% of talks`,
+      caption: `${Math.round(share(summary.collected, summary.total) * 100)}% of talks`,
+      progress: share(summary.collected, summary.total),
+      tone: summary.total > 0 && summary.collected === summary.total ? "ok" : undefined,
       help: "Presentations with at least one file uploaded, out of every presentation on the agenda.",
     },
     {
       label: "Approved",
+      icon: "checkCircle",
       value: summary.approved,
-      color: "var(--ok)",
+      caption: "latest file approved",
+      tone: summary.approved > 0 ? "ok" : undefined,
       help: "Presentations whose latest file a reviewer has approved. Uploaded files wait in Review presentations until then.",
     },
     {
       label: "Warnings open",
+      icon: "warning",
       value: summary.warnings_open,
-      color: "var(--warn)",
+      caption: summary.warnings_open > 0 ? "not fixed or waived" : "none open",
+      tone: summary.warnings_open > 0 ? "warn" : undefined,
       help: "Problems the automatic inspection found in uploaded files — a missing font, an oversized video — that nobody has fixed or waived yet. Resolve them from Review presentations.",
     },
     {
       label: "Missing",
+      icon: "docMissing",
       value: summary.missing,
-      color: summary.missing > 0 ? "var(--block)" : undefined,
+      caption: summary.missing > 0 ? "nothing uploaded yet" : "none missing",
+      tone: summary.missing > 0 ? "bad" : undefined,
       help: "Presentations with nothing uploaded yet. These are the speakers to chase from Communications.",
     },
     {
       label: "Rooms ready",
+      icon: "monitor",
       value: `${summary.rooms_ready} / ${summary.rooms_total}`,
-      color: summary.rooms_ready === summary.rooms_total ? "var(--ok)" : "var(--warn)",
+      caption: summary.rooms_ready === summary.rooms_total ? "all rooms ready" : "not all ready",
+      tone: summary.rooms_ready === summary.rooms_total ? "ok" : "warn",
+      progress: share(summary.rooms_ready, summary.rooms_total),
       help: "A room is ready when its presentation computer has checked in within the last 5 minutes and every talk scheduled there is on that computer and ready to play (or cancelled). Rooms with no talks still count in the total.",
     },
   ];
@@ -193,18 +216,20 @@ export default async function CommandCenterPage({
 
       <div className="krow">
         {kpis.map((kpi, index) => (
-          <div className="kpi" key={kpi.label}>
-            <div className="kl">
-              {kpi.label}
+          <Kpi
+            key={kpi.label}
+            label={kpi.label}
+            icon={kpi.icon}
+            value={kpi.value}
+            caption={kpi.caption}
+            tone={kpi.tone}
+            progress={kpi.progress}
+            help={
               <InfoTip label={kpi.label} align={index === kpis.length - 1 ? "right" : "left"}>
                 {kpi.help}
               </InfoTip>
-            </div>
-            <div className="kv num" style={kpi.color ? { color: kpi.color } : undefined}>
-              {kpi.value}
-            </div>
-            {kpi.note && <div className="note">{kpi.note}</div>}
-          </div>
+            }
+          />
         ))}
       </div>
 

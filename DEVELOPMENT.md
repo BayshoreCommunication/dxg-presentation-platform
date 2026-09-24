@@ -305,9 +305,12 @@ workflow transition and a hash-chained audit record are written — all in one t
   for the superuser. Tampering is therefore not something the application has to prevent.
 - API actions use the `:action` suffix from `api/openapi.yaml`; the colon is not a path
   separator, so the segment is split in `apps/api/src/index.ts`.
-- **Storage is local-disk in development** (`.data/`), behind the same interface the S3 driver
-  will implement in M2-2. The upload protocol, content addressing and checksums are the real
-  thing; only the backing store differs.
+- **Storage is local disk everywhere today** (`FILE_ROOT`, default `.data/`), behind the same
+  interface the S3 driver will implement in M2-2. The upload protocol, content addressing and
+  checksums are the real thing; only the backing store differs. **No file is stored in S3 yet** —
+  the `s3_key` column holds a local path key. **TO DO (M2-2):** build the S3 driver for
+  `packages/files` `Storage` before any production deploy, or every presentation lives only on the
+  API server's disk.
 - **The development scanner is a real scanner with a one-signature database** (EICAR). Production
   uses the ClamAV container (M2-5). It is not a bypass: every file passes through a scanner,
   `stored` is unreachable without a clean verdict, and scan errors fail closed to quarantine.
@@ -339,6 +342,8 @@ workflow transition and a hash-chained audit record are written — all in one t
   refused, not ignored. The platform's own event shape still works in development; in production it
   is refused unless `ALLOW_DIRECT_EMAIL_EVENTS=on`.
 - **Asset upload** (event header, slide template) is not built (M1-4).
+- **`npm run db:verify-sizes`** checks every stored file version's recorded size against its bytes in storage;
+  `npm run db:verify-sizes -- --fix` corrects mismatches, and only on a development database (D-081).
 - **MFA is enforced** for every staff account (D-017). The development accounts are pre-enrolled
   with a known secret so local work uses a real second factor rather than a bypass:
   `npm run demo:totp` prints the current code, and `npm run db:seed` prints the secret and recovery

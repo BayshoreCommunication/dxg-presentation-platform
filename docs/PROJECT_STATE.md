@@ -3028,3 +3028,43 @@ details, 1 px `#4B5563` outline. Portfolio, the Speaker Ready Room group glyph a
 bodies are Kravio's own paths; the rest are drawn on the same grid in the same recipe.
 The collapse control moved into the sidebar's logo row, as in Kravio; the top bar shows a mirrored "Open
 sidebar" button only while the sidebar is shut.
+KPI tiles are Kravio's now, one shared `Kpi` component on the command center, client portal,
+communications and schedule import: 140 px hatched tray, label plus two-tone glyph (tilts on hover), white
+panel with the number at its foot (lifts on hover). As in Kravio the number is never coloured; colour moved
+to the short line under it (green done, amber attention, red problem). Kravio's sparkline slot needs history
+we don't keep, so tiles that are a real share (collected of total, rooms ready of rooms) show a small
+progress ring there instead. Captions come from each tile's existing help text. Schedule import's tiles were
+type-checked, not walked (they need an agenda upload in progress).
+
+## TO DO — open items recorded 2026-09-24
+- **S3 file storage (M2-2) — not built.** No file is stored in S3. Uploads, PDF copies and archive
+  packages all go to local disk under `FILE_ROOT` through `LocalStorage` (`packages/files/src/storage.ts`);
+  `file_versions.s3_key` holds a local key. Build the S3 driver behind the existing `Storage` interface
+  (content-addressed `client/event/sha256` keys, presigned short-lived downloads per BUILD_SPEC) before
+  any production deploy — until then every presentation lives only on the API server's disk.
+- ~~Event-wide file list (FR-FILE-005, M2-6)~~ — **built the same day (D-079)**, see below. Its downloads
+  stream from local disk until the S3 driver lands; then they become signed links.
+
+## 2026-09-24 — Event Files screen (D-079)
+New screen `/events/{id}/files` ("Files" in the sidebar), laid out like the reference "Project Files" design:
+rooms as folders, the eight newest uploads, then every file in a table with status tabs, search, room filter,
+sortable columns, paging, a grid view and a detail drawer with each version. Single and bulk (zip) downloads,
+each audited as `file.downloaded`; quarantined or unfinished versions are never downloadable. API:
+`GET /events/{id}/files`, `GET /file-versions/{id}/download`, `POST /events/{id}/files:bulk-download`
+(capped 50 files / 1 GB until S3 allows a signed-link job). Contract updated in `api/openapi.yaml`.
+Walked in the browser on MedTech Forward: tabs, search by filename and speaker, room folder filter, sorting,
+grid view, drawer, row selection. Downloads verified byte-exact against stored size and present in the audit
+chain. New invariants: `tests/invariants/event-files.test.ts`, 9/9; cross-event and archive suites still 26/26.
+
+## 2026-09-24 — Static data made event-owned (D-080)
+Sweep for values written into code instead of read from the event. Fixed: SRR stations (new table, migration 017,
+managed on the SRR screen, check-in picks one — no more "Station 2" default); Room Agent holding slide, day heading
+and clock; New York time on talk/inspection screens; the always-null speaker organisation; `localhost:3001` in speaker
+email links (now `PORTAL_BASE` — **set it in production**); read-only email templates (now editable, validated);
+archive builder's fake checkboxes; speaker portal tab title; data-like placeholders. Walked in the browser: station
+add/rename/duplicate/remove, check-in at a chosen station and check-out, other events' Room Agent names and Chicago
+clock, template edit with both refusals, archive rules with real dates. Invariants 196/196 (6 new), unit 221/221.
+Open: `speaker_first` merge uses the last name.
+**Same day, D-081:** demo file sizes were invented by the seed (504 MB recorded for 1.9 KB fixtures). Seed now records
+the stored bytes; `npm run db:verify-sizes [-- --fix]` checks recorded sizes against storage (fix is dev-only) and
+corrected the 4 seeded rows; room folders sum current versions only. Files screen shows 1.9 KB / 87.3 KB / 2.0 KB.

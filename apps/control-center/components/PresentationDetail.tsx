@@ -9,14 +9,15 @@ import { Chip } from "@/components/Chip";
 import { formatBytes } from "@pmp/format";
 
 const short = (sha: string | null) => (sha ? `${sha.slice(0, 4)}…${sha.slice(-4)}` : "—");
-const when = (iso: string) =>
+/** On the event's clock (D-080) — it was pinned to New York for every event. */
+const when = (iso: string, timeZone: string) =>
   new Date(iso).toLocaleString("en-US", {
     month: "short",
     day: "numeric",
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
-    timeZone: "America/New_York",
+    timeZone,
   });
 
 const SOURCE_LABEL: Record<string, string> = {
@@ -92,8 +93,9 @@ export function PresentationDetailView({
         </div>
         <div className="cbd">
           <div className="note" style={{ marginBottom: 6 }}>
-            {initial.speaker?.name ?? "No speaker assigned"} · {initial.talk.room} ·{" "}
-            {when(initial.talk.starts_at)}
+            {initial.speaker?.name ?? "No speaker assigned"}
+            {initial.speaker?.organization ? `, ${initial.speaker.organization}` : ""} · {initial.talk.room} ·{" "}
+            {when(initial.talk.starts_at, initial.event.timezone)}
             {initial.talk.track ? ` · ${initial.talk.track}` : ""}
           </div>
 
@@ -108,7 +110,7 @@ export function PresentationDetailView({
             {approved?.approved_by && (
               <span className="chip c-ok">
                 Approved by {approved.approved_by}
-                {approved.approved_at ? ` · ${when(approved.approved_at)}` : ""} · logged
+                {approved.approved_at ? ` · ${when(approved.approved_at, initial.event.timezone)}` : ""} · logged
               </span>
             )}
             {initial.talk.final_locked && <span className="chip c-sync">Final onsite version</span>}
@@ -162,7 +164,7 @@ export function PresentationDetailView({
               {initial.versions.map((row) => (
                 <tr key={row.file_version_id}>
                   <td className="mono">v{row.version_number}</td>
-                  <td className="note">{when(row.created_at)}</td>
+                  <td className="note">{when(row.created_at, initial.event.timezone)}</td>
                   <td className="num">{formatBytes(row.size_bytes)}</td>
                   <td className="mono">{short(row.sha256)}</td>
                   <td className="note">{SOURCE_LABEL[row.source] ?? row.source}</td>

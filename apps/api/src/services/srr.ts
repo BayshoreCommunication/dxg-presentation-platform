@@ -2,7 +2,7 @@ import type pg from "pg";
 import { appendAudit } from "@pmp/db";
 import { deriveTalkStatus, TALK_STATUS_LABEL } from "@pmp/domain";
 import type { Actor, DomainError, Result } from "@pmp/domain";
-import { err, ok } from "@pmp/domain";
+import { atLeast, err, hasAnyRole, ok } from "@pmp/domain";
 import { formatBytes, formatBytesDelta } from "@pmp/format";
 import { ingestVersion, versionFacts } from "./ingest.ts";
 import type { VersionFacts } from "./ingest.ts";
@@ -25,7 +25,7 @@ export type ExpectedArrival = {
 export async function srrDashboard(
   tx: pg.PoolClient,
   eventId: string,
-): Promise<{ expected: ExpectedArrival[]; warnings: { slot_id: string; speaker: string | null; check_code: string; severity: string }[]; stations: { station: string; technician: string | null; busy: boolean }[] }> {
+): Promise<{ expected: ExpectedArrival[]; warnings: { slot_id: string; speaker: string | null; check_code: string; severity: string }[]; stations: SrrStation[] }> {
   const { rows } = await tx.query<{
     speaker_id: string;
     speaker: string;
@@ -108,21 +108,177 @@ export async function srrDashboard(
     [eventId],
   );
 
-  // This event's check-ins only. Without `event_id` a station busy at one event showed
-  // as "In session", under that event's technician, on every other event's screen.
-  const { rows: stations } = await tx.query<{ station: string; technician: string | null; busy: boolean }>(
-    `SELECT st.station,
-            (SELECT u.display_name FROM pmp.srr_checkins c
-               JOIN pmp.users u ON u.id = c.technician_id
-              WHERE c.event_id = $1 AND c.station = st.station AND c.departed_at IS NULL
-              ORDER BY c.checked_in_at DESC LIMIT 1) AS technician,
-            EXISTS (SELECT 1 FROM pmp.srr_checkins c
-                     WHERE c.event_id = $1 AND c.station = st.station AND c.departed_at IS NULL) AS busy
-       FROM (VALUES ('Station 1'), ('Station 2'), ('Station 3 · USB')) AS st(station)`,
+  return { expected, warnings, stations: await eventStations(tx, eventId) };
+}
+
+/* ── Speaker Ready Room stations (D-080) ─────────────────────────────────── */
+
+export type SrrStation = {
+  id: string;
+  /** The station's name; kept as `station` too, the field the screen has always read. */
+  station: string;
+  name: string;
+  technician: string | null;
+  speaker: string | null;
+  busy: boolean;
+  lock_version: number;
+};
+
+/**
+ * The event's stations, each with whoever is checked in at it right now. Busy is read
+ * by station id, so renaming a desk does not strand the speaker sitting at it.
+ */
+export async function eventStations(tx: pg.PoolClient, eventId: string): Promise<SrrStation[]> {
+  const { rows } = await tx.query<SrrStation>(
+    `SELECT st.id, st.name AS station, st.name, st.lock_version,
+            open.technician, open.speaker, open.id IS NOT NULL AS busy
+       FROM pmp.srr_stations st
+       LEFT JOIN LATERAL (
+         SELECT c.id, u.display_name AS technician, sp.full_name AS speaker
+           FROM pmp.srr_checkins c
+           JOIN pmp.users u ON u.id = c.technician_id
+           JOIN pmp.speakers sp ON sp.id = c.speaker_id
+          WHERE c.event_id = $1 AND c.station_id = st.id AND c.departed_at IS NULL
+          ORDER BY c.checked_in_at DESC LIMIT 1
+       ) open ON true
+      WHERE st.event_id = $1 AND st.retired_at IS NULL
+      ORDER BY st.position, st.created_at`,
     [eventId],
   );
+  return rows;
+}
 
-  return { expected, warnings, stations };
+// Running the room is the SRR technician's job, so they may set up its desks.
+const STATION_EDITORS = atLeast("srr_technician");
+
+const cleanName = (name: unknown): string | null => {
+  if (typeof name !== "string") return null;
+  const trimmed = name.replace(/\s+/g, " ").trim();
+  return trimmed.length >= 1 && trimmed.length <= 60 ? trimmed : null;
+};
+
+async function nameTaken(tx: pg.PoolClient, eventId: string, name: string, except?: string): Promise<boolean> {
+  const { rows } = await tx.query(
+    `SELECT 1 FROM pmp.srr_stations
+      WHERE event_id = $1 AND retired_at IS NULL AND lower(btrim(name)) = lower($2)
+        AND ($3::uuid IS NULL OR id <> $3::uuid)`,
+    [eventId, name, except ?? null],
+  );
+  return rows.length > 0;
+}
+
+export async function addStation(
+  tx: pg.PoolClient,
+  actor: Actor,
+  eventId: string,
+  rawName: unknown,
+): Promise<Result<SrrStation, DomainError>> {
+  if (!hasAnyRole(actor, STATION_EDITORS)) {
+    return err({ code: "srr.forbidden", message: "Only the Speaker Ready Room team and managers can set up stations." });
+  }
+  const name = cleanName(rawName);
+  if (!name) return err({ code: "srr.station_name_invalid", message: "Give the station a name of 1–60 characters." });
+  if (await nameTaken(tx, eventId, name)) {
+    return err({ code: "srr.station_conflict", message: `There is already a station called "${name}".` });
+  }
+  const { rows } = await tx.query<{ id: string; client_id: string }>(
+    `INSERT INTO pmp.srr_stations (event_id, client_id, name, position, created_by)
+     SELECT e.id, e.client_id, $2,
+            COALESCE((SELECT max(position) FROM pmp.srr_stations WHERE event_id = e.id), 0) + 1, $3
+       FROM pmp.events e WHERE e.id = $1
+     RETURNING id, client_id`,
+    [eventId, name, actor.id],
+  );
+  const created = rows[0];
+  if (!created) return err({ code: "events.not_found", message: "No such event." });
+  await appendAudit(tx, {
+    partitionId: eventId,
+    clientId: created.client_id,
+    actorUserId: actor.id,
+    action: "srr.station_added",
+    subjectType: "srr_station",
+    subjectId: created.id,
+    detail: { name },
+  });
+  const station = (await eventStations(tx, eventId)).find((row) => row.id === created.id)!;
+  return ok(station);
+}
+
+async function stationRow(tx: pg.PoolClient, eventId: string, stationId: string) {
+  const { rows } = await tx.query<{ id: string; client_id: string; name: string; lock_version: number; busy: boolean }>(
+    `SELECT st.id, st.client_id, st.name, st.lock_version,
+            EXISTS (SELECT 1 FROM pmp.srr_checkins c WHERE c.station_id = st.id AND c.departed_at IS NULL) AS busy
+       FROM pmp.srr_stations st
+      WHERE st.id = $1 AND st.event_id = $2 AND st.retired_at IS NULL`,
+    [stationId, eventId],
+  );
+  return rows[0];
+}
+
+export async function renameStation(
+  tx: pg.PoolClient,
+  actor: Actor,
+  eventId: string,
+  stationId: string,
+  rawName: unknown,
+): Promise<Result<SrrStation, DomainError>> {
+  if (!hasAnyRole(actor, STATION_EDITORS)) {
+    return err({ code: "srr.forbidden", message: "Only the Speaker Ready Room team and managers can set up stations." });
+  }
+  const name = cleanName(rawName);
+  if (!name) return err({ code: "srr.station_name_invalid", message: "Give the station a name of 1–60 characters." });
+  const current = await stationRow(tx, eventId, stationId);
+  if (!current) return err({ code: "srr.station_not_found", message: "No such station at this event." });
+  if (await nameTaken(tx, eventId, name, stationId)) {
+    return err({ code: "srr.station_conflict", message: `There is already a station called "${name}".` });
+  }
+  await tx.query(
+    `UPDATE pmp.srr_stations SET name = $2, lock_version = lock_version + 1 WHERE id = $1`,
+    [stationId, name],
+  );
+  await appendAudit(tx, {
+    partitionId: eventId,
+    clientId: current.client_id,
+    actorUserId: actor.id,
+    action: "srr.station_renamed",
+    subjectType: "srr_station",
+    subjectId: stationId,
+    detail: { from: current.name, to: name },
+  });
+  return ok((await eventStations(tx, eventId)).find((row) => row.id === stationId)!);
+}
+
+/** Retired, not deleted: past check-ins still name the desk they happened at. */
+export async function retireStation(
+  tx: pg.PoolClient,
+  actor: Actor,
+  eventId: string,
+  stationId: string,
+): Promise<Result<{ retired: true }, DomainError>> {
+  if (!hasAnyRole(actor, STATION_EDITORS)) {
+    return err({ code: "srr.forbidden", message: "Only the Speaker Ready Room team and managers can set up stations." });
+  }
+  const current = await stationRow(tx, eventId, stationId);
+  if (!current) return err({ code: "srr.station_not_found", message: "No such station at this event." });
+  if (current.busy) {
+    return err({
+      code: "srr.station_conflict",
+      message: `A speaker is checked in at ${current.name}. Finish that check-in before removing the station.`,
+    });
+  }
+  await tx.query(`UPDATE pmp.srr_stations SET retired_at = now(), lock_version = lock_version + 1 WHERE id = $1`, [
+    stationId,
+  ]);
+  await appendAudit(tx, {
+    partitionId: eventId,
+    clientId: current.client_id,
+    actorUserId: actor.id,
+    action: "srr.station_retired",
+    subjectType: "srr_station",
+    subjectId: stationId,
+    detail: { name: current.name },
+  });
+  return ok({ retired: true });
 }
 
 /* ── screen 12: check-in ─────────────────────────────────────────────────── */
@@ -130,7 +286,7 @@ export async function srrDashboard(
 export async function checkIn(
   tx: pg.PoolClient,
   actor: Actor,
-  input: { eventId: string; speakerId: string; station: string },
+  input: { eventId: string; speakerId: string; stationId: string | undefined },
 ): Promise<Result<{ checkin_id: string }, DomainError>> {
   const { rows: existing } = await tx.query<{ id: string }>(
     `SELECT id FROM pmp.srr_checkins WHERE speaker_id = $1 AND departed_at IS NULL`,
@@ -144,10 +300,23 @@ export async function checkIn(
   );
   if (!speaker[0]) return err({ code: "srr.speaker_not_found", message: "No such speaker at this event." });
 
+  // A check-in happens at a real desk of this event (D-080) — it used to be recorded at
+  // "Station 2" whatever the speaker sat at.
+  if (!input.stationId) {
+    return err({ code: "srr.station_required", message: "Choose the station the speaker is at." });
+  }
+  const station = await stationRow(tx, input.eventId, input.stationId);
+  if (!station) {
+    return err({
+      code: "srr.station_not_found",
+      message: "That station is not set up for this event. Add it under Stations first.",
+    });
+  }
+
   const { rows } = await tx.query<{ id: string }>(
-    `INSERT INTO pmp.srr_checkins (event_id, client_id, speaker_id, technician_id, station)
-     VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-    [input.eventId, speaker[0].client_id, input.speakerId, actor.id, input.station],
+    `INSERT INTO pmp.srr_checkins (event_id, client_id, speaker_id, technician_id, station, station_id)
+     VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+    [input.eventId, speaker[0].client_id, input.speakerId, actor.id, station.name, station.id],
   );
 
   await appendAudit(tx, {
@@ -157,7 +326,7 @@ export async function checkIn(
     action: "srr.checked_in",
     subjectType: "srr_checkin",
     subjectId: rows[0]!.id,
-    detail: { speaker_id: input.speakerId, station: input.station },
+    detail: { speaker_id: input.speakerId, station: station.name, station_id: station.id },
   });
 
   return ok({ checkin_id: rows[0]!.id });

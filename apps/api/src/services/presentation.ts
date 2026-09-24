@@ -34,6 +34,8 @@ export type VersionRow = {
 };
 
 export type PresentationDetail = {
+  /** The event's clock, so every time on the talk's screens reads as it does at the venue (D-080). */
+  event: { id: string; timezone: string };
   talk: {
     slot_id: string;
     title: string;
@@ -65,11 +67,16 @@ export async function presentationDetail(
     session_state: string;
     speaker_id: string | null;
     speaker_name: string | null;
+    speaker_organization: string | null;
+    event_id: string;
+    timezone: string;
   }>(
     `SELECT s.id AS slot_id, s.title, r.name AS room, se.starts_at, t.name AS track,
             s.final_locked, s.restricted, se.session_state,
-            sp.id AS speaker_id, sp.full_name AS speaker_name
+            sp.id AS speaker_id, sp.full_name AS speaker_name, sp.organization AS speaker_organization,
+            e.id AS event_id, e.timezone
        FROM pmp.slots s
+       JOIN pmp.events e ON e.id = s.event_id
        JOIN pmp.sessions se ON se.id = s.session_id
        LEFT JOIN pmp.rooms r ON r.id = se.room_id
        LEFT JOIN pmp.tracks t ON t.id = se.track_id
@@ -127,11 +134,8 @@ export async function presentationDetail(
       ) as never,
   });
 
-  const { rows: org } = await tx.query<{ organization: string | null }>(
-    `SELECT NULL::text AS organization`,
-  );
-
   return {
+    event: { id: row.event_id, timezone: row.timezone },
     talk: {
       slot_id: row.slot_id,
       title: row.title,
@@ -144,7 +148,7 @@ export async function presentationDetail(
       status_label: TALK_STATUS_LABEL[status],
     },
     speaker: row.speaker_id
-      ? { id: row.speaker_id, name: row.speaker_name ?? "", organization: org[0]?.organization ?? null }
+      ? { id: row.speaker_id, name: row.speaker_name ?? "", organization: row.speaker_organization }
       : null,
     versions,
     retained_versions: versions.length,

@@ -3,10 +3,12 @@ import type pg from "pg";
 import { appendAudit } from "@pmp/db";
 import { deriveTalkStatus } from "@pmp/domain";
 import type { Actor, DomainError, Result } from "@pmp/domain";
-import { err, ok } from "@pmp/domain";
+import { atLeast, err, hasAnyRole, ok } from "@pmp/domain";
 import { formatDeadline, formatSessionTime } from "@pmp/format";
 
 const hashToken = (token: string): Buffer => createHash("sha256").update(token).digest();
+
+const PORTAL_BASE = process.env.PORTAL_BASE ?? "http://localhost:3001";
 
 export type TemplateRow = {
   id: string;
@@ -59,6 +61,82 @@ export const DEFAULT_TEMPLATES = [
     ].join("\n"),
   },
 ] as const;
+
+/** Every merge field `send` fills in; anything else would reach the speaker as literal braces. */
+export const MERGE_FIELDS = [
+  "speaker_first",
+  "speaker_name",
+  "event_name",
+  "talk_title",
+  "room",
+  "session_time",
+  "deadline",
+  "upload_link",
+] as const;
+
+const TEMPLATE_EDITORS = atLeast("presentation_manager");
+
+/**
+ * An event's email template, edited (D-080). The wording was only ever the seeded default:
+ * it lived in the database per event, but nothing could change it.
+ *
+ * Mail already sent keeps the text it was sent with (`communications` stores the rendered
+ * copy), so an edit changes the next batch and never rewrites history.
+ */
+export async function updateTemplate(
+  tx: pg.PoolClient,
+  actor: Actor,
+  eventId: string,
+  templateId: string,
+  input: { subject?: unknown; body?: unknown },
+): Promise<Result<TemplateRow, DomainError>> {
+  if (!hasAnyRole(actor, TEMPLATE_EDITORS)) {
+    return err({ code: "comms.forbidden", message: "Only a presentation manager or above can edit email templates." });
+  }
+  const subject = typeof input.subject === "string" ? input.subject.trim() : "";
+  const body = typeof input.body === "string" ? input.body.replace(/\r\n/g, "\n").trim() : "";
+  if (subject.length < 1 || subject.length > 200) {
+    return err({ code: "comms.template_invalid", message: "The subject needs 1–200 characters." });
+  }
+  if (body.length < 1 || body.length > 20_000) {
+    return err({ code: "comms.template_invalid", message: "The message needs 1–20,000 characters." });
+  }
+  const used = [...`${subject}\n${body}`.matchAll(/\{\{\s*([a-z_]+)\s*\}\}/gi)].map((match) => match[1]!.toLowerCase());
+  const unknown = [...new Set(used.filter((field) => !(MERGE_FIELDS as readonly string[]).includes(field)))];
+  if (unknown.length > 0) {
+    return err({
+      code: "comms.template_invalid",
+      message: `Unknown merge field${unknown.length === 1 ? "" : "s"}: ${unknown.map((field) => `{{${field}}}`).join(", ")}. Use only the fields listed.`,
+    });
+  }
+  // The link is the point of every one of these emails: without it the speaker can do nothing.
+  if (!used.includes("upload_link")) {
+    return err({
+      code: "comms.template_invalid",
+      message: "Keep {{upload_link}} in the message — it is each speaker's personal way to upload.",
+    });
+  }
+  const { rows } = await tx.query<TemplateRow & { client_id: string; old_subject: string }>(
+    `UPDATE pmp.communication_templates t
+        SET subject = $3, body = $4, updated_at = now(), lock_version = t.lock_version + 1
+       FROM pmp.communication_templates prior
+      WHERE t.id = prior.id AND t.id = $1 AND t.event_id = $2
+      RETURNING t.id, t.name, t.subject, t.body, t.client_id, prior.subject AS old_subject`,
+    [templateId, eventId, subject, body],
+  );
+  const updated = rows[0];
+  if (!updated) return err({ code: "comms.template_not_found", message: "No such template on this event." });
+  await appendAudit(tx, {
+    partitionId: eventId,
+    clientId: updated.client_id,
+    actorUserId: actor.id,
+    action: "comms.template_updated",
+    subjectType: "communication_template",
+    subjectId: updated.id,
+    detail: { name: updated.name, subject_before: updated.old_subject, subject_after: subject },
+  });
+  return ok({ id: updated.id, name: updated.name, subject: updated.subject, body: updated.body });
+}
 
 export async function ensureTemplates(tx: pg.PoolClient, eventId: string): Promise<TemplateRow[]> {
   const { rows: existing } = await tx.query<TemplateRow>(
@@ -277,7 +355,9 @@ export async function sendBatch(
       session_time: formatSessionTime(recipient.starts_at, event.timezone),
       // Worded exactly as the speaker portal shows it, not a raw "2027-03-01".
       deadline: event.deadline ? formatDeadline(event.deadline, event.timezone) : "the published deadline",
-      upload_link: `http://localhost:3001/t/${token}`,
+      // Where speakers actually reach the portal (D-080) — it was hard-coded to localhost,
+      // so every production email would have carried a link that goes nowhere.
+      upload_link: `${PORTAL_BASE}/t/${token}`,
     });
 
     const { rows: comm } = await tx.query<{ id: string }>(

@@ -29,7 +29,8 @@
     "demo:link": "node scripts/speakerLink.mjs",
     "demo:totp": "node scripts/totp.mjs",
     "dev:dispatcher": "node apps/dispatcher/src/index.ts",
-    "db:approle": "node scripts/ensureAppRole.ts"
+    "db:approle": "node scripts/ensureAppRole.ts",
+    "db:verify-sizes": "node scripts/verifyFileSizes.ts"
   },
   "devDependencies": {
     "@types/node": "^24.3.0",

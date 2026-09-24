@@ -253,6 +253,7 @@ export type AgentScheduleRow = {
 
 export type AgentView = {
   room: { id: string; name: string };
+  event: { id: string; name: string; accent: string | null; timezone: string };
   agent: { id: string | null; fingerprint: string | null; version: string | null; heartbeat_age: number | null };
   library: { files: number; bytes: string; previous_versions: number; updates_waiting: number };
   schedule: AgentScheduleRow[];
@@ -298,8 +299,31 @@ export type ExpectedArrival = {
 export type SrrDashboard = {
   expected: ExpectedArrival[];
   warnings: { slot_id: string; speaker: string | null; check_code: string; severity: string }[];
-  stations: { station: string; technician: string | null; busy: boolean }[];
+  stations: SrrStation[];
 };
+
+/** A Speaker Ready Room desk, set up per event (D-080). */
+export type SrrStation = {
+  id: string;
+  station: string;
+  name: string;
+  technician: string | null;
+  speaker: string | null;
+  busy: boolean;
+  lock_version: number;
+};
+
+export const addStation = (eventId: string, name: string) =>
+  request<SrrStation>(`/events/${eventId}/srr/stations`, { method: "POST", body: JSON.stringify({ name }) });
+
+export const renameStation = (eventId: string, stationId: string, name: string) =>
+  request<SrrStation>(`/events/${eventId}/srr/stations/${stationId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ name }),
+  });
+
+export const retireStation = (eventId: string, stationId: string) =>
+  request<{ retired: true }>(`/events/${eventId}/srr/stations/${stationId}`, { method: "DELETE" });
 
 export type VersionFacts = {
   version_number: number;
@@ -345,10 +369,10 @@ export const getSrrDashboard = (eventId: string) =>
 export const getCheckin = (checkinId: string) =>
   request<CheckinDetail>(`/srr/checkins/${checkinId}`);
 
-export const startCheckin = (eventId: string, speakerId: string, station: string) =>
+export const startCheckin = (eventId: string, speakerId: string, stationId: string) =>
   request<{ checkin_id: string }>(
     `/events/${eventId}/srr/checkins`,
-    { method: "POST", body: JSON.stringify({ speaker_id: speakerId, station }) },
+    { method: "POST", body: JSON.stringify({ speaker_id: speakerId, station_id: stationId }) },
   );
 
 export const beginSrrUpload = () =>
@@ -398,6 +422,7 @@ export type VersionRow = {
 };
 
 export type PresentationDetail = {
+  event: { id: string; timezone: string };
   talk: {
     slot_id: string;
     title: string;
@@ -839,6 +864,7 @@ export type ArchiveScope = {
   earlier_versions: number;
   latest_package: ArchivePackageRow | null;
   downloads: DownloadRecord[];
+  rules: { retention_days: number; event_ends_on: string | null; link_expires_if_delivered_now: string | null };
 };
 
 export const getArchiveScope = (eventId: string) =>
@@ -956,6 +982,8 @@ export type CommRecipient = {
 
 export type CommsView = {
   templates: { id: string; name: string; subject: string; body: string }[];
+  /** The merge fields a template may use (D-080). */
+  merge_fields: string[];
   recipients: CommRecipient[];
   missing: CommRecipient[];
   log: {
@@ -1082,3 +1110,111 @@ export const confirmPasswordReset = (token: string, newPassword: string) =>
     method: "POST",
     body: JSON.stringify({ token, new_password: newPassword }),
   });
+
+/* ── Event files (FR-FILE-005, D-079) ─────────────────────────────────────── */
+
+export type FileStatus = "review" | "approved" | "changes" | "blocked" | "other";
+
+export type FileVersionRow = {
+  id: string;
+  file_id: string;
+  version_number: number;
+  filename: string;
+  size_bytes: number;
+  uploaded_at: string;
+  uploaded_by: string | null;
+  source: string;
+  review_state: string;
+  processing_state: string;
+  sha256: string | null;
+  downloadable: boolean;
+};
+
+export type FileRow = {
+  file_id: string;
+  slot_id: string;
+  talk: string;
+  restricted: boolean;
+  session: string;
+  starts_at: string;
+  room_id: string | null;
+  room: string | null;
+  speakers: string | null;
+  version_id: string;
+  version_number: number;
+  versions: number;
+  filename: string;
+  size_bytes: number;
+  total_bytes: number;
+  uploaded_at: string;
+  uploaded_by: string | null;
+  source: string;
+  review_state: string;
+  processing_state: string;
+  inspection_state: string;
+  open_findings: number;
+  rooms_synced: number;
+  status: FileStatus;
+  status_label: string;
+  downloadable: boolean;
+};
+
+export type EventFiles = {
+  rooms: { room_id: string | null; room: string; files: number; bytes: number }[];
+  recent: (FileRow & { history: FileVersionRow[] })[];
+  counts: Record<FileStatus | "all", number>;
+  items: (FileRow & { history: FileVersionRow[] })[];
+  total: number;
+  page: number;
+  pages: number;
+  limit: number;
+};
+
+export type FileQuery = {
+  q?: string;
+  status?: FileStatus | "all";
+  room?: string;
+  sort?: "uploaded" | "name" | "speaker" | "location" | "size";
+  dir?: "asc" | "desc";
+  page?: number;
+  limit?: number;
+};
+
+export const getEventFiles = (eventId: string, query: FileQuery = {}) => {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(query)) {
+    if (value !== undefined && value !== "" && value !== "all") params.set(key, String(value));
+  }
+  const suffix = params.toString();
+  return request<EventFiles>(`/events/${eventId}/files${suffix ? `?${suffix}` : ""}`);
+};
+
+/** A plain link: a top-level navigation carries the session cookie, like the archive's. */
+export const fileDownloadUrl = (versionId: string) => `${API_BASE_URL}/file-versions/${versionId}/download`;
+
+/**
+ * Several versions as one zip. A POST (it carries a list), so it cannot be a link; the
+ * browser fetches it and saves the result.
+ */
+export async function downloadFilesZip(eventId: string, versionIds: string[]): Promise<{ blob: Blob; filename: string }> {
+  const response = await fetch(`${API_BASE_URL}/events/${eventId}/files:bulk-download`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ version_ids: versionIds }),
+  });
+  if (!response.ok) {
+    const error = (await response.json().catch(() => ({}))) as { code?: string; message?: string };
+    throw new ApiError(error.code ?? "unknown", error.message ?? "The download could not be built.", response.status);
+  }
+  const disposition = response.headers.get("content-disposition") ?? "";
+  const filename = /filename="([^"]+)"/.exec(disposition)?.[1] ?? "event-files.zip";
+  return { blob: await response.blob(), filename };
+}
+
+/** Save an event's email template (D-080). Mail already sent keeps the text it went out with. */
+export const updateTemplate = (eventId: string, templateId: string, subject: string, body: string) =>
+  request<{ id: string; name: string; subject: string; body: string }>(
+    `/events/${eventId}/comms/templates/${templateId}`,
+    { method: "PATCH", body: JSON.stringify({ subject, body }) },
+  );

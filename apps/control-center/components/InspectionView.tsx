@@ -7,14 +7,15 @@ import type { FindingRow, PresentationDetail, VersionRow } from "@/lib/api";
 import { waiveFinding, requestRevision, ApiError } from "@/lib/api";
 import { formatBytes } from "@pmp/format";
 
-const when = (iso: string) =>
+/** On the event's clock (D-080) — it was pinned to New York for every event. */
+const when = (iso: string, timeZone: string) =>
   new Date(iso).toLocaleString("en-US", {
     month: "short",
     day: "numeric",
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
-    timeZone: "America/New_York",
+    timeZone,
   });
 
 /** Plain-language explanation per check, with the slide references the checker found. */
@@ -185,7 +186,7 @@ export function InspectionView({
                   {finding.waived_at && (
                     <div className="note" style={{ marginTop: 6 }}>
                       <span className="chip c-mut">Waived</span> by {finding.waived_by} ·{" "}
-                      {when(finding.waived_at)} — “{finding.waived_reason}” · stays visible in the audit
+                      {when(finding.waived_at, detail.event.timezone)} — “{finding.waived_reason}” · stays visible in the audit
                       trail
                     </div>
                   )}

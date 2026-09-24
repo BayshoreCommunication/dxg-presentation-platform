@@ -135,7 +135,7 @@ export function CreateEventWizard({
                     style={{ width: "100%" }}
                     value={basics.name}
                     onChange={(event) => setBasics({ ...basics, name: event.target.value })}
-                    placeholder="MedTech Forward 2027"
+                    placeholder="Event name"
                   />
                 </div>
                 <div className="field">
@@ -144,7 +144,7 @@ export function CreateEventWizard({
                     style={{ width: "100%" }}
                     value={basics.venue}
                     onChange={(event) => setBasics({ ...basics, venue: event.target.value })}
-                    placeholder="Tampa Convention Center"
+                    placeholder="Venue name"
                   />
                 </div>
                 <div className="field">

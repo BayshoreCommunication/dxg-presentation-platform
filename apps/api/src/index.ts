@@ -3,6 +3,8 @@ import { withScope, withSystemScope, getPool, verifyAuditChain, appendAudit as a
 import type { Actor, DomainError, EventRole, Result, ReviewAction } from "@pmp/domain";
 import { listTalks } from "./services/talks.ts";
 import { eventSummary, riskList, reviewQueue, syncFleet } from "./services/queries.ts";
+import { eventFiles, downloadVersion, bulkDownload } from "./services/files.ts";
+import type { FileQuery } from "./services/files.ts";
 import {
   resolveToken,
   portalTalks,
@@ -41,7 +43,7 @@ import {
 /** Carries the half-finished sign-in between the password and the code. */
 const MFA_COOKIE = "pmp_mfa";
 import { agentView, syncRoom, acknowledge, launch } from "./services/agent.ts";
-import { srrDashboard, checkIn, checkinDetail, usbIngest, signOff, depart } from "./services/srr.ts";
+import { srrDashboard, checkIn, checkinDetail, usbIngest, signOff, depart, addStation, renameStation, retireStation } from "./services/srr.ts";
 import {
   presentationDetail,
   findingsFor,
@@ -86,7 +88,7 @@ import {
   removePresenter,
 } from "./services/agendaEdit.ts";
 import {
-  ensureTemplates,
+  ensureTemplates, updateTemplate, MERGE_FIELDS,
   recipientsFor,
   sendBatch,
   deliveryLog,
@@ -103,8 +105,7 @@ import {
   downloadPackage,
   latestPackage,
   packageDownloads,
-  pdfCandidates,
-} from "./services/archive.ts";
+  pdfCandidates, linkExpiry, RETENTION_DAYS } from "./services/archive.ts";
 import type { ImportField, StagedRow, RowOverrides, ImportPreview } from "./services/scheduleImport.ts";
 import type { PortalSession } from "./services/portal.ts";
 import { decide } from "./services/review.ts";
@@ -285,6 +286,9 @@ const WRITES_ALLOWED_WHEN_ARCHIVED = [
   /^\/api\/v1\/events\/[^/]+\/duplicate$/,
   // Archiving again reaches the service, which answers with its own clearer conflict.
   /^\/api\/v1\/events\/[^/]+\/archive$/,
+  // A bulk download is a POST only because it carries a list; it reads, and an archived
+  // event's files are exactly what someone may still need to take (D-079).
+  /^\/api\/v1\/events\/[^/]+\/files:bulk-download$/,
 ];
 
 const ARCHIVED_REFUSAL = {
@@ -834,6 +838,76 @@ app.get("/api/v1/events/:eventId/review-queue", async (req, res) => {
   return res.json({ items, next_cursor: null });
 });
 
+/*
+ * Event files (FR-FILE-005, D-079): one row per talk's file with its newest version,
+ * the room "folders", the latest uploads and a count per status tab. Staff only, and
+ * scoped to the event like every route under `/events/`.
+ */
+app.get("/api/v1/events/:eventId/files", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  const eventId = String(req.params.eventId);
+  const text = (value: unknown) => (typeof value === "string" && value.length > 0 ? value : undefined);
+  const statuses = ["all", "review", "approved", "changes", "blocked", "other"];
+  const sorts = ["uploaded", "name", "speaker", "location", "size"];
+  const query: FileQuery = {
+    ...(text(req.query.q) ? { q: text(req.query.q)!.slice(0, 200) } : {}),
+    ...(statuses.includes(String(req.query.status)) ? { status: String(req.query.status) as NonNullable<FileQuery["status"]> } : {}),
+    ...(text(req.query.room) ? { roomId: text(req.query.room)! } : {}),
+    ...(sorts.includes(String(req.query.sort)) ? { sort: String(req.query.sort) as NonNullable<FileQuery["sort"]> } : {}),
+    ...(req.query.dir === "asc" || req.query.dir === "desc" ? { dir: req.query.dir } : {}),
+    ...(Number(req.query.page) > 0 ? { page: Math.floor(Number(req.query.page)) } : {}),
+    ...(Number(req.query.limit) > 0 ? { limit: Math.floor(Number(req.query.limit)) } : {}),
+  };
+  const result = await withScope(scopeFor(req, eventId), (tx) => eventFiles(tx, eventId, query));
+  return res.json(result);
+});
+
+/** One version's original file, as uploaded. Logged to the audit chain. */
+app.get("/api/v1/file-versions/:versionId/download", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  const result = await withScope(scopeFor(req), (tx) =>
+    downloadVersion(tx, actor.id, String(req.params.versionId)),
+  );
+  if (!result.ok) {
+    return res.status(result.error.code === "file.not_downloadable" ? 409 : statusFor(result.error)).json(result.error);
+  }
+  res.setHeader("content-type", "application/octet-stream");
+  res.setHeader(
+    "content-disposition",
+    `attachment; filename="${result.value.filename.replace(/["\\\r\n]/g, "_")}"; filename*=UTF-8''${encodeURIComponent(result.value.filename)}`,
+  );
+  res.setHeader("cache-control", "private, no-store");
+  return res.send(result.value.body);
+});
+
+/** Several chosen versions as one zip (`files:bulk-download`, capped — see D-079). */
+app.post("/api/v1/events/:eventId/:filesAndAction", async (req, res, next) => {
+  const { id: resource, action } = splitAction(String(req.params.filesAndAction));
+  if (resource !== "files" || action !== "bulk-download") return next();
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  const eventId = String(req.params.eventId);
+  const ids = (req.body as { version_ids?: unknown })?.version_ids;
+  const result = await withScope(scopeFor(req, eventId), (tx) =>
+    bulkDownload(tx, actor.id, eventId, Array.isArray(ids) ? ids.map(String) : []),
+  );
+  if (!result.ok) {
+    const status =
+      result.error.code === "file.not_downloadable"
+        ? 409
+        : result.error.code.startsWith("file.bulk_")
+          ? 422
+          : statusFor(result.error);
+    return res.status(status).json(result.error);
+  }
+  res.setHeader("content-type", "application/zip");
+  res.setHeader("content-disposition", `attachment; filename="${result.value.filename}"`);
+  res.setHeader("cache-control", "private, no-store");
+  return res.send(result.value.body);
+});
+
 app.get("/api/v1/events/:eventId/sync/fleet", async (req, res) => {
   const actor = actorFrom(req);
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
@@ -1042,7 +1116,7 @@ app.post("/api/v1/speakers/:speakerId/invite", async (req, res) => {
     return rows[0].event_id;
   });
   if (!issued) return res.status(404).json({ code: "speakers.not_found", message: "No such speaker." });
-  return res.status(201).json({ token, url: `http://localhost:3001/t/${token}` });
+  return res.status(201).json({ token, url: `${process.env.PORTAL_BASE ?? "http://localhost:3001"}/t/${token}` });
 });
 
 app.get("/api/v1/portal/session", (req, res) =>
@@ -1137,19 +1211,54 @@ app.get("/api/v1/events/:eventId/srr", async (req, res) => {
 app.post("/api/v1/events/:eventId/srr/checkins", async (req, res) => {
   const actor = actorFrom(req);
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
-  const body = req.body as { speaker_id?: string; station?: string };
+  const body = req.body as { speaker_id?: string; station_id?: string };
   if (!body.speaker_id) {
     return res.status(400).json({ code: "request.invalid", message: "`speaker_id` is required." });
   }
+  // No default station (D-080): the check-in names the desk the speaker is actually at.
   const result = await withScope(scopeFor(req), (tx) =>
     checkIn(tx, actor, {
       eventId: String(req.params.eventId),
       speakerId: body.speaker_id as string,
-      station: body.station ?? "Station 2",
+      stationId: typeof body.station_id === "string" ? body.station_id : undefined,
     }),
   );
   if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
   return res.status(201).json(result.value);
+});
+
+/* Speaker Ready Room stations (D-080): added, renamed and retired per event. */
+app.post("/api/v1/events/:eventId/srr/stations", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  const eventId = String(req.params.eventId);
+  const result = await withScope(scopeFor(req, eventId), (tx) =>
+    addStation(tx, actor, eventId, (req.body as { name?: unknown })?.name),
+  );
+  if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+  return res.status(201).json(result.value);
+});
+
+app.patch("/api/v1/events/:eventId/srr/stations/:stationId", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  const eventId = String(req.params.eventId);
+  const result = await withScope(scopeFor(req, eventId), (tx) =>
+    renameStation(tx, actor, eventId, String(req.params.stationId), (req.body as { name?: unknown })?.name),
+  );
+  if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+  return res.json(result.value);
+});
+
+app.delete("/api/v1/events/:eventId/srr/stations/:stationId", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  const eventId = String(req.params.eventId);
+  const result = await withScope(scopeFor(req, eventId), (tx) =>
+    retireStation(tx, actor, eventId, String(req.params.stationId)),
+  );
+  if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+  return res.json(result.value);
 });
 
 app.get("/api/v1/srr/checkins/:checkinId", async (req, res) => {
@@ -1900,11 +2009,20 @@ app.get("/api/v1/events/:eventId/archive/scope", async (req, res) => {
   const scope = await withScope(scopeFor(req, eventId), (tx) =>
     scopePreview(tx, eventId),
   );
-  const [latest, downloads] = await withScope(scopeFor(req, eventId), async (tx) => [
+  const [latest, downloads, endsOn] = await withScope(scopeFor(req, eventId), async (tx) => [
     await latestPackage(tx, eventId),
     await packageDownloads(tx, eventId),
+    (await tx.query<{ ends_on: string }>(`SELECT ends_on::text FROM pmp.events WHERE id = $1`, [eventId])).rows[0]
+      ?.ends_on ?? null,
   ] as const);
-  return res.json({ ...scope, latest_package: latest, downloads });
+  // The package rules as they apply to this event (D-080), rather than fixed wording:
+  // the link's expiry is computed by the same rule delivery will use.
+  const rules = {
+    retention_days: RETENTION_DAYS,
+    event_ends_on: endsOn,
+    link_expires_if_delivered_now: endsOn ? linkExpiry(endsOn).toISOString() : null,
+  };
+  return res.json({ ...scope, latest_package: latest, downloads, rules });
 });
 
 /*
@@ -2167,6 +2285,7 @@ app.get("/api/v1/events/:eventId/comms", async (req, res) => {
     const invitation = templates[0];
     return {
       templates,
+      merge_fields: MERGE_FIELDS,
       recipients: invitation ? await recipientsFor(tx, eventId, invitation.id, false) : [],
       missing: invitation ? await recipientsFor(tx, eventId, invitation.id, true) : [],
       log: await deliveryLog(tx, eventId),
@@ -2174,6 +2293,21 @@ app.get("/api/v1/events/:eventId/comms", async (req, res) => {
     };
   });
   return res.json(data);
+});
+
+/** Edit an event's email template (D-080). */
+app.patch("/api/v1/events/:eventId/comms/templates/:templateId", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  const eventId = String(req.params.eventId);
+  const body = (req.body ?? {}) as { subject?: unknown; body?: unknown };
+  const result = await withScope(scopeFor(req, eventId), (tx) =>
+    updateTemplate(tx, actor, eventId, String(req.params.templateId), body),
+  );
+  if (!result.ok) {
+    return res.status(result.error.code === "comms.template_invalid" ? 422 : statusFor(result.error)).json(result.error);
+  }
+  return res.json(result.value);
 });
 
 app.post("/api/v1/events/:eventId/comms/send", async (req, res) => {

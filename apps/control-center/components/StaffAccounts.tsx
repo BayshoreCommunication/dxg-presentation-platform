@@ -117,7 +117,7 @@ export function StaffAccounts({ initial }: { initial: StaffRow[] }) {
                 style={{ width: "100%" }}
                 value={name}
                 onChange={(event) => setName(event.target.value)}
-                placeholder="D. Ruiz"
+                placeholder="Full name"
               />
             </div>
           </div>

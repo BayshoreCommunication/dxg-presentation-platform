@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Kpi } from "@/components/Kpi";
 import { useRouter } from "next/navigation";
 import type { ImportPreview, StagedRow } from "@/lib/api";
 import {
@@ -1030,26 +1031,22 @@ export function ImportView({
           )}
 
           <div className="krow">
-            <div className="kpi">
-              <div className="kl">Rows</div>
-              <div className="kv num">{preview.total_rows}</div>
-            </div>
-            <div className="kpi">
-              <div className="kl">Incomplete rows</div>
-              <div className="kv num" style={{ color: blockingRows.length ? "var(--block)" : "var(--ok)" }}>
-                {blockingRows.length}
-              </div>
-            </div>
-            <div className="kpi">
-              <div className="kl">Warnings</div>
-              <div className="kv num" style={{ color: "var(--warn)" }}>
-                {preview.warnings}
-              </div>
-            </div>
-            <div className="kpi">
-              <div className="kl">New speakers</div>
-              <div className="kv num">{preview.new_speakers}</div>
-            </div>
+            <Kpi label="Rows" icon="clipboard" value={preview.total_rows} caption="in this file" />
+            <Kpi
+              label="Incomplete rows"
+              icon="warning"
+              value={blockingRows.length}
+              caption={blockingRows.length ? "must be fixed to import" : "none blocking"}
+              tone={blockingRows.length ? "bad" : "ok"}
+            />
+            <Kpi
+              label="Warnings"
+              icon="warning"
+              value={preview.warnings}
+              caption={preview.warnings ? "won't block the import" : "none"}
+              tone={preview.warnings ? "warn" : undefined}
+            />
+            <Kpi label="New speakers" icon="users" value={preview.new_speakers} />
           </div>
 
           {unmappedRequired.length > 0 && (

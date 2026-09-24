@@ -1,6 +1,7 @@
 "use client";
 
 import type { ClientView } from "@/lib/api";
+import { Kpi } from "@/components/Kpi";
 import { archiveDownloadUrl } from "@/lib/api";
 import { DownloadLog } from "@/components/DownloadLog";
 
@@ -62,39 +63,41 @@ export function ClientPortalView({ data }: { data: ClientView }) {
       </div>
 
       <div className="krow">
-        <div className="kpi">
-          <div className="kl">Collection</div>
-          <div className="kv num">{pct(collected, total)}%</div>
-          <div className="note">
-            {collected} of {total} presentations
-          </div>
-        </div>
+        <Kpi
+          label="Collection"
+          icon="upload"
+          value={`${pct(collected, total)}%`}
+          caption={`${collected} of ${total} presentations`}
+          progress={total === 0 ? 0 : collected / total}
+          tone={total > 0 && collected === total ? "ok" : undefined}
+        />
         {/*
           Three states that add up to the total, so none is counted twice: approved,
           uploaded but not yet approved, and nothing uploaded. "Outstanding" used to be
           total − approved, which lumped the second and third together — a client
           reading it as "missing" would have chased speakers who had already delivered.
         */}
-        <div className="kpi">
-          <div className="kl">Approved</div>
-          <div className="kv num" style={{ color: "var(--ok)" }}>
-            {approved}
-          </div>
-        </div>
-        <div className="kpi">
-          <div className="kl">Need review</div>
-          <div className="kv num" style={{ color: "var(--warn)" }}>
-            {collected - approved}
-          </div>
-          <div className="note">uploaded, not yet approved</div>
-        </div>
-        <div className="kpi">
-          <div className="kl">Missing</div>
-          <div className="kv num" style={{ color: "var(--block)" }}>
-            {total - collected}
-          </div>
-          <div className="note">nothing uploaded yet</div>
-        </div>
+        <Kpi
+          label="Approved"
+          icon="checkCircle"
+          value={approved}
+          caption="latest file approved"
+          tone={approved > 0 ? "ok" : undefined}
+        />
+        <Kpi
+          label="Need review"
+          icon="clock"
+          value={collected - approved}
+          caption="uploaded, not yet approved"
+          tone={collected - approved > 0 ? "warn" : undefined}
+        />
+        <Kpi
+          label="Missing"
+          icon="docMissing"
+          value={total - collected}
+          caption="nothing uploaded yet"
+          tone={total - collected > 0 ? "bad" : undefined}
+        />
       </div>
 
       <div className="card">

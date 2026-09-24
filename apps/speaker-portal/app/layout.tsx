@@ -2,7 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Speaker Upload — MedTech Forward 2026",
+  // The event's name is added by the portal page once the speaker is known (D-080);
+  // it used to name one seeded event on every speaker's tab.
+  title: "Speaker Upload",
   description: "Upload your presentation",
 };
 

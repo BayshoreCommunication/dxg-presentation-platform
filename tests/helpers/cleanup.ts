@@ -154,6 +154,9 @@ export async function removeTestEvents(namePrefixes: readonly string[]): Promise
           "tracks",
           "event_days",
           "communication_templates",
+          // Speaker Ready Room desks are set-up (D-080); a check-in that used one is history
+          // and keeps it, which sends the event to archiving instead.
+          "srr_stations",
         ]) {
           await tx.query(`DELETE FROM pmp.${table} WHERE event_id = $1`, [event.id]);
         }

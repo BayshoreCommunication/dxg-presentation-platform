@@ -218,6 +218,7 @@ const SCREENS: [RegExp, string][] = [
   [/^\/events\/[^/]+\/import$/, "Schedule import"],
   [/^\/events\/[^/]+\/speakers$/, "Speakers"],
   [/^\/events\/[^/]+\/review$/, "Review presentations"],
+  [/^\/events\/[^/]+\/files$/, "Files"],
   [/^\/events\/[^/]+\/comms$/, "Communications"],
   [/^\/events\/[^/]+\/archive$/, "Archive builder"],
   [/^\/events\/[^/]+\/srr$/, "Speaker Ready Room"],

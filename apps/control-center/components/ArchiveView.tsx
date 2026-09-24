@@ -143,14 +143,23 @@ export function ArchiveView({ eventId, initial }: { eventId: string; initial: Ar
           )}
         </div>
         <div className="cbd">
-          <label style={{ display: "block", marginBottom: 6 }}>
-            <input type="checkbox" checked readOnly /> Include manifest (file · version · checksum ·
-            approval record)
-          </label>
-          <label style={{ display: "block", marginBottom: 12 }}>
-            <input type="checkbox" checked readOnly /> Client link expires 30 days after the event ends ·
-            every download logged
-          </label>
+          {/*
+            These were two ticked, read-only checkboxes — options that looked choosable and
+            were not. They are the package's rules, stated for this event (D-080).
+          */}
+          <ul className="note" style={{ margin: "0 0 12px", paddingLeft: 18, lineHeight: 1.7 }}>
+            <li>Every package carries a manifest: file, version, checksum and approval record.</li>
+            <li>
+              The client link expires {initial.rules.retention_days} days after the event ends
+              {initial.rules.event_ends_on ? ` (${initial.rules.event_ends_on})` : ""}
+              {pkg?.link_expires_at
+                ? ` — this package's link expires ${pkg.link_expires_at.slice(0, 10)}`
+                : initial.rules.link_expires_if_delivered_now
+                  ? ` — delivered today, it would expire ${initial.rules.link_expires_if_delivered_now.slice(0, 10)}`
+                  : ""}
+              . Every download is logged.
+            </li>
+          </ul>
 
           <PdfStatus eventId={eventId} pdf={pdf} busy={busy} run={run} />
 

@@ -93,6 +93,38 @@ const GLYPHS: Record<string, Part[]> = {
     { d: "M8 1.333c1.667 1.825 2.5 4.047 2.5 6.667S9.667 12.842 8 14.667C6.333 12.842 5.5 10.62 5.5 8S6.333 3.158 8 1.333Z", fill: INNER, stroke: true },
     { d: "M1.333 8h13.334", stroke: true },
   ],
+  folder: [
+    {
+      d: "M1.667 5c0-1.1 0-1.65.341-1.992C2.35 2.667 2.9 2.667 4 2.667h1.448c.39 0 .586 0 .765.058.158.051.303.134.428.244.141.124.242.29.443.625l.366.61c.2.334.301.501.442.625.125.11.27.193.428.244.18.058.375.058.765.058H12c1.1 0 1.65 0 1.992.342.341.341.341.891.341 1.991v3.87c0 1.1 0 1.65-.341 1.992-.342.341-.892.341-1.992.341H4c-1.1 0-1.65 0-1.992-.341-.341-.342-.341-.892-.341-1.992Z",
+      fill: FILL,
+      stroke: true,
+    },
+    { d: "M1.667 6.667h12.666", stroke: true },
+  ],
+  // KPI header glyphs.
+  clock: [
+    { d: CIRCLE, fill: FILL, stroke: true },
+    { d: "M8 5.333V8l1.333 1.333", stroke: true },
+  ],
+  checkCircle: [
+    { d: CIRCLE, fill: FILL, stroke: true },
+    { d: "M5.667 8.167 7.167 9.667 10.333 6.5", stroke: true },
+  ],
+  warning: [
+    { d: "M7.134 2.5a1 1 0 0 1 1.732 0l5.629 9.75a1 1 0 0 1-.866 1.5H2.371a1 1 0 0 1-.866-1.5Z", fill: FILL, stroke: true },
+    { d: "M8 6.333V9M8 11.167h.006", stroke: true },
+  ],
+  upload: [
+    { d: DOC, fill: FILL, stroke: true },
+    { d: "M8 11.667V8M6.5 9.5 8 8l1.5 1.5", stroke: true },
+  ],
+  docMissing: [
+    { d: DOC, fill: FILL, stroke: true },
+    { d: "M6.5 8.5l3 3M9.5 8.5l-3 3", stroke: true },
+  ],
+  cursor: [
+    { d: "M3.333 2.667 6.9 13.2c.14.412.72.42.87.012l1.43-3.917 3.917-1.43c.408-.15.4-.73-.012-.87Z", fill: FILL, stroke: true },
+  ],
   lock: [
     { d: "M5 6.667V5a3 3 0 0 1 6 0v1.667", stroke: true },
     {
@@ -119,6 +151,11 @@ const GLYPHS: Record<string, Part[]> = {
 // Line-only glyphs that should follow the text colour (chevrons and the like).
 const LINES: Record<string, string> = {
   chevrons: "M5 6 8 3l3 3M5 10l3 3 3-3",
+  download: "M8 2.667v7.666M5 7.667l3 3 3-3M2.667 11.333v.334c0 1.1 0 1.65.341 1.991.342.342.892.342 1.992.342h6c1.1 0 1.65 0 1.992-.342.341-.341.341-.891.341-1.991v-.334",
+  search: "M11.333 11.333 14 14M12.667 7.333a5.333 5.333 0 1 0-10.667 0 5.333 5.333 0 0 0 10.667 0Z",
+  list: "M5.333 4h8M5.333 8h8M5.333 12h8M2.667 4h.006M2.667 8h.006M2.667 12h.006",
+  filter: "M2.667 3.333h10.666L9.333 8.667v4l-2.666 1.333V8.667Z",
+  more: "M8 3.333h.006M8 8h.006M8 12.667h.006",
 };
 
 export type IconName = keyof typeof GLYPHS | keyof typeof LINES;

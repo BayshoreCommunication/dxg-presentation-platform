@@ -1,10 +1,21 @@
 "use client";
 
 import { useState } from "react";
+import { Kpi } from "@/components/Kpi";
+
 import { useRouter } from "next/navigation";
 import type { CommsView as CommsData } from "@/lib/api";
-import { sendBatch, ApiError } from "@/lib/api";
+import { sendBatch, updateTemplate, ApiError } from "@/lib/api";
 import { Chip } from "@/components/Chip";
+
+/** Kravio puts a glyph on every tile; these say what each delivery counter is. */
+const COUNTER_ICON = {
+  queued: "clock",
+  delivered: "mail",
+  opened: "checkCircle",
+  clicked: "cursor",
+  bounced: "warning",
+} as const;
 
 const STATUS_TONE: Record<string, string> = {
   queued: "submitted",
@@ -24,6 +35,25 @@ export function CommsView({ eventId, data }: { eventId: string; data: CommsData 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [editing, setEditing] = useState<{ subject: string; body: string } | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    if (!template || !editing) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await updateTemplate(eventId, template.id, editing.subject, editing.body);
+      setEditing(null);
+      setToast(`Saved “${template.name}” — the next batch uses it`);
+      setTimeout(() => setToast(null), 5000);
+      router.refresh();
+    } catch (caught) {
+      setError(caught instanceof ApiError ? caught.message : "The template could not be saved.");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   const template = data.templates.find((row) => row.id === selected) ?? data.templates[0];
   const isReminder = (template?.name ?? "").toLowerCase().includes("reminder");
@@ -58,22 +88,25 @@ export function CommsView({ eventId, data }: { eventId: string; data: CommsData 
 
       <div className="krow">
         {(["queued", "delivered", "opened", "clicked", "bounced"] as const).map((key) => (
-          <div className="kpi" key={key}>
-            <div className="kl">{key}</div>
-            <div
-              className="kv num"
-              style={key === "bounced" && data.stats.bounced > 0 ? { color: "var(--block)" } : undefined}
-            >
-              {data.stats[key]}
-            </div>
-          </div>
+          <Kpi
+            key={key}
+            label={key[0].toUpperCase() + key.slice(1)}
+            icon={COUNTER_ICON[key]}
+            value={data.stats[key]}
+            caption={key === "bounced" && data.stats.bounced > 0 ? "could not be delivered" : undefined}
+            tone={key === "bounced" && data.stats.bounced > 0 ? "bad" : undefined}
+          />
         ))}
       </div>
 
       <div className="card">
         <div className="chd">
           <h3>Template</h3>
-          <select value={selected} onChange={(event) => setSelected(event.target.value)}>
+          <select
+            value={selected}
+            disabled={editing !== null}
+            onChange={(event) => setSelected(event.target.value)}
+          >
             {data.templates.map((row) => (
               <option key={row.id} value={row.id}>
                 {row.name}
@@ -82,8 +115,61 @@ export function CommsView({ eventId, data }: { eventId: string; data: CommsData 
           </select>
         </div>
         <div className="cbd">
-          {template && (
+          {template && editing && (
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                void save();
+              }}
+            >
+              <div className="field">
+                <label htmlFor="tpl-subject">Subject</label>
+                <input
+                  id="tpl-subject"
+                  value={editing.subject}
+                  maxLength={200}
+                  onChange={(event) => setEditing({ ...editing, subject: event.target.value })}
+                  style={{ width: "100%" }}
+                />
+              </div>
+              <div className="field">
+                <label htmlFor="tpl-body">Message</label>
+                <textarea
+                  id="tpl-body"
+                  rows={14}
+                  value={editing.body}
+                  onChange={(event) => setEditing({ ...editing, body: event.target.value })}
+                  style={{ width: "100%", fontFamily: "inherit" }}
+                />
+              </div>
+              <div className="note" style={{ marginBottom: 12 }}>
+                Merge fields, filled in for each speaker when the batch is sent:{" "}
+                {data.merge_fields.map((field) => (
+                  <code key={field} className="kbd" style={{ marginRight: 4 }}>{`{{${field}}}`}</code>
+                ))}
+                . Keep <code className="kbd">{"{{upload_link}}"}</code> — it is each speaker&apos;s personal link.
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button className="btn pri" disabled={saving || !editing.subject.trim() || !editing.body.trim()}>
+                  {saving ? "Saving…" : "Save template"}
+                </button>
+                <button type="button" className="btn" disabled={saving} onClick={() => setEditing(null)}>
+                  Cancel
+                </button>
+              </div>
+            </form>
+          )}
+          {template && !editing && (
             <>
+              <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => setEditing({ subject: template.subject, body: template.body })}
+                >
+                  Edit template
+                </button>
+              </div>
               <div className="darkpane" style={{ padding: "14px 18px", marginBottom: 12 }}>
                 <b style={{ color: "var(--white)", fontWeight: 500, fontSize: 15 }}>
                   {template.subject}

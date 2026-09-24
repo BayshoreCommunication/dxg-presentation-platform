@@ -65,8 +65,8 @@ const TALKS = [
     start: "2026-03-11T10:30:00-04:00",
     end: "2026-03-11T11:00:00-04:00",
     versions: [
-      { n: 1, size: 504_413_000, processing: "stored", inspection: "passed_with_warnings", review: "superseded" },
-      { n: 2, size: 504_413_000, processing: "stored", inspection: "passed_with_warnings", review: "approved" },
+      { n: 1, processing: "stored", inspection: "passed_with_warnings", review: "superseded" },
+      { n: 2, processing: "stored", inspection: "passed_with_warnings", review: "approved" },
     ],
     roomSync: "active",
   },
@@ -79,7 +79,7 @@ const TALKS = [
     title: "CardioNext Trial Results",
     start: "2026-03-11T11:15:00-04:00",
     end: "2026-03-11T11:45:00-04:00",
-    versions: [{ n: 1, size: 155_189_000, processing: "stored", inspection: "passed", review: "awaiting_review" }],
+    versions: [{ n: 1, processing: "stored", inspection: "passed", review: "awaiting_review" }],
     roomSync: null,
   },
   {
@@ -92,7 +92,7 @@ const TALKS = [
     start: "2026-03-11T13:00:00-04:00",
     end: "2026-03-11T13:30:00-04:00",
     versions: [
-      { n: 1, size: 100_663_296, processing: "stored", inspection: "passed_with_warnings", review: "awaiting_review" },
+      { n: 1, processing: "stored", inspection: "passed_with_warnings", review: "awaiting_review" },
     ],
     roomSync: null,
   },
@@ -172,6 +172,15 @@ async function seed(): Promise<void> {
       ]);
     }
 
+    // The demo event's Speaker Ready Room desks (D-080). Stations are event data now, so
+    // the seed supplies them the way an operator would; a new event starts with none.
+    for (const [position, name] of ["Station 1", "Station 2", "Station 3 · USB"].entries()) {
+      await client.query(
+        `INSERT INTO srr_stations (event_id, client_id, name, position) VALUES ($1, $2, $3, $4)`,
+        [IDS.event, IDS.client, name, position + 1],
+      );
+    }
+
     const { rows: dayRows } = await client.query<{ id: string }>(
       `INSERT INTO event_days (event_id, client_id, day_date) VALUES ($1, $2, '2026-03-11') RETURNING id`,
       [IDS.event, IDS.client],
@@ -236,7 +245,9 @@ async function seed(): Promise<void> {
             IDS.client,
             version.n,
             `${talk.key}_v${version.n}.pptx`,
-            version.size,
+            // The size of the bytes actually stored (D-081). This was a hand-typed figure —
+            // 504 MB for a 1.9 KB fixture — so every size on screen was invented.
+            object.size,
             sha,
             object.key,
             version.processing,

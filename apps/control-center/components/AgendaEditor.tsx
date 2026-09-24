@@ -126,7 +126,7 @@ export function SessionForm({
             id="session-room"
             style={{ width: "100%" }}
             value={value.room}
-            placeholder="e.g. Ballroom A"
+            placeholder="Room name"
             onChange={(event) => set({ room: event.target.value })}
             required
           />

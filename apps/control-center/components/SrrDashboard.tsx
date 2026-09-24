@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { SrrDashboard } from "@/lib/api";
-import { startCheckin, ApiError } from "@/lib/api";
+import type { SrrDashboard, SrrStation } from "@/lib/api";
+import { addStation, renameStation, retireStation, startCheckin, ApiError } from "@/lib/api";
 import { Chip } from "@/components/Chip";
 
 /**
@@ -38,11 +38,11 @@ export function SrrDashboardView({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function check(speakerId: string, station: string) {
+  async function check(speakerId: string, stationId: string) {
     setBusy(true);
     setError(null);
     try {
-      const { checkin_id } = await startCheckin(eventId, speakerId, station);
+      const { checkin_id } = await startCheckin(eventId, speakerId, stationId);
       router.push(`/events/${eventId}/srr/${checkin_id}`);
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : "Check-in failed.");
@@ -96,13 +96,11 @@ export function SrrDashboardView({
                         Open check-in →
                       </a>
                     ) : (
-                      <button
-                        className="btn pri"
+                      <CheckInButton
+                        stations={data.stations}
                         disabled={busy}
-                        onClick={() => void check(row.speaker_id, "Station 2")}
-                      >
-                        Check in →
-                      </button>
+                        onPick={(stationId) => void check(row.speaker_id, stationId)}
+                      />
                     )}
                   </td>
                 </tr>
@@ -142,31 +140,244 @@ export function SrrDashboardView({
         </div>
       </div>
 
-      <div className="card">
-        <div className="chd">
-          <h3>Stations</h3>
+      <StationsCard eventId={eventId} stations={data.stations} onChanged={() => router.refresh()} />
+    </>
+  );
+}
+
+/** Closes on Escape and on a click anywhere else. */
+function useDismiss(open: boolean, close: () => void) {
+  const root = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (event: MouseEvent) => {
+      if (root.current && !root.current.contains(event.target as Node)) close();
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") close();
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open, close]);
+  return root;
+}
+
+/**
+ * Check-in asks which desk (D-080). It was recorded at "Station 2" for every speaker;
+ * now the menu lists this event's stations, with the ones already in use shown but not
+ * offered.
+ */
+function CheckInButton({
+  stations,
+  disabled,
+  onPick,
+}: {
+  stations: SrrStation[];
+  disabled: boolean;
+  onPick: (stationId: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const root = useDismiss(open, () => setOpen(false));
+  const free = stations.filter((station) => !station.busy);
+  if (stations.length === 0) {
+    return (
+      <button className="btn pri" disabled title="Add a station under Stations below first">
+        Check in →
+      </button>
+    );
+  }
+  return (
+    <div className="rowmenu" ref={root} style={{ verticalAlign: "middle" }}>
+      <button
+        className="btn pri"
+        disabled={disabled || free.length === 0}
+        title={free.length === 0 ? "Every station is in use" : undefined}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+      >
+        Check in →
+      </button>
+      {open && (
+        <div className="menu" role="menu" style={{ width: 220, textAlign: "left" }}>
+          <div className="label">At which station?</div>
+          {stations.map((station) => (
+            <button
+              key={station.id}
+              type="button"
+              className="item"
+              role="menuitem"
+              disabled={station.busy}
+              style={station.busy ? { opacity: 0.5, cursor: "default" } : undefined}
+              onClick={() => {
+                if (station.busy) return;
+                setOpen(false);
+                onPick(station.id);
+              }}
+            >
+              {station.name}
+              {station.busy && <span className="tick">in use</span>}
+            </button>
+          ))}
         </div>
-        <div className="cbd" style={{ padding: "0 0 4px" }}>
+      )}
+    </div>
+  );
+}
+
+/** The event's desks: who is at each, and add / rename / remove (D-080). */
+function StationsCard({
+  eventId,
+  stations,
+  onChanged,
+}: {
+  eventId: string;
+  stations: SrrStation[];
+  onChanged: () => void;
+}) {
+  const [draft, setDraft] = useState("");
+  const [editing, setEditing] = useState<{ id: string; name: string } | null>(null);
+  const [confirming, setConfirming] = useState<string | null>(null);
+  const [working, setWorking] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function run(work: () => Promise<unknown>) {
+    setWorking(true);
+    setError(null);
+    try {
+      await work();
+      onChanged();
+      return true;
+    } catch (caught) {
+      setError(caught instanceof ApiError ? caught.message : "That did not work.");
+      return false;
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  return (
+    <div className="card">
+      <div className="chd">
+        <h3>Stations · {stations.length}</h3>
+        <span className="m">the desks speakers check in at</span>
+      </div>
+      <div className="cbd" style={{ padding: "0 0 4px" }}>
+        {error && (
+          <div className="err" role="alert" style={{ margin: "12px 14px" }}>
+            {error}
+          </div>
+        )}
+        {stations.length === 0 ? (
+          <div className="empty">No stations yet. Add the desks this room has, then speakers can be checked in.</div>
+        ) : (
           <table>
             <tbody>
-              {data.stations.map((station) => (
-                <tr key={station.station}>
+              {stations.map((station) => (
+                <tr key={station.id}>
                   <td>
-                    {station.station}
-                    {station.technician ? ` · ${station.technician}` : ""}
+                    {editing?.id === station.id ? (
+                      <form
+                        style={{ display: "flex", gap: 8, alignItems: "center" }}
+                        onSubmit={(event) => {
+                          event.preventDefault();
+                          void run(() => renameStation(eventId, station.id, editing.name)).then((ok) => {
+                            if (ok) setEditing(null);
+                          });
+                        }}
+                      >
+                        <input
+                          aria-label={`New name for ${station.name}`}
+                          value={editing.name}
+                          maxLength={60}
+                          autoFocus
+                          onChange={(event) => setEditing({ id: station.id, name: event.target.value })}
+                        />
+                        <button className="btn pri" disabled={working || !editing.name.trim()}>
+                          Save
+                        </button>
+                        <button type="button" className="btn" onClick={() => setEditing(null)}>
+                          Cancel
+                        </button>
+                      </form>
+                    ) : (
+                      <>
+                        <b>{station.name}</b>
+                        {station.busy && (
+                          <span className="note">
+                            {" "}
+                            · {station.speaker ?? "a speaker"}
+                            {station.technician ? ` with ${station.technician}` : ""}
+                          </span>
+                        )}
+                      </>
+                    )}
                   </td>
-                  <td style={{ textAlign: "right" }}>
-                    <Chip
-                      status={station.busy ? "submitted" : "canceled"}
-                      label={station.busy ? "In session" : "Free"}
-                    />
+                  <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                    <Chip status={station.busy ? "submitted" : "canceled"} label={station.busy ? "In session" : "Free"} />{" "}
+                    {editing?.id !== station.id &&
+                      (confirming === station.id ? (
+                        <>
+                          <button
+                            className="btn danger"
+                            disabled={working}
+                            onClick={() =>
+                              void run(() => retireStation(eventId, station.id)).then(() => setConfirming(null))
+                            }
+                          >
+                            Remove {station.name}
+                          </button>{" "}
+                          <button className="btn" onClick={() => setConfirming(null)}>
+                            Keep
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button className="btn" disabled={working} onClick={() => setEditing({ id: station.id, name: station.name })}>
+                            Rename
+                          </button>{" "}
+                          <button
+                            className="btn"
+                            disabled={working || station.busy}
+                            title={station.busy ? "A speaker is checked in here" : undefined}
+                            onClick={() => setConfirming(station.id)}
+                          >
+                            Remove
+                          </button>
+                        </>
+                      ))}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </div>
+        )}
+        <form
+          style={{ display: "flex", gap: 8, padding: "12px 14px 10px", borderTop: "1px solid rgba(0,0,0,.06)" }}
+          onSubmit={(event) => {
+            event.preventDefault();
+            void run(() => addStation(eventId, draft)).then((ok) => {
+              if (ok) setDraft("");
+            });
+          }}
+        >
+          <input
+            aria-label="New station name"
+            placeholder="Station name"
+            value={draft}
+            maxLength={60}
+            onChange={(event) => setDraft(event.target.value)}
+            style={{ flex: 1 }}
+          />
+          <button className="btn pri" disabled={working || !draft.trim()}>
+            Add station
+          </button>
+        </form>
       </div>
-    </>
+    </div>
   );
 }

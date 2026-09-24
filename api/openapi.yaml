@@ -197,18 +197,38 @@ paths:
     parameters: [{$ref: '#/components/parameters/eventId'}]
     get:
       tags: [files]
-      summary: Role-scoped search/filter (FR-FILE-005)
-      parameters: [{$ref: '#/components/parameters/q'}, {$ref: '#/components/parameters/cursor'}, {$ref: '#/components/parameters/limit'}]
-      responses: {'200': {$ref: '#/components/responses/Page'}}
+      summary: "Role-scoped search/filter (FR-FILE-005, D-079): one row per file with its newest version and history, room folders, recent uploads, per-status counts"
+      parameters:
+        - {$ref: '#/components/parameters/q'}
+        - {name: status, in: query, schema: {type: string, enum: [all, review, approved, changes, blocked, other]}}
+        - {name: room, in: query, schema: {type: string}, description: "Room id, or `none` for talks with no room"}
+        - {name: sort, in: query, schema: {type: string, enum: [uploaded, name, speaker, location, size], default: uploaded}}
+        - {name: dir, in: query, schema: {type: string, enum: [asc, desc], default: desc}}
+        - {name: page, in: query, schema: {type: integer, minimum: 1, default: 1}, description: "Page-numbered, not cursor: the tab counts and folders need the whole event anyway (D-079)"}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 10}}
+      responses: {'200': {$ref: '#/components/responses/OK'}}
   /events/{eventId}/files:bulk-download:
     parameters: [{$ref: '#/components/parameters/eventId'}, {$ref: '#/components/parameters/idempotencyKey'}]
-    post: {tags: [files], summary: Build bulk download (async job → signed link ≤15 min), responses: {'202': {$ref: '#/components/responses/Accepted'}}}
+    post:
+      tags: [files]
+      summary: "Bulk download. Until the S3 driver (M2-2) exists there is nothing to sign a link against, so this returns the zip directly, capped at 50 files / 1 GB (D-079); the async job with a signed link replaces it then."
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [version_ids], properties: {version_ids: {type: array, items: {type: string, format: uuid}, minItems: 1, maxItems: 50}}}}}}
+      responses:
+        '200': {description: "The zip", content: {application/zip: {schema: {type: string, format: binary}}}}
+        '404': {description: "A version is not on this event"}
+        '409': {description: "A chosen version is quarantined or still processing"}
+        '422': {description: "Empty selection, more than 50 files, or over 1 GB"}
   /file-versions/{versionId}:
     parameters: [{$ref: '#/components/parameters/versionId'}]
     get: {tags: [files], summary: 'Version detail: states, checksum, findings, comments', responses: {'200': {$ref: '#/components/responses/OK'}}}
   /file-versions/{versionId}/download:
     parameters: [{$ref: '#/components/parameters/versionId'}]
-    post: {tags: [files], summary: "Signed download URL (≤15 min, NFR-SEC-05, audited)", responses: {'200': {$ref: '#/components/responses/OK'}}}
+    get:
+      tags: [files]
+      summary: "The version's original file, audited (D-079). Streamed by the API while storage is local disk; becomes a ≤15 min signed URL (NFR-SEC-05) with the S3 driver."
+      responses:
+        '200': {description: "The file", content: {application/octet-stream: {schema: {type: string, format: binary}}}}
+        '409': {description: "Quarantined or still processing — never downloadable"}
 
   # ── inspection (M08) ────────────────────────────────────────────────
   /file-versions/{versionId}/findings:

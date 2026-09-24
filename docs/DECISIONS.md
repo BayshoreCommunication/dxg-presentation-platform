@@ -1546,3 +1546,87 @@ portal. It was extracted from the live site (computed styles and the compiled st
 - **The per-event accent colour is untouched.** It brands speaker and client emails, not this UI; its default
   stays `#44C7F4`.
 - **Needs:** G0-6b visual approval re-run against this look, since the approved baseline was the dark one.
+
+## D-079 (2026-09-24): An event Files screen lists every file, with downloads — Status: ACCEPTED (Travis's call)
+FR-FILE-005 ("role-scoped search/filter and bulk download", P1, M2-6) had a contract in `api/openapi.yaml` and no
+route or screen, so staff could only see files in pieces (one talk, the review queue, the archive). Travis asked
+for an all-files screen shaped like a reference "Project Files" design.
+
+- **Screen:** `/events/{id}/files`, a new sidebar item "Files" under Control Center — a deviation from the 17-screen
+  inventory (D-010), recorded here like D-058. Rooms are the folders (where a file will play, plus "No room yet" so
+  nothing drops out of the totals); Recent files are the eight newest uploads; All files is a table with status tabs
+  (Awaiting review / Approved / Changes requested / Blocked), search across filename, talk, speaker, room and
+  session, a room filter, sortable columns, pagination, a grid view, and a drawer with one file's details and
+  every version.
+- **A row is a file, not a version.** It carries the newest version, because that is the one anybody is asking about;
+  earlier versions are in the drawer, each individually downloadable.
+- **Downloads:** `GET /file-versions/{id}/download` (one version) and `POST /events/{id}/files:bulk-download` (a zip of
+  chosen versions). Every download is written to the event's audit chain as `file.downloaded`. Only a `stored` version
+  can be downloaded; a quarantined or unfinished one cannot, and the UI offers no checkbox or link for it.
+- **Deviation from the contract, because S3 does not exist yet:** the contract's bulk download is an async job that
+  returns a ≤15 min signed link, and single downloads are signed URLs (NFR-SEC-05). With files on local disk there is
+  nothing to sign against, so the API streams the bytes itself and the zip is built in the request, capped at 50 files
+  and 1 GB. Both move to signed links with the S3 driver (M2-2, still TO DO).
+- **Scope:** every staff role on the event may list and download — the same gate as the rest of the event's routes
+  (`/events/…` and `/file-versions/…` are resolved to their event by the D-034 table). A bulk request naming a version
+  from another event is refused whole, not filtered. Bulk download stays allowed on an archived event: it is a POST
+  only because it carries a list.
+- **Paging is page-numbered, not cursor-based.** The tab counts and folders need the whole event in one read anyway,
+  and an event has hundreds of talks, not hundreds of thousands.
+
+Tests: `tests/invariants/event-files.test.ts` (9): listing, tabs partition the files, folders account for every file,
+search, byte-exact audited download, bulk zip, foreign version refused, empty selection refused, no session → 401,
+another event's staff → 403 on the list and both download routes.
+
+## D-080 (2026-09-24): What a screen shows about an event comes from that event — Status: ACCEPTED (Travis's call)
+Travis: "it's currently showing some static data, make it completely dynamic." A sweep of both apps and the API for
+values written into code rather than read from the event found these, all now fixed:
+
+- **Speaker Ready Room stations** were a `VALUES ('Station 1'), ('Station 2'), ('Station 3 · USB')` list in the
+  dashboard query, identical on every event, and every check-in was recorded at "Station 2" (the API's default).
+  Migration 017 adds `srr_stations` (per event, unique live name, retired rather than deleted) and
+  `srr_checkins.station_id`. Stations are added, renamed and removed on the SRR screen (SRR technician or above,
+  audited); check-in asks which station and refuses without one; busy is read by station id, so renaming a desk
+  does not strand the speaker at it; a desk with a speaker at it cannot be removed. Existing events keep the three
+  names they were showing, as ordinary editable rows; new events start with none; the seed gives the demo event its
+  three.
+- **Room Agent** showed "MEDTECH FORWARD 2026" on every room's holding slide, "TODAY · WED MAR 11" above every
+  schedule, and every time in New York time. It now shows the room's own event name (edged in the event's accent
+  when one is set), a heading per day at the venue, and the event's clock throughout. OrthoWorld (Chicago) was the
+  visible casualty.
+- **Talk and inspection screens** formatted every time in New York time; they use the event's timezone now. The
+  talk's speaker organisation was a literal `SELECT NULL` although `speakers.organization` exists (migration 006);
+  it is read and shown.
+- **Speaker emails carried `http://localhost:3001/t/…` as the upload link** — hard-coded in the batch send and in
+  the credential route, while decision notices already used `PORTAL_BASE`. Both use `PORTAL_BASE` now. In production
+  every invitation and reminder would otherwise have linked nowhere.
+- **Email templates** lived per event in the database but nothing could change them. Communications has an editor
+  (presentation manager or above, audited): only the merge fields sending fills in are accepted, and
+  `{{upload_link}}` must stay, because it is each speaker's only way in. Mail already sent keeps its text.
+- **Archive builder** showed two ticked, read-only checkboxes — options that were not options. They are stated as
+  the package's rules with this event's end date and the link's actual or would-be expiry.
+- **Speaker portal tab title** named "MedTech Forward 2026" for every speaker; it names the speaker's own event.
+- **Placeholders** that read like real data ("MedTech Forward 2027", "Tampa Convention Center", "D. Ruiz",
+  "e.g. Ballroom A") are neutral labels.
+
+**Left as they are, deliberately:** stated service rules rather than data — the 30-day link retention (D-069, now
+rendered from `RETENTION_DAYS`), the client portal's "within 4 hours of event close", upload limits in the portal.
+**Noticed, not changed:** `speaker_first` in email merges takes the *last* word of the name ("Hi Raman").
+
+Tests: `tests/invariants/event-owned-data.test.ts` (6). Full invariants 196/196, unit 221/221.
+
+## D-081 (2026-09-24): File sizes are the stored bytes — Status: ACCEPTED (Travis's call)
+The Files screen showed "Ballroom A · 1 file · 1.0 GB". The seed wrote a small real fixture file for each demo
+version and then recorded a hand-typed size beside it — 504 MB for a 1.9 KB object — so every size anywhere in the
+product (Files, Room Agent library, review queue) was invented for the demo event. Real uploads were always right:
+`ingestVersion` records the size of the bytes it assembled.
+
+- The seed records `object.size`, the bytes it actually stored; the invented figures are gone.
+- `npm run db:verify-sizes` compares every stored version's recorded size with its object in storage and reports
+  mismatches and missing objects; `-- --fix` corrects the recorded size, and is refused outside a `pmp_dev`/`pmp_test`
+  database, because on real data a disagreement is an integrity fault to investigate, not a number to overwrite. Run
+  on the dev database it found and fixed exactly the four seeded versions; 0 mismatches after.
+- A room folder's size now counts the current versions — the same files its count and the table describe — instead of
+  adding superseded versions on top ("1 file · 1.0 GB" was one file plus its replaced predecessor).
+
+Test: `event-files.test.ts` now checks every file's shown size against the bytes it downloads.

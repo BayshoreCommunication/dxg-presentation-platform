@@ -34,6 +34,8 @@ export type AgentScheduleRow = {
 
 export type AgentView = {
   room: { id: string; name: string };
+  /** What the holding screen shows between talks: the event's own name and accent (D-080). */
+  event: { id: string; name: string; accent: string | null; timezone: string };
   agent: { id: string | null; fingerprint: string | null; version: string | null; heartbeat_age: number | null };
   library: { files: number; bytes: string; previous_versions: number; updates_waiting: number };
   schedule: AgentScheduleRow[];
@@ -44,14 +46,21 @@ export async function agentView(tx: pg.PoolClient, roomId: string): Promise<Agen
   const { rows: roomRows } = await tx.query<{
     id: string;
     name: string;
+    event_id: string;
+    event_name: string;
+    accent: string | null;
+    timezone: string;
     agent_id: string | null;
     fingerprint: string | null;
     agent_version: string | null;
     heartbeat_age: number | null;
   }>(
-    `SELECT r.id, r.name, ra.id AS agent_id, ra.device_fingerprint AS fingerprint,
+    `SELECT r.id, r.name, e.id AS event_id, e.name AS event_name,
+            NULLIF(e.branding->>'accent', '') AS accent, e.timezone,
+            ra.id AS agent_id, ra.device_fingerprint AS fingerprint,
             ra.agent_version, EXTRACT(EPOCH FROM (now() - ra.last_heartbeat_at))::int AS heartbeat_age
        FROM pmp.rooms r
+       JOIN pmp.events e ON e.id = r.event_id
        LEFT JOIN pmp.room_agents ra ON ra.room_id = r.id AND ra.revoked_at IS NULL
       WHERE r.id = $1`,
     [roomId],
@@ -105,6 +114,7 @@ export async function agentView(tx: pg.PoolClient, roomId: string): Promise<Agen
 
   return {
     room: { id: room.id, name: room.name },
+    event: { id: room.event_id, name: room.event_name, accent: room.accent, timezone: room.timezone },
     agent: {
       id: room.agent_id,
       fingerprint: room.fingerprint,

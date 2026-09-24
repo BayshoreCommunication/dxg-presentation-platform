@@ -66,6 +66,8 @@ export const GROUPS: {
        * talk to open and led nowhere.
        */
       { label: "Review presentations", href: "/events/:id/review", icon: "review" },
+      // Every file of the event in one list (FR-FILE-005, D-079).
+      { label: "Files", href: "/events/:id/files", icon: "folder" },
       { label: "Communications", href: "/events/:id/comms", icon: "mail" },
       { label: "Archive builder", href: "/events/:id/archive", icon: "archive" },
     ],
