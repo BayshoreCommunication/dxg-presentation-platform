@@ -3076,3 +3076,5 @@ Files, Room Agent, create event with its date picker, change password; switching
 look unchanged. Speaker portal stays light.
 **Same day, D-083:** both themes now share the dark theme's sizes (one geometry block; theme blocks are colour-only),
 so toggling changes colour and nothing moves — measured identical on the command center and Files.
+**Same day, D-084:** the speaker portal has the same dark theme and shared sizes; a Light / Dark / Match system switch
+pinned bottom-left on every portal page. Checked on sign-in (identical geometry, choice persists); upload page type-checked only.

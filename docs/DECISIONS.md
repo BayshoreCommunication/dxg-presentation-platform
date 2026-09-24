@@ -1665,3 +1665,15 @@ in light colours.
 Verified by measuring 18 elements on the command center and 15 on Files in both themes: identical position and size,
 and identical page height. **Rule going forward:** a theme block may set colours, shadows and radii, never a height,
 padding, margin, font size, weight or border width.
+
+## D-084 (2026-09-24): The speaker portal wears the same themes — Status: ACCEPTED (Travis's call)
+D-082 left the speaker portal light. It now has the same dark theme and the same shared sizes (D-083) as the control
+center: the dark colour block and the shared-geometry block are copied verbatim into
+`apps/speaker-portal/app/globals.css`, with `lib/theme.ts` copied alongside, and a note in each to keep them in step
+(there is no shared UI package yet — `packages/ui` is unbuilt). The portal has no settings menu, so a small
+Light / Dark / Match system switch is pinned to the bottom-left corner of every portal page, sign-in included. The portal is its own origin, so
+a speaker's choice is remembered there independently of any staff choice.
+
+Verified on the sign-in page: 8 elements measured identical in both themes; the choice applies at once and survives a
+reload. The signed-in upload page uses only classes already verified on the control center (card, chip, lane, bar,
+button); it was type-checked, not walked, because it needs a presenter access code.
