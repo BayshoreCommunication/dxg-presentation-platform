@@ -504,6 +504,8 @@ export type SpeakerRow = {
   talks: number;
   approved: number;
   with_files: number;
+  /** The last email this speaker was sent (D-086); null when never emailed. */
+  last_email: { status: string; at: string; to: string; count: number } | null;
 };
 
 export type DuplicatePair = {
@@ -518,6 +520,14 @@ export type DuplicatePair = {
 
 export const getSpeakers = (eventId: string, q = "") =>
   request<{ items: SpeakerRow[] }>(`/events/${eventId}/speakers?q=${encodeURIComponent(q)}`);
+
+export type NewSpeakerInput = { name: string; email: string; organization: string; slot_id?: string };
+
+export const addSpeaker = (eventId: string, input: NewSpeakerInput) =>
+  request<{ speaker_id: string; created: boolean; slot_id: string | null }>(`/events/${eventId}/speakers`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
 
 /* ── event details tabs (D-063) ────────────────────────────────────────── */
 
@@ -586,6 +596,12 @@ export const mergeSpeakers = (speakerId: string, into: string) =>
     `/speakers/${speakerId}/merge`,
     { method: "POST", body: JSON.stringify({ into }) },
   );
+
+/** Emails one speaker their upload link — once; a second call is refused (D-086). */
+export const sendUploadLink = (eventId: string, speakerId: string) =>
+  request<{ communication_id: string; to: string }>(`/events/${eventId}/speakers/${speakerId}/send-link`, {
+    method: "POST",
+  });
 
 export const inviteSpeaker = (speakerId: string) =>
   request<{ token: string; url: string }>(`/speakers/${speakerId}/invite`, { method: "POST" });

@@ -156,6 +156,7 @@ const LINES: Record<string, string> = {
   list: "M5.333 4h8M5.333 8h8M5.333 12h8M2.667 4h.006M2.667 8h.006M2.667 12h.006",
   filter: "M2.667 3.333h10.666L9.333 8.667v4l-2.666 1.333V8.667Z",
   more: "M8 3.333h.006M8 8h.006M8 12.667h.006",
+  send: "M14 2 7.333 8.667M14 2 9.667 14 7.333 8.667 2 6.333Z",
 };
 
 export type IconName = keyof typeof GLYPHS | keyof typeof LINES;

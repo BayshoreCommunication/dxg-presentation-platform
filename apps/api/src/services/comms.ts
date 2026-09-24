@@ -268,6 +268,71 @@ export async function recipientsFor(
     .filter((row) => (missingOnly ? row.status === "missing" : true));
 }
 
+type QueueInput = {
+  eventId: string;
+  event: { client_id: string; name: string; deadline: string | null; timezone: string };
+  template: TemplateRow;
+  recipient: { speaker_id: string; name: string; email: string; talk_title: string; room: string | null; starts_at: string };
+};
+
+/**
+ * One speaker's email: a fresh personal link, the template rendered for them, a
+ * `communications` row (the delivery log and the "already sent?" record) and an outbox
+ * entry the dispatcher delivers. Shared by the batch and the single send (D-086).
+ */
+async function queueInvitation(tx: pg.PoolClient, input: QueueInput): Promise<string> {
+  // Each recipient gets their own link; a batch never contains a shared URL.
+  const token = randomUUID();
+  await tx.query(
+    `INSERT INTO pmp.speaker_tokens (speaker_id, event_id, client_id, kind, token_hash, expires_at)
+     VALUES ($1,$2,$3,'magic_link',$4, now() + interval '30 days')`,
+    [input.recipient.speaker_id, input.eventId, input.event.client_id, hashToken(token)],
+  );
+
+  const rendered = renderTemplate(input.template, {
+    speaker_first: firstName(input.recipient.name),
+    speaker_name: input.recipient.name,
+    event_name: input.event.name,
+    talk_title: input.recipient.talk_title,
+    room: input.recipient.room ?? "TBC",
+    // On the event's clock (D-072). This was the UTC time with no zone, so a 10:30
+    // New York session was mailed out as "14:30".
+    session_time: formatSessionTime(input.recipient.starts_at, input.event.timezone),
+    // Worded exactly as the speaker portal shows it, not a raw "2027-03-01".
+    deadline: input.event.deadline ? formatDeadline(input.event.deadline, input.event.timezone) : "the published deadline",
+    // Where speakers actually reach the portal (D-080) — it was hard-coded to localhost,
+    // so every production email would have carried a link that goes nowhere.
+    upload_link: `${PORTAL_BASE}/t/${token}`,
+  });
+
+  const { rows: comm } = await tx.query<{ id: string }>(
+    `INSERT INTO pmp.communications (event_id, client_id, speaker_id, template_id, to_address, subject, body, status)
+     VALUES ($1,$2,$3,$4,$5::citext,$6,$7,'queued') RETURNING id`,
+    [
+      input.eventId,
+      input.event.client_id,
+      input.recipient.speaker_id,
+      input.template.id,
+      input.recipient.email,
+      rendered.subject,
+      // Kept for the archive (D-069) without the sign-in link: the token in it logs the
+      // speaker in for 30 days, and the stored copy ends up in the client's package.
+      rendered.body.replaceAll(token, "[personal link removed]"),
+    ],
+  );
+
+  // Delivery is a side effect: it goes through the outbox, never the request.
+  await tx.query(`INSERT INTO pmp.outbox (topic, payload) VALUES ('email.send', $1)`, [
+    JSON.stringify({
+      communication_id: comm[0]!.id,
+      to: input.recipient.email,
+      subject: rendered.subject,
+      body: rendered.body,
+    }),
+  ]);
+  return comm[0]!.id;
+}
+
 export type SendResult = {
   queued: number;
   skipped: { reason: string; count: number }[];
@@ -337,55 +402,7 @@ export async function sendBatch(
       continue;
     }
 
-    // Each recipient gets their own link; a batch never contains a shared URL.
-    const token = randomUUID();
-    await tx.query(
-      `INSERT INTO pmp.speaker_tokens (speaker_id, event_id, client_id, kind, token_hash, expires_at)
-       VALUES ($1,$2,$3,'magic_link',$4, now() + interval '30 days')`,
-      [recipient.speaker_id, input.eventId, event.client_id, hashToken(token)],
-    );
-
-    const rendered = renderTemplate(template, {
-      speaker_first: firstName(recipient.name),
-      speaker_name: recipient.name,
-      event_name: event.name,
-      talk_title: recipient.talk_title,
-      room: recipient.room ?? "TBC",
-      // On the event's clock (D-072). This was the UTC time with no zone, so a 10:30
-      // New York session was mailed out as "14:30".
-      session_time: formatSessionTime(recipient.starts_at, event.timezone),
-      // Worded exactly as the speaker portal shows it, not a raw "2027-03-01".
-      deadline: event.deadline ? formatDeadline(event.deadline, event.timezone) : "the published deadline",
-      // Where speakers actually reach the portal (D-080) — it was hard-coded to localhost,
-      // so every production email would have carried a link that goes nowhere.
-      upload_link: `${PORTAL_BASE}/t/${token}`,
-    });
-
-    const { rows: comm } = await tx.query<{ id: string }>(
-      `INSERT INTO pmp.communications (event_id, client_id, speaker_id, template_id, to_address, subject, body, status)
-       VALUES ($1,$2,$3,$4,$5::citext,$6,$7,'queued') RETURNING id`,
-      [
-        input.eventId,
-        event.client_id,
-        recipient.speaker_id,
-        template.id,
-        recipient.email,
-        rendered.subject,
-        // Kept for the archive (D-069) without the sign-in link: the token in it logs the
-        // speaker in for 30 days, and the stored copy ends up in the client's package.
-        rendered.body.replaceAll(token, "[personal link removed]"),
-      ],
-    );
-
-    // Delivery is a side effect: it goes through the outbox, never the request.
-    await tx.query(`INSERT INTO pmp.outbox (topic, payload) VALUES ('email.send', $1)`, [
-      JSON.stringify({
-        communication_id: comm[0]!.id,
-        to: recipient.email,
-        subject: rendered.subject,
-        body: rendered.body,
-      }),
-    ]);
+    await queueInvitation(tx, { eventId: input.eventId, event, template, recipient: { ...recipient, email: recipient.email } });
     queued += 1;
   }
 
@@ -403,6 +420,138 @@ export async function sendBatch(
     queued,
     skipped: [...skipped.entries()].map(([reason, count]) => ({ reason, count })),
   });
+}
+
+/** What the Speakers screen shows about the last email a speaker was sent (D-086). */
+export type LastEmail = { status: string; at: string; to: string; count: number };
+
+/** The statuses that mean the email did not reach the speaker, so sending again is not a repeat. */
+const UNDELIVERED = ["bounced", "complained", "failed"];
+
+/**
+ * Emails one speaker their upload link, with the event's invitation template (D-086).
+ *
+ * "Send upload link" used to issue a link and show it in a toast — nothing was sent,
+ * and nothing recorded that the speaker had been contacted. It now goes through the
+ * same path as a batch (personal link, rendered template, communications row, outbox),
+ * so it is in the delivery log and its status moves queued → sent → delivered.
+ *
+ * Sent once per speaker, never again (Travis's call): a second request is refused, and
+ * the screen disables the button once the email has gone. Only an email that failed
+ * before leaving (status `failed`) does not count. A bounce is refused too — the
+ * address needs fixing, not another attempt.
+ */
+export async function sendUploadLink(
+  tx: pg.PoolClient,
+  actor: Actor,
+  input: { eventId: string; speakerId: string },
+): Promise<Result<{ communication_id: string; to: string }, DomainError>> {
+  const { rows: eventRows } = await tx.query<{
+    rooms: string;
+    days: string;
+    client_id: string;
+    name: string;
+    deadline: string | null;
+    timezone: string;
+  }>(
+    `SELECT (SELECT count(*)::text FROM pmp.rooms WHERE event_id = e.id) AS rooms,
+            (SELECT count(*)::text FROM pmp.event_days WHERE event_id = e.id) AS days,
+            e.client_id, e.name, (e.settings ->> 'upload_deadline') AS deadline, e.timezone
+       FROM pmp.events e WHERE e.id = $1`,
+    [input.eventId],
+  );
+  const event = eventRows[0];
+  if (!event) return err({ code: "comms.event_not_found", message: "No such event." });
+  if (Number(event.rooms) === 0 || Number(event.days) === 0) {
+    return err({
+      code: "comms.event_incomplete",
+      message: "Upload links can't be sent until the event has at least one day and one room.",
+    });
+  }
+
+  // The speaker and their earliest talk — the invitation names one.
+  const { rows: speakerRows } = await tx.query<{
+    name: string;
+    email: string | null;
+    talk_title: string | null;
+    room: string | null;
+    starts_at: string | null;
+  }>(
+    `SELECT sp.full_name AS name, sp.email::text AS email,
+            t.title AS talk_title, t.room, t.starts_at
+       FROM pmp.speakers sp
+       LEFT JOIN LATERAL (
+         SELECT s.title, r.name AS room, se.starts_at
+           FROM pmp.speaker_assignments sa
+           JOIN pmp.slots s     ON s.id = sa.slot_id
+           JOIN pmp.sessions se ON se.id = s.session_id
+           LEFT JOIN pmp.rooms r ON r.id = se.room_id
+          WHERE sa.speaker_id = sp.id AND se.session_state <> 'canceled'
+          ORDER BY se.starts_at
+          LIMIT 1
+       ) t ON true
+      WHERE sp.id = $1 AND sp.event_id = $2 AND sp.merged_into IS NULL`,
+    [input.speakerId, input.eventId],
+  );
+  const speaker = speakerRows[0];
+  if (!speaker) return err({ code: "comms.speaker_not_found", message: "No such speaker on this event." });
+  if (!speaker.email) {
+    return err({ code: "comms.no_email", message: `${speaker.name} has no email address. Add one first.` });
+  }
+  if (!speaker.talk_title || !speaker.starts_at) {
+    return err({
+      code: "comms.no_talk",
+      message: `${speaker.name} is not on any presentation yet, so there is nothing to upload for. Assign a talk first.`,
+    });
+  }
+
+  const { rows: history } = await tx.query<{ status: string; at: string; to_address: string }>(
+    `SELECT status, COALESCE(sent_at, created_at)::text AS at, to_address::text
+       FROM pmp.communications WHERE speaker_id = $1 ORDER BY created_at DESC`,
+    [input.speakerId],
+  );
+  if (history.some((row) => row.status === "bounced" || row.status === "complained")) {
+    return err({
+      code: "comms.bounced_conflict",
+      message: `An earlier email to ${speaker.name} bounced. Check the address before sending again.`,
+    });
+  }
+  const reached = history.find((row) => !UNDELIVERED.includes(row.status));
+  if (reached) {
+    return err({
+      code: "comms.already_sent_conflict",
+      message: `${speaker.name} was already emailed an upload link (${reached.status}, to ${reached.to_address}).`,
+    });
+  }
+
+  const templates = await ensureTemplates(tx, input.eventId);
+  const template = templates[0];
+  if (!template) return err({ code: "comms.template_not_found", message: "This event has no invitation template." });
+
+  const communicationId = await queueInvitation(tx, {
+    eventId: input.eventId,
+    event,
+    template,
+    recipient: {
+      speaker_id: input.speakerId,
+      name: speaker.name,
+      email: speaker.email,
+      talk_title: speaker.talk_title,
+      room: speaker.room,
+      starts_at: speaker.starts_at,
+    },
+  });
+
+  await appendAudit(tx, {
+    partitionId: input.eventId,
+    clientId: event.client_id,
+    actorUserId: actor.id,
+    action: "comms.upload_link_sent",
+    subjectType: "speaker",
+    subjectId: input.speakerId,
+    detail: { communication_id: communicationId, template_id: template.id },
+  });
+  return ok({ communication_id: communicationId, to: speaker.email });
 }
 
 export type DeliveryRow = {

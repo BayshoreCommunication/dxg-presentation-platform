@@ -1677,3 +1677,37 @@ a speaker's choice is remembered there independently of any staff choice.
 Verified on the sign-in page: 8 elements measured identical in both themes; the choice applies at once and survives a
 reload. The signed-in upload page uses only classes already verified on the control center (card, chip, lane, bar,
 button); it was type-checked, not walked, because it needs a presenter access code.
+
+## D-085 (2026-09-24): Speakers can be added from the Speakers screen — Status: ACCEPTED (Travis's call)
+"+ Add speaker" was a disabled placeholder pointing at M1-8; a speaker could only arrive with the agenda (import row
+or a presenter typed onto a talk). It is now `POST /events/{id}/speakers` `{name, email?, organization?, slot_id?}`
+(`addSpeaker` in `services/agendaEdit.ts`), behind the same rule as agenda edits: presentation manager or above,
+audited, refused on an archived event by the D-062 middleware. Matching is the import's — by email, else by name.
+Without a talk, a match is refused (`409 speakers.conflict`, "X already has that email on this event") rather than
+silently returning the existing record. With a talk, an existing speaker is simply assigned (409 only if they already
+present it); a new one is created and assigned via `syncPresenters`. Audit: `speakers.created` or
+`slot.presenter_added`. The form offers every talk outside a canceled session, or "Not assigned yet".
+Rest of M1-8 (release-permission editing, assignment roles, replacement) is still open.
+
+Verified in the browser on MedTech: a duplicate email is refused inside the form; a new speaker put onto
+"Sensor Talk" appears in the list with 1 talk (test row then deleted from pmp_dev). No invariant test yet.
+
+## D-086 (2026-09-24): "Send upload link" emails the speaker, and the screen shows it was sent — Status: ACCEPTED (Travis's call)
+The per-speaker button issued a link and showed it in a toast: nothing was emailed and nothing recorded the contact.
+It is now **Email upload link** → `POST /events/{id}/speakers/{speakerId}/send-link` (`sendUploadLink` in
+`services/comms.ts`), which uses the event's invitation template and the same path as a batch (personal 30-day
+link, `communications` row, outbox → dispatcher) — the per-recipient part of `sendBatch` became the shared
+`queueInvitation`. The speaker's earliest non-canceled talk fills the template; no email → 422 `comms.no_email`,
+no talk → 422 `comms.no_talk`, an earlier bounce → 409.
+
+**Sent once, never again (Travis's call, same day):** there is no resend. If any earlier email to the speaker has any
+status other than `failed`, the API refuses with `409 comms.already_sent_conflict` (a bounce is refused as
+`comms.bounced_conflict` — fix the address instead). The Speakers list returns `last_email` `{status, at, to, count}`;
+the screen shows it in an "Upload link" column as a status only (Not sent / Queued / Sent / Delivered / Bounced — no
+date). The last column is headed **Action** and holds icon buttons with a hover label (`HoverTip`, portalled like
+InfoTip): a paper plane, "Email upload link", shown only until the speaker has been emailed — then it is gone, not
+disabled — and a clipboard, "Copy upload link" (a link to send by hand; not emailed, not logged). Audit: `comms.upload_link_sent`.
+
+Verified 2026-09-24: speaker "Rakibul" (irakibul568@gmail.com) added to Sensor Talk on MedTech and emailed through
+real SES (a one-off dispatcher with `MAIL_TRANSPORT=ses`, profile `rfpilot`; SES message id recorded, status `sent`);
+the dev dispatcher was then put back on `file`. A second send returned 409. Status stops at `sent` locally — delivered/opened need the SNS webhook on a public URL.

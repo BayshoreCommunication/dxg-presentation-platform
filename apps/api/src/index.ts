@@ -86,11 +86,13 @@ import {
   deletePresentation,
   addPresenter,
   removePresenter,
+  addSpeaker,
 } from "./services/agendaEdit.ts";
 import {
   ensureTemplates, updateTemplate, MERGE_FIELDS,
   recipientsFor,
   sendBatch,
+  sendUploadLink,
   deliveryLog,
   deliveryStats,
   recordDeliveryEvent,
@@ -730,6 +732,11 @@ app.delete(
   ),
 );
 
+app.post(
+  "/api/v1/events/:eventId/speakers",
+  agendaRoute(201, (tx, actor, req) => addSpeaker(tx, actor, String(req.params.eventId), bodyOf(req))),
+);
+
 app.get("/api/v1/events/:eventId/talks", async (req, res) => {
   const actor = actorFrom(req);
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
@@ -1025,7 +1032,13 @@ app.get("/api/v1/events/:eventId/speakers", async (req, res) => {
       `SELECT sp.id, sp.full_name, sp.email::text, sp.organization, sp.release_permission,
               count(DISTINCT sa.id)::int AS talks,
               count(DISTINCT fv.file_id) FILTER (WHERE fv.review_state = 'approved')::int AS approved,
-              count(DISTINCT f.id)::int AS with_files
+              count(DISTINCT f.id)::int AS with_files,
+              -- The last email this speaker was sent, so nobody is emailed twice by accident (D-086).
+              (SELECT json_build_object('status', c.status, 'at', COALESCE(c.sent_at, c.created_at),
+                                        'to', c.to_address::text,
+                                        'count', (SELECT count(*) FROM pmp.communications x WHERE x.speaker_id = sp.id))
+                 FROM pmp.communications c WHERE c.speaker_id = sp.id
+                ORDER BY c.created_at DESC LIMIT 1) AS last_email
          FROM pmp.speakers sp
          LEFT JOIN pmp.speaker_assignments sa ON sa.speaker_id = sp.id
          LEFT JOIN pmp.files f ON f.slot_id = sa.slot_id
@@ -2308,6 +2321,22 @@ app.patch("/api/v1/events/:eventId/comms/templates/:templateId", async (req, res
     return res.status(result.error.code === "comms.template_invalid" ? 422 : statusFor(result.error)).json(result.error);
   }
   return res.json(result.value);
+});
+
+/** Email one speaker their upload link, once (D-086). */
+app.post("/api/v1/events/:eventId/speakers/:speakerId/send-link", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  const eventId = String(req.params.eventId);
+  const result = await withScope(scopeFor(req, eventId), (tx) =>
+    sendUploadLink(tx, actor, { eventId, speakerId: String(req.params.speakerId) }),
+  );
+  if (!result.ok) {
+    const code = result.error.code;
+    const status = code === "comms.no_email" || code === "comms.no_talk" ? 422 : statusFor(result.error);
+    return res.status(status).json(result.error);
+  }
+  return res.status(201).json(result.value);
 });
 
 app.post("/api/v1/events/:eventId/comms/send", async (req, res) => {

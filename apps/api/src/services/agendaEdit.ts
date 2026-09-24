@@ -534,6 +534,98 @@ export async function addPresenter(
 }
 
 /**
+ * Adds a speaker from the Speakers screen, optionally straight onto a presentation.
+ *
+ * Until now a speaker could only arrive with the agenda — an import row or a presenter
+ * typed onto a talk. A speaker confirmed before their talk is placed had nowhere to go.
+ * Matching is the import's: by email when there is one, else by name. Without a talk,
+ * a match is refused rather than silently returning the existing record, so the person
+ * adding learns the speaker was already here. With a talk, a match is simply assigned.
+ */
+export async function addSpeaker(
+  tx: pg.PoolClient,
+  actor: Actor,
+  eventId: string,
+  input: PresenterInput & { slot_id?: string },
+): Promise<Result<{ speaker_id: string; created: boolean; slot_id: string | null }, DomainError>> {
+  if (!hasAnyRole(actor, EDITORS)) return err(forbidden("Adding a speaker"));
+  const event = await eventOf(tx, eventId);
+  if (!event) return err(notFound("event"));
+  const name = input.name?.trim() ?? "";
+  const email = input.email?.trim() ?? "";
+  const organization = input.organization?.trim() ?? "";
+  const slotId = input.slot_id?.trim() || null;
+  if (!name) return err({ code: "agenda.incomplete", message: "A speaker needs a name." });
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return err({ code: "agenda.incomplete", message: "That email address does not look complete." });
+  }
+  if (slotId && !(await slotOf(tx, eventId, slotId))) return err(notFound("presentation"));
+
+  const { rows: found } = await tx.query<{ id: string; full_name: string }>(
+    email
+      ? `SELECT id, full_name FROM pmp.speakers WHERE event_id = $1 AND lower(email::text) = lower($2) AND merged_into IS NULL`
+      : `SELECT id, full_name FROM pmp.speakers WHERE event_id = $1 AND lower(full_name) = lower($2) AND merged_into IS NULL`,
+    [eventId, email || name],
+  );
+  const existing = found[0];
+
+  if (!slotId) {
+    if (existing) {
+      return err({
+        code: "speakers.conflict",
+        message: email
+          ? `${existing.full_name} already has ${email} on this event.`
+          : `${existing.full_name} is already a speaker on this event.`,
+      });
+    }
+    const { rows } = await tx.query<{ id: string }>(
+      `INSERT INTO pmp.speakers (client_id, event_id, email, full_name, organization)
+       VALUES ($1,$2,NULLIF($3,'')::citext,$4,NULLIF($5,'')) RETURNING id`,
+      [event.client_id, eventId, email, name, organization],
+    );
+    const speakerId = rows[0]!.id;
+    await appendAudit(tx, {
+      partitionId: eventId,
+      clientId: event.client_id,
+      actorUserId: actor.id,
+      action: "speakers.created",
+      subjectType: "speaker",
+      subjectId: speakerId,
+      detail: { via: "speakers_screen" },
+    });
+    return ok({ speaker_id: speakerId, created: true, slot_id: null });
+  }
+
+  if (existing) {
+    const { rowCount } = await tx.query(
+      `SELECT 1 FROM pmp.speaker_assignments WHERE speaker_id = $1 AND slot_id = $2`,
+      [existing.id, slotId],
+    );
+    if (rowCount) {
+      return err({ code: "speakers.conflict", message: `${existing.full_name} already presents that talk.` });
+    }
+  }
+  const touched = await syncPresenters(tx, {
+    eventId,
+    clientId: event.client_id,
+    slotId,
+    presenters: [{ name, email }],
+    organization,
+  });
+  const speakerId = [...touched][0]!;
+  await appendAudit(tx, {
+    partitionId: eventId,
+    clientId: event.client_id,
+    actorUserId: actor.id,
+    action: existing ? "slot.presenter_added" : "speakers.created",
+    subjectType: existing ? "slot" : "speaker",
+    subjectId: existing ? slotId : speakerId,
+    detail: { speaker_ids: [speakerId], slot_id: slotId, via: "speakers_screen" },
+  });
+  return ok({ speaker_id: speakerId, created: !existing, slot_id: slotId });
+}
+
+/**
  * Takes a presenter off a presentation. The speaker record stays — they may give
  * other talks, and their history is theirs — only this assignment goes.
  */
