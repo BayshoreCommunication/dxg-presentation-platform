@@ -125,6 +125,8 @@ main{flex:1;min-width:0;min-height:100vh;background:var(--card);box-shadow:inset
 .ibtn[data-state="open"]{background:rgba(0,0,0,.05)}
 .ibtn:active{transform:scale(.97)}
 .ibtn.toggle:hover{background:rgba(0,0,0,.05)}
+.ibtn.toggle.open svg{transform:rotate(180deg)}
+.logo .ibtn.toggle{margin:-4px}
 .ibtn.bell svg{transform-origin:top}
 .ibtn.bell:hover svg{animation:ring .6s ease-in-out}
 .ibtn.gear svg{transition:transform .5s var(--ease-out-expo)}

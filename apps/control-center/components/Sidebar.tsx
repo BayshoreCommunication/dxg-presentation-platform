@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { usePathname, useParams, useRouter } from "next/navigation";
-import { Icon } from "@/components/Icon";
+import { Glyph, Icon } from "@/components/Icon";
 import { logout } from "@/lib/api";
 import type { Principal, EventRow } from "@/lib/api";
 
@@ -122,7 +122,16 @@ function dayLabel(event: EventRow | undefined): string {
   return `Day ${Math.round((today - startsAt) / day) + 1}`;
 }
 
-export function Sidebar({ principal, events }: { principal: Principal | null; events: EventRow[] }) {
+export function Sidebar({
+  principal,
+  events,
+  onCollapse,
+}: {
+  principal: Principal | null;
+  events: EventRow[];
+  /** Kravio keeps the collapse control in the sidebar's own logo row (D-078). */
+  onCollapse?: () => void;
+}) {
   const pathname = usePathname();
   const params = useParams<{ id?: string }>();
   const router = useRouter();
@@ -144,6 +153,11 @@ export function Sidebar({ principal, events }: { principal: Principal | null; ev
           <span className="mark" aria-hidden="true">D</span>
           <b>DXG·PM</b>
         </Link>
+        {onCollapse && (
+          <button type="button" className="ibtn toggle" aria-label="Collapse sidebar" onClick={onCollapse}>
+            <Glyph name="sidebar" />
+          </button>
+        )}
       </div>
       <div className="sidebody">
         {/*

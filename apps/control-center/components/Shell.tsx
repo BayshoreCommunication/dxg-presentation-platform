@@ -40,7 +40,7 @@ export function Shell({
   const crumbs = breadcrumb(pathname, events);
 
   return (
-    <StaffFrame crumbs={crumbs} sidebar={<Sidebar principal={principal} events={events} />}>
+    <StaffFrame crumbs={crumbs} principal={principal} events={events}>
       {children}
     </StaffFrame>
   );
@@ -58,11 +58,13 @@ const SIDEBAR_KEY = "dxg.sidebar";
  */
 function StaffFrame({
   crumbs,
-  sidebar,
+  principal,
+  events,
   children,
 }: {
   crumbs: { label: string; href?: string }[];
-  sidebar: React.ReactNode;
+  principal: Principal | null;
+  events: EventRow[];
   children: React.ReactNode;
 }) {
   const [collapsed, setCollapsed] = useState(false);
@@ -75,33 +77,28 @@ function StaffFrame({
     }
   }, []);
 
-  const toggle = () => {
-    setCollapsed((value) => {
-      const next = !value;
-      try {
-        window.localStorage.setItem(SIDEBAR_KEY, next ? "collapsed" : "open");
-      } catch {
-        // Not remembered, still toggled.
-      }
-      return next;
-    });
+  const setAndRemember = (next: boolean) => {
+    setCollapsed(next);
+    try {
+      window.localStorage.setItem(SIDEBAR_KEY, next ? "collapsed" : "open");
+    } catch {
+      // Not remembered, still toggled.
+    }
   };
 
   return (
     <div className={collapsed ? "shell sidebar-collapsed" : "shell"}>
-      {sidebar}
+      <Sidebar principal={principal} events={events} onCollapse={() => setAndRemember(true)} />
       <main>
         <header className="topbar">
           <div className="left">
-            <button
-              type="button"
-              className="ibtn toggle"
-              aria-label={collapsed ? "Open sidebar" : "Collapse sidebar"}
-              aria-expanded={!collapsed}
-              onClick={toggle}
-            >
-              <Glyph name="sidebar" />
-            </button>
+            {/* As in Kravio, the top bar only offers a way back once the sidebar is shut;
+                the glyph is mirrored to point the way the rail will open. */}
+            {collapsed && (
+              <button type="button" className="ibtn toggle open" aria-label="Open sidebar" onClick={() => setAndRemember(false)}>
+                <Glyph name="sidebar" />
+              </button>
+            )}
             <nav className="crumbs" aria-label="Breadcrumb">
               {crumbs.map((crumb, index) => {
                 const last = index === crumbs.length - 1;

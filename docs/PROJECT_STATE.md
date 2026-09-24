@@ -3023,3 +3023,8 @@ and the right side has its bell and settings glyphs (copied path for path). Sett
 and Two-factor authentication. **The bell has nothing behind it** — the product raises no notifications —
 so it opens a panel saying "No notifications yet" rather than a made-up feed.
 Then the bell was hidden at Travis's request until notifications exist; its glyph and styles stay for then.
+Sidebar and account-menu icons are now two-tone like Kravio's: `#D9D9D9` main shape, `#F7F7F7` inner
+details, 1 px `#4B5563` outline. Portfolio, the Speaker Ready Room group glyph and the square and circle
+bodies are Kravio's own paths; the rest are drawn on the same grid in the same recipe.
+The collapse control moved into the sidebar's logo row, as in Kravio; the top bar shows a mirrored "Open
+sidebar" button only while the sidebar is shut.
