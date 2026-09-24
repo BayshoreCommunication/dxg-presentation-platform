@@ -602,7 +602,7 @@ export async function addSpeaker(
       [existing.id, slotId],
     );
     if (rowCount) {
-      return err({ code: "speakers.conflict", message: `${existing.full_name} already presents that talk.` });
+      return err({ code: "speakers.conflict", message: `${existing.full_name} already presents that presentation.` });
     }
   }
   const touched = await syncPresenters(tx, {

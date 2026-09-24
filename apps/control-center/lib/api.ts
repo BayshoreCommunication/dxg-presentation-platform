@@ -504,6 +504,9 @@ export type SpeakerRow = {
   talks: number;
   approved: number;
   with_files: number;
+  /** Presentations with at least one file / with an approved file (D-087). */
+  talks_with_files: number;
+  talks_approved: number;
   /** The last email this speaker was sent (D-086); null when never emailed. */
   last_email: { status: string; at: string; to: string; count: number } | null;
 };
@@ -988,10 +991,12 @@ export type CommRecipient = {
   speaker_id: string;
   name: string;
   email: string | null;
+  /** Every presentation the email is about, joined with " · " (D-087). */
   talk_title: string;
   room: string | null;
   starts_at: string;
   status: string;
+  talks: { title: string; room: string | null; starts_at: string; status: string }[];
   bounced: boolean;
   already_sent: boolean;
 };

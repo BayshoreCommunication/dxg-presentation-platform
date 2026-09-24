@@ -57,7 +57,8 @@ export function SpeakersView({
     }
   }
 
-  const missing = rows.filter((row) => row.with_files === 0);
+  // Anyone with a presentation still missing a file — what "Bulk remind" chases.
+  const missing = rows.filter((row) => row.talks > 0 && row.talks_with_files < row.talks);
 
   async function emailLink(row: SpeakerRow) {
     setPending(`${row.id}:send`);
@@ -81,13 +82,16 @@ export function SpeakersView({
   }
 
   function statusOf(row: SpeakerRow): { status: string; label: string } {
-    if (row.talks === 0) return { status: "canceled", label: "No talks" };
-    if (row.with_files === 0)
-      return { status: "missing", label: "Not submitted" };
-    if (row.approved >= row.talks)
-      return { status: "synchronized_onsite", label: "Approved" };
+    if (row.talks === 0) return { status: "canceled", label: "No presentations" };
+    if (row.talks_with_files === 0) return { status: "missing", label: "Not submitted" };
+    // Some presentations have a file and some do not (D-087) — "Submitted" hid the gap.
+    if (row.talks_with_files < row.talks) {
+      return { status: "needs_revision", label: `${row.talks_with_files} of ${row.talks} submitted` };
+    }
+    if (row.talks_approved >= row.talks) return { status: "synchronized_onsite", label: "Approved" };
     return { status: "submitted", label: "Submitted" };
   }
+
 
   return (
     <>
@@ -231,7 +235,7 @@ export function SpeakersView({
                 <tr>
                   <th>Speaker</th>
                   <th>Organization</th>
-                  <th>Talks</th>
+                  <th>Presentations</th>
                   <th>Status</th>
                   <th>Upload link</th>
                   <th style={{ textAlign: "right" }}>Action</th>
@@ -406,7 +410,7 @@ function AddSpeakerDialog({
       onAdded(
         result.created
           ? `${name.trim()} added${talk ? ` to ${talk.label}` : ""}`
-          : `${name.trim()} was already on this event — now on ${talk?.label ?? "that talk"} too`,
+          : `${name.trim()} was already on this event — now on ${talk?.label ?? "that presentation"} too`,
       );
     } catch (caught) {
       setError(

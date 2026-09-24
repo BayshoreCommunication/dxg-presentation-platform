@@ -56,7 +56,7 @@ before(async () => {
 
 after(async () => {
   if (presenterCookie) {
-    await fetch(`${API}/auth/logout`, { method: "POST", headers: { cookie: presenterCookie } });
+    await fetch(`${API}/portal/logout`, { method: "POST", headers: { cookie: presenterCookie } });
   }
   if (staffCookie) await fetch(`${API}/auth/logout`, { method: "POST", headers: { cookie: staffCookie } });
   if (clientCookie) await fetch(`${API}/auth/logout`, { method: "POST", headers: { cookie: clientCookie } });
@@ -97,6 +97,46 @@ describe("a presenter session is not a staff session", () => {
       const response = await fetch(`${API}${path}`);
       assert.equal(response.status, 401, `${path} should need a session`);
     }
+  });
+});
+
+describe("staff and presenter sessions live side by side (D-088)", () => {
+  /** The token alone, whatever cookie name it arrived under. */
+  const tokenOf = (cookie: string) => cookie.split(";")[0]!.split("=").slice(1).join("=");
+
+  test("a presenter signs in under their own cookie, not the staff one", (t: TestContext) => {
+    if (!up || !presenterCookie) return t.skip("API not running");
+    assert.match(presenterCookie, /^pmp_presenter=/);
+    assert.doesNotMatch(presenterCookie, /pmp_session=/);
+  });
+
+  test("one browser holding both cookies is staff on staff routes and the presenter on the portal", async (t: TestContext) => {
+    if (!up || !presenterCookie) return t.skip("API not running");
+    const both = `${staffCookie}; ${presenterCookie}`;
+    const staff = await fetch(`${API}/auth/session`, { headers: { cookie: both } });
+    assert.equal(staff.status, 200, "signing into the portal did not end the staff session");
+    const who = (await staff.json()) as { principal: { kind: string } };
+    assert.equal(who.principal.kind, "staff");
+    const portal = await fetch(`${API}/portal/talks`, { headers: { cookie: both } });
+    assert.equal(portal.status, 200);
+  });
+
+  test("a staff session is not a presenter session on the portal", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    assert.equal((await fetch(`${API}/portal/talks`, { headers: { cookie: staffCookie } })).status, 401);
+  });
+
+  test("a presenter token under the staff cookie's name is ignored", async (t: TestContext) => {
+    if (!up || !presenterCookie) return t.skip("API not running");
+    const smuggled = `pmp_session=${tokenOf(presenterCookie)}`;
+    assert.equal((await fetch(`${API}/auth/session`, { headers: { cookie: smuggled } })).status, 401);
+    assert.equal((await fetch(`${API}/events`, { headers: { cookie: smuggled } })).status, 401);
+  });
+
+  test("a staff token under the presenter cookie's name is ignored", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const smuggled = `pmp_presenter=${tokenOf(staffCookie)}`;
+    assert.equal((await fetch(`${API}/portal/talks`, { headers: { cookie: smuggled } })).status, 401);
   });
 });
 

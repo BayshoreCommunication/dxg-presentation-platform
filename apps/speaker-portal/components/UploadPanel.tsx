@@ -12,12 +12,16 @@ import {
 import type { CompleteResult, UploadSession } from "@/lib/api";
 import { formatBytes } from "@pmp/format";
 
-type Phase = "idle" | "hashing" | "uploading" | "paused" | "completing" | "done" | "failed";
+type Phase = "idle" | "selected" | "hashing" | "uploading" | "paused" | "completing" | "done" | "failed";
 
 /**
  * Resumable multipart upload (FR-FILE-002/003, NFR-PERF-02). Parts are uploaded
  * one at a time and the server records each; on resume the client asks which
  * parts already landed and continues from there — never from zero.
+ *
+ * Choosing (or dropping) a file only selects it: the speaker sees its name and size and
+ * submits deliberately. Picking a file used to start the upload at once, so a wrong
+ * click became a new version the team would then review.
  */
 export function UploadPanel({
   slotId,
@@ -32,8 +36,22 @@ export function UploadPanel({
   const [sent, setSent] = useState(0);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
   const pausedRef = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  function select(chosen: File) {
+    setError(null);
+    setFile(chosen);
+    setPhase("selected");
+  }
+
+  function clearSelection() {
+    setFile(null);
+    setPhase("idle");
+    // Lets the same file be chosen again after a cancel.
+    if (inputRef.current) inputRef.current.value = "";
+  }
 
   const totalParts = (session: UploadSession) => Math.max(1, Math.ceil(session.total_bytes / session.part_size));
 
@@ -124,28 +142,78 @@ export function UploadPanel({
     }
   }
 
+  const fileInput = (
+    <input
+      ref={inputRef}
+      type="file"
+      accept=".pptx,.ppt,.pdf,.key"
+      style={{ display: "none" }}
+      onChange={(event) => {
+        const chosen = event.target.files?.[0];
+        if (chosen) select(chosen);
+      }}
+    />
+  );
+
   const percent =
     upload && totalParts(upload) > 0 ? Math.min(100, Math.round((sent / totalParts(upload)) * 100)) : 0;
+
+  if (phase === "selected" && file) {
+    return (
+      <div style={{ border: "1px solid var(--line)", borderRadius: 10, padding: 16 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 13 }}>
+          <span className="mono" style={{ overflowWrap: "anywhere" }}>
+            {file.name}
+          </span>
+          <span className="mono num">{formatBytes(file.size)}</span>
+        </div>
+        <div className="note" style={{ margin: "6px 0 12px" }}>
+          Check this is the right file, then submit it. Nothing has been uploaded yet.
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button className="btn pri" onClick={() => void start(file)}>
+            Submit presentation
+          </button>
+          <button className="btn" onClick={() => inputRef.current?.click()}>
+            Choose a different file
+          </button>
+          <button className="btn" onClick={clearSelection}>
+            Cancel
+          </button>
+        </div>
+        {fileInput}
+      </div>
+    );
+  }
 
   if (phase === "idle" || phase === "failed") {
     return (
       <>
         {error && <div className="err">{error}</div>}
-        <div style={{ border: "2px dashed var(--line)", borderRadius: 10, padding: 26, textAlign: "center" }}>
+        <div
+          style={{
+            border: `2px dashed ${dragging ? "var(--blue)" : "var(--line)"}`,
+            borderRadius: 10,
+            padding: 26,
+            textAlign: "center",
+          }}
+          onDragOver={(event) => {
+            event.preventDefault();
+            setDragging(true);
+          }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={(event) => {
+            event.preventDefault();
+            setDragging(false);
+            const dropped = event.dataTransfer.files?.[0];
+            if (dropped) select(dropped);
+          }}
+        >
           <b>Drag your presentation here</b>
           <div className="note" style={{ margin: "4px 0 10px" }}>
             PPTX preferred · up to 10 GB · uploads resume automatically if your connection drops
           </div>
-          <input
-            ref={inputRef}
-            type="file"
-            accept=".pptx,.ppt,.pdf,.key"
-            style={{ display: "none" }}
-            onChange={(event) => {
-              const chosen = event.target.files?.[0];
-              if (chosen) void start(chosen);
-            }}
-          />
+          {fileInput}
           <button className="btn pri" onClick={() => inputRef.current?.click()}>
             Choose file…
           </button>
@@ -163,6 +231,7 @@ export function UploadPanel({
             setPhase("idle");
             setUpload(null);
             setSent(0);
+            setFile(null);
           }}
         >
           Replace file

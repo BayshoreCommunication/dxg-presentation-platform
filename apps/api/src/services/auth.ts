@@ -20,6 +20,12 @@ const IDLE_MINUTES = { staff: 12 * 60, presenter: 8 * 60 } as const;
 const ABSOLUTE_MINUTES = { staff: 24 * 60, presenter: 24 * 60 } as const;
 
 export const SESSION_COOKIE = "pmp_session";
+/**
+ * Presenters' own cookie (D-088). Staff and presenters share the API origin, so with one
+ * cookie a staff member who opened a speaker link and signed in lost their staff session.
+ * Each cookie now carries only its own kind of session.
+ */
+export const PRESENTER_COOKIE = "pmp_presenter";
 
 export type Principal =
   | {

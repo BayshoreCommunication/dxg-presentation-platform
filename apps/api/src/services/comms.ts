@@ -35,7 +35,9 @@ export const DEFAULT_TEMPLATES = [
     body: [
       "Hi {{speaker_first}},",
       "",
-      "You're presenting at {{event_name}} — {{talk_title}} in {{room}} on {{session_time}}.",
+      "You're presenting at {{event_name}}:",
+      "",
+      "{{presentations}}",
       "",
       "Please upload your presentation by {{deadline}} using your personal secure link. No account is needed.",
       "",
@@ -52,7 +54,11 @@ export const DEFAULT_TEMPLATES = [
     body: [
       "Hi {{speaker_first}},",
       "",
-      "We don't have your presentation for {{talk_title}} yet. The deadline is {{deadline}}.",
+      "We don't have your presentation yet for:",
+      "",
+      "{{presentations}}",
+      "",
+      "The deadline is {{deadline}}.",
       "",
       "{{upload_link}}",
       "",
@@ -73,6 +79,7 @@ export const MERGE_FIELDS = [
   "session_time",
   "deadline",
   "upload_link",
+  "presentations",
 ] as const;
 
 const TEMPLATE_EDITORS = atLeast("presentation_manager");
@@ -172,6 +179,17 @@ export async function ensureTemplates(tx: pg.PoolClient, eventId: string): Promi
   return rows;
 }
 
+/** One presentation a speaker is emailed about. */
+export type RecipientTalk = { title: string; room: string | null; starts_at: string; status: string };
+
+/**
+ * One row per *speaker*, not per presentation (D-087). A speaker on two presentations
+ * used to be two recipients, so a batch sent them two emails with two different links —
+ * the 24-hour guard is read before either is written, so it could not stop the second.
+ * `talks` holds every presentation the email is about (for a reminder, only the ones
+ * still missing a file); `talk_title`, `room` and `starts_at` describe the first, for
+ * screens that show one line.
+ */
 export type Recipient = {
   speaker_id: string;
   name: string;
@@ -180,6 +198,7 @@ export type Recipient = {
   room: string | null;
   starts_at: string;
   status: string;
+  talks: RecipientTalk[];
   bounced: boolean;
   already_sent: boolean;
 };
@@ -244,36 +263,85 @@ export async function recipientsFor(
        JOIN pmp.sessions se ON se.id = s.session_id
        LEFT JOIN pmp.rooms r ON r.id = se.room_id
       WHERE sp.event_id = $1 AND sp.merged_into IS NULL
-      ORDER BY sp.full_name`,
+      ORDER BY sp.full_name, se.starts_at`,
     [eventId, templateId, RESEND_COOLDOWN_HOURS],
   );
 
-  return rows
+  const perTalk = rows
     .map((row) => ({
-      speaker_id: row.speaker_id,
-      name: row.name,
-      email: row.email,
-      talk_title: row.talk_title,
-      room: row.room,
-      starts_at: row.starts_at,
+      row,
       status: deriveTalkStatus({
         sessionState: row.session_state as never,
         eventArchived: false,
         versions: (row.versions ?? []) as never,
         roomCopies: [],
       }),
+    }))
+    // A canceled presentation is nothing to upload for, so no email names it.
+    .filter(({ status }) => status !== "canceled")
+    .filter(({ status }) => (missingOnly ? status === "missing" : true));
+
+  const bySpeaker = new Map<string, Recipient>();
+  for (const { row, status } of perTalk) {
+    const talk: RecipientTalk = { title: row.talk_title, room: row.room, starts_at: row.starts_at, status };
+    const existing = bySpeaker.get(row.speaker_id);
+    if (existing) {
+      existing.talks.push(talk);
+      continue;
+    }
+    bySpeaker.set(row.speaker_id, {
+      speaker_id: row.speaker_id,
+      name: row.name,
+      email: row.email,
+      talk_title: row.talk_title,
+      room: row.room,
+      starts_at: row.starts_at,
+      status,
+      talks: [talk],
       bounced: row.bounced,
       already_sent: row.already_sent,
-    }))
-    .filter((row) => (missingOnly ? row.status === "missing" : true));
+    });
+  }
+  for (const recipient of bySpeaker.values()) {
+    // `starts_at` arrives from pg as a Date, whatever the row type says — compare as time.
+    recipient.talks.sort((a, b) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime());
+    const [first] = recipient.talks;
+    recipient.talk_title = recipient.talks.map((talk) => talk.title).join(" · ");
+    recipient.room = first!.room;
+    recipient.starts_at = first!.starts_at;
+    if (recipient.talks.some((talk) => talk.status === "missing")) recipient.status = "missing";
+  }
+  return [...bySpeaker.values()];
 }
 
 type QueueInput = {
   eventId: string;
   event: { client_id: string; name: string; deadline: string | null; timezone: string };
   template: TemplateRow;
-  recipient: { speaker_id: string; name: string; email: string; talk_title: string; room: string | null; starts_at: string };
+  recipient: { speaker_id: string; name: string; email: string; talks: { title: string; room: string | null; starts_at: string }[] };
 };
+
+/** "A", "A and B", "A, B and C". */
+const listed = (items: string[]): string =>
+  items.length <= 1 ? (items[0] ?? "") : `${items.slice(0, -1).join(", ")} and ${items.at(-1)}`;
+
+/**
+ * The per-presentation merge fields (D-087). `{{presentations}}` is one line per
+ * presentation; the single-value fields still work for a template written before it —
+ * with several presentations they read as a list ("A and B in Hall 1 and Hall 3 …").
+ */
+export function talkFields(
+  talks: { title: string; room: string | null; starts_at: string }[],
+  timezone: string,
+): { talk_title: string; room: string; session_time: string; presentations: string } {
+  const when = (talk: { starts_at: string }) => formatSessionTime(talk.starts_at, timezone);
+  return {
+    talk_title: listed(talks.map((talk) => talk.title)),
+    room: listed([...new Set(talks.map((talk) => talk.room ?? "TBC"))]),
+    session_time: listed(talks.map(when)),
+    presentations: talks.map((talk) => `• ${talk.title} — ${talk.room ?? "Room TBC"}, ${when(talk)}`).join("\n"),
+  };
+}
 
 /**
  * One speaker's email: a fresh personal link, the template rendered for them, a
@@ -293,11 +361,9 @@ async function queueInvitation(tx: pg.PoolClient, input: QueueInput): Promise<st
     speaker_first: firstName(input.recipient.name),
     speaker_name: input.recipient.name,
     event_name: input.event.name,
-    talk_title: input.recipient.talk_title,
-    room: input.recipient.room ?? "TBC",
     // On the event's clock (D-072). This was the UTC time with no zone, so a 10:30
     // New York session was mailed out as "14:30".
-    session_time: formatSessionTime(input.recipient.starts_at, input.event.timezone),
+    ...talkFields(input.recipient.talks, input.event.timezone),
     // Worded exactly as the speaker portal shows it, not a raw "2027-03-01".
     deadline: input.event.deadline ? formatDeadline(input.event.deadline, input.event.timezone) : "the published deadline",
     // Where speakers actually reach the portal (D-080) — it was hard-coded to localhost,
@@ -402,7 +468,12 @@ export async function sendBatch(
       continue;
     }
 
-    await queueInvitation(tx, { eventId: input.eventId, event, template, recipient: { ...recipient, email: recipient.email } });
+    await queueInvitation(tx, {
+      eventId: input.eventId,
+      event,
+      template,
+      recipient: { speaker_id: recipient.speaker_id, name: recipient.name, email: recipient.email, talks: recipient.talks },
+    });
     queued += 1;
   }
 
@@ -469,27 +540,23 @@ export async function sendUploadLink(
     });
   }
 
-  // The speaker and their earliest talk — the invitation names one.
+  // The speaker and every presentation they are on — one email names them all (D-087).
   const { rows: speakerRows } = await tx.query<{
     name: string;
     email: string | null;
-    talk_title: string | null;
-    room: string | null;
-    starts_at: string | null;
+    talks: { title: string; room: string | null; starts_at: string }[];
   }>(
     `SELECT sp.full_name AS name, sp.email::text AS email,
-            t.title AS talk_title, t.room, t.starts_at
+            COALESCE((
+              SELECT json_agg(json_build_object('title', s.title, 'room', r.name, 'starts_at', se.starts_at)
+                              ORDER BY se.starts_at)
+                FROM pmp.speaker_assignments sa
+                JOIN pmp.slots s     ON s.id = sa.slot_id
+                JOIN pmp.sessions se ON se.id = s.session_id
+                LEFT JOIN pmp.rooms r ON r.id = se.room_id
+               WHERE sa.speaker_id = sp.id AND se.session_state <> 'canceled'
+            ), '[]'::json) AS talks
        FROM pmp.speakers sp
-       LEFT JOIN LATERAL (
-         SELECT s.title, r.name AS room, se.starts_at
-           FROM pmp.speaker_assignments sa
-           JOIN pmp.slots s     ON s.id = sa.slot_id
-           JOIN pmp.sessions se ON se.id = s.session_id
-           LEFT JOIN pmp.rooms r ON r.id = se.room_id
-          WHERE sa.speaker_id = sp.id AND se.session_state <> 'canceled'
-          ORDER BY se.starts_at
-          LIMIT 1
-       ) t ON true
       WHERE sp.id = $1 AND sp.event_id = $2 AND sp.merged_into IS NULL`,
     [input.speakerId, input.eventId],
   );
@@ -498,10 +565,10 @@ export async function sendUploadLink(
   if (!speaker.email) {
     return err({ code: "comms.no_email", message: `${speaker.name} has no email address. Add one first.` });
   }
-  if (!speaker.talk_title || !speaker.starts_at) {
+  if (speaker.talks.length === 0) {
     return err({
       code: "comms.no_talk",
-      message: `${speaker.name} is not on any presentation yet, so there is nothing to upload for. Assign a talk first.`,
+      message: `${speaker.name} is not on any presentation yet, so there is nothing to upload for. Assign a presentation first.`,
     });
   }
 
@@ -536,9 +603,7 @@ export async function sendUploadLink(
       speaker_id: input.speakerId,
       name: speaker.name,
       email: speaker.email,
-      talk_title: speaker.talk_title,
-      room: speaker.room,
-      starts_at: speaker.starts_at,
+      talks: speaker.talks,
     },
   });
 

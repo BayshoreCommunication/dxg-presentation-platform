@@ -1690,7 +1690,8 @@ present it); a new one is created and assigned via `syncPresenters`. Audit: `spe
 Rest of M1-8 (release-permission editing, assignment roles, replacement) is still open.
 
 Verified in the browser on MedTech: a duplicate email is refused inside the form; a new speaker put onto
-"Sensor Talk" appears in the list with 1 talk (test row then deleted from pmp_dev). No invariant test yet.
+"Sensor Talk" appears in the list with 1 talk (test row then deleted from pmp_dev). Invariants:
+`tests/invariants/speakers-add-and-send.test.ts` (11 add cases).
 
 ## D-086 (2026-09-24): "Send upload link" emails the speaker, and the screen shows it was sent — Status: ACCEPTED (Travis's call)
 The per-speaker button issued a link and showed it in a toast: nothing was emailed and nothing recorded the contact.
@@ -1710,4 +1711,45 @@ disabled — and a clipboard, "Copy upload link" (a link to send by hand; not em
 
 Verified 2026-09-24: speaker "Rakibul" (irakibul568@gmail.com) added to Sensor Talk on MedTech and emailed through
 real SES (a one-off dispatcher with `MAIL_TRANSPORT=ses`, profile `rfpilot`; SES message id recorded, status `sent`);
-the dev dispatcher was then put back on `file`. A second send returned 409. Status stops at `sent` locally — delivered/opened need the SNS webhook on a public URL.
+the dev dispatcher was then put back on `file`. A second send returned 409. Status stops at `sent` locally — delivered/opened need the SNS webhook on a public URL. Invariants: 8 send cases in
+`tests/invariants/speakers-add-and-send.test.ts` (once only, failed doesn't count, bounce refused, no email/talk, other
+event 404); disabling the once-only guard makes the "second send" case fail.
+
+## D-087 (2026-09-24): A speaker on several presentations is one recipient, emailed once — Status: ACCEPTED (Travis's call)
+Three gaps for a speaker on more than one presentation:
+
+1. **Batches emailed them once per presentation.** `recipientsFor` returned one row per assignment, so a speaker with
+   two talks missing files got two reminders with two links — the 24-hour guard is read before either is written. It
+   now returns one row per speaker with `talks[]` (for a reminder, only the talks still missing a file; canceled
+   talks are never named); `talk_title` is the titles joined with " · " for one-line screens. The Communications
+   audience, which keyed rows by speaker id, had the same duplicates and is fixed by the same change.
+2. **Status hid a missing file.** "Submitted" meant *any* file. The speakers list now returns `talks_with_files`
+   and `talks_approved` (per presentation, not per file); the screen shows **"2 of 3 submitted"** (warn tone) when
+   some presentations have no file, and Bulk remind counts anyone with a presentation still missing one.
+3. **The email named one presentation.** New merge field `{{presentations}}` — one line per presentation:
+   `• Title — Room, Wed, Sep 1, 09:00 EDT` (event timezone). Both default templates use it; migration 018 rewrites
+   the seeded sentence in existing templates and leaves reworded ones alone. In a template without it,
+   `{{talk_title}}`, `{{room}}` and `{{session_time}}` read as lists ("A, B and C") rather than the first talk.
+   The per-speaker send (D-086) lists every non-canceled presentation too.
+
+Tests: `apps/api/src/services/comms.test.ts` (wording, timezone, default templates) and 3 cases in
+`tests/invariants/speakers-add-and-send.test.ts` (list counts, one batch email naming both, single send names both).
+Found while testing: pg returns `starts_at` as a Date, so sorting with `localeCompare` threw — compare as time.
+
+## D-088 (2026-09-24): Presenters get their own session cookie — Status: ACCEPTED (Travis's call)
+Staff and presenters share the API origin and both sessions were set as `pmp_session`, so a staff member who opened
+a speaker link and signed in (e.g. to check what a speaker sees) silently lost their staff session — and signing in
+as staff ended the presenter's. Found while testing a multi-session speaker on 2026-09-24.
+
+Presenter sign-in (`POST /portal/login`) now sets **`pmp_presenter`**; staff keep `pmp_session`. The session
+middleware reads `pmp_presenter` on `/api/v1/portal/*` and `pmp_session` everywhere else, and **each accepts only its
+own kind** — a presenter token under the staff name, or a staff token under the presenter name, resolves to no one.
+New `POST /portal/logout` ends only the presenter session (the portal used `/auth/logout`); the speaker portal's Next
+middleware checks `pmp_presenter`. `/auth/session`'s kind check stays as a second line.
+
+Effect on deploy: presenters signed in before this must sign in again (their token sits under the old name).
+Tests: 5 cases in `tests/invariants/auth-separation.test.ts` ("side by side").
+
+Also 2026-09-24, speaker portal: choosing or dropping a file only *selects* it — name, size, "Nothing has been
+uploaded yet" — and **Submit presentation** starts the upload (with Choose a different file / Cancel). It used to
+upload the moment a file was picked, and "Drag your presentation here" had no drop handler.

@@ -17,6 +17,7 @@ import {
 import { randomUUID } from "node:crypto";
 import {
   SESSION_COOKIE,
+  PRESENTER_COOKIE,
   staffLogin,
   completeMfaLogin,
   presenterLogin,
@@ -258,15 +259,24 @@ function scopeFor(req: express.Request, eventId?: string): {
   };
 }
 
-/** Attaches the signed-in principal, if there is one, to every request. */
+/**
+ * Attaches the signed-in principal, if there is one, to every request.
+ *
+ * The speaker portal's routes read the presenter cookie and everything else reads the
+ * staff cookie (D-088), and each accepts only its own kind of session — so a browser can
+ * hold both at once, and a presenter token can never stand in for a staff one.
+ */
 app.use(async (req, _res, next) => {
-  const token = readCookie(req, SESSION_COOKIE);
+  const portal = req.path.startsWith("/api/v1/portal/");
+  const token = readCookie(req, portal ? PRESENTER_COOKIE : SESSION_COOKIE);
   if (!token) return next();
   try {
     const principal = await withSystemScope((tx) =>
       resolveSession(tx, token),
     );
-    if (principal) (req as express.Request & { principal?: Principal }).principal = principal;
+    if (principal && (principal.kind === "presenter") === portal) {
+      (req as express.Request & { principal?: Principal }).principal = principal;
+    }
   } catch (error) {
     console.error("session resolution failed", error);
   }
@@ -1033,6 +1043,9 @@ app.get("/api/v1/events/:eventId/speakers", async (req, res) => {
               count(DISTINCT sa.id)::int AS talks,
               count(DISTINCT fv.file_id) FILTER (WHERE fv.review_state = 'approved')::int AS approved,
               count(DISTINCT f.id)::int AS with_files,
+              -- Presentations with a file, as against files: "2 of 3 submitted" (D-087).
+              count(DISTINCT sa.slot_id) FILTER (WHERE f.id IS NOT NULL)::int AS talks_with_files,
+              count(DISTINCT sa.slot_id) FILTER (WHERE fv.review_state = 'approved')::int AS talks_approved,
               -- The last email this speaker was sent, so nobody is emailed twice by accident (D-086).
               (SELECT json_build_object('status', c.status, 'at', COALESCE(c.sent_at, c.created_at),
                                         'to', c.to_address::text,
@@ -2584,8 +2597,18 @@ app.post("/api/v1/portal/login", async (req, res) => {
     }),
   );
   if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
-  res.cookie(SESSION_COOKIE, result.value.token, cookieOptions(24 * 60));
+  res.cookie(PRESENTER_COOKIE, result.value.token, cookieOptions(24 * 60));
   return res.json({ principal: result.value.principal });
+});
+
+/** Ends the presenter's session only; a staff session in the same browser is untouched. */
+app.post("/api/v1/portal/logout", async (req, res) => {
+  const token = readCookie(req, PRESENTER_COOKIE);
+  if (token) {
+    await withSystemScope((tx) => endSession(tx, token));
+  }
+  res.clearCookie(PRESENTER_COOKIE, { path: "/" });
+  return res.status(204).end();
 });
 
 app.post("/api/v1/auth/logout", async (req, res) => {
@@ -2599,12 +2622,10 @@ app.post("/api/v1/auth/logout", async (req, res) => {
 
 app.get("/api/v1/auth/session", (req, res) => {
   const principal = (req as express.Request & { principal?: Principal }).principal;
-  // Staff and presenters share this API origin, so one browser holds one session
-  // cookie for both apps and signing into the portal replaces a staff session.
-  // This endpoint answers "who is the signed-in *staff member*", so a presenter
-  // here is not a staff member — it is no session at all. Returning the presenter
-  // instead let the staff app render someone who cannot use it, and crash on the
-  // roles a presenter does not have.
+  // "Who is the signed-in *staff member*". Presenters have their own cookie (D-088),
+  // which this route never reads; the kind check stays as a second line — a presenter
+  // is not a staff member, and returning one let the staff app render someone who
+  // cannot use it and crash on the roles a presenter does not have.
   if (!principal || principal.kind !== "staff") {
     return res.status(401).json({ code: "auth.no_session", message: "Not signed in." });
   }

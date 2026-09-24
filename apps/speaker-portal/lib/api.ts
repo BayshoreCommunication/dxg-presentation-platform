@@ -90,7 +90,7 @@ export const presenterLogin = (email: string, code: string) =>
     body: JSON.stringify({ email, code }),
   });
 
-export const presenterLogout = () => request<void>("/auth/logout", { method: "POST" });
+export const presenterLogout = () => request<void>("/portal/logout", { method: "POST" });
 
 export const getSession = () => request<PortalSession>("/portal/session");
 export const getTalks = () => request<{ items: PortalTalk[] }>("/portal/talks");
