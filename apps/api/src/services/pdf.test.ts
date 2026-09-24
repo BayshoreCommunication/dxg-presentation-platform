@@ -51,6 +51,13 @@ describe("PDF conversion", () => {
       const pdf = await convertToPdf(pptx, "Keynote (final v3).pptx");
       assert.equal(pdf.subarray(0, 5).toString(), "%PDF-");
       assert.ok(pdf.length > 1000, "a real document, not an empty shell");
+
+      // The old binary format (PowerPoint 97–2003), which speakers still send.
+      run("p3", ["--convert-to", "ppt", "deck.pptx"]);
+      const ppt = await readFile(path.join(work, "deck.ppt"));
+      assert.equal(ppt.subarray(0, 4).toString("hex"), "d0cf11e0", "the fixture is a real legacy .ppt");
+      const fromPpt = await convertToPdf(ppt, "Old deck (2019).ppt");
+      assert.equal(fromPpt.subarray(0, 5).toString(), "%PDF-");
     } finally {
       await rm(work, { recursive: true, force: true });
     }
