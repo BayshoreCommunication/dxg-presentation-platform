@@ -203,6 +203,63 @@ describe("a presentation manager on the event still can", () => {
   });
 });
 
+/**
+ * The settings themselves are checked (D-091). `settings` was stored as sent, so a
+ * deadline of "tomorrow" or "2026-13-45" reached every speaker's portal and email. The
+ * probe runs 2027-06-01 to 2027-06-02; the date pickers cap the deadline at its start.
+ */
+describe("what the event's settings will and will not accept", () => {
+  const refused = async (settings: unknown, pattern: RegExp) => {
+    const before = await setupOf(probeEvent, admin);
+    const response = await patch(probeEvent, admin, { settings });
+    assert.equal(response.status, 422, JSON.stringify(settings));
+    const body = (await response.json()) as { code: string; message: string };
+    assert.equal(body.code, "events.bad_settings");
+    assert.match(body.message, pattern);
+    assert.deepEqual((await setupOf(probeEvent, admin)).settings, before.settings, "and nothing was stored");
+  };
+
+  test("a real date on or before the first day is stored", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    for (const deadline of ["2027-05-20", "2027-06-01"]) {
+      const response = await patch(probeEvent, admin, { settings: { upload_deadline: deadline } });
+      assert.equal(response.status, 200, deadline);
+      assert.equal((await setupOf(probeEvent, admin)).settings.upload_deadline, deadline);
+    }
+  });
+
+  test("an empty deadline clears it", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    assert.equal((await patch(probeEvent, admin, { settings: { upload_deadline: "" } })).status, 200);
+    assert.equal((await setupOf(probeEvent, admin)).settings.upload_deadline, "");
+  });
+
+  test("text that is not a date is refused", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    await refused({ upload_deadline: "tomorrow" }, /YYYY-MM-DD/);
+    await refused({ upload_deadline: "06/01/2027" }, /YYYY-MM-DD/);
+    await refused({ upload_deadline: 20270601 }, /YYYY-MM-DD/);
+  });
+
+  test("a date that does not exist is refused", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    await refused({ upload_deadline: "2027-02-30" }, /not a real date/);
+    await refused({ upload_deadline: "2027-13-01" }, /not a real date/);
+  });
+
+  test("a deadline after the event has started is refused", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    await refused({ upload_deadline: "2027-06-02" }, /after the event starts/);
+  });
+
+  test("unknown settings and oversized reminders are refused", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    await refused({ upload_deadline: "2027-05-20", portal_closed: true }, /Unknown setting: portal_closed/);
+    await refused({ reminders: "x".repeat(201) }, /200 characters/);
+    await refused({ reminders: 7 }, /must be text/);
+  });
+});
+
 describe("what a live event will and will not accept", () => {
   test("an event with rooms and days but no agenda cannot be activated", async (t: TestContext) => {
     if (!up) return t.skip("API not running");

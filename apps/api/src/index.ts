@@ -598,6 +598,7 @@ const statusFor = (error: DomainError): number => {
     error.code.endsWith(".event_incomplete") ||
     error.code.endsWith(".incomplete") ||
     error.code.endsWith(".bad_dates") ||
+    error.code.endsWith(".bad_settings") ||
     error.code.endsWith(".name_required") ||
     error.code.endsWith(".not_a_draft") ||
     error.code.endsWith(".unknown_timezone") ||

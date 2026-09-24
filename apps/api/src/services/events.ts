@@ -85,6 +85,51 @@ function checkBasics(input: CreateEventInput): DomainError | null {
   return null;
 }
 
+/** The settings an event carries; anything else is refused rather than stored. */
+const SETTING_KEYS = ["upload_deadline", "reminders"] as const;
+
+/**
+ * Checks event settings before any of the request is written (D-091).
+ *
+ * `settings` was merged into the event as sent, unchecked, so a deadline of "tomorrow"
+ * or "2026-13-45" was stored and then shown to every speaker and printed in every
+ * email. The screens send a date picker's `YYYY-MM-DD`; the endpoint is reachable
+ * directly, so it holds the rules itself:
+ *   - only known keys;
+ *   - `upload_deadline` is empty (no deadline) or a real calendar date, on or before
+ *     the event's first day — the same bound both date pickers already set: a deadline
+ *     after the event has begun is not a deadline;
+ *   - `reminders` is text of a sensible length.
+ */
+function checkSettings(settings: unknown, startsOn: string): DomainError | null {
+  const bad = (message: string): DomainError => ({ code: "events.bad_settings", message });
+  if (typeof settings !== "object" || settings === null || Array.isArray(settings)) {
+    return bad("Settings must be an object.");
+  }
+  const unknown = Object.keys(settings).filter((key) => !(SETTING_KEYS as readonly string[]).includes(key));
+  if (unknown.length > 0) return bad(`Unknown setting${unknown.length === 1 ? "" : "s"}: ${unknown.join(", ")}.`);
+
+  const { upload_deadline: deadline, reminders } = settings as Record<string, unknown>;
+  if (deadline !== undefined && deadline !== null && deadline !== "") {
+    if (typeof deadline !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(deadline)) {
+      return bad("The upload deadline must be a date (YYYY-MM-DD).");
+    }
+    const parsed = new Date(`${deadline}T00:00:00Z`);
+    // Round-tripping catches dates that do not exist, such as 2026-02-30.
+    if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== deadline) {
+      return bad(`${deadline} is not a real date.`);
+    }
+    if (deadline > startsOn) {
+      return bad(`The upload deadline (${deadline}) is after the event starts (${startsOn}).`);
+    }
+  }
+  if (reminders !== undefined && reminders !== null) {
+    if (typeof reminders !== "string") return bad("Reminders must be text.");
+    if (reminders.length > 200) return bad("Reminders must be 200 characters or fewer.");
+  }
+  return null;
+}
+
 /** Every date from `from` to `to` inclusive, as `YYYY-MM-DD`. */
 function calendarDays(from: string, to: string): string[] {
   const days: string[] = [];
@@ -182,6 +227,13 @@ export async function configureEvent(
   if (!eventRows[0]) return err({ code: "events.not_found", message: "No such event." });
   if (!hasAnyRole(actor, CONFIGURERS)) return err(forbidden("Changing an event's setup"));
   const clientId = eventRows[0].client_id;
+
+  // Before anything is written, so a refused request changes nothing. Checked against
+  // the start date this same request may be setting.
+  if (input.settings !== undefined) {
+    const invalid = checkSettings(input.settings, input.basics?.starts_on ?? eventRows[0].starts_on);
+    if (invalid) return err(invalid);
+  }
 
   /*
    * Step 1 is editable while the event is a draft, because a draft is now something

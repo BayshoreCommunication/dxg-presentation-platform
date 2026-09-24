@@ -1796,3 +1796,17 @@ Verified 2026-09-24: request revision on Rakibul's "Opening Keynote" (Multi-Sess
 to irakibul568@gmail.com (status `sent`, message id recorded); Speakers shows "1 of 2 need revision" with Upload link
 still "Not sent"; the portal shows Needs revision, the feedback and the upload box. Links in dev mail still point at
 `PORTAL_BASE` (localhost:3001) and open only on the machine running the stack.
+
+## D-091 (2026-09-24): Event settings are validated by the API — Status: ACCEPTED (Travis's call)
+`PATCH /events/{id}` merged `settings` into the event exactly as sent. Both screens send a date picker's
+`YYYY-MM-DD`, but the endpoint is reachable directly, so "tomorrow", "2026-13-45" or a date after the event would have
+been stored and then shown in every speaker's portal and printed in every email.
+
+`checkSettings` (services/events.ts) now runs before anything in the request is written, so a refused request
+changes nothing (the same PATCH can also move dates, rooms and branding): `422 events.bad_settings` unless
+- keys are only `upload_deadline` and `reminders`;
+- `upload_deadline` is empty (no deadline) or a real calendar date (`2027-02-30` is refused) **on or before the
+  event's first day** — the bound both date pickers already set (`max={starts_on}`), checked against the start date
+  the same request may be setting;
+- `reminders` is text of at most 200 characters.
+No existing event violated these when they were added. Tests: 6 cases in `tests/invariants/event-configuration.test.ts`.
