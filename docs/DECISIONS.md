@@ -1483,3 +1483,21 @@ Checked with Travis's own deck ("RFP AI layer (3).pptx", 8 slides): LibreOffice'
 closely (verified slide by slide against it). **That deck was uploaded to MedTech as v2 of Kwame Osei's "Sensor Talk"
 through the real ingest path, to see the viewer on a real file — it is now in Review presentations.** Keys, page
 position and "nothing decided by accident" (state stayed `awaiting_review`) checked in the browser.
+
+## D-076 (2026-09-24): Only the newest upload is reviewed — Status: ACCEPTED (Travis's call)
+A speaker who uploaded a new version before the last one was decided left both in Review presentations (Kwame
+Osei's Sensor Talk showed twice), and a reviewer could approve the stale file.
+
+- **New transition** (WORKFLOW_STATES §3 amended): `awaiting_review | in_review → superseded`, action `supersede`,
+  machine. `ingestVersion` applies it the moment a newer version of the same talk is stored clean, recording a
+  `workflow_transitions` row with the reason ("v2 was uploaded before v1 was reviewed"). An approved version is left
+  alone — it keeps playing until the new one is approved (FR-REV-004). A quarantined upload supersedes nothing. A
+  reviewer mid-decision on the old version gets the existing lock conflict.
+- **Rollback guard:** "superseded" can now mean "replaced before review", so `restore` is limited to versions that were
+  approved before (`approved_at` set), and "Roll back to this" only appears for those — otherwise rollback would
+  approve a file nobody reviewed.
+- **Migration 015** applied the rule to versions already stuck (Kwame's v1), with the same transition record.
+
+Tests: `tests/invariants/stale-versions.test.ts` — v1 then v2 through the real speaker portal leaves one entry, the
+newest; after approving it, rolling back to the never-approved v1 is refused. The probe event is reused and left archived
+between runs (it holds files, so it cannot be deleted).

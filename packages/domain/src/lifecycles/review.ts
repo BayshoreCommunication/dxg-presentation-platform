@@ -48,6 +48,10 @@ export const reviewLifecycle: Lifecycle<ReviewState, ReviewAction> = {
     { from: "in_review", action: "reject", to: "rejected", authority: REVIEWERS, requiresReason: true },
     // Automatic once a newer version is approved.
     { from: "approved", action: "supersede", to: "superseded", authority: "machine" },
+    // Automatic when a newer version is uploaded (scanned clean) before this one was
+    // decided (D-076): only the newest file is reviewed, so nobody approves a stale one.
+    { from: "awaiting_review", action: "supersede", to: "superseded", authority: "machine" },
+    { from: "in_review", action: "supersede", to: "superseded", authority: "machine" },
     // FR-REV-005: byte-identical restore of an earlier approved version. The
     // current version is rolled back and the earlier one is restored; both halves
     // need a manager and a reason, and both are audited.

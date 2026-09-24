@@ -120,6 +120,32 @@ export async function ingestVersion(
        VALUES ($1, $2, $3) ON CONFLICT (file_version_id) DO NOTHING`,
       [versionId, input.eventId, input.clientId],
     );
+
+    /*
+     * A newer clean upload replaces any earlier version still waiting for a decision
+     * (D-076, WORKFLOW_STATES §3 amended): only the newest file is reviewed, so a
+     * reviewer cannot approve the stale one by mistake. Approved versions are left alone —
+     * they keep playing in the room until this one is itself approved (FR-REV-004).
+     * A quarantined upload replaces nothing.
+     */
+    const { rows: replaced } = await tx.query<{ id: string; review_state: string; version_number: number }>(
+      `UPDATE pmp.file_versions old
+          SET review_state = 'superseded', lock_version = old.lock_version + 1
+         FROM pmp.file_versions prior
+        WHERE old.id = prior.id
+          AND old.file_id = $1 AND old.id <> $2
+          AND old.review_state IN ('awaiting_review', 'in_review')
+       RETURNING old.id, prior.review_state, old.version_number`,
+      [fileId, versionId],
+    );
+    for (const old of replaced) {
+      await tx.query(
+        `INSERT INTO pmp.workflow_transitions
+           (event_id, client_id, subject_type, subject_id, from_state, to_state, action, actor_user_id, reason)
+         VALUES ($1, $2, 'file_version.review', $3, $4, 'superseded', 'supersede', NULL, $5)`,
+        [input.eventId, input.clientId, old.id, old.review_state, `v${versionNumber} was uploaded before v${old.version_number} was reviewed`],
+      );
+    }
   }
 
   await appendAudit(tx, {

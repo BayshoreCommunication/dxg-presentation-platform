@@ -365,13 +365,17 @@ export async function rollBack(
   const { rows: target } = await tx.query<{ id: string; version_number: number; sha256: string | null }>(
     `SELECT fv.id, fv.version_number, encode(fv.sha256, 'hex') AS sha256
        FROM pmp.file_versions fv JOIN pmp.files f ON f.id = fv.file_id
-      WHERE fv.id = $1 AND f.slot_id = $2 AND fv.processing_state = 'stored'`,
+      WHERE fv.id = $1 AND f.slot_id = $2 AND fv.processing_state = 'stored'
+        AND fv.approved_at IS NOT NULL`,
     [input.targetVersionId, input.slotId],
   );
+  // Only a version that was once approved can be restored (D-076): a version superseded
+  // while still waiting for review was never approved, and restoring it would approve a
+  // file nobody reviewed.
   if (!target[0]) {
     return err({
       code: "review.target_not_restorable",
-      message: "That version cannot be restored — it is not a stored version of this talk.",
+      message: "That version cannot be restored — only a version that was approved before can be rolled back to.",
     });
   }
 

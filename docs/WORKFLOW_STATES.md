@@ -65,6 +65,13 @@ delivery path to get wrong.
 
 Legal: `awaiting_review→in_review→{approved, changes_requested, rejected}`; `changes_requested` resolves when a new version arrives (this version stays; new version starts its own lifecycles); `approved→superseded` (automatic when a newer version is approved); `approved→rolled_back` (FR-REV-005: byte-identical restore of a prior approved version, rooms notified). **Re-approval rule (FR-REV-004)**: a new version never affects room assignments until it independently reaches `approved` — enforced here plus in lifecycle §4. Invalid: `awaiting_review→approved` (skipping review) except via audited override (authorized role + reason); any transition on `superseded`. Roles: reviewer decisions require Content Reviewer or above; overrides and rollback require Presentation Manager or above + reason.
 
+**Amended 2026-09-24 (D-076):** a version still `awaiting_review` or `in_review` moves to `superseded`
+(action `supersede`, machine) when a **newer version of the same talk is uploaded and scanned clean**. Only the newest
+upload is reviewed, so a reviewer cannot approve a stale file; an `approved` version is untouched and keeps playing until
+the new one is itself approved (FR-REV-004). Because `superseded` can now mean "replaced before review", the rollback
+`restore` is limited to versions that were approved before (`approved_at` set) — otherwise it would approve a file
+nobody reviewed. A quarantined upload supersedes nothing.
+
 **Final onsite lock** (SRS §9): a boolean `final_locked` on the Talk (set in SRR at sign-off or by PM). When set, speaker-portal replacement is blocked; new versions can only originate in SRR. It is a flag, not a state — it composes with every review state.
 
 **Restricted-from-distribution** is likewise an orthogonal flag on FileVersion/Talk (SRS §9) affecting search visibility, bulk download, and archive — never a workflow state.

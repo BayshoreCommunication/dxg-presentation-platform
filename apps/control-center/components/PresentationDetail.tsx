@@ -230,7 +230,8 @@ export function PresentationDetailView({
                     )}
                   </td>
                   <td style={{ textAlign: "right" }}>
-                    {row.review_state === "superseded" && approved && (
+                    {/* Only a version that was once approved can be rolled back to (D-076). */}
+                    {row.review_state === "superseded" && row.approved_at && approved && (
                       <button
                         className="btn warnb"
                         style={{ padding: "4px 10px" }}
