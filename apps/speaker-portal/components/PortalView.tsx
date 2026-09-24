@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
-import { presenterLogout } from "@/lib/api";
+import { portalAssetUrl, presenterLogout } from "@/lib/api";
 import type { CompleteResult, PortalSession, PortalTalk } from "@/lib/api";
 import { UploadPanel } from "./UploadPanel";
 import { formatBytes, formatDeadline } from "@pmp/format";
@@ -22,6 +22,22 @@ export function PortalView({
 
   return (
     <>
+      {/* The event's header banner, when the team has uploaded one (D-093). */}
+      {session.event.header && (
+        <img
+          src={portalAssetUrl("header", session.event.header.uploaded_at)}
+          alt={`${session.event.name} header`}
+          style={{
+            display: "block",
+            width: "100%",
+            aspectRatio: "4 / 1",
+            objectFit: "cover",
+            borderRadius: 14,
+            marginBottom: 20,
+            background: "var(--line)",
+          }}
+        />
+      )}
       <div
         className="animate-rise"
         style={{
@@ -34,6 +50,13 @@ export function PortalView({
         }}
       >
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {/* The event's accent (D-092): a short bar above its name, as on the room screens. */}
+          {session.event.accent && (
+            <span
+              aria-hidden="true"
+              style={{ width: 44, height: 5, borderRadius: 3, background: session.event.accent }}
+            />
+          )}
           <h1 className="htitle" style={{ marginBottom: 0 }}>
             {session.event.name}
           </h1>
@@ -55,6 +78,24 @@ export function PortalView({
           Sign out
         </button>
       </div>
+
+      {/* The event's slide template, to build the deck on (D-093). */}
+      {session.event.template && (
+        <div className="card">
+          <div className="cbd" style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+            <div style={{ flex: "1 1 220px", minWidth: 0 }}>
+              <b>Slide template</b>
+              <div className="note" style={{ overflowWrap: "anywhere" }}>
+                Build your presentation on the event&rsquo;s template · {session.event.template.file_name} ·{" "}
+                {formatBytes(session.event.template.size_bytes)}
+              </div>
+            </div>
+            <a className="btn pri" href={portalAssetUrl("template", session.event.template.uploaded_at)}>
+              Download template
+            </a>
+          </div>
+        </div>
+      )}
 
       {talks.length === 0 && (
         <div className="card">

@@ -4,6 +4,9 @@ import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 import { datePickerPopperModifiers, useDatePickerYearNavigation } from "@/components/DatePickerHeader";
 
+/** react-datepicker creates this element on <body> the first time a calendar opens. */
+const DATEPICKER_PORTAL = "dxg-datepicker-portal";
+
 /**
  * The date and time control, in the DXG dashboard's style (D-044).
  *
@@ -83,6 +86,9 @@ export function DateField({
       wrapperClassName="dxg-field-wrap"
       popperPlacement="bottom-start"
       popperProps={{ strategy: "fixed" }}
+      // Rendered in a container on <body> (D-094): inside a card whose entry animation
+      // leaves a transform, a fixed popup is positioned against — and clipped by — the card.
+      portalId={DATEPICKER_PORTAL}
       popperModifiers={datePickerPopperModifiers}
       popperClassName="dxg-datepicker-popper"
       showPopperArrow={false}
@@ -170,6 +176,9 @@ export function TimeField({
       wrapperClassName="dxg-field-wrap"
       popperPlacement="bottom-start"
       popperProps={{ strategy: "fixed" }}
+      // Rendered in a container on <body> (D-094): inside a card whose entry animation
+      // leaves a transform, a fixed popup is positioned against — and clipped by — the card.
+      portalId={DATEPICKER_PORTAL}
       popperModifiers={datePickerPopperModifiers}
       popperClassName="dxg-datepicker-popper"
       showPopperArrow={false}

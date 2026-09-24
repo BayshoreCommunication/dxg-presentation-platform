@@ -260,6 +260,27 @@ describe("what the event's settings will and will not accept", () => {
   });
 });
 
+/** Branding is only an accent colour, `#RRGGBB` (D-092). */
+describe("what the event's branding will and will not accept", () => {
+  test("a hex colour is stored, in capitals", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const response = await patch(probeEvent, admin, { branding: { accent: "#1a7f5c" } });
+    assert.equal(response.status, 200);
+    assert.equal((await setupOf(probeEvent, admin)).branding.accent, "#1A7F5C");
+  });
+
+  test("anything that is not a six-digit hex colour is refused, and nothing is stored", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    for (const branding of [{ accent: "blue" }, { accent: "#44C7F" }, { accent: "44C7F4" }, { accent: 44 }, { logo: "x.png" }]) {
+      const before = await setupOf(probeEvent, admin);
+      const response = await patch(probeEvent, admin, { branding });
+      assert.equal(response.status, 422, JSON.stringify(branding));
+      assert.equal(((await response.json()) as { code: string }).code, "events.bad_branding");
+      assert.deepEqual((await setupOf(probeEvent, admin)).branding, before.branding);
+    }
+  });
+});
+
 describe("what a live event will and will not accept", () => {
   test("an event with rooms and days but no agenda cannot be activated", async (t: TestContext) => {
     if (!up) return t.skip("API not running");

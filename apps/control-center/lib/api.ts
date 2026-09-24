@@ -1250,3 +1250,34 @@ export const updateTemplate = (eventId: string, templateId: string, subject: str
     `/events/${eventId}/comms/templates/${templateId}`,
     { method: "PATCH", body: JSON.stringify({ subject, body }) },
   );
+
+/* ── event header & slide template (D-093) ───────────────────────────────── */
+
+export type AssetKind = "header" | "template";
+export type BrandAsset = { file_name: string; content_type: string; size_bytes: number; uploaded_at: string };
+
+/** Where the browser loads an asset from; `version` busts the cache after a replace. */
+export const assetUrl = (eventId: string, kind: AssetKind, version?: string) =>
+  `${API_BASE_URL}/events/${eventId}/assets/${kind}${version ? `?v=${encodeURIComponent(version)}` : ""}`;
+
+/** Uploads (or replaces) the event's header image or slide template. */
+export async function uploadAsset(eventId: string, kind: AssetKind, file: File): Promise<BrandAsset> {
+  const response = await fetch(`${API_BASE_URL}/events/${eventId}/assets/${kind}`, {
+    method: "PUT",
+    credentials: "include",
+    headers: {
+      "content-type": "application/octet-stream",
+      // Percent-encoded: a header holds only Latin-1, and the server decodes it.
+      "x-file-name": encodeURIComponent(file.name),
+    },
+    body: file,
+  });
+  const body = (await response.json().catch(() => ({}))) as BrandAsset & { code?: string; message?: string };
+  if (!response.ok) {
+    throw new ApiError(body.code ?? "asset.failed", body.message ?? "The file could not be uploaded.", response.status);
+  }
+  return body;
+}
+
+export const removeAsset = (eventId: string, kind: AssetKind) =>
+  request<{ removed: true }>(`/events/${eventId}/assets/${kind}`, { method: "DELETE" });

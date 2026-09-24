@@ -130,6 +130,25 @@ function checkSettings(settings: unknown, startsOn: string): DomainError | null 
   return null;
 }
 
+/**
+ * Branding is only an accent colour, `#RRGGBB` (D-092). The wizard's text box took
+ * anything and the API stored it, so "blue" or "#44C7F" reached the room screens and
+ * the speaker portal as a colour that does not render.
+ */
+function checkBranding(branding: unknown): DomainError | null {
+  const bad = (message: string): DomainError => ({ code: "events.bad_branding", message });
+  if (typeof branding !== "object" || branding === null || Array.isArray(branding)) {
+    return bad("Branding must be an object.");
+  }
+  const unknown = Object.keys(branding).filter((key) => key !== "accent");
+  if (unknown.length > 0) return bad(`Unknown branding field${unknown.length === 1 ? "" : "s"}: ${unknown.join(", ")}.`);
+  const { accent } = branding as { accent?: unknown };
+  if (accent !== undefined && (typeof accent !== "string" || !/^#[0-9a-fA-F]{6}$/.test(accent))) {
+    return bad("The accent colour must be a hex colour such as #44C7F4.");
+  }
+  return null;
+}
+
 /** Every date from `from` to `to` inclusive, as `YYYY-MM-DD`. */
 function calendarDays(from: string, to: string): string[] {
   const days: string[] = [];
@@ -232,6 +251,10 @@ export async function configureEvent(
   // the start date this same request may be setting.
   if (input.settings !== undefined) {
     const invalid = checkSettings(input.settings, input.basics?.starts_on ?? eventRows[0].starts_on);
+    if (invalid) return err(invalid);
+  }
+  if (input.branding !== undefined) {
+    const invalid = checkBranding(input.branding);
     if (invalid) return err(invalid);
   }
 
@@ -386,7 +409,14 @@ export async function configureEvent(
     await tx.query(
       `UPDATE pmp.events SET branding = COALESCE(branding,'{}'::jsonb) || $2::jsonb, lock_version = lock_version + 1
         WHERE id = $1`,
-      [eventId, JSON.stringify(input.branding)],
+      [
+        eventId,
+        JSON.stringify(
+          typeof input.branding.accent === "string"
+            ? { ...input.branding, accent: input.branding.accent.toUpperCase() }
+            : input.branding,
+        ),
+      ],
     );
   }
 

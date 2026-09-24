@@ -2,6 +2,8 @@ import express from "express";
 import { withScope, withSystemScope, getPool, verifyAuditChain, appendAudit as appendAuditRecord } from "@pmp/db";
 import type { Actor, DomainError, EventRole, Result, ReviewAction } from "@pmp/domain";
 import { listTalks } from "./services/talks.ts";
+import { ASSET_KINDS, putAsset, removeAsset, assetOf, readAsset } from "./services/brandAssets.ts";
+import type { AssetKind, AssetRecord } from "./services/brandAssets.ts";
 import { eventSummary, riskList, reviewQueue, syncFleet } from "./services/queries.ts";
 import { eventFiles, downloadVersion, bulkDownload } from "./services/files.ts";
 import type { FileQuery } from "./services/files.ts";
@@ -599,6 +601,8 @@ const statusFor = (error: DomainError): number => {
     error.code.endsWith(".incomplete") ||
     error.code.endsWith(".bad_dates") ||
     error.code.endsWith(".bad_settings") ||
+    error.code.endsWith(".bad_branding") ||
+    error.code.endsWith(".bad_asset") ||
     error.code.endsWith(".name_required") ||
     error.code.endsWith(".not_a_draft") ||
     error.code.endsWith(".unknown_timezone") ||
@@ -1176,10 +1180,20 @@ app.get("/api/v1/portal/session", (req, res) =>
   withPortalSession(req, res, async (session, tx) => {
     // The event's own upload deadline (D-071). The portal showed "Feb 27 · 23:59 ET" on
     // every event; it now shows this, or says none is set.
-    const { rows } = await tx.query<{ deadline: string | null }>(
-      `SELECT settings ->> 'upload_deadline' AS deadline FROM pmp.events WHERE id = $1`,
+    const { rows } = await tx.query<{
+      deadline: string | null;
+      accent: string | null;
+      header: AssetRecord | null;
+      template: AssetRecord | null;
+    }>(
+      `SELECT settings ->> 'upload_deadline' AS deadline, NULLIF(branding ->> 'accent', '') AS accent,
+              branding -> 'header' AS header, branding -> 'template' AS template
+         FROM pmp.events WHERE id = $1`,
       [session.event_id],
     );
+    // What the portal needs to show them — never the storage key.
+    const describe = (asset: AssetRecord | null | undefined) =>
+      asset?.key ? { file_name: asset.file_name, size_bytes: asset.size_bytes, uploaded_at: asset.uploaded_at } : null;
     return res.json({
       speaker: { id: session.speaker_id, name: session.speaker_name },
       event: {
@@ -1187,8 +1201,24 @@ app.get("/api/v1/portal/session", (req, res) =>
         name: session.event_name,
         timezone: session.timezone,
         upload_deadline: rows[0]?.deadline || null,
+        // The event's accent (D-092), so the portal wears the event's colour.
+        accent: rows[0]?.accent ?? null,
+        // The header banner and the slide template (D-093); fetched from /portal/assets.
+        header: describe(rows[0]?.header),
+        template: describe(rows[0]?.template),
       },
     });
+  }),
+);
+
+/** The event's header or slide template, for that event's speakers only (D-093). */
+app.get("/api/v1/portal/assets/:kind", (req, res) =>
+  withPortalSession(req, res, async (session, tx) => {
+    const kind = assetKind(String(req.params.kind));
+    if (!kind) return res.status(404).json({ code: "request.unknown_asset", message: "Unknown asset." });
+    const asset = await assetOf(tx, session.event_id, kind);
+    if (!asset) return res.status(404).json({ code: "events.asset_not_found", message: "Nothing has been uploaded." });
+    return sendAsset(res, kind, asset);
   }),
 );
 
@@ -1653,6 +1683,68 @@ const importCache = new Map<
     effectiveMapping?: (ImportField | null)[];
   }
 >();
+
+/* ── event header & slide template (D-093) ─────────────────────────────── */
+
+const assetKind = (raw: string): AssetKind | null =>
+  (ASSET_KINDS as readonly string[]).includes(raw) ? (raw as AssetKind) : null;
+
+/** Sends an asset: the header inline (it is shown), the template as a download. */
+async function sendAsset(res: express.Response, kind: AssetKind, asset: AssetRecord): Promise<void> {
+  const body = await readAsset(asset);
+  res.setHeader("content-type", asset.content_type);
+  res.setHeader("x-content-type-options", "nosniff");
+  res.setHeader("cache-control", "private, no-store");
+  const name = asset.file_name.replace(/["\\\r\n]/g, "_");
+  res.setHeader(
+    "content-disposition",
+    `${kind === "header" ? "inline" : "attachment"}; filename="${name}"; filename*=UTF-8''${encodeURIComponent(asset.file_name)}`,
+  );
+  res.send(body);
+}
+
+app.put("/api/v1/events/:eventId/assets/:kind", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  const kind = assetKind(String(req.params.kind));
+  if (!kind) return res.status(404).json({ code: "request.unknown_asset", message: "Unknown asset." });
+  let fileName = String(req.header("x-file-name") ?? "");
+  try {
+    fileName = decodeURIComponent(fileName);
+  } catch {
+    // Not percent-encoded — use it as sent.
+  }
+  const eventId = String(req.params.eventId);
+  const result = await withScope(scopeFor(req, eventId), (tx) =>
+    putAsset(tx, actor, eventId, kind, { body: req.body, fileName }),
+  );
+  if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+  // Everything but the storage key, which never leaves the server.
+  const { file_name, content_type, size_bytes, uploaded_at } = result.value;
+  return res.status(201).json({ file_name, content_type, size_bytes, uploaded_at });
+});
+
+app.delete("/api/v1/events/:eventId/assets/:kind", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  const kind = assetKind(String(req.params.kind));
+  if (!kind) return res.status(404).json({ code: "request.unknown_asset", message: "Unknown asset." });
+  const eventId = String(req.params.eventId);
+  const result = await withScope(scopeFor(req, eventId), (tx) => removeAsset(tx, actor, eventId, kind));
+  if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+  return res.json(result.value);
+});
+
+app.get("/api/v1/events/:eventId/assets/:kind", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  const kind = assetKind(String(req.params.kind));
+  if (!kind) return res.status(404).json({ code: "request.unknown_asset", message: "Unknown asset." });
+  const eventId = String(req.params.eventId);
+  const asset = await withScope(scopeFor(req, eventId), (tx) => assetOf(tx, eventId, kind));
+  if (!asset) return res.status(404).json({ code: "events.asset_not_found", message: "Nothing has been uploaded." });
+  return sendAsset(res, kind, asset);
+});
 
 app.post("/api/v1/events/:eventId/imports", async (req, res) => {
   const actor = actorFrom(req);

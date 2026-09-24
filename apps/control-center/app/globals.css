@@ -1076,3 +1076,7 @@ th{font-weight:500}
 .btn{height:36px;padding:0 14px;font-size:13px;border-width:1px}
 input,select,textarea{border-width:1px}
 .search{border-width:1px}
+
+/* Accent picker swatches (D-092): a small lift on hover and keyboard focus. */
+.cp-swatch{transition:transform .15s var(--ease-out-expo)}
+.cp-swatch:hover,.cp-swatch:focus-visible{transform:scale(1.1);outline:none}

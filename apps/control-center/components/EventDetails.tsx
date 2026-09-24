@@ -8,6 +8,8 @@ import { configureEvent, ApiError } from "@/lib/api";
 import { Chip } from "@/components/Chip";
 import { eventStatusChip } from "@/lib/eventStatus";
 import { DateField } from "@/components/DateTimeField";
+import { ColorPicker } from "@/components/ColorPicker";
+import { BrandAssetField, assetFrom } from "@/components/BrandAssetField";
 
 const TIMEZONE_NOTE =
   "Every time in this event — session times, deadlines, reminders — is read in this zone.";
@@ -70,7 +72,8 @@ export function EventDetails({
   const settingsChanged =
     deadline !== (setup.settings.upload_deadline ?? "") ||
     reminders !== (setup.settings.reminders ?? "");
-  const brandingChanged = accent !== (setup.branding.accent ?? "#44C7F4");
+  const brandingChanged =
+    accent.toUpperCase() !== String(setup.branding.accent ?? "#44C7F4").toUpperCase();
   const changed = basicsChanged || settingsChanged || brandingChanged;
 
   async function save() {
@@ -290,15 +293,29 @@ export function EventDetails({
         <div className="cbd">
           <div className="field">
             <label htmlFor="event-accent">Accent colour</label>
-            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <input
-                id="event-accent"
-                type="color"
-                value={accent}
+            <div>
+              <ColorPicker id="event-accent" value={accent} disabled={readOnly} onChange={setAccent} />
+            </div>
+          </div>
+          {/* Saved on upload (D-093) — not part of "Save changes" below. */}
+          <div className="grid2">
+            <div className="field">
+              <label>Event header</label>
+              <BrandAssetField
+                eventId={setup.id}
+                kind="header"
+                initial={assetFrom(setup.branding, "header")}
                 disabled={readOnly}
-                onChange={(event) => setAccent(event.target.value)}
               />
-              <span className="mono">{accent}</span>
+            </div>
+            <div className="field">
+              <label>Slide template</label>
+              <BrandAssetField
+                eventId={setup.id}
+                kind="template"
+                initial={assetFrom(setup.branding, "template")}
+                disabled={readOnly}
+              />
             </div>
           </div>
         </div>

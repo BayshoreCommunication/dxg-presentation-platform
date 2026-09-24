@@ -61,10 +61,26 @@ export type PortalTalk = {
   feedback: { body: string; created_at: string; version_number: number }[];
 };
 
+export type PortalAsset = { file_name: string; size_bytes: number; uploaded_at: string };
+
+/** An event asset for the signed-in speaker's event; `version` busts the cache after a replace. */
+export const portalAssetUrl = (kind: "header" | "template", version: string) =>
+  `${BASE}/portal/assets/${kind}?v=${encodeURIComponent(version)}`;
+
 export type PortalSession = {
   speaker: { id: string; name: string };
   /** `upload_deadline` is the event's own `YYYY-MM-DD`, or null when none is set (D-071). */
-  event: { id: string; name: string; timezone: string; upload_deadline: string | null };
+  event: {
+    id: string;
+    name: string;
+    timezone: string;
+    upload_deadline: string | null;
+    /** The event's accent colour, `#RRGGBB`, or null when none is set (D-092). */
+    accent: string | null;
+    /** The header banner and the slide template, when the team has uploaded them (D-093). */
+    header: PortalAsset | null;
+    template: PortalAsset | null;
+  };
 };
 
 export type UploadSession = {

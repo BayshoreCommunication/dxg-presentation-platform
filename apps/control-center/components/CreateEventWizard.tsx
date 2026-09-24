@@ -4,6 +4,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { EventDraft } from "@/lib/api";
 import { createEvent, configureEvent, activateEvent, getDraft, ApiError } from "@/lib/api";
+import { ColorPicker } from "@/components/ColorPicker";
+import { BrandAssetField, assetFrom } from "@/components/BrandAssetField";
 import { ImportView } from "@/components/ImportView";
 import { DateField } from "@/components/DateTimeField";
 
@@ -229,14 +231,21 @@ export function CreateEventWizard({
           {step === 4 && (
             <div className="grid2">
               <div className="field">
-                <label>Accent colour</label>
-                <input className="mono" style={{ width: "100%" }} value={accent} onChange={(event) => setAccent(event.target.value)} />
+                <label htmlFor="wizard-accent">Accent colour</label>
+                <ColorPicker id="wizard-accent" value={accent} onChange={setAccent} />
               </div>
-              <div className="field">
-                <label>Event header &amp; slide template</label>
-                <button className="btn" style={{ width: "100%" }} disabled title="Asset upload — M1-4">
-                  Upload…
-                </button>
+              <div>
+                {/* Uploaded as soon as chosen (D-093); the draft exists by step 4. */}
+                <div className="field">
+                  <label>Event header</label>
+                  {draft && <BrandAssetField eventId={draft.id} kind="header" initial={assetFrom(draft.branding, "header")} />}
+                </div>
+                <div className="field">
+                  <label>Slide template</label>
+                  {draft && (
+                    <BrandAssetField eventId={draft.id} kind="template" initial={assetFrom(draft.branding, "template")} />
+                  )}
+                </div>
               </div>
             </div>
           )}
@@ -338,39 +347,6 @@ export function CreateEventWizard({
           </div>
         </div>
       </div>
-
-      {draft && (
-        <div className="card">
-          <div className="chd">
-            <h3>Draft so far</h3>
-            <span className="chip c-mut">{draft.status}</span>
-          </div>
-          <div className="cbd" style={{ padding: "0 0 4px" }}>
-            <table>
-              <tbody>
-                <tr>
-                  <td>Name</td>
-                  <td>{draft.name}</td>
-                </tr>
-                <tr>
-                  <td>Days</td>
-                  <td className="num">{draft.days}</td>
-                </tr>
-                <tr>
-                  <td>Rooms</td>
-                  <td>
-                    {draft.rooms.length > 0 ? (
-                      draft.rooms.join(", ")
-                    ) : (
-                      <span className="chip c-warn">none — import an agenda</span>
-                    )}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
 
       <div className={`toast ${toast ? "show" : ""}`}>{toast}</div>
     </>

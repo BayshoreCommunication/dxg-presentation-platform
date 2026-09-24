@@ -1810,3 +1810,54 @@ changes nothing (the same PATCH can also move dates, rooms and branding): `422 e
   the same request may be setting;
 - `reminders` is text of at most 200 characters.
 No existing event violated these when they were added. Tests: 6 cases in `tests/invariants/event-configuration.test.ts`.
+
+## D-092 (2026-09-24): A round accent-colour picker, and the accent is a real colour — Status: ACCEPTED (Travis's call)
+The wizard's step 4 took the accent as free text and the API stored whatever was typed ("blue", "#44C7F"); event
+settings used a bare `<input type="color">`. The accent was also shown in only one place, the Room Agent holding screen.
+
+- **Picker** (`components/ColorPicker.tsx`, used by the wizard and event settings), after Travis's reference image: a
+  round palette — 12 strong colours on the outer ring (including the platform's `#44C7F4`), 8 soft tints inside, white
+  at the centre — ringed by a rainbow rim that opens the system picker for any other colour, plus a hex field
+  (a missing `#` is added; applied once six digits are valid) and Done. Opens as a popover portalled to `<body>` (so a
+  card's entry animation cannot clip it), placed under the button and kept on screen; closes on Done, Esc or a click
+  outside. The chosen swatch is ringed; swatches lift on hover/focus.
+- **API** (`checkBranding`, services/events.ts, before anything is written): branding may hold only `accent`, and it
+  must be `#RRGGBB` → otherwise `422 events.bad_branding`. Stored in capitals. Every existing event was `{}` or
+  `#44C7F4`.
+- **Used:** `GET /portal/session` returns `event.accent`; the speaker portal shows it as a short bar above the event
+  name (as the holding screen edges its slide). Emails are plain text, so they carry no colour.
+
+Tests: 2 branding cases in `tests/invariants/event-configuration.test.ts`. The "event header & slide template" upload
+next to it is still the disabled M1-4 placeholder (no storage or consumer exists yet).
+
+## D-093 (2026-09-24): Event header image and slide template — Status: ACCEPTED (Travis's call)
+Step 4's "Event header & slide template · Upload…" was a disabled M1-4 placeholder with nothing behind it. Built:
+
+- **Header** — PNG, JPEG or WebP, ≤ 5 MB, shown as a banner across the top of the speaker portal (4:1, cover).
+- **Slide template** — PowerPoint `.pptx` / `.potx`, ≤ 50 MB, which speakers download from a "Slide template" card
+  at the top of the portal.
+
+API (`services/brandAssets.ts`): `PUT /events/{id}/assets/{header|template}` (raw body, percent-encoded
+`x-file-name`), `DELETE` and `GET` of the same (staff), and `GET /portal/assets/{kind}` (the signed-in speaker's own
+event only). Presentation manager or above to change; audited (`events.asset_uploaded` / `_removed`, with sha256);
+archived events refuse writes (D-062 middleware). The bytes decide the type, never the name: image magic numbers for
+the header; for the template a real OOXML zip with `[Content_Types].xml` and `ppt/`, refusing `.pptm/.potm` names or
+any `vbaProject.bin` (macros), and every file goes through the malware scanner. Stored under
+`events/{id}/branding/{kind}-{uuid}` (local `FILE_ROOT` until S3); the event's `branding.header|template` records name,
+type, size, time and storage key — the key never leaves the server (responses and `/portal/session` omit it). PATCH
+branding still accepts only `accent` (D-092), so the records cannot be forged through it. Served with the sniffed
+type, `nosniff`, and inline for the header / attachment for the template. Removing drops the record; the stored bytes
+are kept (named in the audit).
+
+UI: `BrandAssetField` in the wizard's step 4 and on event settings — uploads as soon as a file is chosen (no separate
+save), header preview, template Download, Replace, Remove, and the server's refusal shown inline.
+
+Tests: `tests/invariants/brand-assets.test.ts` (12 cases; reused probe event "Brand Assets Probe", left archived).
+Not done: the Room Agent holding screen does not use the header yet.
+
+## D-094 (2026-09-24): Date pickers open above the page; the wizard drops "Draft so far" — Status: ACCEPTED (Travis's call)
+The speaker upload deadline's calendar was cut off below the weekday row: react-datepicker's popup uses fixed
+positioning, and inside a card whose entry animation leaves a transform, "fixed" is relative to — and clipped by —
+the card (the same cause as the InfoTip and slide-viewer fixes). `DateField` and the time field now pass
+`portalId="dxg-datepicker-portal"`, so every calendar renders in a container on `<body>`. The wizard's "Draft so far"
+card (name, days, rooms) is removed at Travis's request; the steps themselves show the same information.
