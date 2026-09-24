@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { QueueItem } from "@/lib/api";
 import { previewUrl, requestPreview, ApiError } from "@/lib/api";
+import { SlideViewer } from "@/components/SlideViewer";
 
 /**
  * The file's actual slides, for the reviewer (D-074) — replacing eight numbered
@@ -50,16 +51,12 @@ export function SlidePreview({ item }: { item: QueueItem }) {
     const src = previewUrl(item.file_version_id);
     return (
       <div>
-        <iframe
-          key={item.file_version_id}
-          src={`${src}#view=FitH`}
-          title={`Slides of ${item.title}, version ${item.version_number}`}
-          style={frame}
-        />
+        {/* Thumbnails on the left, the slide large on the right (D-075). */}
+        <SlideViewer key={item.file_version_id} url={src} title={`${item.title}, version ${item.version_number}`} />
         <div className="note" style={{ marginTop: 4 }}>
-          Preview rendered from the uploaded file. Fonts and video can differ slightly from PowerPoint.{" "}
+          Rendered from the uploaded file — fonts and video can differ slightly from PowerPoint.{" "}
           <a href={src} target="_blank" rel="noreferrer">
-            Open full screen ↗
+            Open as PDF ↗
           </a>
         </div>
       </div>

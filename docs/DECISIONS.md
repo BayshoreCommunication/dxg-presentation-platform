@@ -1467,3 +1467,19 @@ uploaded — over the note "Slide previews render in M2-7". Reviewers approved f
 
 Checked: MedTech's CardioNext opened in the viewer (its seeded file is placeholder text, so the "slides" are that
 text); a real `.pptx` pushed through `ingestVersion` (rolled back) was queued for preview at upload.
+
+## D-075 (2026-09-24): The slide preview looks like a slide deck — Status: ACCEPTED (Travis's call)
+Travis, showing a Google Slides screenshot: "when a pptx upload the UI should be like the attach image." D-074 showed
+the preview in the browser's generic PDF viewer; it now uses `SlideViewer`, drawn with **pdf.js** (`pdfjs-dist`, the
+engine browsers use for PDFs, added to the control center):
+
+- numbered thumbnails down the left, the chosen one outlined; the chosen slide large on the right on a grey stage;
+- "Slide N of M", previous/next and full screen above; arrow keys, Page Up/Down, Home and End move between slides;
+- thumbnails render only when scrolled into view (a long deck opens as fast as a short one); the selected thumbnail
+  is kept in view by scrolling its column only — `scrollIntoView` would also scroll the page to the viewer on load;
+- "Open as PDF ↗" remains for a full-size look.
+
+Checked with Travis's own deck ("RFP AI layer (3).pptx", 8 slides): LibreOffice's rendering matches the original
+closely (verified slide by slide against it). **That deck was uploaded to MedTech as v2 of Kwame Osei's "Sensor Talk"
+through the real ingest path, to see the viewer on a real file — it is now in Review presentations.** Keys, page
+position and "nothing decided by accident" (state stayed `awaiting_review`) checked in the browser.
