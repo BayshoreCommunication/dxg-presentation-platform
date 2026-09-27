@@ -67,8 +67,8 @@ before(async () => {
             name: "Event Scope Probe",
             venue: "Elsewhere",
             timezone: "America/New_York",
-            starts_on: "2026-06-01",
-            ends_on: "2026-06-02",
+            starts_on: "2030-06-01",
+            ends_on: "2030-06-02",
           }),
         })
       ).json()) as { event_id: string }

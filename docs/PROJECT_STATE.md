@@ -3102,3 +3102,8 @@ admin and staff. Staff no longer see Staff accounts or Event assignments (the AP
 own events; a staff member who creates an event becomes its project manager. Migration 022. New invariants in
 `tests/invariants/admin.test.ts`; full suite 284/284, unit 253 pass. **Deploy note:** rebuild the dispatcher as well
 as api/staff (it redacts the emailed password after sending); the email's sign-in link uses `STAFF_BASE`, already set.
+
+## 2026-09-27 — Event start dates: tomorrow or later (D-101)
+Create event no longer greys out start dates after the chosen end date (the end moves with the start instead), and no
+longer offers today or past days. The API enforces the same rule in the event's time zone. Lint, 253 unit and
+287/287 invariants pass. Deployed 2026-09-27: D-100 (768fdf5) and uptime monitoring (Route 53 + CloudWatch, us-east-1).

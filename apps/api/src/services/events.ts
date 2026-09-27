@@ -85,6 +85,26 @@ function checkBasics(input: CreateEventInput): DomainError | null {
   return null;
 }
 
+/** Today's date, `YYYY-MM-DD`, in the given time zone. */
+function todayIn(timezone: string): string {
+  // en-CA formats as YYYY-MM-DD.
+  return new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+}
+
+/**
+ * A new event starts tomorrow at the earliest (D-101), counted in the event's own time
+ * zone: an event starting today has no time for invitations, uploads or review.
+ */
+function checkFutureStart(input: CreateEventInput): DomainError | null {
+  if (input.starts_on <= todayIn(input.timezone)) {
+    return {
+      code: "events.bad_dates",
+      message: "An event must start in the future — tomorrow at the earliest.",
+    };
+  }
+  return null;
+}
+
 /** The settings an event carries; anything else is refused rather than stored. */
 const SETTING_KEYS = ["upload_deadline", "reminder_days"] as const;
 /** The reminder days an event may choose (D-096): days before the upload deadline. */
@@ -186,7 +206,7 @@ export async function createEvent(
    */
   if (!hasAnyRole(actor, CONFIGURERS)) return err(forbidden("Creating an event"));
 
-  const invalid = checkBasics(input);
+  const invalid = checkBasics(input) ?? checkFutureStart(input);
   if (invalid) return err(invalid);
 
   let venueId: string | null = null;
@@ -321,6 +341,12 @@ export async function configureEvent(
     }
     const invalid = checkBasics(input.basics);
     if (invalid) return err(invalid);
+    // Only a date being changed has to be in the future: re-saving a draft whose start
+    // has since passed, without touching it, is not refused (D-101).
+    if (eventRows[0] && eventRows[0].starts_on !== input.basics.starts_on) {
+      const past = checkFutureStart(input.basics);
+      if (past) return err(past);
+    }
 
     const wanted = calendarDays(input.basics.starts_on, input.basics.ends_on);
     // A day carrying sessions is not ours to delete. It cannot happen from the wizard

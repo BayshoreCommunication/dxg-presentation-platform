@@ -10,6 +10,13 @@ import { BrandAssetField, assetFrom } from "@/components/BrandAssetField";
 import { ImportView } from "@/components/ImportView";
 import { DateField } from "@/components/DateTimeField";
 
+/** Tomorrow on this computer, `YYYY-MM-DD` — the earliest an event may start (D-101). */
+const tomorrow = () => {
+  const date = new Date();
+  date.setDate(date.getDate() + 1);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+};
+
 /*
  * Step 2 is called "Agenda", not "Schedule import": inside the wizard it is the thing
  * being described, not the act of loading it — the other three steps are named for
@@ -163,13 +170,21 @@ export function CreateEventWizard({
                 <div />
                 <div className="field">
                   <label htmlFor="event-starts-on">Start date</label>
-                  {/* The DXG dashboard's picker (D-044). The end cannot precede the
-                      start, and neither is offered outside that relationship. */}
+                  {/* The DXG dashboard's picker (D-044). An event starts tomorrow at the
+                      earliest (D-101). The start is never capped by the end: picking a start
+                      after the current end moves the end with it, instead of greying out
+                      every later day — which read as "these dates are unavailable". */}
                   <DateField
                     id="event-starts-on"
                     value={basics.starts_on}
-                    max={basics.ends_on || undefined}
-                    onChange={(value) => setBasics({ ...basics, starts_on: value })}
+                    min={tomorrow()}
+                    onChange={(value) =>
+                      setBasics({
+                        ...basics,
+                        starts_on: value,
+                        ends_on: basics.ends_on && value && basics.ends_on < value ? value : basics.ends_on,
+                      })
+                    }
                     ariaLabel="Start date"
                   />
                 </div>
@@ -178,7 +193,7 @@ export function CreateEventWizard({
                   <DateField
                     id="event-ends-on"
                     value={basics.ends_on}
-                    min={basics.starts_on || undefined}
+                    min={basics.starts_on || tomorrow()}
                     onChange={(value) => setBasics({ ...basics, ends_on: value })}
                     ariaLabel="End date"
                   />

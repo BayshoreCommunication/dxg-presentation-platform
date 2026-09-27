@@ -2006,3 +2006,11 @@ outbox row is `sensitive` and the dispatcher replaces the body once sent. Passin
 grants and uploads, but password, authenticator, recovery codes, sessions, reset links and event roles go, the account
 is hidden from the list, and the email moves to `deleted_email` so the address can be invited again. Refused: deleting,
 deactivating or demoting yourself (`admin.self_lockout`), or the last active root admin (`admin.last_admin`, 409).
+
+## D-101 (2026-09-27): An event starts tomorrow at the earliest; the start date is never capped by the end — Status: ACCEPTED (Travis's call)
+Create event's start picker was bounded above by the end date, so once an end was chosen every later day was greyed
+out and read as "unavailable", while today and past days stayed selectable. Now both pickers start at tomorrow; the
+start has no upper bound, and choosing a start after the current end moves the end to the same day. The API refuses
+`starts_on` on or before today in the event's own time zone (`events.bad_dates`, 422) when an event is created, and
+when a draft's start date is changed — re-saving a draft whose start has since passed, without changing it, is allowed.
+`tests/invariants/event-dates.test.ts`.
