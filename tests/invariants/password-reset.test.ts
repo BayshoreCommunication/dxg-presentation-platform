@@ -13,6 +13,7 @@ import { removeTestAccounts } from "../helpers/cleanup.ts";
  * factor — a hijacked mailbox alone must not open an account.
  */
 const API = process.env.API_BASE ?? "http://localhost:4000/api/v1";
+const TARGET_PASSWORD_ISSUED = `Temp-${Date.now()}-Kq7wZ`;
 const MAIL = path.join(process.env.FILE_ROOT ?? ".data", "mail");
 
 /**
@@ -75,10 +76,13 @@ before(async () => {
     await fetch(`${API}/admin/users`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie: admin },
-      body: JSON.stringify({ email: TARGET, display_name: "Reset Probe" }),
+      // Temporary passwords are emailed, never returned (D-100), so the suite supplies one —
+      // it is still a temporary password that must be changed on first sign-in.
+      body: JSON.stringify({ email: TARGET, display_name: "Reset Probe", password: TARGET_PASSWORD_ISSUED }),
     })
-  ).json()) as { temporary_password: string };
-  TARGET_PASSWORD = created.temporary_password;
+  ).json()) as { user_id?: string };
+  if (!created.user_id) throw new Error("could not create the probe account");
+  TARGET_PASSWORD = TARGET_PASSWORD_ISSUED;
 
   // Enrol it, so "a reset does not stand in for the second factor" is actually
   // being tested rather than asserted against an account with no second factor.

@@ -42,6 +42,8 @@ import {
   unlock,
   grantRole,
   revokeRole,
+  setAccountType,
+  deleteAccount,
 } from "./services/admin.ts";
 
 /** Carries the half-finished sign-in between the password and the code. */
@@ -649,6 +651,7 @@ const statusFor = (error: DomainError): number => {
   if (error.code === "mfa.challenge_expired") return 401;
   if (error.code.startsWith("mfa.")) return 422;
   if (error.code === "auth.email_taken") return 409;
+  if (error.code === "admin.last_admin") return 409;
   if (error.code === "auth.reset_invalid") return 422;
   // A well-formed request whose value breaks a rule is unprocessable, not malformed.
   if (
@@ -2869,7 +2872,7 @@ app.post("/api/v1/auth/password", async (req, res) => {
 app.post("/api/v1/admin/users", async (req, res) => {
   const actor = actorFrom(req);
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in first." });
-  const body = req.body as { email?: string; display_name?: string; password?: string };
+  const body = req.body as { email?: string; display_name?: string; password?: string; account_type?: string };
   if (!body.email) {
     return res.status(400).json({ code: "request.invalid", message: "`email` is required." });
   }
@@ -2877,6 +2880,7 @@ app.post("/api/v1/admin/users", async (req, res) => {
     createStaffUser(tx, actor, {
       email: body.email as string,
       displayName: body.display_name ?? "",
+      accountType: (body.account_type ?? "staff") as "root_admin" | "staff",
       ...(body.password ? { password: body.password } : {}),
     }),
   );
@@ -2944,6 +2948,27 @@ app.post("/api/v1/admin/users/:userId/active", async (req, res) => {
   const result = await withScope(scopeFor(req), (tx) =>
     setActive(tx, actor, String(req.params.userId), body.active !== false),
   );
+  if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+  return res.json(result.value);
+});
+
+// Root admin or staff (D-100).
+app.post("/api/v1/admin/users/:userId/account-type", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  const body = req.body as { account_type?: string };
+  const result = await withScope(scopeFor(req), (tx) =>
+    setAccountType(tx, actor, String(req.params.userId), body.account_type as "root_admin" | "staff"),
+  );
+  if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+  return res.json(result.value);
+});
+
+// Deleting an account keeps its history and releases its email address (D-100).
+app.delete("/api/v1/admin/users/:userId", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  const result = await withScope(scopeFor(req), (tx) => deleteAccount(tx, actor, String(req.params.userId)));
   if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
   return res.json(result.value);
 });

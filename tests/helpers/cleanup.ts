@@ -41,7 +41,10 @@ export async function removeTestAccounts(emailPrefixes: readonly string[]): Prom
   await withSystemScope(async (tx) => {
     const { rows } = await tx.query<{ id: string; email: string }>(
       `SELECT id, email::text AS email FROM pmp.users
-        WHERE ${emailPrefixes.map((_, i) => `email::text LIKE $${i + 1}`).join(" OR ")}`,
+        WHERE ${emailPrefixes
+          // A deleted account (D-100) gave up its address; its old one is in deleted_email.
+          .map((_, i) => `email::text LIKE $${i + 1} OR deleted_email LIKE $${i + 1}`)
+          .join(" OR ")}`,
       emailPrefixes.map((prefix) => `${prefix}%`),
     );
 

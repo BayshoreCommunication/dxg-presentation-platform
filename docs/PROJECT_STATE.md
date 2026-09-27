@@ -3094,3 +3094,11 @@ Built and rehearsed, not deployed: same-origin API + CSRF/origin allowlist, S3 s
 checks, rate limits, Dockerfile + Compose (Caddy/TLS, Postgres, ClamAV, migrate, nightly backups), CI, runbook
 (`docs/infra/PRODUCTION.md`). Local rehearsal 21/21 through Caddy; three production-only bugs found and fixed
 (migration 021, clamd config, upload volume ownership). Next: the AWS setup and go-live checklist in the runbook.
+
+## 2026-09-27 — Root admins and staff, emailed passwords, delete account (D-100)
+Staff accounts: role chosen at creation (Staff / Root admin) with badges; temporary passwords go to the person's email
+(create and reset) instead of being shown; accounts can be deleted (soft, address reusable) and switched between root
+admin and staff. Staff no longer see Staff accounts or Event assignments (the API refuses them too) and only see their
+own events; a staff member who creates an event becomes its project manager. Migration 022. New invariants in
+`tests/invariants/admin.test.ts`; full suite 284/284, unit 253 pass. **Deploy note:** rebuild the dispatcher as well
+as api/staff (it redacts the emailed password after sending); the email's sign-in link uses `STAFF_BASE`, already set.

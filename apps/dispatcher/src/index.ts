@@ -92,7 +92,17 @@ async function drain(): Promise<number> {
     for (const row of rows) {
       try {
         await handle(row);
-        await tx.query(`UPDATE pmp.outbox SET dispatched_at = now() WHERE id = $1`, [row.id]);
+        // A `sensitive` email carries a temporary password (D-100): once it has been
+        // handled, the stored copy keeps who and what, but not the password.
+        await tx.query(
+          `UPDATE pmp.outbox
+              SET dispatched_at = now(),
+                  payload = CASE WHEN payload->>'sensitive' = 'true'
+                                 THEN payload || '{"body":"[removed after sending: contained a temporary password]"}'::jsonb
+                                 ELSE payload END
+            WHERE id = $1`,
+          [row.id],
+        );
       } catch (error) {
         // Left undispatched so it is retried rather than lost.
         console.error(`[dispatcher] ${row.topic} #${row.id} failed:`, error);

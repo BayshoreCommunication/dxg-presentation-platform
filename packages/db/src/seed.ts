@@ -129,7 +129,7 @@ async function seed(): Promise<void> {
     );
 
     const staff: [string, string, string, string][] = [
-      // Someone has to be able to create the others.
+      // Someone has to be able to create the others: the root admin.
       [IDS.admin, "admin@example.invalid", "A. Whitfield", "platform_admin"],
       [IDS.pm, "m.vega@example.invalid", "M. Vega", "presentation_manager"],
       [IDS.reviewer, "c.delgado@example.invalid", "C. Delgado", "content_reviewer"],
@@ -148,11 +148,16 @@ async function seed(): Promise<void> {
                mfa_secret = EXCLUDED.mfa_secret, mfa_enrolled_at = EXCLUDED.mfa_enrolled_at`,
         [id, email, name, devHash, DEV_MFA_SECRET],
       );
-      await client.query(
-        `INSERT INTO event_roles (user_id, event_id, role) VALUES ($1, $2, $3)
-         ON CONFLICT DO NOTHING`,
-        [id, IDS.event, role],
-      );
+      // Root admin is a flag on the account, not an event role (D-100).
+      if (role === "platform_admin") {
+        await client.query(`UPDATE users SET is_root_admin = true WHERE id = $1`, [id]);
+      } else {
+        await client.query(
+          `INSERT INTO event_roles (user_id, event_id, role) VALUES ($1, $2, $3)
+           ON CONFLICT DO NOTHING`,
+          [id, IDS.event, role],
+        );
+      }
       for (const recovery of recoveryCodes) {
         await client.query(
           `INSERT INTO mfa_recovery_codes (user_id, code_hash) VALUES ($1, $2)

@@ -12,6 +12,7 @@ import {
   lockoutState,
 } from "@pmp/auth";
 import { openChallenge, isEnrolled } from "./mfa.ts";
+import { queueTemporaryPasswordEmail } from "./accountMail.ts";
 import type { Actor, DomainError, EventRole, Result } from "@pmp/domain";
 import { err, ok, atLeast, hasAnyRole } from "@pmp/domain";
 
@@ -34,6 +35,8 @@ export type Principal =
       email: string;
       display_name: string;
       roles: EventRole[];
+      /** Root admin (D-100): every event and every account. Carries `platform_admin` in `roles`. */
+      is_root_admin: boolean;
       /**
        * Which roles are held on which event. The flattened `roles` above says what
        * this account can ever do; this says where, and it is the difference between
@@ -222,14 +225,18 @@ export async function principalFor(tx: pg.PoolClient, userId: string): Promise<P
     display_name: string;
     must_change_password: boolean;
     mfa_enrolled: boolean;
+    is_root_admin: boolean;
   }>(
     `SELECT id, email::text, display_name, must_change_password,
-            (mfa_enrolled_at IS NOT NULL) AS mfa_enrolled
+            (mfa_enrolled_at IS NOT NULL) AS mfa_enrolled, is_root_admin
        FROM pmp.users WHERE id = $1`,
     [userId],
   );
   const user = rows[0]!;
   const roles = await rolesFor(tx, user.id);
+  // Root admin is a property of the account (D-100); `platform_admin` in `roles` is how
+  // the rest of the API — which already treats that role as platform-wide — sees it.
+  if (user.is_root_admin && !roles.includes("platform_admin")) roles.push("platform_admin");
   // Only an account with no staff role at all needs somewhere to be sent: staff land
   // on the portfolio. Asking the question this way also means a future hybrid account
   // is treated as staff, which is the safer of the two guesses.
@@ -240,6 +247,7 @@ export async function principalFor(tx: pg.PoolClient, userId: string): Promise<P
     email: user.email,
     display_name: user.display_name,
     roles,
+    is_root_admin: user.is_root_admin,
     event_roles: await eventRolesFor(tx, user.id),
     client_ids: await clientsFor(tx, user.id),
     client_events: clientOnly ? await clientEventsFor(tx, user.id) : [],
@@ -268,7 +276,7 @@ export async function completeMfaLogin(
 
 async function rolesFor(tx: pg.PoolClient, userId: string): Promise<EventRole[]> {
   const { rows } = await tx.query<{ role: EventRole }>(
-    `SELECT DISTINCT role FROM pmp.event_roles WHERE user_id = $1`,
+    `SELECT DISTINCT role FROM pmp.event_roles WHERE user_id = $1 AND role <> 'platform_admin'`,
     [userId],
   );
   return rows.map((row) => row.role);
@@ -280,7 +288,7 @@ async function eventRolesFor(
   userId: string,
 ): Promise<{ event_id: string; role: EventRole }[]> {
   const { rows } = await tx.query<{ event_id: string; role: EventRole }>(
-    `SELECT event_id, role FROM pmp.event_roles WHERE user_id = $1`,
+    `SELECT event_id, role FROM pmp.event_roles WHERE user_id = $1 AND role <> 'platform_admin'`,
     [userId],
   );
   return rows;
@@ -496,13 +504,18 @@ export async function logout(tx: pg.PoolClient, token: string): Promise<void> {
 export async function createStaffUser(
   tx: pg.PoolClient,
   actor: Actor,
-  input: { email: string; displayName: string; password?: string },
-): Promise<Result<{ user_id: string; temporary_password: string | null }, DomainError>> {
-  if (!hasAnyRole(actor, ["platform_admin", "project_manager"])) {
+  input: { email: string; displayName: string; password?: string; accountType?: "root_admin" | "staff" },
+): Promise<Result<{ user_id: string; account_type: "root_admin" | "staff"; emailed_to: string | null }, DomainError>> {
+  // Only a root admin makes accounts (D-100): staff see their own events, not the people list.
+  if (!hasAnyRole(actor, ["platform_admin"])) {
     return err({
       code: "auth.forbidden",
-      message: "Creating staff accounts requires a platform admin or project manager.",
+      message: "Only a root admin can create accounts.",
     });
+  }
+  const accountType = input.accountType ?? "staff";
+  if (accountType !== "staff" && accountType !== "root_admin") {
+    return err({ code: "auth.bad_account_type", message: "An account is either staff or a root admin." });
   }
   const email = input.email.trim().toLowerCase();
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
@@ -514,18 +527,40 @@ export async function createStaffUser(
     return err({ code: "auth.email_taken", message: "An account already exists for that email address." });
   }
 
-  // A generated password is handed over once and must be changed on first use.
+  // A generated password is emailed to the account itself (D-100) and must be changed on
+  // first use. A caller-chosen one (the test harness) is not emailed — the caller has it.
   const temporary = input.password ?? `${generateAccessCode(4, 4)}`;
   const problem = checkPassword(temporary);
   if (problem) return err({ code: `auth.${problem.code}`, message: problem.message });
 
+  const displayName = input.displayName.trim() || email;
   const { rows } = await tx.query<{ id: string }>(
-    `INSERT INTO pmp.users (email, display_name, password_hash, password_set_at, must_change_password)
-     VALUES ($1::citext, $2, $3, now(), true) RETURNING id`,
-    [email, input.displayName.trim() || email, await hashPassword(temporary)],
+    `INSERT INTO pmp.users (email, display_name, password_hash, password_set_at, must_change_password, is_root_admin)
+     VALUES ($1::citext, $2, $3, now(), true, $4) RETURNING id`,
+    [email, displayName, await hashPassword(temporary), accountType === "root_admin"],
   );
+  const userId = rows[0]!.id;
 
-  return ok({ user_id: rows[0]!.id, temporary_password: input.password ? null : temporary });
+  if (!input.password) {
+    await queueTemporaryPasswordEmail(tx, {
+      to: email,
+      displayName,
+      temporaryPassword: temporary,
+      reason: "created",
+      accountType,
+    });
+  }
+  await appendAudit(tx, {
+    partitionId: userId,
+    clientId: userId,
+    actorUserId: actor.id,
+    action: "admin.account_created",
+    subjectType: "user",
+    subjectId: userId,
+    detail: { account_type: accountType, emailed: !input.password },
+  });
+
+  return ok({ user_id: userId, account_type: accountType, emailed_to: input.password ? null : email });
 }
 
 export async function changeOwnPassword(

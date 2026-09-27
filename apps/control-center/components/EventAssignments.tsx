@@ -79,8 +79,8 @@ export function EventAssignments({ initial, events }: { initial: StaffRow[]; eve
     <>
       <h1 className="htitle">Event assignments</h1>
       <div className="note" style={{ margin: "-8px 0 14px" }}>
-        A role is held on an event, not on the platform — so someone assigned nowhere can sign in and
-        reach nothing.
+        A role is held on an event, not on the platform — so a staff member assigned nowhere can sign in
+        and reach nothing. Root admins reach every event already and are not listed here.
       </div>
 
       {error && <div className="err">{error}</div>}
@@ -189,7 +189,8 @@ export function EventAssignments({ initial, events }: { initial: StaffRow[]; eve
                         >
                           <option value="">assign someone…</option>
                           {initial
-                            .filter((person) => person.is_active)
+                            // Root admins reach every event without a role (D-100).
+                            .filter((person) => person.is_active && person.account_type === "staff")
                             .map((person) => (
                               <option key={person.id} value={person.id}>
                                 {person.display_name}

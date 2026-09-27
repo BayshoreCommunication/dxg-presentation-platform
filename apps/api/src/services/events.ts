@@ -205,6 +205,19 @@ export async function createEvent(
   );
   const eventId = rows[0]!.id;
 
+  /*
+   * Staff can only reach events they hold a role on (D-100), so a staff member who creates
+   * one is made its project manager — otherwise they would lock themselves out of their
+   * own new event. A root admin reaches every event already and is not added.
+   */
+  if (!hasAnyRole(actor, ["platform_admin"])) {
+    await tx.query(
+      `INSERT INTO pmp.event_roles (user_id, event_id, role) VALUES ($1, $2, 'project_manager')
+       ON CONFLICT DO NOTHING`,
+      [actor.id, eventId],
+    );
+  }
+
   // Every day between the dates, so the schedule has somewhere to hang.
   for (const day of calendarDays(input.starts_on, input.ends_on)) {
     await tx.query(

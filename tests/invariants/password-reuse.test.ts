@@ -14,6 +14,7 @@ import { removeTestAccounts } from "../helpers/cleanup.ts";
  * remaining exactly as exposed as the day it was created.
  */
 const API = process.env.API_BASE ?? "http://localhost:4000/api/v1";
+const TEMPORARY_ISSUED = `Temp-${Date.now()}-Kq7wZ`;
 
 let up = false;
 let TARGET = "";
@@ -37,10 +38,13 @@ before(async () => {
     await fetch(`${API}/admin/users`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie: admin },
-      body: JSON.stringify({ email: TARGET, display_name: "Reuse Probe" }),
+      // Temporary passwords are emailed, never returned (D-100), so the suite supplies one —
+      // it is still a temporary password that must be changed on first sign-in.
+      body: JSON.stringify({ email: TARGET, display_name: "Reuse Probe", password: TEMPORARY_ISSUED }),
     })
-  ).json()) as { temporary_password: string };
-  TEMPORARY = created.temporary_password;
+  ).json()) as { user_id?: string };
+  if (!created.user_id) throw new Error("could not create the probe account");
+  TEMPORARY = TEMPORARY_ISSUED;
 });
 
 /** Signs in on the temporary password; no MFA yet, so this yields a session. */

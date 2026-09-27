@@ -1,13 +1,13 @@
 import { redirect } from "next/navigation";
-import { listStaff, ApiError } from "@/lib/api";
+import { listStaff, getSession, ApiError } from "@/lib/api";
 import { StaffAccounts } from "@/components/StaffAccounts";
 
 export const dynamic = "force-dynamic";
 
 export default async function StaffAccountsPage() {
   try {
-    const staff = await listStaff();
-    return <StaffAccounts initial={staff.items} />;
+    const [staff, session] = await Promise.all([listStaff(), getSession().catch(() => null)]);
+    return <StaffAccounts initial={staff.items} me={session?.principal.user_id ?? null} />;
   } catch (caught) {
     if (caught instanceof ApiError && caught.status === 401) {
       redirect("/login?next=%2Fadmin%2Fusers&reason=required");

@@ -1,5 +1,5 @@
 /**
- * Creates the very first platform admin on a deployment that has none.
+ * Creates the very first root admin (platform admin) on a deployment that has none.
  *
  *     node --env-file=.env scripts/bootstrapAdmin.ts \
  *       --email you@dxg.live --name "A. Whitfield" \
@@ -81,12 +81,11 @@ const result = await withSystemScope(async (tx) => {
   // Refuse rather than mint a second administrator. This is the one check that keeps
   // the script from being a standing way in.
   const { rows: admins } = await tx.query<{ email: string }>(
-    `SELECT u.email::text AS email
-       FROM pmp.event_roles er JOIN pmp.users u ON u.id = er.user_id
-      WHERE er.role = 'platform_admin' LIMIT 1`,
+    `SELECT email::text AS email FROM pmp.users
+      WHERE is_root_admin AND deleted_at IS NULL LIMIT 1`,
   );
   if (admins[0]) {
-    return { refused: `A platform admin already exists (${admins[0].email}). Create further accounts from Staff accounts.` };
+    return { refused: `A root admin already exists (${admins[0].email}). Create further accounts from Staff accounts.` };
   }
 
   const { rows: taken } = await tx.query(`SELECT id FROM pmp.users WHERE lower(email::text) = $1`, [email]);
@@ -118,16 +117,14 @@ const result = await withSystemScope(async (tx) => {
     ).rows[0]!.id;
 
   const { rows: userRows } = await tx.query<{ id: string }>(
-    `INSERT INTO pmp.users (email, display_name, password_hash, password_set_at, must_change_password)
-     VALUES ($1::citext, $2, $3, now(), true) RETURNING id`,
+    `INSERT INTO pmp.users (email, display_name, password_hash, password_set_at, must_change_password, is_root_admin)
+     VALUES ($1::citext, $2, $3, now(), true, true) RETURNING id`,
     [email, name, await hashPassword(temporary)],
   );
   const userId = userRows[0]!.id;
 
-  await tx.query(
-    `INSERT INTO pmp.event_roles (user_id, event_id, role) VALUES ($1, $2, 'platform_admin')`,
-    [userId, eventId],
-  );
+  // Root admin is a flag on the account (D-100); the placeholder event is only somewhere
+  // for the portfolio to show until the first real event exists.
 
   // The first administrator is exactly the account whose creation nobody can be asked
   // to vouch for later, so it goes into the same hash-chained trail as every other

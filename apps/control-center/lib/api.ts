@@ -74,6 +74,8 @@ export type Principal = {
   email: string;
   display_name: string;
   roles: string[];
+  /** Root admin (D-100): every event and every account. */
+  is_root_admin: boolean;
   client_ids: string[];
   /** Events a client-only account may open. Empty for DXG staff. */
   client_events: { id: string; name: string }[];
@@ -1104,6 +1106,7 @@ export type StaffRow = {
   id: string;
   email: string;
   display_name: string;
+  account_type: AccountType;
   is_active: boolean;
   mfa_enrolled: boolean;
   must_change_password: boolean;
@@ -1113,8 +1116,11 @@ export type StaffRow = {
   recovery_codes_left: number;
 };
 
+/** Root admin or staff — set on the account, not per event (D-100). */
+export type AccountType = "root_admin" | "staff";
+
+/** Roles held on an event. Root admin is not one of them: it is the account type. */
 export const EVENT_ROLE_NAMES = [
-  "platform_admin",
   "project_manager",
   "presentation_manager",
   "srr_technician",
@@ -1126,14 +1132,23 @@ export const EVENT_ROLE_NAMES = [
 
 export const listStaff = () => request<{ items: StaffRow[] }>("/admin/users");
 
-export const createStaff = (email: string, displayName: string) =>
-  request<{ user_id: string; temporary_password: string | null }>("/admin/users", {
+export const createStaff = (email: string, displayName: string, accountType: AccountType) =>
+  request<{ user_id: string; account_type: AccountType; emailed_to: string | null }>("/admin/users", {
     method: "POST",
-    body: JSON.stringify({ email, display_name: displayName }),
+    body: JSON.stringify({ email, display_name: displayName, account_type: accountType }),
   });
 
 export const resetStaffPassword = (userId: string) =>
-  request<{ temporary_password: string }>(`/admin/users/${userId}/reset-password`, { method: "POST" });
+  request<{ emailed_to: string }>(`/admin/users/${userId}/reset-password`, { method: "POST" });
+
+export const setStaffAccountType = (userId: string, accountType: AccountType) =>
+  request<{ account_type: AccountType }>(`/admin/users/${userId}/account-type`, {
+    method: "POST",
+    body: JSON.stringify({ account_type: accountType }),
+  });
+
+export const deleteStaff = (userId: string) =>
+  request<{ deleted: true }>(`/admin/users/${userId}`, { method: "DELETE" });
 
 export const resetStaffMfa = (userId: string, reason: string) =>
   request<{ reset: true }>(`/admin/users/${userId}/reset-mfa`, {

@@ -1988,3 +1988,21 @@ common password, two amber for fair, three green for strong (≥ 14 characters, 
 character) — with the reason in words. The confirm field says whether it matches. `components/PasswordField.tsx`,
 used by Set your own password, Reset password and sign-in. The bar mirrors `@pmp/auth` checkPassword; the server
 still decides. Also: no `X-Powered-By: Next.js` header (Caddy strips it; `poweredByHeader: false` in both apps).
+
+## D-100 (2026-09-27): Root admins and staff; emailed temporary passwords; deleting accounts — Status: ACCEPTED (Travis's call)
+Account type is a property of the account, not an event role. **Root admin** (`users.is_root_admin`, any number of
+them) sees every event and every account and alone administers accounts and assignments. **Staff** hold roles on the
+events they are assigned to and see nothing else — not the account list, not root admins, not other staff. Before
+this, `platform_admin` was an event role and any project manager on any event could list every account and create
+new ones. Migration 022 made every former `platform_admin` holder a root admin and deleted those event rows; the
+principal still carries `platform_admin` in `roles` for a root admin, so every existing "platform-wide" check keeps
+working, and `principal.is_root_admin` is the new explicit flag. `platform_admin` can no longer be granted per event
+(`admin.unknown_role`). The role is chosen on Create an account (Staff / Root admin), shown as a badge on each row and
+under the name in the sidebar, and can be changed later (make root admin / make staff; ends their sessions).
+A staff member who creates an event is made its project manager — without it they could not open their own event.
+**Temporary passwords are emailed** to the account (create and reset) and never returned to the administrator; the
+outbox row is `sensitive` and the dispatcher replaces the body once sent. Passing `password` to `POST /admin/users`
+(test harness only) sets it without an email. **Delete** (`DELETE /admin/users/:id`) is soft: the row stays for audit,
+grants and uploads, but password, authenticator, recovery codes, sessions, reset links and event roles go, the account
+is hidden from the list, and the email moves to `deleted_email` so the address can be invited again. Refused: deleting,
+deactivating or demoting yourself (`admin.self_lockout`), or the last active root admin (`admin.last_admin`, 409).

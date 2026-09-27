@@ -40,7 +40,8 @@ const STAFF_ROLES = [
   "room_technician",
   "content_reviewer",
 ];
-const ADMIN_ROLES = ["platform_admin", "project_manager"];
+// Root admins only (D-100); `platform_admin` in the session roles is how a root admin shows.
+const ADMIN_ROLES = ["platform_admin"];
 export const GROUPS: {
   group: string;
   roles?: string[];
@@ -314,7 +315,8 @@ function AccountMenu({ principal }: { principal: Principal }) {
         </span>
         <span className="who">
           <b>{principal.display_name}</b>
-          <small>{principal.roles.join(", ") || "no event role"}</small>
+          {/* Root admin or staff (D-100); raw role codes read like a stack trace. */}
+          <small>{principal.is_root_admin ? "Root admin" : "Staff"}</small>
         </span>
         <span style={{ color: "var(--subtle-foreground)", display: "flex" }}>
           <Icon name="chevrons" size={12} />
