@@ -3037,7 +3037,8 @@ progress ring there instead. Captions come from each tile's existing help text. 
 type-checked, not walked (they need an agenda upload in progress).
 
 ## TO DO — open items recorded 2026-09-24
-- **S3 file storage (M2-2) — not built.** No file is stored in S3. Uploads, PDF copies and archive
+- ~~**S3 file storage (M2-2) — not built.**~~ **Built 2026-09-27 (D-098)** — `FILE_STORAGE=s3`; production runbook in
+  `docs/infra/PRODUCTION.md`. Original note: No file is stored in S3. Uploads, PDF copies and archive
   packages all go to local disk under `FILE_ROOT` through `LocalStorage` (`packages/files/src/storage.ts`);
   `file_versions.s3_key` holds a local key. Build the S3 driver behind the existing `Storage` interface
   (content-addressed `client/event/sha256` keys, presigned short-lived downloads per BUILD_SPEC) before
@@ -3087,3 +3088,9 @@ default invitation opened "Hi Raman" for "Dr. Priya Raman" and "Hi Osei" for "Kw
 Mx, Sir, Dame, with or without a full stop, any case), falling back to the full name when nothing else is left, and
 unchanged for single-word names. No other code had the bug; `decisionNotice.ts` greets with the full name and was left
 as is. Unit tests in `firstName.test.ts` (7 cases). Mail already sent keeps the greeting it was sent with.
+
+## 2026-09-27 — Production-ready on one server (D-098)
+Built and rehearsed, not deployed: same-origin API + CSRF/origin allowlist, S3 storage, ClamAV, start-up config
+checks, rate limits, Dockerfile + Compose (Caddy/TLS, Postgres, ClamAV, migrate, nightly backups), CI, runbook
+(`docs/infra/PRODUCTION.md`). Local rehearsal 21/21 through Caddy; three production-only bugs found and fixed
+(migration 021, clamd config, upload volume ownership). Next: the AWS setup and go-live checklist in the runbook.

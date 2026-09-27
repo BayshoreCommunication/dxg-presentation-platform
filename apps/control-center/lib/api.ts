@@ -1,4 +1,16 @@
-const BASE = process.env.API_BASE ?? "http://localhost:4000/api/v1";
+/**
+ * Where the API is (production readiness). The browser always calls `/api/v1` on the
+ * app's own address — the web server in production (Caddy) and Next's rewrite in
+ * development pass it to the API — so the session cookie belongs to this site and one
+ * build runs on any domain. Server-rendered code has no "own address" to call, so it
+ * uses the API's internal origin, read at run time rather than baked into the build.
+ */
+const BASE =
+  typeof window === "undefined"
+    ? `${process.env.API_INTERNAL_ORIGIN ?? "http://localhost:4000"}/api/v1`
+    : "/api/v1";
+/** For URLs placed in the page (links, images): always the browser's path. */
+const BROWSER_BASE = "/api/v1";
 
 export class ApiError extends Error {
   constructor(
@@ -178,7 +190,7 @@ export type QueueItem = {
   original_filename: string | null;
 };
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:4000/api/v1";
+const API_BASE_URL = BROWSER_BASE;
 
 /** The version's slide preview as a PDF, for an <iframe> (D-074). */
 export const previewUrl = (versionId: string) => `${API_BASE_URL}/file-versions/${versionId}/preview`;
@@ -928,7 +940,7 @@ export const deliverArchive = (packageId: string) =>
   request<{ link_expires_at: string }>(`/archive-packages/${packageId}/deliver`, { method: "POST" });
 
 export const archiveDownloadUrl = (packageId: string, format: "pptx" | "pdf" = "pptx") =>
-  `${process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:4000/api/v1"}/archive-packages/${packageId}/download?format=${format}`;
+  `${BROWSER_BASE}/archive-packages/${packageId}/download?format=${format}`;
 
 /** One download of an archive package — who and when (FR-ARCH-002). */
 export type DownloadRecord = { downloaded_at: string; downloaded_by: string | null; format: "pptx" | "pdf" };

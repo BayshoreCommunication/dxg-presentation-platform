@@ -1,11 +1,13 @@
 import type pg from "pg";
 import { appendAudit } from "@pmp/db";
-import { DevSignatureScanner, LocalStorage, inspectPresentation, worstSeverity } from "@pmp/files";
+import { scannerFromEnv, storageFromEnv, inspectPresentation, worstSeverity } from "@pmp/files";
 import type { Finding, ScanVerdict } from "@pmp/files";
 import { scanVerdictToAction } from "@pmp/domain";
 
-export const storage = new LocalStorage(process.env.FILE_ROOT ?? ".data");
-const scanner = new DevSignatureScanner();
+/** Local disk in development, S3 in production (`FILE_STORAGE=s3`). */
+export const storage = storageFromEnv();
+/** ClamAV in production (CLAMAV_HOST), the signature scanner in development. */
+export const scanner = scannerFromEnv();
 
 export type IngestSource = "portal" | "srr_usb" | "srr_manual";
 

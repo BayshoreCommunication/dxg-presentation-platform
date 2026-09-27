@@ -1,4 +1,16 @@
-const BASE = process.env.API_BASE ?? "http://localhost:4000/api/v1";
+/**
+ * Where the API is (production readiness). The browser always calls `/api/v1` on the
+ * app's own address — the web server in production (Caddy) and Next's rewrite in
+ * development pass it to the API — so the session cookie belongs to this site and one
+ * build runs on any domain. Server-rendered code has no "own address" to call, so it
+ * uses the API's internal origin, read at run time rather than baked into the build.
+ */
+const BASE =
+  typeof window === "undefined"
+    ? `${process.env.API_INTERNAL_ORIGIN ?? "http://localhost:4000"}/api/v1`
+    : "/api/v1";
+/** For URLs placed in the page (links, images): always the browser's path. */
+const BROWSER_BASE = "/api/v1";
 
 export class PortalError extends Error {
   constructor(
@@ -65,7 +77,7 @@ export type PortalAsset = { file_name: string; size_bytes: number; uploaded_at: 
 
 /** An event asset for the signed-in speaker's event; `version` busts the cache after a replace. */
 export const portalAssetUrl = (kind: "header" | "template", version: string) =>
-  `${BASE}/portal/assets/${kind}?v=${encodeURIComponent(version)}`;
+  `${BROWSER_BASE}/portal/assets/${kind}?v=${encodeURIComponent(version)}`;
 
 export type PortalSession = {
   speaker: { id: string; name: string };

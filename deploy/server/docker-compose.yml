@@ -1,0 +1,154 @@
+# The Presentation Management Platform on one server (production readiness).
+#
+#   cp .env.example .env    # fill it in — see docs/infra/PRODUCTION.md
+#   docker compose build
+#   docker compose run --rm migrate
+#   docker compose up -d
+#
+# Public: Caddy on 80/443 only. Everything else talks on the private compose network.
+name: pmp
+
+x-app-env: &app-env
+  NODE_ENV: production
+  TRUST_PROXY: "1"
+  STAFF_BASE: https://${STAFF_HOST}
+  PORTAL_BASE: https://${PORTAL_HOST}
+  # optional: further origins allowed to call the API (e.g. a rehearsal on a non-443 port)
+  CORS_ORIGINS: ${CORS_ORIGINS:-}
+  PGHOST: postgres
+  PGPORT: "5432"
+  PGDATABASE: pmp
+  PGUSER: pmp_app
+  PGPASSWORD: ${PG_APP_PASSWORD}
+  FILE_STORAGE: s3
+  FILE_ROOT: /data
+  S3_BUCKET: ${S3_BUCKET}
+  S3_REGION: ${AWS_REGION}
+  # Only for an S3-compatible store (a local rehearsal with MinIO); empty for AWS S3.
+  S3_ENDPOINT: ${S3_ENDPOINT:-}
+  S3_FORCE_PATH_STYLE: ${S3_FORCE_PATH_STYLE:-}
+  AWS_REGION: ${AWS_REGION}
+  AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+  AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+  CLAMAV_HOST: clamav
+  MAIL_TRANSPORT: ses
+  MAIL_FROM: ${MAIL_FROM}
+  MAIL_REPLY_TO: ${MAIL_REPLY_TO}
+  SES_CONFIGURATION_SET: ${SES_CONFIGURATION_SET}
+  SNS_TOPIC_ARNS: ${SNS_TOPIC_ARNS:-}
+
+services:
+  caddy:
+    image: caddy:2.8-alpine
+    restart: unless-stopped
+    ports: ["80:80", "443:443", "443:443/udp"]
+    environment:
+      STAFF_HOST: ${STAFF_HOST}
+      PORTAL_HOST: ${PORTAL_HOST}
+      ACME_EMAIL: ${ACME_EMAIL}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [api, staff, portal]
+
+  api:
+    build: { context: ../.., dockerfile: deploy/server/Dockerfile, target: api }
+    image: pmp-api
+    restart: unless-stopped
+    environment: *app-env
+    volumes:
+      # In-progress upload parts only; finished files go to S3.
+      - uploads:/data
+    depends_on:
+      postgres: { condition: service_healthy }
+      clamav: { condition: service_healthy }
+
+  dispatcher:
+    build: { context: ../.., dockerfile: deploy/server/Dockerfile, target: dispatcher }
+    image: pmp-dispatcher
+    restart: unless-stopped
+    environment: *app-env
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  staff:
+    build: { context: ../.., dockerfile: deploy/server/Dockerfile, target: staff }
+    image: pmp-staff
+    restart: unless-stopped
+    environment:
+      API_INTERNAL_ORIGIN: http://api:4000
+    depends_on: [api]
+
+  portal:
+    build: { context: ../.., dockerfile: deploy/server/Dockerfile, target: portal }
+    image: pmp-portal
+    restart: unless-stopped
+    environment:
+      API_INTERNAL_ORIGIN: http://api:4000
+    depends_on: [api]
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: pmp
+      POSTGRES_USER: pmp
+      POSTGRES_PASSWORD: ${PG_OWNER_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pmp -d pmp"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  clamav:
+    image: clamav/clamav:stable
+    restart: unless-stopped
+    volumes:
+      - clamdb:/var/lib/clamav
+      - ./clamd.conf:/etc/clamav/clamd.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "clamdscan --ping 1 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 20
+      start_period: 300s
+
+  # One-shot: applies migrations as the schema owner and (re)sets the app role's password.
+  migrate:
+    image: pmp-api
+    profiles: ["ops"]
+    environment:
+      <<: *app-env
+      PGOWNER: pmp
+      PGOWNER_PASSWORD: ${PG_OWNER_PASSWORD}
+    command: ["sh", "-c", "node packages/db/src/migrate.ts && node scripts/ensureAppRole.ts"]
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  # Nightly database dump to S3 (kept per the bucket's lifecycle rule).
+  backup:
+    build: { context: ./backup }
+    image: pmp-backup
+    restart: unless-stopped
+    environment:
+      PGHOST: postgres
+      PGDATABASE: pmp
+      PGUSER: pmp
+      PGPASSWORD: ${PG_OWNER_PASSWORD}
+      S3_BUCKET: ${S3_BUCKET}
+      AWS_REGION: ${AWS_REGION}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      BACKUP_HOUR_UTC: ${BACKUP_HOUR_UTC:-7}
+    depends_on:
+      postgres: { condition: service_healthy }
+
+volumes:
+  pgdata:
+  clamdb:
+  uploads:
+  caddy_data:
+  caddy_config:

@@ -1,0 +1,78 @@
+# Continuous integration (production readiness). Every push and pull request:
+#   checks     — lint, type-check every app, unit tests
+#   invariants — the API against a real Postgres (migrated + seeded), then the invariant suite
+#   images     — the four production images build (nothing is pushed)
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24.4.1, cache: npm }
+      - run: npm ci --no-audit --no-fund
+      - run: npm run lint
+      - name: Type-check every app
+        run: |
+          for app in api dispatcher control-center speaker-portal; do
+            echo "::group::$app"; (cd apps/$app && npx tsc --noEmit -p .); echo "::endgroup::"
+          done
+      - run: npm test
+
+  invariants:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env: { POSTGRES_DB: pmp_dev, POSTGRES_USER: pmp, POSTGRES_PASSWORD: pmp_dev }
+        ports: ["5434:5432"]
+        options: >-
+          --health-cmd "pg_isready -U pmp -d pmp_dev" --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: "5434"
+      PGDATABASE: pmp_dev
+      MAIL_TRANSPORT: file
+      REMINDERS_DISABLED: "1"
+      EMAIL_DNS_CHECK: "0"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24.4.1, cache: npm }
+      - run: npm ci --no-audit --no-fund
+      - run: npm run db:migrate && npm run db:seed
+      - name: Start the API and the mail dispatcher
+        run: |
+          node apps/api/src/index.ts > api.log 2>&1 &
+          node apps/dispatcher/src/index.ts > dispatcher.log 2>&1 &
+          for i in $(seq 1 60); do curl -sf http://localhost:4000/ops/health && break; sleep 1; done
+      - run: npm run test:invariants
+      - if: failure()
+        run: tail -n 200 api.log dispatcher.log
+
+  images:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target: [api, dispatcher, staff, portal]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/server/Dockerfile
+          target: ${{ matrix.target }}
+          push: false
+          cache-from: type=gha,scope=${{ matrix.target }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.target }}

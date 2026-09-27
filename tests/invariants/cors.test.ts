@@ -58,3 +58,49 @@ describe("the browser is allowed to send what the web apps actually send", () =>
     assert.equal(response.headers.get("access-control-allow-origin"), WEB_ORIGIN);
   });
 });
+
+/*
+ * Production readiness: the API used to reflect *any* Origin with credentials allowed, so
+ * any web page could have made signed-in requests. Only the apps' own sites are allowed
+ * now, and a change (POST/PUT/PATCH/DELETE) from anywhere else is refused outright.
+ */
+describe("only our own sites may call the API with a session", () => {
+  const STRANGER = "https://evil.example";
+
+  test("another site gets no CORS permission", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const response = await fetch(`${ROOT}/api/v1/events`, {
+      method: "OPTIONS",
+      headers: { origin: STRANGER, "access-control-request-method": "POST" },
+    });
+    assert.equal(response.headers.get("access-control-allow-origin"), null);
+    assert.equal(response.headers.get("access-control-allow-credentials"), null);
+  });
+
+  test("a change requested from another site is refused (CSRF)", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const response = await fetch(`${ROOT}/api/v1/auth/login`, {
+      method: "POST",
+      headers: { origin: STRANGER, "content-type": "application/json" },
+      body: JSON.stringify({ email: "admin@example.invalid", password: "x" }),
+    });
+    assert.equal(response.status, 403);
+    assert.equal(((await response.json()) as { code: string }).code, "request.cross_site");
+  });
+
+  test("our own site and origin-less callers (scripts, room computers) are unaffected", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const own = await fetch(`${ROOT}/api/v1/auth/login`, {
+      method: "POST",
+      headers: { origin: WEB_ORIGIN, "content-type": "application/json" },
+      body: JSON.stringify({ email: "nobody@example.invalid", password: "wrong-password" }),
+    });
+    assert.notEqual(own.status, 403);
+    const script = await fetch(`${ROOT}/api/v1/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: "nobody@example.invalid", password: "wrong-password" }),
+    });
+    assert.notEqual(script.status, 403);
+  });
+});

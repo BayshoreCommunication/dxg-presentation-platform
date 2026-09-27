@@ -1,0 +1,50 @@
+# The only public entry point (production readiness). Caddy obtains and renews the TLS
+# certificates itself (Let's Encrypt) once the two DNS names point at this server.
+#
+#   https://{$STAFF_HOST}     → control center, with the API under /api
+#   https://{$PORTAL_HOST}    → speaker portal, with the API under /api
+#
+# Each app and its API share one origin, so each site's session cookie is its own and the
+# browser never makes a cross-site call. The API, database and ClamAV are not published.
+{
+	email {$ACME_EMAIL}
+}
+
+(common) {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		-Server
+	}
+	# The API, including the SES delivery webhook (SNS signs every message; the API verifies
+	# it). Uploads arrive in parts, each bounded by the API, so no body cap is set here.
+	# X-Forwarded-For is *replaced* with the address Caddy saw, so a client cannot choose
+	# the address its sign-in attempts are counted against.
+	handle /api/* {
+		reverse_proxy api:4000 {
+			header_up X-Forwarded-For {remote_host}
+		}
+	}
+	# Liveness for an external uptime monitor.
+	handle /ops/health {
+		reverse_proxy api:4000
+	}
+}
+
+{$STAFF_HOST} {
+	import common
+	handle {
+		reverse_proxy staff:3000
+	}
+}
+
+{$PORTAL_HOST} {
+	import common
+	handle {
+		reverse_proxy portal:3001
+	}
+}

@@ -3,8 +3,8 @@ import type pg from "pg";
 import { appendAudit } from "@pmp/db";
 import type { Actor, DomainError, Result } from "@pmp/domain";
 import { atLeast, err, hasAnyRole, ok } from "@pmp/domain";
-import { DevSignatureScanner, readZipEntries } from "@pmp/files";
-import { storage } from "./ingest.ts";
+import { readZipEntries } from "@pmp/files";
+import { scanner, storage } from "./ingest.ts";
 
 /**
  * The event header image and the slide template (D-093).
@@ -34,7 +34,6 @@ export type AssetRecord = {
 
 const EDITORS = atLeast("presentation_manager");
 const LIMITS: Record<AssetKind, number> = { header: 5 * 1024 * 1024, template: 50 * 1024 * 1024 };
-const scanner = new DevSignatureScanner();
 
 const bad = (message: string): DomainError => ({ code: "events.bad_asset", message });
 

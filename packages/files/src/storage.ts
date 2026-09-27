@@ -84,4 +84,9 @@ export class LocalStorage implements Storage {
     await writeFile(target, body);
     return { key, sha256: sha256(body), size: body.length };
   }
+
+  /** Deletes a stored object — used by the S3 driver to drop its local staging copy. */
+  async remove(key: string): Promise<void> {
+    await rm(path.join(this.root, "library", key), { force: true });
+  }
 }

@@ -1,5 +1,5 @@
 import { randomUUID, createHash } from "node:crypto";
-import { mkdir, writeFile, readFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import type pg from "pg";
 import { appendAudit } from "@pmp/db";
@@ -10,7 +10,19 @@ import { err, ok } from "@pmp/domain";
 import { storage } from "./ingest.ts";
 import { findLibreOffice, pdfStates } from "./pdf.ts";
 
-const ARCHIVE_ROOT = path.join(process.env.FILE_ROOT ?? ".data", "archives");
+/** Where packages were written before they went through the storage layer. */
+const LEGACY_ARCHIVE_ROOT = path.join(process.env.FILE_ROOT ?? ".data", "archives");
+
+/** A built package, from storage — or, for one built before that change, from local disk. */
+async function readPackage(objectKey: string): Promise<Buffer> {
+  try {
+    return await storage.read(`archives/${objectKey}`);
+  } catch (error) {
+    const legacy = await readFile(path.join(LEGACY_ARCHIVE_ROOT, objectKey)).catch(() => null);
+    if (legacy) return legacy;
+    throw error;
+  }
+}
 
 export type Candidate = {
   slot_id: string;
@@ -458,9 +470,9 @@ export async function buildPackage(
   const key = `${packageId}.zip`;
   const pdfZip = writeZip(pdfEntries);
   const pdfKey = `${packageId}-pdf.zip`;
-  await mkdir(ARCHIVE_ROOT, { recursive: true });
-  await writeFile(path.join(ARCHIVE_ROOT, key), zip);
-  await writeFile(path.join(ARCHIVE_ROOT, pdfKey), pdfZip);
+  // Through the storage layer (S3 in production), not the API server's own disk.
+  await storage.put(`archives/${key}`, zip);
+  await storage.put(`archives/${pdfKey}`, pdfZip);
 
   const built = transition(archiveLifecycle, {
     from: "building",
@@ -606,7 +618,7 @@ export async function downloadPackage(
     });
   }
 
-  const body = await readFile(path.join(ARCHIVE_ROOT, objectKey));
+  const body = await readPackage(objectKey);
 
   // Every download is logged, with who and when (FR-ARCH-002).
   await tx.query(

@@ -1950,3 +1950,33 @@ went from ~10 minutes to ~70 seconds. Running suites concurrently then exposed t
 `"probe-admin-"`); and password-reset counted the whole mail folder (now counts only mail to its own address). The
 reminders suite clears its probe's `reminder_runs` in `before` (migration 020 grants DELETE on it) and uses fixed dates.
 Result: 271/271 invariants twice in a row, 0 cancelled.
+
+## D-098 (2026-09-27): Production-ready on one server — built and rehearsed, not deployed — Status: ACCEPTED (Travis's call)
+Travis's choices: one server (Docker Compose), subdomains of av-rfpilot.com (`pmp.` staff, `speakers.` portal), for
+DXG and their clients, build now and deploy later. Runbook: `docs/infra/PRODUCTION.md`.
+
+- **Same-origin API.** Each app serves the API under its own `/api` (Caddy in production, a Next rewrite in
+  development); browser code uses `/api/v1`, server-rendered code `API_INTERNAL_ORIGIN` at run time — one build for any
+  domain, and each site's cookie is its own. The API no longer reflects any Origin: only `STAFF_BASE`, `PORTAL_BASE`
+  and `CORS_ORIGINS`, and a POST/PUT/PATCH/DELETE from any other origin is refused (`403 request.cross_site`, CSRF).
+  `X-Forwarded-For` is trusted only as the last hop behind `TRUST_PROXY=1` (it was spoofable for sign-in throttling).
+- **S3 storage** (`packages/files/src/s3.ts`, `FILE_STORAGE=s3`) behind the existing `Storage` interface: objects in
+  S3 under the same content-addressed keys, SSE, SHA-256 checksums; upload parts staged on local disk and assembled.
+  Archive packages now go through storage too (old local packages still readable). Closes the TO DO item.
+- **ClamAV** (`ClamdScanner`, INSTREAM over TCP, fails closed) when `CLAMAV_HOST` is set; required in production.
+- **Hardening** (`apps/api/src/config.ts`): the API refuses to start in production with missing/unsafe settings;
+  security headers; no `X-Powered-By`; per-address rate limit on sign-in, MFA, portal sign-in and reset requests
+  (production default 30 per 5 min); graceful drain on SIGTERM.
+- **Deployment** (`deploy/server/`): one multi-target Dockerfile (api with LibreOffice, dispatcher, staff, portal
+  standalone Next servers, unprivileged user), Compose with Caddy (automatic TLS, HSTS, security headers), Postgres,
+  ClamAV (limits raised to 2 GB), a one-shot migrate job, nightly `pg_dump` to S3; `.env.example`.
+- **CI** (`.github/workflows/ci.yml`): lint, type-check every app, unit tests; invariants against a real Postgres with
+  the API and dispatcher running; all four images build.
+- **Migration 021** moves `citext`/`pgcrypto` to `public`: on a fresh database the migration runner had put them in
+  `pmp`, where `pmp_app` cannot resolve the type — every fresh install would have failed.
+- **Rehearsal** (`docker-compose.rehearsal.yml`, MinIO + `*.localhost`): 21/21 smoke checks, including a real deck
+  through clamd → S3 → LibreOffice → preview, with no file on the API's disk. Found and fixed the migration-021 bug, a
+  clamd config that never became ready, and an upload volume the `node` user could not write.
+
+Not done (in the runbook): creating any AWS resource, DNS, the SNS bounce subscription, a restore drill, uptime
+monitoring. Still open product gates: G0-6b visual sign-off, G0-1 Room Agent PowerPoint PoC.

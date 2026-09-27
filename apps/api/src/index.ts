@@ -1,4 +1,5 @@
 import express from "express";
+import { assertProductionConfig, rateLimiter } from "./config.ts";
 import { withScope, withSystemScope, getPool, verifyAuditChain, appendAudit as appendAuditRecord } from "@pmp/db";
 import type { Actor, DomainError, EventRole, Result, ReviewAction } from "@pmp/domain";
 import { listTalks } from "./services/talks.ts";
@@ -118,20 +119,92 @@ import type { ImportField, StagedRow, RowOverrides, ImportPreview } from "./serv
 import type { PortalSession } from "./services/portal.ts";
 import { decide } from "./services/review.ts";
 
+assertProductionConfig();
+
 const app = express();
+app.disable("x-powered-by");
 app.use(express.json());
+
+/** Headers for every API response: nothing here is meant to be framed, sniffed or cached by a proxy. */
+app.use((_req, res, next) => {
+  res.header("X-Content-Type-Options", "nosniff");
+  res.header("X-Frame-Options", "DENY");
+  res.header("Referrer-Policy", "no-referrer");
+  next();
+});
+
+/*
+ * Throttle per client address on the endpoints worth hammering (production readiness).
+ * On by default in production; AUTH_RATE_LIMIT=0 turns it off, any number sets it. Off in
+ * development unless set, so the test suite's many sign-ins are not throttled.
+ */
+const signInLimit = Number(process.env.AUTH_RATE_LIMIT ?? (process.env.NODE_ENV === "production" ? 30 : 0));
+const throttled: { prefix: string; check: ReturnType<typeof rateLimiter> }[] =
+  signInLimit > 0
+    ? [
+        { prefix: "/api/v1/auth/login", check: rateLimiter(signInLimit, 5 * 60_000) },
+        { prefix: "/api/v1/auth/mfa/verify", check: rateLimiter(signInLimit, 5 * 60_000) },
+        { prefix: "/api/v1/portal/login", check: rateLimiter(signInLimit, 5 * 60_000) },
+        { prefix: "/api/v1/auth/password-reset/request", check: rateLimiter(Math.max(3, Math.floor(signInLimit / 3)), 15 * 60_000) },
+      ]
+    : [];
 app.use((req, res, next) => {
-  // Dev only: the control center runs on a different port until they are served together.
-  // Credentialed requests cannot use a wildcard origin.
+  if (req.method !== "POST") return next();
+  const rule = throttled.find((entry) => req.path === entry.prefix);
+  if (!rule) return next();
+  const verdict = rule.check(clientIp(req) ?? "unknown");
+  if (verdict.allowed) return next();
+  res.header("Retry-After", String(verdict.retryAfterSeconds));
+  return res
+    .status(429)
+    .json({ code: "request.too_many", message: "Too many attempts from this address. Wait a few minutes and try again." });
+});
+/**
+ * Which sites may call the API with a signed-in session (production readiness).
+ *
+ * This used to reflect *any* Origin with credentials allowed — fine on one laptop, and in
+ * production an open door: any page on the web (and, being same-site, any other app on
+ * av-rfpilot.com) could have made signed-in requests. Now only the two apps' own
+ * addresses (STAFF_BASE, PORTAL_BASE) and any extras in CORS_ORIGINS are allowed; in
+ * production the apps call `/api` on their own address, so the list is a second line.
+ */
+const ALLOWED_ORIGINS = new Set(
+  [
+    process.env.STAFF_BASE ?? "http://localhost:3000",
+    process.env.PORTAL_BASE ?? "http://localhost:3001",
+    ...(process.env.CORS_ORIGINS ?? "").split(","),
+  ]
+    .map((origin) => origin.trim().replace(/\/+$/, ""))
+    .filter(Boolean),
+);
+
+app.use((req, res, next) => {
   const origin = req.header("origin");
-  if (origin) res.header("Access-Control-Allow-Origin", origin);
-  res.header("Access-Control-Allow-Credentials", "true");
-  // `x-file-name` carries the original filename on an upload. It is not a simple
-  // header, so leaving it out of this list meant the browser refused every schedule
-  // import before sending it — on the standalone screen and in the create-event
-  // wizard alike — while the same call from a script worked perfectly.
-  res.header("Access-Control-Allow-Headers", "content-type, authorization, x-file-name");
-  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
+  if (origin && ALLOWED_ORIGINS.has(origin)) {
+    res.header("Access-Control-Allow-Origin", origin);
+    res.header("Access-Control-Allow-Credentials", "true");
+    res.header("Vary", "Origin");
+    // `x-file-name` carries the original filename on an upload. It is not a simple
+    // header, so leaving it out of this list meant the browser refused every schedule
+    // import before sending it — on the standalone screen and in the create-event
+    // wizard alike — while the same call from a script worked perfectly.
+    res.header("Access-Control-Allow-Headers", "content-type, authorization, x-file-name");
+    res.header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
+  }
+  /*
+   * Cross-site request forgery: a browser always names the page's origin on a POST, PUT,
+   * PATCH or DELETE. One from a site that is not ours is refused before it can act on a
+   * session cookie. (Scripts and the room agent send no Origin, and carry no cookie of
+   * a visitor's.) The SES webhook is exempt: SNS is not a browser and signs its messages.
+   */
+  if (
+    origin &&
+    !ALLOWED_ORIGINS.has(origin) &&
+    !["GET", "HEAD", "OPTIONS"].includes(req.method) &&
+    !req.path.startsWith("/api/v1/webhooks/")
+  ) {
+    return res.status(403).json({ code: "request.cross_site", message: "That request came from another site." });
+  }
   next();
 });
 app.options(/.*/, (_req, res) => res.sendStatus(204));
@@ -2608,9 +2681,18 @@ app.post("/api/v1/webhooks/email", snsBody, async (req, res) => {
 
 /* ── authentication (two principals: DXG staff and presenters) ───────────── */
 
+/**
+ * The caller's address, for sign-in throttling and the audit trail.
+ *
+ * The first `X-Forwarded-For` entry is whatever the caller wrote, so trusting it let
+ * anyone pick the address their failed sign-ins counted against. Behind our one proxy
+ * (TRUST_PROXY=1 in production — Caddy appends the address it saw) the *last* entry is
+ * the real one; without a proxy the header is ignored.
+ */
 const clientIp = (req: express.Request): string | undefined => {
-  const forwarded = req.header("x-forwarded-for")?.split(",")[0]?.trim();
-  const address = forwarded ?? req.socket.remoteAddress ?? undefined;
+  const forwarded =
+    process.env.TRUST_PROXY === "1" ? req.header("x-forwarded-for")?.split(",").at(-1)?.trim() : undefined;
+  const address = forwarded || req.socket.remoteAddress || undefined;
   return address?.replace(/^::ffff:/, "");
 };
 
@@ -2969,10 +3051,26 @@ app.use((err: unknown, _req: express.Request, res: express.Response, _next: expr
 });
 
 const port = Number(process.env.PORT ?? 4000);
-app.listen(port, () => {
+const server = app.listen(port, () => {
   console.error(`api listening on http://localhost:${port}`);
   // Conversions interrupted by a restart go back in line (D-067).
   resumePdfQueue().catch((error: unknown) => console.error("pdf queue resume failed", error));
   // Automatic upload reminders (D-096): every quarter hour, from a minute after start.
   startReminderScheduler();
 });
+
+/*
+ * A deploy stops the old container with SIGTERM: finish what is in flight, then close the
+ * database pool, instead of cutting requests (an upload's last part, a review decision) off.
+ */
+for (const signal of ["SIGTERM", "SIGINT"] as const) {
+  process.once(signal, () => {
+    console.error(`[api] ${signal} — draining`);
+    server.close(() => {
+      void getPool()
+        .end()
+        .finally(() => process.exit(0));
+    });
+    setTimeout(() => process.exit(0), 20_000).unref();
+  });
+}
