@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { login, verifyMfa, ApiError } from "@/lib/api";
 import { landingFor } from "@/lib/landing";
+import { PasswordField } from "@/components/PasswordField";
 
 const REASONS: Record<string, string> = {
   expired: "Your session expired. Please sign in again.",
@@ -122,17 +123,7 @@ export function LoginForm({ next, reason }: { next: string; reason: string | nul
             onChange={(event) => setEmail(event.target.value)}
           />
         </div>
-        <div className="field">
-          <label htmlFor="password">Password</label>
-          <input
-            id="password"
-            type="password"
-            autoComplete="current-password"
-            required
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-          />
-        </div>
+        <PasswordField id="password" label="Password" value={password} onChange={setPassword} autoComplete="current-password" />
 
         <button className="btn pri" style={{ width: "100%", padding: 9 }} disabled={busy} type="submit">
           {busy ? "Signing in…" : "Sign in"}

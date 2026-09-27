@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { PasswordField } from "@/components/PasswordField";
 import Link from "next/link";
 import { changePassword, logout, ApiError } from "@/lib/api";
 
@@ -58,42 +59,22 @@ export function ChangePasswordForm({ firstUse }: { firstUse: boolean }) {
           </div>
         )}
 
-        <div className="field">
-          <label htmlFor="current">{firstUse ? "Temporary password" : "Current password"}</label>
-          <input
-            id="current"
-            type="password"
-            autoComplete="current-password"
-            required
-            value={current}
-            onChange={(event) => setCurrent(event.target.value)}
-          />
-        </div>
-        <div className="field">
-          <label htmlFor="next">New password</label>
-          <input
-            id="next"
-            type="password"
-            autoComplete="new-password"
-            required
-            value={next}
-            onChange={(event) => setNext(event.target.value)}
-          />
-          <div className="note" style={{ marginTop: 4 }}>
-            At least 6 characters. Length matters more than symbols — a short phrase works well.
-          </div>
-        </div>
-        <div className="field">
-          <label htmlFor="confirm">Confirm new password</label>
-          <input
-            id="confirm"
-            type="password"
-            autoComplete="new-password"
-            required
-            value={confirm}
-            onChange={(event) => setConfirm(event.target.value)}
-          />
-        </div>
+        <PasswordField
+          id="current"
+          label={firstUse ? "Temporary password" : "Current password"}
+          value={current}
+          onChange={setCurrent}
+          autoComplete="current-password"
+        />
+        <PasswordField id="next" label="New password" value={next} onChange={setNext} autoComplete="new-password" meter />
+        <PasswordField
+          id="confirm"
+          label="Confirm new password"
+          value={confirm}
+          onChange={setConfirm}
+          autoComplete="new-password"
+          matches={next}
+        />
 
         <button className="btn pri" style={{ width: "100%", padding: 9 }} disabled={busy} type="submit">
           {busy ? "Saving…" : "Set password"}

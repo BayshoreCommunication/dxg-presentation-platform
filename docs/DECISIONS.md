@@ -1980,3 +1980,11 @@ DXG and their clients, build now and deploy later. Runbook: `docs/infra/PRODUCTI
 
 Not done (in the runbook): creating any AWS resource, DNS, the SNS bounce subscription, a restore drill, uptime
 monitoring. Still open product gates: G0-6b visual sign-off, G0-1 Room Agent PowerPoint PoC.
+
+## D-099 (2026-09-27): Password fields show/hide and rate the new password — Status: ACCEPTED (Travis's call)
+After Travis's reference: every password field (sign-in, temporary/current, new, confirm) has an eye button to show or
+hide what was typed, and a new password has a three-part strength bar — one red segment for too short (< 6) or a
+common password, two amber for fair, three green for strong (≥ 14 characters, or ≥ 10 with three kinds of
+character) — with the reason in words. The confirm field says whether it matches. `components/PasswordField.tsx`,
+used by Set your own password, Reset password and sign-in. The bar mirrors `@pmp/auth` checkPassword; the server
+still decides. Also: no `X-Powered-By: Next.js` header (Caddy strips it; `poweredByHeader: false` in both apps).

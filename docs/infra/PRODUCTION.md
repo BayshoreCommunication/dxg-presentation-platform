@@ -1,8 +1,10 @@
 # Production — one server (runbook)
 
-Status: **built and rehearsed locally, not deployed** (2026-09-27, D-098). Nothing described here
-exists in AWS yet; every step below that creates or changes a cloud resource is for a person to run,
-deliberately.
+Status: **deployed 2026-09-27** (commit `35932fa`) to account 295229565954, us-east-2 — Lightsail
+`pmp-prod` (4 GB, static IP `3.146.210.9`), S3 `dxg-pmp-files-295229565954`, IAM user `pmp-server`. DNS for
+av-rfpilot.com is at **GoDaddy**, not Route 53. Code is at `/opt/pmp` on the server (a `git archive` of the
+commit, not a clone — the server has no GitHub access); SSH as `ubuntu@3.146.210.9`, allowed only from the
+deploying machine's IP. Updating: `git archive HEAD` → copy → extract over `/opt/pmp` → §6.
 
 Target: DXG staff, their client admins and their speakers, for DXG's events. Accounts are created
 by DXG (no public sign-up).

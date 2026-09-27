@@ -19,6 +19,7 @@
 		Referrer-Policy "strict-origin-when-cross-origin"
 		Permissions-Policy "camera=(), microphone=(), geolocation=()"
 		-Server
+		-X-Powered-By
 	}
 	# The API, including the SES delivery webhook (SNS signs every message; the API verifies
 	# it). Uploads arrive in parts, each bounded by the API, so no body cap is set here.

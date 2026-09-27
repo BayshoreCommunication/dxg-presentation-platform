@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { confirmPasswordReset, ApiError } from "@/lib/api";
+import { PasswordField } from "@/components/PasswordField";
 
 export function ResetPassword({ token }: { token: string }) {
   const router = useRouter();
@@ -85,32 +86,15 @@ export function ResetPassword({ token }: { token: string }) {
           </div>
         )}
 
-        <div className="field">
-          <label htmlFor="password">New password</label>
-          <input
-            id="password"
-            type="password"
-            autoComplete="new-password"
-            autoFocus
-            required
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-          />
-          <div className="note" style={{ marginTop: 4, color: "var(--dim)" }}>
-            At least 6 characters. A short phrase beats a clever substitution.
-          </div>
-        </div>
-        <div className="field">
-          <label htmlFor="confirm">Confirm new password</label>
-          <input
-            id="confirm"
-            type="password"
-            autoComplete="new-password"
-            required
-            value={confirm}
-            onChange={(event) => setConfirm(event.target.value)}
-          />
-        </div>
+        <PasswordField id="password" label="New password" value={password} onChange={setPassword} autoComplete="new-password" meter />
+        <PasswordField
+          id="confirm"
+          label="Confirm new password"
+          value={confirm}
+          onChange={setConfirm}
+          autoComplete="new-password"
+          matches={password}
+        />
 
         <button className="btn pri" style={{ width: "100%", padding: 9 }} disabled={busy} type="submit">
           {busy ? "Saving…" : "Set new password"}

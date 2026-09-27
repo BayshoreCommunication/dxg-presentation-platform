@@ -4,6 +4,8 @@ const config: NextConfig = {
   // @pmp/format ships TypeScript, not built JS, so Next has to compile it.
   transpilePackages: ["@pmp/format"],
   reactStrictMode: true,
+  // No "X-Powered-By: Next.js" — it tells a visitor nothing they need.
+  poweredByHeader: false,
   // The theme switch lives in the bottom-left corner (D-084); keep the dev-only Next.js
   // badge out of its way.
   devIndicators: { position: "bottom-right" },

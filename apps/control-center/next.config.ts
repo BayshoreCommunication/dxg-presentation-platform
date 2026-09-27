@@ -4,6 +4,8 @@ const config: NextConfig = {
   // @pmp/format ships TypeScript, not built JS, so Next has to compile it.
   transpilePackages: ["@pmp/format"],
   reactStrictMode: true,
+  // No "X-Powered-By: Next.js" — it tells a visitor nothing they need.
+  poweredByHeader: false,
   // The browser calls `/api` on this site; in development Next passes it to the API
   // (in production the web server does, and this rewrite is not reached).
   async rewrites() {
