@@ -134,8 +134,17 @@ The API drains in-flight requests on SIGTERM before exiting.
 
 ## 8. Monitoring
 
-- **Uptime**: an external monitor (UptimeRobot, Better Stack, Route 53 health check) on
-  `https://pmp.av-rfpilot.com/ops/health`, alerting by email/SMS.
+- **Uptime** (set up 2026-09-27, account 295229565954): two Route 53 health checks —
+  `pmp-pmp` (`0549a2f5-0569-4166-9318-7d9fce9dda58`) and `pmp-speakers`
+  (`249a0365-6462-415f-87e0-729d51b9d791`) — request `https://<host>/ops/health` every 30 s from
+  ~16 locations and pass only if the body contains `"status":"ok"` (so a down database fails
+  too). Unhealthy after 3 failed checks. CloudWatch alarms `pmp-uptime-pmp` / `pmp-uptime-speakers`
+  (**us-east-1** — Route 53 metrics exist only there) fire on 2 unhealthy minutes out of 3 (late
+  metrics are ignored, not counted as down) and email
+  SNS topic `pmp-uptime-alerts` → dxgrfptool@gmail.com, again on recovery. Cost ≈ $1–3/month.
+  Status: Route 53 console → Health checks, or
+  `aws route53 get-health-check-status --health-check-id <id> --profile rfpilot`.
+  `/ops/health` is not rate-limited; keep it that way or the checkers will trip the alarm.
 - **Logs**: `docker compose logs -f api dispatcher`. Worth watching: `[dispatcher] not sent to …`
   (suppressed or invalid addresses), `[reminders] …`, `pdf` failures, `refusing to start`.
 - **Disk**: Postgres volume and Docker images; alert at 80 %.
