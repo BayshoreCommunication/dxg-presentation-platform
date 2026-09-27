@@ -34,6 +34,8 @@ let reviewer = "";
 let addEventId = "";
 let addSlots: string[] = [];
 let sendEventId = "";
+/** This run's speakers on the send probe, taken off its presentations when the run ends. */
+const runSpeakers: string[] = [];
 let sendSlot = "";
 /** The probe's two added presentations (a session also carries one under its own title). */
 let sendTalks: { slot_id: string; title: string }[] = [];
@@ -98,7 +100,9 @@ async function newSpeaker(label: string, input: { email?: string; onTalk?: boole
     ...(input.onTalk === false ? {} : { slot_id: sendSlot }),
   });
   assert.equal(response.status, 201, `fixture: speaker ${label}`);
-  return ((await response.json()) as { speaker_id: string }).speaker_id;
+  const { speaker_id } = (await response.json()) as { speaker_id: string };
+  runSpeakers.push(speaker_id);
+  return speaker_id;
 }
 
 const sendLink = (speakerId: string, eventId = sendEventId, cookie = admin) =>
@@ -192,6 +196,21 @@ after(async () => {
   if (!up) return;
   await removeTestAccounts(["probe-speakers-reviewer-"]);
   await removeTestEvents([ADD_EVENT]);
+  /*
+   * The send probe cannot be deleted — its emails are history — so it is reused. Left as
+   * it was, every run added its speakers to the probe's presentations and the event
+   * stayed live in the portfolio: a hundred probe speakers on one agenda. The run's own
+   * speakers come off the presentations (their records and emails stay, as history),
+   * and the event goes back to archived; the next run restores it.
+   */
+  if (sendEventId) {
+    if (runSpeakers.length > 0) {
+      await withSystemScope(async (tx) => {
+        await tx.query(`DELETE FROM pmp.speaker_assignments WHERE speaker_id = ANY($1::uuid[])`, [runSpeakers]);
+      });
+    }
+    await call(admin, "POST", `/events/${sendEventId}/archive`);
+  }
 });
 
 describe("adding a speaker (D-085)", () => {
