@@ -11,10 +11,12 @@ import {
   addSpeaker,
   sendUploadLink,
   setReleasePermission,
+  removeSpeaker,
   ApiError,
 } from "@/lib/api";
 import { Chip } from "@/components/Chip";
 import { Icon } from "@/components/Icon";
+import { InfoTip } from "@/components/InfoTip";
 import { HoverTip } from "@/components/HoverTip";
 
 /** Screen 5 — the speaker directory, its duplicates, and the chase list. */
@@ -40,6 +42,7 @@ export function SpeakersView({
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  const [removing, setRemoving] = useState<SpeakerRow | null>(null);
 
   // The server component re-renders on refresh; the list here is client state, so a
   // new speaker is fetched rather than waiting on a prop that `useState` would ignore.
@@ -286,7 +289,16 @@ export function SpeakersView({
                   <th>Speaker</th>
                   <th>Presentations</th>
                   <th>Status</th>
-                  <th>Release</th>
+                  <th style={{ whiteSpace: "nowrap" }}>
+                    Archive permission
+                    <InfoTip label="Archive permission" align="right">
+                      What this speaker agreed the client may keep after the
+                      event. Full release: the PowerPoint and a PDF go into the
+                      post-event archive. PDF only: just the PDF. No release, or
+                      Not set: their presentations are left out. For a shared
+                      talk the strictest speaker&rsquo;s choice applies.
+                    </InfoTip>
+                  </th>
                   <th>Upload link</th>
                   <th style={{ textAlign: "right" }}>Action</th>
                 </tr>
@@ -319,7 +331,7 @@ export function SpeakersView({
                       </td>
                       <td>
                         <select
-                          aria-label={`Release permission for ${row.full_name}`}
+                          aria-label={`Archive permission for ${row.full_name}`}
                           value={row.release_permission}
                           disabled={pending === `${row.id}:release`}
                           style={{ minWidth: 0, maxWidth: 124 }}
@@ -405,6 +417,17 @@ export function SpeakersView({
                               <Icon name="clipboard" />
                             </button>
                           </HoverTip>
+                          <HoverTip label="Remove speaker">
+                            <button
+                              className="btn"
+                              style={ICON_BUTTON}
+                              disabled={pending === `${row.id}:remove`}
+                              aria-label={`Remove ${row.full_name} from this event`}
+                              onClick={() => setRemoving(row)}
+                            >
+                              <Icon name="trash" />
+                            </button>
+                          </HoverTip>
                         </span>
                       </td>
                     </tr>
@@ -415,6 +438,40 @@ export function SpeakersView({
           )}
         </div>
       </div>
+
+      {removing && (
+        <RemoveSpeakerDialog
+          speaker={removing}
+          busy={pending === `${removing.id}:remove`}
+          onClose={() => setRemoving(null)}
+          onConfirm={async () => {
+            const who = removing;
+            setPending(`${who.id}:remove`);
+            setError(null);
+            try {
+              const result = await removeSpeaker(eventId, who.id);
+              setRemoving(null);
+              setToast(
+                `${who.full_name} removed` +
+                  (result.presentations > 0
+                    ? ` · taken off ${result.presentations} presentation${result.presentations === 1 ? "" : "s"}`
+                    : ""),
+              );
+              await reload();
+              router.refresh();
+            } catch (caught) {
+              setRemoving(null);
+              setError(
+                caught instanceof ApiError
+                  ? caught.message
+                  : "The speaker could not be removed.",
+              );
+            } finally {
+              setPending(null);
+            }
+          }}
+        />
+      )}
 
       {adding && (
         <AddSpeakerDialog
@@ -473,6 +530,10 @@ function AddSpeakerDialog({
       setError("A speaker needs a name.");
       return;
     }
+    if (!slotId) {
+      setError("Choose the presentation this speaker is giving.");
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -480,12 +541,12 @@ function AddSpeakerDialog({
         name: name.trim(),
         email: email.trim(),
         organization: organization.trim(),
-        ...(slotId ? { slot_id: slotId } : {}),
+        slot_id: slotId,
       });
       const talk = talks.find((candidate) => candidate.slot_id === slotId);
       onAdded(
         result.created
-          ? `${name.trim()} added${talk ? ` to ${talk.label}` : ""}`
+          ? `${name.trim()} added to ${talk?.label ?? "the presentation"}`
           : `${name.trim()} was already on this event — now on ${talk?.label ?? "that presentation"} too`,
       );
     } catch (caught) {
@@ -560,13 +621,26 @@ function AddSpeakerDialog({
           </div>
           <div className="field">
             <label htmlFor="new-speaker-talk">Presentation</label>
+            {talks.length === 0 && (
+              <div className="note" style={{ marginBottom: 6 }}>
+                Add the presentation to the agenda first — a speaker is always
+                added to one.
+              </div>
+            )}
             <select
               id="new-speaker-talk"
               style={{ width: "100%" }}
               value={slotId}
+              required
+              disabled={talks.length === 0}
               onChange={(event) => setSlotId(event.target.value)}
             >
-              <option value="">Not assigned yet</option>
+              {/* Required (D-095): a speaker is added to a presentation. */}
+              <option value="" disabled>
+                {talks.length === 0
+                  ? "No presentations on the agenda yet"
+                  : "Choose a presentation…"}
+              </option>
               {talks.map((talk) => (
                 <option key={talk.slot_id} value={talk.slot_id}>
                   {talk.label}
@@ -590,7 +664,11 @@ function AddSpeakerDialog({
             >
               Cancel
             </button>
-            <button type="submit" className="btn pri" disabled={saving}>
+            <button
+              type="submit"
+              className="btn pri"
+              disabled={saving || !slotId}
+            >
               {saving ? "Adding…" : "Add speaker"}
             </button>
           </div>
@@ -638,4 +716,95 @@ function EmailStatus({ email }: { email: SpeakerRow["last_email"] }) {
   };
   const label = email.status.charAt(0).toUpperCase() + email.status.slice(1);
   return <Chip status={tone[email.status] ?? "submitted"} label={label} />;
+}
+
+/**
+ * Confirms removing a speaker (D-095), saying what it does. Asked on the page, not with
+ * `window.confirm`, which the desktop app's browser dismisses unseen (D-073).
+ */
+function RemoveSpeakerDialog({
+  speaker,
+  busy,
+  onClose,
+  onConfirm,
+}: {
+  speaker: SpeakerRow;
+  busy: boolean;
+  onClose: () => void;
+  onConfirm: () => Promise<void>;
+}) {
+  useEffect(() => {
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !busy) onClose();
+    };
+    document.addEventListener("keydown", escape);
+    return () => document.removeEventListener("keydown", escape);
+  }, [busy, onClose]);
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Remove ${speaker.full_name}`}
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(8,12,20,.55)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 20,
+        zIndex: 50,
+      }}
+      onClick={(event) => {
+        if (event.target === event.currentTarget && !busy) onClose();
+      }}
+    >
+      <div className="card" style={{ maxWidth: 460, width: "100%" }}>
+        <div className="chd">
+          <h3>Remove {speaker.full_name}?</h3>
+        </div>
+        <div className="cbd">
+          <p style={{ marginTop: 0 }}>
+            {speaker.full_name} will be taken off{" "}
+            {speaker.talks === 1
+              ? "their presentation"
+              : `their ${speaker.talks} presentations`}{" "}
+            and removed from this event. Their upload link and access code stop
+            working at once.
+          </p>
+          <p className="note">
+            Files they uploaded stay with the presentations, and emails already
+            sent stay in the delivery log.
+          </p>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "flex-end",
+              gap: 8,
+              marginTop: 12,
+            }}
+          >
+            <button
+              type="button"
+              className="btn"
+              disabled={busy}
+              onClick={onClose}
+              autoFocus
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="btn warnb"
+              disabled={busy}
+              onClick={() => void onConfirm()}
+            >
+              {busy ? "Removing…" : "Remove speaker"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }

@@ -90,6 +90,7 @@ import {
   addPresenter,
   removePresenter,
   addSpeaker,
+  removeSpeaker,
   setReleasePermission,
 } from "./services/agendaEdit.ts";
 import {
@@ -753,6 +754,14 @@ app.post(
   agendaRoute(201, (tx, actor, req) => addSpeaker(tx, actor, String(req.params.eventId), bodyOf(req))),
 );
 
+/** Removes a speaker from the event (D-095); their history stays. */
+app.delete(
+  "/api/v1/events/:eventId/speakers/:speakerId",
+  agendaRoute(200, (tx, actor, req) =>
+    removeSpeaker(tx, actor, String(req.params.eventId), String(req.params.speakerId)),
+  ),
+);
+
 /** What the speaker allows the archive to share (D-089). */
 app.put(
   "/api/v1/events/:eventId/speakers/:speakerId/release-permission",
@@ -1087,7 +1096,7 @@ app.get("/api/v1/events/:eventId/speakers", async (req, res) => {
          LEFT JOIN pmp.speaker_assignments sa ON sa.speaker_id = sp.id
          LEFT JOIN pmp.files f ON f.slot_id = sa.slot_id
          LEFT JOIN pmp.file_versions fv ON fv.file_id = f.id
-        WHERE sp.event_id = $1 AND sp.merged_into IS NULL
+        WHERE sp.event_id = $1 AND sp.merged_into IS NULL AND sp.removed_at IS NULL
           AND ($2 = '' OR sp.full_name ILIKE '%' || $2 || '%'
                OR COALESCE(sp.organization,'') ILIKE '%' || $2 || '%'
                OR COALESCE(sp.email::text,'') ILIKE '%' || $2 || '%')
@@ -1577,11 +1586,11 @@ app.get("/api/v1/events/:eventId/speaker-duplicates", async (req, res) => {
                    ELSE 'same name and organization' END AS reason
          FROM pmp.speakers a
          JOIN pmp.speakers b
-           ON b.event_id = a.event_id AND b.id > a.id AND b.merged_into IS NULL
+           ON b.event_id = a.event_id AND b.id > a.id AND b.merged_into IS NULL AND b.removed_at IS NULL
           AND (lower(a.email::text) = lower(b.email::text)
                OR (lower(a.full_name) = lower(b.full_name)
                    AND COALESCE(lower(a.organization),'') = COALESCE(lower(b.organization),'')))
-        WHERE a.event_id = $1 AND a.merged_into IS NULL`,
+        WHERE a.event_id = $1 AND a.merged_into IS NULL AND a.removed_at IS NULL`,
       [eventId],
     );
     return rows;
@@ -1604,7 +1613,7 @@ app.post("/api/v1/speakers/:speakerId/merge", async (req, res) => {
 
   const result = await withScope(scopeFor(req), async (tx) => {
     const { rows } = await tx.query<{ event_id: string; client_id: string }>(
-      `SELECT event_id, client_id FROM pmp.speakers WHERE id = $1 AND merged_into IS NULL`,
+      `SELECT event_id, client_id FROM pmp.speakers WHERE id = $1 AND merged_into IS NULL AND removed_at IS NULL`,
       [merged],
     );
     if (!rows[0]) return null;

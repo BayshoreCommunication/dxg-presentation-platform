@@ -368,7 +368,7 @@ export async function presenterLogin(
             st.event_id, st.client_id, st.expires_at, st.revoked_at
        FROM pmp.speaker_tokens st
        JOIN pmp.speakers sp ON sp.id = st.speaker_id
-      WHERE st.token_hash = ANY($1::bytea[]) AND sp.merged_into IS NULL`,
+      WHERE st.token_hash = ANY($1::bytea[]) AND sp.merged_into IS NULL AND sp.removed_at IS NULL`,
     [candidates],
   );
   const token = rows[0];
@@ -467,7 +467,7 @@ export async function resolveSession(tx: pg.PoolClient, token: string): Promise<
       client_id: string;
     }>(
       `SELECT id, email::text, full_name, event_id, client_id
-         FROM pmp.speakers WHERE id = $1 AND merged_into IS NULL`,
+         FROM pmp.speakers WHERE id = $1 AND merged_into IS NULL AND removed_at IS NULL`,
       [session.speaker_id],
     );
     const speaker = speakerRows[0];
@@ -608,7 +608,7 @@ export async function issuePresenterCredential(
     client_id: string;
   }>(
     `SELECT id, full_name, email::text, event_id, client_id
-       FROM pmp.speakers WHERE id = $1 AND merged_into IS NULL`,
+       FROM pmp.speakers WHERE id = $1 AND merged_into IS NULL AND removed_at IS NULL`,
     [input.speakerId],
   );
   const speaker = rows[0];

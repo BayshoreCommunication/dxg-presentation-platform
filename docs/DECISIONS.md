@@ -1861,3 +1861,27 @@ positioning, and inside a card whose entry animation leaves a transform, "fixed"
 the card (the same cause as the InfoTip and slide-viewer fixes). `DateField` and the time field now pass
 `portalId="dxg-datepicker-portal"`, so every calendar renders in a container on `<body>`. The wizard's "Draft so far"
 card (name, days, rooms) is removed at Travis's request; the steps themselves show the same information.
+
+## D-095 (2026-09-27): Speakers can be removed; adding one needs a presentation — Status: ACCEPTED (Travis's call)
+**Remove.** A speaker row cannot be deleted once anything refers to it — sent emails, uploads, comments, sign-in
+records and the audit chain are history — so removal is a mark (migration 019: `speakers.removed_at`, `removed_by`).
+`DELETE /events/{id}/speakers/{speakerId}` (`removeSpeaker`, presentation manager or above) takes the speaker off every
+presentation, revokes every link and access code (`speaker_tokens`) and ends any portal session (`auth_sessions`),
+and audits `speakers.removed` with name, email and the presentations they were on. Every query that already hid merged
+duplicates (`merged_into IS NULL`, 17 places) now also hides removed speakers, and the portal's link resolution
+refuses them. Files they uploaded stay with the presentations. Removing twice, or another event's speaker, is 404.
+The same person can be added again later; they get a new record.
+Speakers screen: a trash icon ("Remove speaker") in Action, confirmed in an on-page dialog that says what happens.
+
+**A presentation is required.** `POST /events/{id}/speakers` refuses a missing `slot_id` (`422 agenda.incomplete`,
+"Choose the presentation this speaker is giving."): a speaker on nothing has nothing to upload for and gets no
+invitation. The form's presentation list has no "Not assigned yet"; it starts on "Choose a presentation…" and Add
+speaker stays disabled until one is chosen (with a note when the agenda has none). A speaker can still end up on no
+presentation by being taken off it on the agenda, so the send-link `comms.no_talk` refusal stays.
+
+Tests: `tests/invariants/speakers-add-and-send.test.ts` — presentation required, duplicate on the same presentation,
+and 5 removal cases (off presentations and directory, link stops working, cannot be emailed, audited, twice/other
+event 404, re-add creates a new record, role refused).
+The Speakers screen's "Release" column is now **Archive permission** (also on the event's Speakers tab), with an
+"i" note: what the speaker agreed the client may keep after the event, what each choice puts in the post-event
+archive, and that a shared talk follows the strictest speaker's choice.

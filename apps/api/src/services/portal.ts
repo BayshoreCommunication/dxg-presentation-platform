@@ -26,6 +26,7 @@ export async function resolveToken(tx: pg.PoolClient, token: string): Promise<Po
        JOIN pmp.speakers sp ON sp.id = st.speaker_id
        JOIN pmp.events e ON e.id = st.event_id
       WHERE st.token_hash = $1
+        AND sp.removed_at IS NULL
         AND st.revoked_at IS NULL
         AND st.expires_at > now()`,
     [hashToken(token)],

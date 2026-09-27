@@ -673,7 +673,7 @@ export async function buildPreview(
   );
 
   const { rows: speakerRows } = await tx.query<{ email: string | null }>(
-    `SELECT email::text FROM pmp.speakers WHERE event_id = $1 AND merged_into IS NULL`,
+    `SELECT email::text FROM pmp.speakers WHERE event_id = $1 AND merged_into IS NULL AND removed_at IS NULL`,
     [input.eventId],
   );
   const existingEmails = new Set(speakerRows.map((row) => (row.email ?? "").toLowerCase()));
@@ -1100,8 +1100,8 @@ export async function syncPresenters(
 
     const { rows: found } = await tx.query<{ id: string }>(
       presenter.email
-        ? `SELECT id FROM pmp.speakers WHERE event_id = $1 AND lower(email::text) = lower($2) AND merged_into IS NULL`
-        : `SELECT id FROM pmp.speakers WHERE event_id = $1 AND lower(full_name) = lower($2) AND merged_into IS NULL`,
+        ? `SELECT id FROM pmp.speakers WHERE event_id = $1 AND lower(email::text) = lower($2) AND merged_into IS NULL AND removed_at IS NULL`
+        : `SELECT id FROM pmp.speakers WHERE event_id = $1 AND lower(full_name) = lower($2) AND merged_into IS NULL AND removed_at IS NULL`,
       [input.eventId, presenter.email || displayName],
     );
 

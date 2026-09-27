@@ -60,7 +60,7 @@ export async function noticeToSpeakers(
        JOIN pmp.speakers sp ON sp.id = sa.speaker_id
        JOIN pmp.files f ON f.slot_id = sa.slot_id
        JOIN pmp.file_versions fv ON fv.file_id = f.id
-      WHERE fv.id = $1 AND sa.replaced_by IS NULL AND sp.merged_into IS NULL`,
+      WHERE fv.id = $1 AND sa.replaced_by IS NULL AND sp.merged_into IS NULL AND sp.removed_at IS NULL`,
     [input.versionId],
   );
 

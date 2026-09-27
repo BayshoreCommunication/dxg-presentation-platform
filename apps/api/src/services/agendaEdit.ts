@@ -538,16 +538,16 @@ export async function addPresenter(
  *
  * Until now a speaker could only arrive with the agenda — an import row or a presenter
  * typed onto a talk. A speaker confirmed before their talk is placed had nowhere to go.
- * Matching is the import's: by email when there is one, else by name. Without a talk,
- * a match is refused rather than silently returning the existing record, so the person
- * adding learns the speaker was already here. With a talk, a match is simply assigned.
+ * Matching is the import's: by email when there is one, else by name. A presentation is
+ * required (D-095); an existing speaker is simply put on it, and one already on it is
+ * refused so the person adding learns they were already there.
  */
 export async function addSpeaker(
   tx: pg.PoolClient,
   actor: Actor,
   eventId: string,
   input: PresenterInput & { slot_id?: string },
-): Promise<Result<{ speaker_id: string; created: boolean; slot_id: string | null }, DomainError>> {
+): Promise<Result<{ speaker_id: string; created: boolean; slot_id: string }, DomainError>> {
   if (!hasAnyRole(actor, EDITORS)) return err(forbidden("Adding a speaker"));
   const event = await eventOf(tx, eventId);
   if (!event) return err(notFound("event"));
@@ -559,42 +559,20 @@ export async function addSpeaker(
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return err({ code: "agenda.incomplete", message: "That email address does not look complete." });
   }
-  if (slotId && !(await slotOf(tx, eventId, slotId))) return err(notFound("presentation"));
+  // A speaker is added *to a presentation* (D-095). A speaker on nothing has nothing to
+  // upload for, gets no invitation, and is only clutter in the directory.
+  if (!slotId) {
+    return err({ code: "agenda.incomplete", message: "Choose the presentation this speaker is giving." });
+  }
+  if (!(await slotOf(tx, eventId, slotId))) return err(notFound("presentation"));
 
   const { rows: found } = await tx.query<{ id: string; full_name: string }>(
     email
-      ? `SELECT id, full_name FROM pmp.speakers WHERE event_id = $1 AND lower(email::text) = lower($2) AND merged_into IS NULL`
-      : `SELECT id, full_name FROM pmp.speakers WHERE event_id = $1 AND lower(full_name) = lower($2) AND merged_into IS NULL`,
+      ? `SELECT id, full_name FROM pmp.speakers WHERE event_id = $1 AND lower(email::text) = lower($2) AND merged_into IS NULL AND removed_at IS NULL`
+      : `SELECT id, full_name FROM pmp.speakers WHERE event_id = $1 AND lower(full_name) = lower($2) AND merged_into IS NULL AND removed_at IS NULL`,
     [eventId, email || name],
   );
   const existing = found[0];
-
-  if (!slotId) {
-    if (existing) {
-      return err({
-        code: "speakers.conflict",
-        message: email
-          ? `${existing.full_name} already has ${email} on this event.`
-          : `${existing.full_name} is already a speaker on this event.`,
-      });
-    }
-    const { rows } = await tx.query<{ id: string }>(
-      `INSERT INTO pmp.speakers (client_id, event_id, email, full_name, organization)
-       VALUES ($1,$2,NULLIF($3,'')::citext,$4,NULLIF($5,'')) RETURNING id`,
-      [event.client_id, eventId, email, name, organization],
-    );
-    const speakerId = rows[0]!.id;
-    await appendAudit(tx, {
-      partitionId: eventId,
-      clientId: event.client_id,
-      actorUserId: actor.id,
-      action: "speakers.created",
-      subjectType: "speaker",
-      subjectId: speakerId,
-      detail: { via: "speakers_screen" },
-    });
-    return ok({ speaker_id: speakerId, created: true, slot_id: null });
-  }
 
   if (existing) {
     const { rowCount } = await tx.query(
@@ -623,6 +601,53 @@ export async function addSpeaker(
     detail: { speaker_ids: [speakerId], slot_id: slotId, via: "speakers_screen" },
   });
   return ok({ speaker_id: speakerId, created: !existing, slot_id: slotId });
+}
+
+/**
+ * Removes a speaker from the event (D-095).
+ *
+ * The row stays — emails, uploads, comments and the audit chain refer to it — but the
+ * speaker is gone from the event: off every presentation, every sign-in link and access
+ * code revoked, any open portal session ended, and hidden from every list that hides
+ * merged duplicates. Files they uploaded stay with the presentations: those belong to
+ * the talk, not the person. Audited with who they were and what they were on.
+ */
+export async function removeSpeaker(
+  tx: pg.PoolClient,
+  actor: Actor,
+  eventId: string,
+  speakerId: string,
+): Promise<Result<{ removed: true; presentations: number }, DomainError>> {
+  if (!hasAnyRole(actor, EDITORS)) return err(forbidden("Removing a speaker"));
+  const { rows } = await tx.query<{ client_id: string; full_name: string; email: string | null }>(
+    `UPDATE pmp.speakers SET removed_at = now(), removed_by = $3, lock_version = lock_version + 1, updated_at = now()
+      WHERE id = $1 AND event_id = $2 AND merged_into IS NULL AND removed_at IS NULL
+      RETURNING client_id, full_name, email::text`,
+    [speakerId, eventId, actor.id],
+  );
+  const speaker = rows[0];
+  if (!speaker) return err(notFound("speaker"));
+
+  const { rows: assignments } = await tx.query<{ slot_id: string }>(
+    `DELETE FROM pmp.speaker_assignments WHERE speaker_id = $1 RETURNING slot_id`,
+    [speakerId],
+  );
+  await tx.query(`UPDATE pmp.speaker_tokens SET revoked_at = now() WHERE speaker_id = $1 AND revoked_at IS NULL`, [
+    speakerId,
+  ]);
+  await tx.query(`UPDATE pmp.auth_sessions SET revoked_at = now() WHERE speaker_id = $1 AND revoked_at IS NULL`, [
+    speakerId,
+  ]);
+  await appendAudit(tx, {
+    partitionId: eventId,
+    clientId: speaker.client_id,
+    actorUserId: actor.id,
+    action: "speakers.removed",
+    subjectType: "speaker",
+    subjectId: speakerId,
+    detail: { name: speaker.full_name, email: speaker.email, slot_ids: assignments.map((row) => row.slot_id) },
+  });
+  return ok({ removed: true, presentations: assignments.length });
 }
 
 /** What a speaker allows the archive to share (FR-SPK-003). */
@@ -656,7 +681,7 @@ export async function setReleasePermission(
     `UPDATE pmp.speakers sp
         SET release_permission = $3, lock_version = sp.lock_version + 1, updated_at = now()
        FROM pmp.speakers prior
-      WHERE sp.id = prior.id AND sp.id = $1 AND sp.event_id = $2 AND sp.merged_into IS NULL
+      WHERE sp.id = prior.id AND sp.id = $1 AND sp.event_id = $2 AND sp.merged_into IS NULL AND sp.removed_at IS NULL
       RETURNING sp.client_id, prior.release_permission AS before`,
     [speakerId, eventId, value],
   );

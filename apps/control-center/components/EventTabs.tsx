@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip } from "@/components/InfoTip";
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import type { AgendaPresentation, AgendaSession, EventDraft, SpeakerRow } from "@/lib/api";
@@ -564,7 +565,15 @@ function SpeakersPanel({
                 <th style={{ textAlign: "left" }}>Speaker</th>
                 <th style={{ textAlign: "left" }}>Presentations</th>
                 <th style={{ textAlign: "left" }}>Files</th>
-                <th style={{ textAlign: "left" }}>Release</th>
+                <th style={{ textAlign: "left", whiteSpace: "nowrap" }}>
+                  Archive permission
+                  <InfoTip label="Archive permission" align="right">
+                  What this speaker agreed the client may keep after the event. Full release: the
+                  PowerPoint and a PDF go into the post-event archive. PDF only: just the PDF. No
+                  release, or Not set: their presentations are left out. For a shared talk the
+                  strictest speaker&rsquo;s choice applies.
+                </InfoTip>
+                </th>
               </tr>
             </thead>
             <tbody>

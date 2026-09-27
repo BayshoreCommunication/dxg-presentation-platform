@@ -526,10 +526,14 @@ export type DuplicatePair = {
 export const getSpeakers = (eventId: string, q = "") =>
   request<{ items: SpeakerRow[] }>(`/events/${eventId}/speakers?q=${encodeURIComponent(q)}`);
 
-export type NewSpeakerInput = { name: string; email: string; organization: string; slot_id?: string };
+export type NewSpeakerInput = { name: string; email: string; organization: string; slot_id: string };
+
+/** Removes a speaker from the event; their history stays (D-095). */
+export const removeSpeaker = (eventId: string, speakerId: string) =>
+  request<{ removed: true; presentations: number }>(`/events/${eventId}/speakers/${speakerId}`, { method: "DELETE" });
 
 export const addSpeaker = (eventId: string, input: NewSpeakerInput) =>
-  request<{ speaker_id: string; created: boolean; slot_id: string | null }>(`/events/${eventId}/speakers`, {
+  request<{ speaker_id: string; created: boolean; slot_id: string }>(`/events/${eventId}/speakers`, {
     method: "POST",
     body: JSON.stringify(input),
   });

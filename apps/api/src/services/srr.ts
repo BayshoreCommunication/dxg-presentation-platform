@@ -62,7 +62,7 @@ export async function srrDashboard(
        JOIN pmp.slots s ON s.id = sa.slot_id
        JOIN pmp.sessions se ON se.id = s.session_id
        LEFT JOIN pmp.rooms r ON r.id = se.room_id
-      WHERE sp.event_id = $1 AND sp.merged_into IS NULL
+      WHERE sp.event_id = $1 AND sp.merged_into IS NULL AND sp.removed_at IS NULL
       ORDER BY se.starts_at`,
     [eventId],
   );

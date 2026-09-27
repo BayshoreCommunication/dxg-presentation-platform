@@ -92,12 +92,12 @@ async function agendaWithTwoTalks(eventId: string, date: string): Promise<string
 }
 
 /** Adds a speaker to the send probe and returns its id. Unique per run, so "once" starts fresh. */
-async function newSpeaker(label: string, input: { email?: string; onTalk?: boolean } = {}): Promise<string> {
+async function newSpeaker(label: string, input: { email?: string } = {}): Promise<string> {
   const response = await call(admin, "POST", `/events/${sendEventId}/speakers`, {
     name: `Link Probe ${label} ${RUN}`,
     email: input.email ?? "",
     organization: "",
-    ...(input.onTalk === false ? {} : { slot_id: sendSlot }),
+    slot_id: sendSlot,
   });
   assert.equal(response.status, 201, `fixture: speaker ${label}`);
   const { speaker_id } = (await response.json()) as { speaker_id: string };
@@ -214,23 +214,17 @@ after(async () => {
 });
 
 describe("adding a speaker (D-085)", () => {
-  test("a speaker can be added with no talk yet", async (t: TestContext) => {
+  test("a presentation is required (D-095)", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
+    const before = (await speakers(addEventId)).length;
     const response = await call(admin, "POST", `/events/${addEventId}/speakers`, {
       name: "Unplaced Probe",
       email: "unplaced.probe@example.invalid",
       organization: "Probe Org",
     });
-    assert.equal(response.status, 201);
-    const body = (await response.json()) as { speaker_id: string; created: boolean; slot_id: string | null };
-    assert.equal(body.created, true);
-    assert.equal(body.slot_id, null);
-    const row = (await speakers(addEventId)).find((speaker) => speaker.id === body.speaker_id);
-    assert.ok(row, "the speaker is in the directory");
-    assert.equal(row.email, "unplaced.probe@example.invalid");
-    assert.equal(row.organization, "Probe Org");
-    assert.equal(row.talks, 0);
-    assert.equal(row.last_email, null, "nobody has emailed them");
+    assert.equal(response.status, 422);
+    assert.equal(await codeOf(response), "agenda.incomplete");
+    assert.equal((await speakers(addEventId)).length, before, "nothing was created");
   });
 
   test("a speaker can be added straight onto a presentation", async (t: TestContext) => {
@@ -249,28 +243,18 @@ describe("adding a speaker (D-085)", () => {
     assert.equal(row?.talks, 1);
   });
 
-  test("the same email with no talk is refused, not silently matched", async (t: TestContext) => {
+  test("the same email on the same presentation is refused, not silently matched", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
     const before = (await speakers(addEventId)).length;
     const response = await call(admin, "POST", `/events/${addEventId}/speakers`, {
       name: "Someone Else",
       email: "PLACED.probe@example.invalid",
       organization: "",
+      slot_id: addSlots[0],
     });
     assert.equal(response.status, 409);
     assert.equal(await codeOf(response), "speakers.conflict");
     assert.equal((await speakers(addEventId)).length, before, "no second record");
-  });
-
-  test("the same name with no email and no talk is refused", async (t: TestContext) => {
-    if (!up) return t.skip("API not running");
-    const response = await call(admin, "POST", `/events/${addEventId}/speakers`, {
-      name: "unplaced PROBE",
-      email: "",
-      organization: "",
-    });
-    assert.equal(response.status, 409);
-    assert.equal(await codeOf(response), "speakers.conflict");
   });
 
   test("an existing speaker added onto another talk is assigned, not duplicated", async (t: TestContext) => {
@@ -443,7 +427,11 @@ describe("emailing the upload link (D-086)", () => {
 
   test("a speaker with no talk is refused — there is nothing to upload for", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
-    const speakerId = await newSpeaker("NoTalk", { email: `link.notalk.${RUN}@example.invalid`, onTalk: false });
+    // Every speaker is added to a presentation (D-095); one can still end up on none
+    // when they are taken off it on the agenda.
+    const speakerId = await newSpeaker("NoTalk", { email: `link.notalk.${RUN}@example.invalid` });
+    const off = await call(admin, "DELETE", `/events/${sendEventId}/presentations/${sendSlot}/presenters/${speakerId}`);
+    assert.equal(off.status, 200, "fixture: taken off the presentation");
     const response = await sendLink(speakerId);
     assert.equal(response.status, 422);
     assert.equal(await codeOf(response), "comms.no_talk");
@@ -521,5 +509,82 @@ describe("a speaker on several presentations (D-087)", () => {
     assert.equal((await sendLink(speakerId)).status, 201);
     const [sent] = await communicationsFor(speakerId);
     for (const talk of sendTalks) assert.ok(sent!.body.includes(`• ${talk.title}`), `names ${talk.title}`);
+  });
+});
+
+describe("removing a speaker (D-095)", () => {
+  test("they come off every presentation and out of the directory, and their link stops working", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const email = `remove.me.${RUN}@example.invalid`;
+    const speakerId = await newSpeaker("Remove", { email });
+    await call(admin, "POST", `/events/${sendEventId}/speakers`, {
+      name: `Link Probe Remove ${RUN}`,
+      email,
+      organization: "",
+      slot_id: sendTalks[1]!.slot_id,
+    });
+    const invite = (await (await call(admin, "POST", `/speakers/${speakerId}/invite`)).json()) as { token: string };
+    const portal = (token: string) => fetch(`${API}/portal/session`, { headers: { authorization: `Bearer ${token}` } });
+    assert.equal((await portal(invite.token)).status, 200, "fixture: the link works before removal");
+
+    const response = await call(admin, "DELETE", `/events/${sendEventId}/speakers/${speakerId}`);
+    assert.equal(response.status, 200);
+    assert.equal(((await response.json()) as { presentations: number }).presentations, 2);
+
+    assert.equal((await speakers(sendEventId)).some((speaker) => speaker.id === speakerId), false);
+    const assignments = await withSystemScope(async (tx) => {
+      const { rows } = await tx.query(`SELECT 1 FROM pmp.speaker_assignments WHERE speaker_id = $1`, [speakerId]);
+      return rows.length;
+    });
+    assert.equal(assignments, 0);
+    assert.equal((await portal(invite.token)).status, 401, "their link no longer signs in");
+    assert.equal((await sendLink(speakerId)).status, 404, "and they cannot be emailed");
+  });
+
+  test("the removal is audited with who they were", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const speakerId = await newSpeaker("RemoveAudit", { email: `remove.audit.${RUN}@example.invalid` });
+    assert.equal((await call(admin, "DELETE", `/events/${sendEventId}/speakers/${speakerId}`)).status, 200);
+    const detail = await withSystemScope(async (tx) => {
+      const { rows } = await tx.query<{ detail: { name: string; email: string } }>(
+        `SELECT detail FROM pmp.audit_records WHERE action = 'speakers.removed' AND subject_id = $1`,
+        [speakerId],
+      );
+      return rows[0]?.detail;
+    });
+    assert.equal(detail?.email, `remove.audit.${RUN}@example.invalid`);
+  });
+
+  test("removing twice, or someone from another event, is not found", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const speakerId = await newSpeaker("RemoveTwice", { email: `remove.twice.${RUN}@example.invalid` });
+    assert.equal((await call(admin, "DELETE", `/events/${sendEventId}/speakers/${speakerId}`)).status, 200);
+    assert.equal((await call(admin, "DELETE", `/events/${sendEventId}/speakers/${speakerId}`)).status, 404);
+    const medtech = (await speakers(MEDTECH))[0]!;
+    assert.equal((await call(admin, "DELETE", `/events/${sendEventId}/speakers/${medtech.id}`)).status, 404);
+  });
+
+  test("the same person can be added again afterwards, as a new record", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const email = `remove.readd.${RUN}@example.invalid`;
+    const first = await newSpeaker("Readd", { email });
+    assert.equal((await call(admin, "DELETE", `/events/${sendEventId}/speakers/${first}`)).status, 200);
+    const again = await call(admin, "POST", `/events/${sendEventId}/speakers`, {
+      name: `Link Probe Readd ${RUN}`,
+      email,
+      organization: "",
+      slot_id: sendSlot,
+    });
+    assert.equal(again.status, 201);
+    const body = (await again.json()) as { speaker_id: string; created: boolean };
+    assert.equal(body.created, true);
+    assert.notEqual(body.speaker_id, first);
+    runSpeakers.push(body.speaker_id);
+  });
+
+  test("staff below presentation manager cannot remove a speaker", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const response = await call(reviewer, "DELETE", `/events/${addEventId}/speakers/${(await speakers(addEventId))[0]!.id}`);
+    assert.equal(response.status, 403);
   });
 });
