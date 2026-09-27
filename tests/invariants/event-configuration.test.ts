@@ -197,9 +197,9 @@ describe("a room technician cannot reconfigure the event they staff", () => {
 describe("a presentation manager on the event still can", () => {
   test("the gate stops the wrong role, not the work", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
-    const response = await patch(probeEvent, manager, { settings: { reminders: "T-7 · T-2" } });
+    const response = await patch(probeEvent, manager, { settings: { reminder_days: [7, 2] } });
     assert.equal(response.status, 200);
-    assert.equal((await setupOf(probeEvent, admin)).settings.reminders, "T-7 · T-2");
+    assert.deepEqual((await setupOf(probeEvent, admin)).settings.reminder_days, [7, 2]);
   });
 });
 
@@ -252,11 +252,13 @@ describe("what the event's settings will and will not accept", () => {
     await refused({ upload_deadline: "2027-06-02" }, /after the event starts/);
   });
 
-  test("unknown settings and oversized reminders are refused", async (t: TestContext) => {
+  test("unknown settings and reminder days not on offer are refused (D-096)", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
     await refused({ upload_deadline: "2027-05-20", portal_closed: true }, /Unknown setting: portal_closed/);
-    await refused({ reminders: "x".repeat(201) }, /200 characters/);
-    await refused({ reminders: 7 }, /must be text/);
+    await refused({ reminders: "T-14 · T-7" }, /Unknown setting: reminders/);
+    await refused({ reminder_days: [10] }, /Reminder days must be chosen/);
+    await refused({ reminder_days: [7, 7] }, /Reminder days must be chosen/);
+    await refused({ reminder_days: "7" }, /Reminder days must be chosen/);
   });
 });
 

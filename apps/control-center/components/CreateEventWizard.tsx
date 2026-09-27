@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { EventDraft } from "@/lib/api";
 import { createEvent, configureEvent, activateEvent, getDraft, ApiError } from "@/lib/api";
 import { ColorPicker } from "@/components/ColorPicker";
+import { ReminderDaysField, reminderDaysFrom } from "@/components/ReminderDaysField";
 import { BrandAssetField, assetFrom } from "@/components/BrandAssetField";
 import { ImportView } from "@/components/ImportView";
 import { DateField } from "@/components/DateTimeField";
@@ -63,9 +64,7 @@ export function CreateEventWizard({
     null,
   );
   const [deadline, setDeadline] = useState(text(resume?.settings.upload_deadline, ""));
-  const [reminders, setReminders] = useState(
-    text(resume?.settings.reminders, "T-14 · T-7 · T-2 · missing-file only"),
-  );
+  const [reminderDays, setReminderDays] = useState<number[]>(reminderDaysFrom(resume?.settings));
   const [accent, setAccent] = useState(text(resume?.branding.accent, "#44C7F4"));
 
   /*
@@ -222,8 +221,8 @@ export function CreateEventWizard({
                 />
               </div>
               <div className="field">
-                <label>Reminders</label>
-                <input style={{ width: "100%" }} value={reminders} onChange={(event) => setReminders(event.target.value)} />
+                <label>Automatic reminders</label>
+                <ReminderDaysField value={reminderDays} onChange={setReminderDays} />
               </div>
             </div>
           )}
@@ -310,7 +309,7 @@ export function CreateEventWizard({
                     }
                     setDraft(
                       await configureEvent(draft!.id, {
-                        settings: { upload_deadline: deadline, reminders },
+                        settings: { upload_deadline: deadline, reminder_days: reminderDays },
                       }),
                     );
                     setStep(step + 1);

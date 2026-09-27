@@ -1885,3 +1885,68 @@ event 404, re-add creates a new record, role refused).
 The Speakers screen's "Release" column is now **Archive permission** (also on the event's Speakers tab), with an
 "i" note: what the speaker agreed the client may keep after the event, what each choice puts in the post-event
 archive, and that a shared talk follows the strictest speaker's choice.
+
+## D-096 (2026-09-27): Automatic upload reminders — Status: ACCEPTED (Travis's call)
+The event's "Reminders" setting was free text ("T-14 · T-7 · T-2 · missing-file only") that nothing read, and the
+Communications screen stated "Automated reminders: T-14 · T-7 · T-2 before the deadline, missing-file only" — no
+reminder had ever been sent on a schedule (there is no worker). Now they are real (FR-COM-002):
+
+- **Setting:** `settings.reminder_days`, chosen from 14 / 7 / 3 / 2 / 1 days before the upload deadline; an empty list
+  turns them off. The wizard's step 3 and event settings show five toggle buttons (default 14, 7, 2) instead of the
+  text box. The API refuses any other value and the old `reminders` key (D-091's `checkSettings`). Migration 020 drops
+  the text and gives every event the default.
+- **Scheduler** (`services/reminders.ts`, started with the API, every 15 minutes, `REMINDERS_DISABLED=1` turns it off):
+  only **active** events with a deadline; a reminder day is due from **09:00 on that day in the event's timezone** until
+  the deadline passes; it sends the event's reminder template through the ordinary batch (`sendBatch`, missing files
+  only), so every guard applies — no address, bounced, reserved test domains (D-090), and anyone sent that template in
+  the last **12 hours** (shorter than the manual 24 so reminder days a day apart both go).
+- **Once only:** `reminder_runs` (unique per event, deadline and day) records each run, under a transaction-level
+  advisory lock so two API instances never both send. If the server was down across a reminder day, the next run sends
+  **one** reminder for the most recent day due and records the missed ones as `caught_up` — never a burst. Moving the
+  deadline starts a fresh set. An event that cannot send (e.g. no reminder template) is recorded `failed`, not retried
+  every tick.
+- **Communications:** the false line is replaced by an "Automatic reminders" card: the chosen days and deadline, the
+  next reminder's date, what each past run did, or why it is off (no deadline / not activated / turned off).
+
+Tests: `tests/invariants/automatic-reminders.test.ts` drives the scheduler with a chosen clock (8 cases: nothing
+before a reminder day or before 09:00; once only; a missed day folded into the next; nothing after the deadline; a moved
+deadline starts afresh; off stops it; a draft sends nothing). Existing tests moved from `reminders` text to
+`reminder_days`.
+
+## D-097 (2026-09-27): Email addresses are validated, and bounced addresses are never mailed again — Status: ACCEPTED (Travis's call)
+To protect the sending domain's reputation (av-rfpilot.com via SES): hard bounces and spam complaints are what mail
+providers punish. Before this, nothing checked an address at send time; the spreadsheet import did not check emails
+at all; Add speaker and add-presenter used a loose `x@y.z` pattern; and a bounce was only remembered on the one
+speaker record, so the same dead address on another speaker or event was mailed again.
+
+- **`@pmp/email` `checkAddress`** (no network): RFC 5321 lengths, a valid local part, a dotted domain with a real
+  top-level label, no spaces/double @ — and common provider typos (gmial, gamil, gmail.con, hotmial, outlok, yaho,
+  iclod…) refused with the likely address ("Did you mean jane@gmail.com?").
+- **`@pmp/email` `verifyAddress`**: `checkAddress`, then DNS — the domain must have an MX record, or an A/AAAA record
+  to fall back on (RFC 5321 §5.1), and not a null MX (RFC 7505). Cached an hour per domain. If DNS cannot answer
+  (timeout, offline) the address is allowed, marked `unverified` — never block work on a network blip. Reserved test
+  domains are not looked up; `EMAIL_DNS_CHECK=0` turns the lookup off.
+- **Where addresses are typed:** Add speaker and the agenda's add-presenter refuse a bad address
+  (`422 speakers.bad_email`, stored normalised with a lower-cased domain); the schedule import flags every bad presenter
+  address as a **blocking** issue on its row and column (text checks per row, one DNS look-up per distinct domain).
+- **Before every send (dispatcher, `apps/dispatcher/src/guard.ts`):** whatever queued it, a message is not handed to
+  the provider if the address fails `verifyAddress`, or if that address has **ever bounced or complained on any event**
+  (case-insensitive). The communication is marked `failed` with the reason and a `failed` delivery event.
+- **Earlier refusals:** batch recipients and the per-speaker send treat an address-level bounce/complaint as bounced
+  (reported before queueing, `comms.bounced_conflict`).
+
+Scan of the dev database: 193 distinct speaker addresses, 1 refused — `wallace@Branch-productions.com` (Test Event),
+whose domain takes no mail. Tests: `packages/email` validate + verify unit tests (fake DNS), and 5 cases in
+`tests/invariants/speakers-add-and-send.test.ts` (typo with suggestion, add-presenter, import blocking, address-level
+bounce across speaker records incl. the dispatcher guard, invalid address at send time).
+
+**Test harness, same day.** Full invariant runs had begun cancelling whole suites: 23 suites sign in as
+`admin@example.invalid`, each sign-in spends a fresh 30-second authenticator step, and the step lock queued them
+(~10 minutes, past the hook timeouts). `tests/helpers/signIn.ts` now shares the admin's session across suites (kept
+beside the step ledger, checked live against `/auth/session` before use, re-checked under the lock) — admin only,
+because a session snapshots roles and suites that grant a seeded account a role must sign it in afterwards. A full run
+went from ~10 minutes to ~70 seconds. Running suites concurrently then exposed two old overlaps, fixed:
+`admin.test.ts` cleaned up with the prefix `"probe-"`, deleting other suites' probe accounts mid-setup (now
+`"probe-admin-"`); and password-reset counted the whole mail folder (now counts only mail to its own address). The
+reminders suite clears its probe's `reminder_runs` in `before` (migration 020 grants DELETE on it) and uses fixed dates.
+Result: 271/271 invariants twice in a row, 0 cancelled.

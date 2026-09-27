@@ -86,7 +86,9 @@ function checkBasics(input: CreateEventInput): DomainError | null {
 }
 
 /** The settings an event carries; anything else is refused rather than stored. */
-const SETTING_KEYS = ["upload_deadline", "reminders"] as const;
+const SETTING_KEYS = ["upload_deadline", "reminder_days"] as const;
+/** The reminder days an event may choose (D-096): days before the upload deadline. */
+const REMINDER_CHOICES = [14, 7, 3, 2, 1];
 
 /**
  * Checks event settings before any of the request is written (D-091).
@@ -99,7 +101,8 @@ const SETTING_KEYS = ["upload_deadline", "reminders"] as const;
  *   - `upload_deadline` is empty (no deadline) or a real calendar date, on or before
  *     the event's first day — the same bound both date pickers already set: a deadline
  *     after the event has begun is not a deadline;
- *   - `reminders` is text of a sensible length.
+ *   - `reminder_days` is a set of the offered days before the deadline (D-096); an empty
+ *     list turns automatic reminders off.
  */
 function checkSettings(settings: unknown, startsOn: string): DomainError | null {
   const bad = (message: string): DomainError => ({ code: "events.bad_settings", message });
@@ -109,7 +112,7 @@ function checkSettings(settings: unknown, startsOn: string): DomainError | null 
   const unknown = Object.keys(settings).filter((key) => !(SETTING_KEYS as readonly string[]).includes(key));
   if (unknown.length > 0) return bad(`Unknown setting${unknown.length === 1 ? "" : "s"}: ${unknown.join(", ")}.`);
 
-  const { upload_deadline: deadline, reminders } = settings as Record<string, unknown>;
+  const { upload_deadline: deadline, reminder_days: reminderDays } = settings as Record<string, unknown>;
   if (deadline !== undefined && deadline !== null && deadline !== "") {
     if (typeof deadline !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(deadline)) {
       return bad("The upload deadline must be a date (YYYY-MM-DD).");
@@ -123,9 +126,14 @@ function checkSettings(settings: unknown, startsOn: string): DomainError | null 
       return bad(`The upload deadline (${deadline}) is after the event starts (${startsOn}).`);
     }
   }
-  if (reminders !== undefined && reminders !== null) {
-    if (typeof reminders !== "string") return bad("Reminders must be text.");
-    if (reminders.length > 200) return bad("Reminders must be 200 characters or fewer.");
+  if (reminderDays !== undefined) {
+    if (
+      !Array.isArray(reminderDays) ||
+      reminderDays.some((day) => !REMINDER_CHOICES.includes(day as number)) ||
+      new Set(reminderDays).size !== reminderDays.length
+    ) {
+      return bad(`Reminder days must be chosen from ${REMINDER_CHOICES.join(", ")} days before the deadline.`);
+    }
   }
   return null;
 }

@@ -3,6 +3,8 @@ import { appendAudit } from "@pmp/db";
 import { parseSheet, excelSerialToDate } from "@pmp/files";
 import type { Actor, DomainError, Result } from "@pmp/domain";
 import { err, ok } from "@pmp/domain";
+import { checkAddress } from "@pmp/email";
+import { verifyAddress } from "@pmp/email";
 
 /* ── column mapping (FR-IMP-001) ─────────────────────────────────────────── */
 
@@ -681,6 +683,8 @@ export async function buildPreview(
   const issues: RowIssue[] = [];
   const staged: StagedRow[] = [];
   const newSpeakers = new Set<string>();
+  // Addresses whose shape is fine, by domain — their mail servers are checked after the loop.
+  const toVerify = new Map<string, { row: number; column: RowIssue["column"]; address: string }[]>();
 
   dataRows.forEach((row, index) => {
     // The row number the operator sees in their spreadsheet, so an error names a row
@@ -724,6 +728,30 @@ export async function buildPreview(
         .join(" "),
       email: at(`${prefix}.email` as ImportField),
     })).filter((presenter) => presenter.name || presenter.email);
+
+    /*
+     * Every address the row names is checked before it can become a speaker (D-097): a
+     * bad one would bounce, and bounces count against the sending domain. Blocking, like
+     * any other error, and named by the column it came from so the row editor opens on it.
+     */
+    PRESENTER_PREFIXES.forEach((prefix) => {
+      const column = `${prefix}.email` as ImportField;
+      const address = at(column);
+      if (!address) return;
+      const check = checkAddress(address);
+      if (!check.ok) {
+        issues.push({
+          row: rowNumber,
+          column,
+          severity: "blocking",
+          message: check.suggestion ? `${check.reason} Did you mean ${check.suggestion}?` : check.reason,
+        });
+        return;
+      }
+      const list = toVerify.get(check.domain) ?? [];
+      list.push({ row: rowNumber, column, address });
+      toVerify.set(check.domain, list);
+    });
 
     if (!title) {
       issues.push({ row: rowNumber, column: "session.title", severity: "blocking", message: "Session title is empty." });
@@ -944,6 +972,18 @@ export async function buildPreview(
       action: match ? "unchanged" : "create",
     });
   });
+
+  // One DNS look-up per domain, all at once; a domain that takes no mail blocks its rows.
+  await Promise.all(
+    [...toVerify.values()].map(async (entries) => {
+      const verdict = await verifyAddress(entries[0]!.address);
+      if (verdict.ok) return;
+      for (const entry of entries) {
+        issues.push({ row: entry.row, column: entry.column, severity: "blocking", message: verdict.reason });
+      }
+    }),
+  );
+  issues.sort((a, b) => a.row - b.row);
 
   const counts = {
     create: staged.filter((row) => row.action === "create").length,

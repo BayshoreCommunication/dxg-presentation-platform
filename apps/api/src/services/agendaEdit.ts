@@ -3,6 +3,21 @@ import { appendAudit } from "@pmp/db";
 import type { Actor, DomainError, Result } from "@pmp/domain";
 import { atLeast, err, hasAnyRole, ok } from "@pmp/domain";
 import { normalise, resolveDay, resolveRoom, resolveTrack, syncPresenters } from "./scheduleImport.ts";
+import { verifyAddress } from "@pmp/email";
+
+/**
+ * A typed address, checked before it is stored (D-097): its shape, known typos, and that
+ * its domain takes mail. Empty stays empty — an address is optional on a presenter.
+ */
+async function checkedEmail(raw: string): Promise<Result<string, DomainError>> {
+  if (!raw) return ok("");
+  const verdict = await verifyAddress(raw);
+  if (verdict.ok) return ok(verdict.address);
+  return err({
+    code: "speakers.bad_email",
+    message: verdict.suggestion ? `${verdict.reason} Did you mean ${verdict.suggestion}?` : verdict.reason,
+  });
+}
 
 /**
  * Editing the agenda from the event details (D-064).
@@ -509,11 +524,11 @@ export async function addPresenter(
   if (!event) return err(notFound("event"));
   if (!(await slotOf(tx, eventId, slotId))) return err(notFound("presentation"));
   const name = presenter.name?.trim() ?? "";
-  const email = presenter.email?.trim() ?? "";
-  if (!name && !email) return err({ code: "agenda.incomplete", message: "A presenter needs a name or an email." });
-  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    return err({ code: "agenda.incomplete", message: "That email address does not look complete." });
-  }
+  const typed = presenter.email?.trim() ?? "";
+  if (!name && !typed) return err({ code: "agenda.incomplete", message: "A presenter needs a name or an email." });
+  const checked = await checkedEmail(typed);
+  if (!checked.ok) return checked;
+  const email = checked.value;
   const touched = await syncPresenters(tx, {
     eventId,
     clientId: event.client_id,
@@ -552,13 +567,13 @@ export async function addSpeaker(
   const event = await eventOf(tx, eventId);
   if (!event) return err(notFound("event"));
   const name = input.name?.trim() ?? "";
-  const email = input.email?.trim() ?? "";
+  const typedEmail = input.email?.trim() ?? "";
   const organization = input.organization?.trim() ?? "";
   const slotId = input.slot_id?.trim() || null;
   if (!name) return err({ code: "agenda.incomplete", message: "A speaker needs a name." });
-  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    return err({ code: "agenda.incomplete", message: "That email address does not look complete." });
-  }
+  const checked = await checkedEmail(typedEmail);
+  if (!checked.ok) return checked;
+  const email = checked.value;
   // A speaker is added *to a presentation* (D-095). A speaker on nothing has nothing to
   // upload for, gets no invitation, and is only clutter in the directory.
   if (!slotId) {

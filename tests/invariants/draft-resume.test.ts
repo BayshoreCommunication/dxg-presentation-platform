@@ -143,11 +143,11 @@ describe("an unfinished draft can be picked back up", () => {
 
   test("settings and branding come back, so steps 3 and 4 resume too", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
-    await patch(draftId, { settings: { upload_deadline: "2027-03-01", reminders: "T-7 only" } });
+    await patch(draftId, { settings: { upload_deadline: "2027-03-01", reminder_days: [7] } });
     await patch(draftId, { branding: { accent: "#123456" } });
     const draft = await getDraft(draftId);
     assert.equal(draft.settings.upload_deadline, "2027-03-01");
-    assert.equal(draft.settings.reminders, "T-7 only");
+    assert.deepEqual(draft.settings.reminder_days, [7]);
     assert.equal(draft.branding.accent, "#123456");
   });
 });

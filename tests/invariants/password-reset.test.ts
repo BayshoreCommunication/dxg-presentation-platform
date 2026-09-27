@@ -116,12 +116,23 @@ describe("requesting a reset reveals nothing", () => {
 
   test("an unknown address produces no email at all", async (t: TestContext) => {
     if (!up || !dispatcherRunning) return t.skip("dispatcher not running");
+    const nobody = "definitely-nobody@example.invalid";
+    const since = Date.now();
+    await requestReset(nobody);
     await settle();
-    const before = (await readdir(MAIL).catch(() => [] as string[])).length;
-    await requestReset("definitely-nobody@example.invalid");
-    await settle();
-    const after = (await readdir(MAIL).catch(() => [] as string[])).length;
-    assert.equal(after, before, "no message should have been sent");
+    /*
+     * Mail *to that address*, not a count of the whole mail folder: other suites send mail
+     * while this one runs, and a folder count failed whenever one of them did.
+     */
+    let sent = 0;
+    for (const file of (await readdir(MAIL).catch(() => [] as string[])).filter((name) => name.endsWith(".json"))) {
+      const full = path.join(MAIL, file);
+      const written = await stat(full).catch(() => null);
+      if (!written || written.mtimeMs < since) continue;
+      const message = JSON.parse(await readFile(full, "utf8")) as { to: string };
+      if (message.to === nobody) sent += 1;
+    }
+    assert.equal(sent, 0, "no message should have been sent");
   });
 });
 

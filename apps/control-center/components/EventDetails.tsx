@@ -9,6 +9,7 @@ import { Chip } from "@/components/Chip";
 import { eventStatusChip } from "@/lib/eventStatus";
 import { DateField } from "@/components/DateTimeField";
 import { ColorPicker } from "@/components/ColorPicker";
+import { ReminderDaysField, reminderDaysFrom, sameDays } from "@/components/ReminderDaysField";
 import { BrandAssetField, assetFrom } from "@/components/BrandAssetField";
 
 const TIMEZONE_NOTE =
@@ -57,9 +58,7 @@ export function EventDetails({
   const [deadline, setDeadline] = useState(
     typeof setup.settings.upload_deadline === "string" ? setup.settings.upload_deadline : "",
   );
-  const [reminders, setReminders] = useState(
-    typeof setup.settings.reminders === "string" ? setup.settings.reminders : "",
-  );
+  const [reminderDays, setReminderDays] = useState<number[]>(reminderDaysFrom(setup.settings));
   const [accent, setAccent] = useState(
     typeof setup.branding.accent === "string" ? setup.branding.accent : "#44C7F4",
   );
@@ -71,7 +70,7 @@ export function EventDetails({
   const basicsChanged = name !== setup.name || venue !== (setup.venue ?? "");
   const settingsChanged =
     deadline !== (setup.settings.upload_deadline ?? "") ||
-    reminders !== (setup.settings.reminders ?? "");
+    !sameDays(reminderDays, reminderDaysFrom(setup.settings));
   const brandingChanged =
     accent.toUpperCase() !== String(setup.branding.accent ?? "#44C7F4").toUpperCase();
   const changed = basicsChanged || settingsChanged || brandingChanged;
@@ -97,7 +96,7 @@ export function EventDetails({
               },
             }
           : {}),
-        ...(settingsChanged ? { settings: { upload_deadline: deadline, reminders } } : {}),
+        ...(settingsChanged ? { settings: { upload_deadline: deadline, reminder_days: reminderDays } } : {}),
         ...(brandingChanged ? { branding: { accent } } : {}),
       });
       setToast("Saved");
@@ -271,15 +270,8 @@ export function EventDetails({
               {deadline === "" && <div className="note">Not set — no deadline is enforced.</div>}
             </div>
             <div className="field">
-              <label htmlFor="event-reminders">Reminder cadence</label>
-              <input
-                id="event-reminders"
-                style={{ width: "100%" }}
-                value={reminders}
-                disabled={readOnly}
-                placeholder="T-14 · T-7 · T-2 · missing-file only"
-                onChange={(event) => setReminders(event.target.value)}
-              />
+              <label>Automatic reminders</label>
+              <ReminderDaysField value={reminderDays} onChange={setReminderDays} disabled={readOnly} />
             </div>
           </div>
         </div>

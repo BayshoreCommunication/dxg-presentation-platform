@@ -254,9 +254,49 @@ export function CommsView({ eventId, data }: { eventId: string; data: CommsData 
         >
           Test send
         </button>
-        <span className="note" style={{ alignSelf: "center" }}>
-          Automated reminders: T-14 · T-7 · T-2 before the deadline, missing-file only.
-        </span>
+
+      </div>
+
+      {/* The automatic reminders (D-096) — what the event is actually set to do, not a slogan. */}
+      <div className="card">
+        <div className="chd">
+          <h3>Automatic reminders</h3>
+          <span className="m">reminder template · speakers still missing a file · 09:00 event time</span>
+        </div>
+        <div className="cbd">
+          {data.reminders.days.length > 0 && (
+            <div style={{ marginBottom: 8 }}>
+              {data.reminders.days.map((day) => `${day} day${day === 1 ? "" : "s"}`).join(" · ")} before the deadline
+              {data.reminders.deadline ? ` (${formatDay(data.reminders.deadline)})` : ""}
+            </div>
+          )}
+          {data.reminders.on ? (
+            <div className="note">
+              {data.reminders.next
+                ? `Next: ${formatDay(data.reminders.next.date)} — ${data.reminders.next.days_before} day${data.reminders.next.days_before === 1 ? "" : "s"} before.`
+                : "All reminders for this deadline have gone."}
+            </div>
+          ) : (
+            <div className="note">{data.reminders.off_reason}</div>
+          )}
+          {data.reminders.runs.length > 0 && (
+            <ul className="note" style={{ margin: "8px 0 0", paddingLeft: 18 }}>
+              {data.reminders.runs.map((run) => (
+                <li key={run.days_before}>
+                  {run.days_before} day{run.days_before === 1 ? "" : "s"} before ({formatDay(run.due_on)}):{" "}
+                  {run.outcome === "sent"
+                    ? `sent to ${run.queued} speaker${run.queued === 1 ? "" : "s"}`
+                    : run.outcome === "caught_up"
+                      ? "missed while the server was down — covered by the next reminder"
+                      : "could not send"}
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="note" style={{ marginTop: 8 }}>
+            Change the days in the event&rsquo;s settings. Bulk remind on Speakers sends one now.
+          </div>
+        </div>
       </div>
 
       <div className="card">
@@ -297,4 +337,14 @@ export function CommsView({ eventId, data }: { eventId: string; data: CommsData 
       <div className={`toast ${toast ? "show" : ""}`}>{toast}</div>
     </>
   );
+}
+
+/** `2026-10-20` → "Tue, Oct 20". A calendar day, so no timezone shift. */
+function formatDay(day: string): string {
+  return new Date(`${day}T12:00:00Z`).toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
 }

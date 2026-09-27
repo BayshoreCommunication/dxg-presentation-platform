@@ -146,7 +146,7 @@ describe("an archived event is read-only", () => {
     const response = await fetch(`${API}/events/${frozen}`, {
       method: "PATCH",
       headers: json(admin),
-      body: JSON.stringify({ settings: { reminders: "T-7 only" } }),
+      body: JSON.stringify({ settings: { reminder_days: [7] } }),
     });
     await expectArchived(response);
   });
@@ -194,7 +194,7 @@ describe("an archived event is read-only", () => {
     const response = await fetch(`${API}/events/${frozen}`, {
       method: "PATCH",
       headers: json(admin),
-      body: JSON.stringify({ settings: { reminders: "T-7 only" } }),
+      body: JSON.stringify({ settings: { reminder_days: [7] } }),
     });
     assert.equal(response.status, 200);
   });

@@ -1,6 +1,7 @@
 import { withSystemScope, closePool } from "@pmp/db";
 import { senderFromEnv } from "@pmp/email";
 import type { Message } from "@pmp/email";
+import { suppressionReason } from "./guard.ts";
 
 /**
  * The outbox dispatcher (BUILD_SPEC §6.2). Side effects are written inside the
@@ -25,6 +26,27 @@ async function handle(row: OutboxRow): Promise<void> {
   };
   if (!payload.to || !payload.subject) {
     throw new Error("email.send payload needs `to` and `subject`");
+  }
+
+  // Never hand the provider an address that will bounce, or one that already has (D-097).
+  const refused = await withSystemScope((tx) => suppressionReason(tx, payload.to!));
+  if (refused) {
+    console.error(`[dispatcher] not sent to ${payload.to} — ${refused}`);
+    if (payload.communication_id) {
+      await withSystemScope(async (tx) => {
+        await tx.query(
+          `UPDATE pmp.communications SET status = 'failed', status_detail = $2 WHERE id = $1 AND status = 'queued'`,
+          [payload.communication_id, JSON.stringify({ reason: refused })],
+        );
+        await tx.query(
+          `INSERT INTO pmp.communication_events
+             (communication_id, event_id, client_id, event_type, payload, occurred_at)
+           SELECT id, event_id, client_id, 'failed', $2, now() FROM pmp.communications WHERE id = $1`,
+          [payload.communication_id, JSON.stringify({ reason: refused })],
+        );
+      });
+    }
+    return; // Dispatched: it was decided, not deferred — retrying would refuse again.
   }
 
   const message: Message = {

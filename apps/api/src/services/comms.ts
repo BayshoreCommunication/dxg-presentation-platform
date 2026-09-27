@@ -232,6 +232,7 @@ export async function recipientsFor(
   eventId: string,
   templateId: string,
   missingOnly: boolean,
+  cooldownHours: number = RESEND_COOLDOWN_HOURS,
 ): Promise<Recipient[]> {
   const { rows } = await tx.query<{
     speaker_id: string;
@@ -252,8 +253,11 @@ export async function recipientsFor(
                                                'review', fv.review_state) ORDER BY fv.version_number)
                FROM pmp.file_versions fv JOIN pmp.files f ON f.id = fv.file_id
               WHERE f.slot_id = s.id) AS versions,
+            -- By speaker *or address* (D-097): an address that bounced or complained on any
+            -- event is not mailed again, whichever speaker record now carries it.
             EXISTS (SELECT 1 FROM pmp.communications c
-                     WHERE c.speaker_id = sp.id AND c.status IN ('bounced','complained')) AS bounced,
+                     WHERE (c.speaker_id = sp.id OR lower(c.to_address::text) = lower(sp.email::text))
+                       AND c.status IN ('bounced','complained')) AS bounced,
             EXISTS (SELECT 1 FROM pmp.communications c
                      WHERE c.speaker_id = sp.id AND c.template_id = $2
                        AND c.created_at > now() - make_interval(hours => $3)) AS already_sent
@@ -264,7 +268,7 @@ export async function recipientsFor(
        LEFT JOIN pmp.rooms r ON r.id = se.room_id
       WHERE sp.event_id = $1 AND sp.merged_into IS NULL AND sp.removed_at IS NULL
       ORDER BY sp.full_name, se.starts_at`,
-    [eventId, templateId, RESEND_COOLDOWN_HOURS],
+    [eventId, templateId, cooldownHours],
   );
 
   const perTalk = rows
@@ -411,7 +415,13 @@ export type SendResult = {
 export async function sendBatch(
   tx: pg.PoolClient,
   actor: Actor,
-  input: { eventId: string; templateId: string; missingOnly: boolean },
+  input: {
+    eventId: string;
+    templateId: string;
+    missingOnly: boolean;
+    /** The automatic reminders use a shorter guard, so reminder days a day apart both go (D-096). */
+    cooldownHours?: number;
+  },
 ): Promise<Result<SendResult, DomainError>> {
   const { rows: readiness } = await tx.query<{
     rooms: string;
@@ -447,7 +457,8 @@ export async function sendBatch(
   const template = templateRows[0];
   if (!template) return err({ code: "comms.template_not_found", message: "No such template." });
 
-  const recipients = await recipientsFor(tx, input.eventId, input.templateId, input.missingOnly);
+  const cooldown = input.cooldownHours ?? RESEND_COOLDOWN_HOURS;
+  const recipients = await recipientsFor(tx, input.eventId, input.templateId, input.missingOnly, cooldown);
   const skipped = new Map<string, number>();
   const note = (reason: string) => skipped.set(reason, (skipped.get(reason) ?? 0) + 1);
 
@@ -464,7 +475,7 @@ export async function sendBatch(
     if (recipient.already_sent) {
       // Named by what it is, so an operator can tell "I already did this" from
       // "this address is dead" — the two reasons a chase list comes back empty.
-      note(`already emailed this in the last ${RESEND_COOLDOWN_HOURS} hours`);
+      note(`already emailed this in the last ${cooldown} hours`);
       continue;
     }
 
@@ -575,8 +586,12 @@ export async function sendUploadLink(
   const { rows: history } = await tx.query<{ status: string; at: string; to_address: string; upload_link: boolean }>(
     `SELECT status, COALESCE(sent_at, created_at)::text AS at, to_address::text,
             template_id IS NOT NULL AS upload_link
-       FROM pmp.communications WHERE speaker_id = $1 ORDER BY created_at DESC`,
-    [input.speakerId],
+       FROM pmp.communications
+      WHERE speaker_id = $1
+         -- A bounce or complaint on this address anywhere counts too (D-097).
+         OR (lower(to_address::text) = lower($2) AND status IN ('bounced','complained'))
+      ORDER BY created_at DESC`,
+    [input.speakerId, speaker.email],
   );
   if (history.some((row) => row.status === "bounced" || row.status === "complained")) {
     return err({

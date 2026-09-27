@@ -32,7 +32,11 @@ const STEP_NOW = () => Math.floor(Date.now() / 1000 / 30);
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** Held only for the moment it takes to claim a step; stale locks are broken. */
-async function withStepLock<T>(account: string, fn: () => Promise<T>): Promise<T> {
+async function withStepLock<T>(
+  account: string,
+  fn: () => Promise<T>,
+  reuse?: () => Promise<T | null>,
+): Promise<T> {
   const { mkdir, open, readFile, writeFile, stat, unlink } = await import("node:fs/promises");
   await mkdir(COORD_DIR, { recursive: true });
   const key = account.replace(/[^a-z0-9]+/gi, "_");
@@ -58,6 +62,9 @@ async function withStepLock<T>(account: string, fn: () => Promise<T>): Promise<T
       const handle = await open(lock, "wx");
       await handle.close();
       try {
+        // Someone ahead in the queue may already hold a session this caller can share.
+        const early = await reuse?.();
+        if (early) return early;
         const spent = Number((await readFile(ledger, "utf8").catch(() => "0")).trim()) || 0;
         // Wait out only what is actually spent, not a whole window on principle.
         while (STEP_NOW() <= spent) await sleep(500);
@@ -113,6 +120,42 @@ export async function freshCode(secret = DEV_MFA_SECRET): Promise<string> {
   return totp(secret);
 }
 
+/*
+ * ── sharing the platform admin's session across suites ─────────────────────────────
+ *
+ * Every staff sign-in spends a fresh 30-second authenticator step, and the step lock above
+ * queues the suites that need one. Twenty-three suites sign in as `admin@example.invalid`,
+ * so a full run queued for up to ten minutes and suites began timing out in `before` —
+ * "cancelled" with nothing wrong in the code under test.
+ *
+ * So the admin's session is signed in once and shared: the cookie is kept beside the step
+ * ledger, and each suite checks it is still live (`/auth/session`, same account) before
+ * using it. Only the admin: its authority is platform-wide and never changes, whereas a
+ * session snapshots roles at sign-in, and suites that grant a seeded account a role and
+ * then sign it in need a session made *after* the grant.
+ */
+const SHARED_SESSIONS = new Set(["admin@example.invalid"]);
+
+async function sharedSession(api: string, email: string): Promise<string | null> {
+  if (!SHARED_SESSIONS.has(email.toLowerCase())) return null;
+  const { readFile } = await import("node:fs/promises");
+  const cookie = (await readFile(`${COORD_DIR}/${email.replace(/[^a-z0-9]+/gi, "_")}.session`, "utf8").catch(() => "")).trim();
+  if (!cookie) return null;
+  const response = await fetch(`${api}/auth/session`, { headers: { cookie } }).catch(() => null);
+  if (!response?.ok) return null;
+  const body = (await response.json().catch(() => ({}))) as { principal?: { email?: string } };
+  return body.principal?.email?.toLowerCase() === email.toLowerCase() ? cookie : null;
+}
+
+async function keepSession(email: string, cookie: string): Promise<string> {
+  if (SHARED_SESSIONS.has(email.toLowerCase()) && cookie) {
+    const { mkdir, writeFile } = await import("node:fs/promises");
+    await mkdir(COORD_DIR, { recursive: true });
+    await writeFile(`${COORD_DIR}/${email.replace(/[^a-z0-9]+/gi, "_")}.session`, cookie, "utf8");
+  }
+  return cookie;
+}
+
 /**
  * Signs a staff account in through both factors and returns the session cookie.
  * Staff sign-in is two steps now, so tests have to walk both.
@@ -126,6 +169,9 @@ export async function signInStaff(
   // realistic pile-up of suites contending for the same account.
   const attempts = 3;
   let lastReason = "";
+
+  const shared = await sharedSession(api, email);
+  if (shared) return shared;
 
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     const first = await fetch(`${api}/auth/login`, {
@@ -142,21 +188,25 @@ export async function signInStaff(
     }
 
     const body = (await first.json()) as { step?: string };
-    if (body.step === "signed_in") return cookieFrom(first);
+    if (body.step === "signed_in") return keepSession(email, cookieFrom(first));
 
     /*
      * Claiming the step and spending it happen together, under the lock: picking a code
      * and then racing another process to the server is the collision this exists to
      * prevent.
      */
-    const second = await withStepLock(email, () =>
-      fetch(`${api}/auth/mfa/verify`, {
-        method: "POST",
-        headers: { "content-type": "application/json", cookie: cookieFrom(first) },
-        body: JSON.stringify({ code: totp(DEV_MFA_SECRET) }),
-      }),
+    const second = await withStepLock<Response | string>(
+      email,
+      () =>
+        fetch(`${api}/auth/mfa/verify`, {
+          method: "POST",
+          headers: { "content-type": "application/json", cookie: cookieFrom(first) },
+          body: JSON.stringify({ code: totp(DEV_MFA_SECRET) }),
+        }),
+      () => sharedSession(api, email),
     );
-    if (second.ok) return cookieFrom(second);
+    if (typeof second === "string") return second;
+    if (second.ok) return keepSession(email, cookieFrom(second));
 
     const detail = (await second.json().catch(() => ({}))) as { code?: string; message?: string };
     lastReason = `${second.status} ${detail.code ?? "unknown"}`;

@@ -5,6 +5,7 @@ import { signInStaff } from "../helpers/signIn.ts";
 import { createStaffAccount, grantRole } from "../helpers/account.ts";
 import { removeTestAccounts, removeTestEvents } from "../helpers/cleanup.ts";
 import { withSystemScope } from "@pmp/db";
+import { suppressionReason } from "../../apps/dispatcher/src/guard.ts";
 
 /**
  * The Speakers screen's two actions: adding a speaker (D-085) and emailing a speaker
@@ -586,5 +587,80 @@ describe("removing a speaker (D-095)", () => {
     if (!up) return t.skip("API not running");
     const response = await call(reviewer, "DELETE", `/events/${addEventId}/speakers/${(await speakers(addEventId))[0]!.id}`);
     assert.equal(response.status, 403);
+  });
+});
+
+describe("email addresses are checked before they can cost us (D-097)", () => {
+  test("a mistyped provider is refused, with the likely address", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const response = await call(admin, "POST", `/events/${addEventId}/speakers`, {
+      name: "Typo Probe",
+      email: "typo.probe@gmial.com",
+      organization: "",
+      slot_id: addSlots[0],
+    });
+    assert.equal(response.status, 422);
+    const body = (await response.json()) as { code: string; message: string };
+    assert.equal(body.code, "speakers.bad_email");
+    assert.match(body.message, /Did you mean typo\.probe@gmail\.com\?/);
+  });
+
+  test("a malformed address is refused on the agenda's add-presenter too", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const response = await call(admin, "POST", `/events/${addEventId}/presentations/${addSlots[0]}/presenters`, {
+      name: "Broken Probe",
+      email: "broken@@probe",
+      organization: "",
+    });
+    assert.equal(response.status, 422);
+    assert.equal(await codeOf(response), "speakers.bad_email");
+  });
+
+  test("an imported row with a bad address is blocked before commit", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const csv = [
+      "Session Title,Session Location,Session Date,Session Start,Session End,Presenter 1 Email",
+      "Good Row,Probe Room,08/01/2027,1:00 PM,2:00 PM,good.row@example.invalid",
+      "Bad Row,Probe Room,08/01/2027,2:00 PM,3:00 PM,bad row@example",
+      "Typo Row,Probe Room,08/01/2027,3:00 PM,4:00 PM,typo.row@hotmial.com",
+    ].join("\n");
+    const preview = (await (
+      await fetch(`${API}/events/${addEventId}/imports`, {
+        method: "POST",
+        headers: { "content-type": "application/octet-stream", "x-file-name": "agenda.csv", cookie: admin },
+        body: Buffer.from(csv, "utf8"),
+      })
+    ).json()) as { issues: { row: number; column: string; severity: string; message: string }[] };
+    const emailIssues = preview.issues.filter((issue) => issue.column === "speaker.email" && issue.severity === "blocking");
+    assert.equal(emailIssues.length, 2, JSON.stringify(preview.issues));
+    assert.ok(emailIssues.some((issue) => /space/.test(issue.message)));
+    assert.ok(emailIssues.some((issue) => /hotmail\.com/.test(issue.message)));
+  });
+
+  test("an address that bounced is never sent again — under any speaker record", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const address = `bounce.shared.${RUN}@example.invalid`;
+    const first = await newSpeaker("SharedBounce", { email: address });
+    assert.equal((await sendLink(first)).status, 201);
+    const [sent] = await communicationsFor(first);
+    await setStatus(sent!.id, "bounced");
+
+    // The send-time guard, whatever queued the message.
+    const reason = await withSystemScope((tx) => suppressionReason(tx, address.toUpperCase()));
+    assert.match(reason ?? "", /bounced before/);
+
+    // A second record for the same person (another event, a re-add) is refused up front.
+    assert.equal((await call(admin, "DELETE", `/events/${sendEventId}/speakers/${first}`)).status, 200);
+    const second = await newSpeaker("SharedBounceAgain", { email: address });
+    const again = await sendLink(second);
+    assert.equal(again.status, 409);
+    assert.equal(await codeOf(again), "comms.bounced_conflict");
+  });
+
+  test("the send-time guard refuses addresses that are not addresses", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const reason = await withSystemScope((tx) => suppressionReason(tx, "no-at-sign"));
+    assert.match(reason ?? "", /invalid address/);
+    assert.equal(await withSystemScope((tx) => suppressionReason(tx, `clean.${RUN}@example.invalid`)), null);
   });
 });

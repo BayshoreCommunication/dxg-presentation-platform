@@ -1016,7 +1016,18 @@ export type CommRecipient = {
   already_sent: boolean;
 };
 
+/** The event's automatic reminders (D-096). */
+export type ReminderSchedule = {
+  days: number[];
+  deadline: string | null;
+  on: boolean;
+  off_reason: string | null;
+  next: { days_before: number; date: string } | null;
+  runs: { days_before: number; due_on: string; ran_at: string; outcome: string; queued: number }[];
+};
+
 export type CommsView = {
+  reminders: ReminderSchedule;
   templates: { id: string; name: string; subject: string; body: string }[];
   /** The merge fields a template may use (D-080). */
   merge_fields: string[];

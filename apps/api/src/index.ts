@@ -79,6 +79,7 @@ import {
 import { eventAgenda } from "./services/agenda.ts";
 import { agentForKey, issueDeviceKey } from "./services/deviceKeys.ts";
 import { pdfStates, queuePdfs, resumePdfQueue } from "./services/pdf.ts";
+import { reminderSchedule, startReminderScheduler } from "./services/reminders.ts";
 import {
   createSession,
   updateSession,
@@ -604,6 +605,7 @@ const statusFor = (error: DomainError): number => {
     error.code.endsWith(".bad_settings") ||
     error.code.endsWith(".bad_branding") ||
     error.code.endsWith(".bad_asset") ||
+    error.code.endsWith(".bad_email") ||
     error.code.endsWith(".name_required") ||
     error.code.endsWith(".not_a_draft") ||
     error.code.endsWith(".unknown_timezone") ||
@@ -2443,6 +2445,8 @@ app.get("/api/v1/events/:eventId/comms", async (req, res) => {
       recipients: invitation ? await recipientsFor(tx, eventId, invitation.id, false) : [],
       missing: invitation ? await recipientsFor(tx, eventId, invitation.id, true) : [],
       log: await deliveryLog(tx, eventId),
+      // The automatic reminders (D-096): what is on, what is next, what has gone.
+      reminders: await reminderSchedule(tx, eventId),
       stats: await deliveryStats(tx, eventId),
     };
   });
@@ -2969,4 +2973,6 @@ app.listen(port, () => {
   console.error(`api listening on http://localhost:${port}`);
   // Conversions interrupted by a restart go back in line (D-067).
   resumePdfQueue().catch((error: unknown) => console.error("pdf queue resume failed", error));
+  // Automatic upload reminders (D-096): every quarter hour, from a minute after start.
+  startReminderScheduler();
 });

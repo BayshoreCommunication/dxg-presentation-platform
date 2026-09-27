@@ -132,7 +132,7 @@ describe("a created account starts locked down", () => {
 
   test("a staff account must change its password and enrol before doing anything", async (t: TestContext) => {
     if (!up || !admin) return t.skip("API not running");
-    const email = `probe-${Date.now()}@example.invalid`;
+    const email = `probe-admin-${Date.now()}@example.invalid`;
     const created = (await json(
       await fetch(`${API}/admin/users`, {
         method: "POST",
@@ -172,5 +172,8 @@ describe("a created account starts locked down", () => {
  */
 after(async () => {
   if (!up) return;
-  await removeTestAccounts(["roleless-", "probe-"]);
+  // Its own prefixes only. `"probe-"` also matched other suites' accounts
+  // (`probe-brand-reviewer-…`, `probe-outsider-…`) and deleted them mid-setup whenever the
+  // suites ran at the same time — which they do once sign-in no longer queues them.
+  await removeTestAccounts(["roleless-", "probe-admin-"]);
 });
