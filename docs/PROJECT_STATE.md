@@ -3137,3 +3137,10 @@ Sign-off pack (baseline vs built app, 17 rows, portals at phone width too) publi
 approved, no change requests. The "G0-6b visual approval must be re-run" item from D-078 is closed. Remaining product
 gate: G0-1 (Room Agent PowerPoint PoC, needs Windows hardware). Local dev: three test drafts archived for a clean
 portfolio capture.
+
+## 2026-09-28 — Speaker Ready Room checked end to end; review eligibility fixed (D-105)
+SRR exercised through the API on the demo event: dashboard, add/retire station, check-in, check-in detail, USB intake
+(upload, ClamAV/EICAR quarantine, inspection, slide comparison with the previous version, re-approval), depart —
+all worked; sign-off is guarded to scanned versions. One serious defect found and fixed: quarantined files could be
+approved and queued to a room (D-105). There was no SRR test suite; review-eligibility.test.ts now covers USB intake's
+quarantine path. 294/294 invariants.

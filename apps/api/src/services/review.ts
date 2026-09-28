@@ -66,6 +66,18 @@ export async function decide(
     });
   }
 
+  /*
+   * Only a file that passed its virus scan and finished inspection can be reviewed or
+   * approved (WORKFLOW_STATES §3: "Eligible when inspection is in a terminal non-failed
+   * state, or failed fully waived"; §1: unscanned files never enter the library). This
+   * was not enforced here: a quarantined upload sat in the queue and could be claimed,
+   * approved and queued to its room without anyone waiving anything (D-105).
+   */
+  if (input.action === "claim" || input.action === "approve") {
+    const ineligible = await reviewIneligibility(tx, version.id, input.action);
+    if (ineligible) return err(ineligible);
+  }
+
   const tellsSpeaker = input.action === "request_changes" || input.action === "reject";
   const note = input.note?.trim() ?? "";
   if (tellsSpeaker && !note) {
@@ -197,4 +209,44 @@ export async function decide(
     rooms_queued: roomsQueued,
     ...(notice ? { notice } : {}),
   });
+}
+
+/** Why this version may not be claimed or approved, or nothing when it may (D-105). */
+async function reviewIneligibility(
+  tx: pg.PoolClient,
+  versionId: string,
+  action: ReviewAction,
+): Promise<DomainError | undefined> {
+  const { rows } = await tx.query<{ processing_state: string; inspection_state: string; open_blocking: number }>(
+    `SELECT fv.processing_state, fv.inspection_state,
+            (SELECT count(*)::int FROM pmp.inspection_findings f
+              WHERE f.file_version_id = fv.id AND f.severity = 'blocking' AND f.waived_at IS NULL) AS open_blocking
+       FROM pmp.file_versions fv WHERE fv.id = $1`,
+    [versionId],
+  );
+  const version = rows[0];
+  if (!version) return undefined;
+  if (version.processing_state !== "stored") {
+    return {
+      code: "review.ineligible_conflict",
+      message:
+        version.processing_state === "quarantined"
+          ? "This file failed its virus scan and is quarantined. It can never be approved — ask the speaker for a new file."
+          : `This file has not finished its virus scan (${version.processing_state}), so it cannot be reviewed yet.`,
+    };
+  }
+  if (action !== "approve") return undefined;
+  if (["pending", "inspecting", "technician_review"].includes(version.inspection_state)) {
+    return {
+      code: "review.ineligible_conflict",
+      message: "This file is still being inspected. It can be approved once inspection finishes.",
+    };
+  }
+  if (version.open_blocking > 0) {
+    return {
+      code: "review.ineligible_conflict",
+      message: `This file has ${version.open_blocking} blocking finding${version.open_blocking === 1 ? "" : "s"}. Waive ${version.open_blocking === 1 ? "it" : "them"} with a reason, or ask the speaker for a new version.`,
+    };
+  }
+  return undefined;
 }

@@ -1,6 +1,7 @@
 import { test, describe, before, after } from "node:test";
 import assert from "node:assert/strict";
 import type { TestContext } from "node:test";
+import { writeZip } from "../../packages/files/src/zipWrite.ts";
 import { signInStaff, cookieFrom } from "../helpers/signIn.ts";
 
 /**
@@ -36,7 +37,13 @@ const post = (path: string, body: unknown, cookie = staff) =>
 
 /** Uploads one small file through the speaker portal, as a speaker would. */
 async function upload(name: string, text: string): Promise<void> {
-  const body = Buffer.from(text);
+  // A real (minimal) PowerPoint package carrying `text`: approval requires inspection to
+  // pass with no open blocking finding (D-105), and plain text named .pptx is corrupt.
+  const body = writeZip([
+    { name: "[Content_Types].xml", body: Buffer.from('<?xml version="1.0"?><Types/>') },
+    { name: "ppt/presentation.xml", body: Buffer.from('<p:presentation><p:sldSz cx="12192000" cy="6858000"/></p:presentation>') },
+    { name: "ppt/slides/slide1.xml", body: Buffer.from(`<p:sld>${text}</p:sld>`) },
+  ]);
   const started = (await (
     await post("/portal/uploads", { slot_id: slotId, file_name: name, total_bytes: body.length }, presenter)
   ).json()) as { upload_id: string };

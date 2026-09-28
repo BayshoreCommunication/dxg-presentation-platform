@@ -2055,3 +2055,15 @@ decision per screen; **17/17 approved, no change requests or notes**, all record
 reviewer account. This satisfies G0-6b and the SRS §22 prototype criterion; M1's [B] frontend tasks are no longer
 gated on it. The approved sheet is the baseline for visual regressions from here: re-run it at each milestone that
 touches UI and at M7 UAT.
+
+## D-105 (2026-09-28): Only scanned, inspected files can be reviewed or approved — Status: ACCEPTED (security fix)
+Found while checking the Speaker Ready Room: a USB file carrying the EICAR test signature was quarantined as it
+should be, yet it stayed in the review queue (every version is created `awaiting_review` before its scan) and a
+reviewer could claim and **approve** it, which queued it to its room — no waiver, no override. `decide()` checked the
+review state and the role, never WORKFLOW_STATES §1/§3's eligibility. Portal uploads were exposed the same way; no
+quarantined file exists in production. Now: claiming requires `processing_state = 'stored'`; approving also requires a
+finished inspection and no unwaived blocking finding (`review.ineligible_conflict`, 409, with the reason); the queue
+lists only stored files; and a `malware` finding cannot be waived (`inspection.not_waivable_conflict`) — releasing a
+quarantined file stays the platform-admin override §1 describes (not built). Two invariant fixtures had relied on
+approving plain text named `.pptx` (a blocking "corruption" finding) and now upload a minimal real package.
+`tests/invariants/review-eligibility.test.ts`.

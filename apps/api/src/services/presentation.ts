@@ -211,6 +211,14 @@ export async function waiveFinding(
   if (finding.waived_at) {
     return err({ code: "inspection.already_waived", message: "This finding is already waived." });
   }
+  // A virus is not a finding to accept (D-105): a quarantined file is released only by the
+  // platform-admin override WORKFLOW_STATES §1 describes, never by a waiver.
+  if (finding.check_code === "malware") {
+    return err({
+      code: "inspection.not_waivable_conflict",
+      message: "A virus finding can't be waived. The file stays quarantined — ask the speaker for a clean file.",
+    });
+  }
 
   await tx.query(
     `UPDATE pmp.inspection_findings SET waived_by = $1, waived_reason = $2, waived_at = now() WHERE id = $3`,

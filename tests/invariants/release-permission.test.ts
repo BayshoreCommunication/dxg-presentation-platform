@@ -4,6 +4,7 @@ import type { TestContext } from "node:test";
 import { signInStaff, cookieFrom } from "../helpers/signIn.ts";
 import { createStaffAccount, grantRole } from "../helpers/account.ts";
 import { removeTestAccounts } from "../helpers/cleanup.ts";
+import { writeZip } from "../../packages/files/src/zipWrite.ts";
 import { withSystemScope } from "@pmp/db";
 
 /**
@@ -74,7 +75,13 @@ async function uploadAndApprove(): Promise<void> {
   assert.equal(login.status, 200, "fixture: the presenter signs in");
   const presenter = cookieFrom(login);
 
-  const body = Buffer.from(`release probe ${RUN}`);
+  // A real (minimal) PowerPoint package: approval now requires inspection to pass with no
+  // open blocking finding (D-105), and plain text named .pptx is a corrupt file.
+  const body = writeZip([
+    { name: "[Content_Types].xml", body: Buffer.from('<?xml version="1.0"?><Types/>') },
+    { name: "ppt/presentation.xml", body: Buffer.from('<p:presentation><p:sldSz cx="12192000" cy="6858000"/></p:presentation>') },
+    { name: "ppt/slides/slide1.xml", body: Buffer.from(`<p:sld>release probe ${RUN}</p:sld>`) },
+  ]);
   const started = (await (
     await call("POST", "/portal/uploads", { slot_id: slotId, file_name: "deck.pptx", total_bytes: body.length }, presenter)
   ).json()) as { upload_id: string };

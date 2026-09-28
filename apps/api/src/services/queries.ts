@@ -204,6 +204,8 @@ export async function reviewQueue(tx: pg.PoolClient, eventId: string): Promise<Q
        JOIN pmp.sessions se ON se.id = s.session_id
        LEFT JOIN pmp.rooms r ON r.id = se.room_id
       WHERE fv.event_id = $1 AND fv.review_state IN ('awaiting_review','in_review')
+        -- Only files that passed the virus scan are reviewed (D-105).
+        AND fv.processing_state = 'stored'
       ORDER BY fv.created_at ASC`,
     [eventId],
   );
