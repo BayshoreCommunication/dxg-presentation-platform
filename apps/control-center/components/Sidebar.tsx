@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { usePathname, useParams, useRouter } from "next/navigation";
 import { Glyph, Icon } from "@/components/Icon";
+import { WhyNot } from "@/components/WhyNot";
 import { logout } from "@/lib/api";
 import type { Principal, EventRow } from "@/lib/api";
 
@@ -174,7 +175,17 @@ export function Sidebar({
         */}
         <div className="evtctx">
           {events.length === 0 ? (
-            <span className="note">No events yet</span>
+            <>
+              <span className="note">No events yet</span>
+              {/* A21 (D-111): the greyed links below need an event; say how to get one. */}
+              {principal?.is_root_admin ? (
+                <div className="note">
+                  <Link href="/events/new">Create your first event</Link>
+                </div>
+              ) : (
+                <WhyNot reason="Ask a DXG administrator to add you to an event." />
+              )}
+            </>
           ) : (
             <>
               <select
@@ -198,6 +209,8 @@ export function Sidebar({
                   </option>
                 ))}
               </select>
+              {/* A20 (D-111): the greyed links say why on the page, not only on hover. */}
+              <WhyNot reason={!eventId ? "Choose an event above to open the greyed screens below." : null} />
               {current && (
                 <div className="note">
                   {/* Every screen of an archived event is read-only (D-062); say so on all of them. */}

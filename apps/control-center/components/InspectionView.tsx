@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { FindingRow, PresentationDetail, VersionRow } from "@/lib/api";
 import { waiveFinding, requestRevision, ApiError } from "@/lib/api";
+import { WhyNot } from "@/components/WhyNot";
 import { CHECK, formatBytes, INSPECTION_STATE, SEVERITY, VERSION_STATE, wordsFor } from "@pmp/format";
 
 /** On the event's clock (D-080) — it was pinned to New York for every event. */
@@ -266,6 +267,16 @@ export function InspectionView({
                             Cancel
                           </button>
                         </div>
+                        {/* D-111: the empty-text reason, on the page. */}
+                        <WhyNot
+                          reason={
+                            form.text.trim()
+                              ? null
+                              : form.kind === "waive"
+                                ? "Write the reason above to continue."
+                                : "Write the message to the speaker to continue."
+                          }
+                        />
                       </form>
                     ) : (
                       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>

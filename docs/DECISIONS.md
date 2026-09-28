@@ -2167,3 +2167,22 @@ refusals from @pmp/domain are reworded centrally by code (`plainError`, e.g. "On
 do this."); lockout says "Try again in 12 minutes"; no error `code` changed. Speakers' "access code" is kept (it is
 their sign-in code, not a backup code). Tests: vocabulary unit tests; one invariant updated for the new wording;
 298/298 invariants.
+
+## D-111 (2026-09-28): Staff-usability batch 3 — every greyed-out control says why — Status: ACCEPTED
+Third batch of `docs/UX_REVIEW.md`. A greyed-out control now says why **on the page** (hover text is useless on
+touch screens and in print), in one plain line with the alternative, through one component
+(`components/WhyNot.tsx`, `.why-not`). Exceptions: a control greyed only while its own request runs, and paging at
+an end. **Setup:** create event ("Enter a name, start date and end date to continue"; steps say "Finish Basics
+first"), Import's Save row (what is still needed), Speakers ("Remind speakers missing files (N)" — counted over the
+whole event, since the send goes to everyone; row Email link, Save address, Add speaker), Communications, Files
+("Tick the files you want first"), Archive (Build / Deliver). **Review & onsite:** "Preview slides" is real — it shows
+the version's slides inline or asks for a preview, and otherwise says why (no milestone code); SRR Check in ("Every
+station is in use — check a speaker out") and station Remove; USB intake lists what is missing before anything
+uploads; Room Agent Launch is greyed with the server's own rule ("No approved file on this room PC yet", "Switch to
+vN above to play it"), "Manual sync" became "Check for updates" (a real action), and the room header no longer says
+"all files present" beside talks that are not on the room PC; review, inspection and roll-back forms say what to
+write. **Accounts & navigation:** Staff accounts gives the true reasons from the server's rules (your own account;
+the only active DXG administrator; no sign-in app to reset); the sidebar says "Choose an event above…" and, with no
+events, "Create your first event" (DXG administrator) or "Ask a DXG administrator to add you to an event"; the
+client portal says why downloads are closed and hides the PDF button when there are no PDFs. The speaker portal had
+no greyed-out controls. No API changes.

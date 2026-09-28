@@ -8,6 +8,7 @@ import { FloatingMenu, useFloatingMenu } from "@/components/FloatingMenu";
 import { CHECK, wordsFor } from "@pmp/format";
 import { Chip, SeverityChip, StatusMeaning } from "@/components/Chip";
 import { staleNoteFor } from "@/lib/roomWords";
+import { WhyNot } from "@/components/WhyNot";
 
 /**
  * A session's day and time, on the event's clock. The day is spelled out rather than
@@ -43,6 +44,13 @@ export function SrrDashboardView({
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Why "Check in →" is greyed, once above the list rather than on every row (R33, D-111).
+  const checkInBlocked =
+    data.stations.length === 0
+      ? "Check in is off until this room has a station. Add one under Stations below."
+      : data.stations.every((station) => station.busy)
+        ? "Every station is in use. To free one, check a speaker out: open their check-in and press Check out."
+        : null;
 
   async function check(speakerId: string, stationId: string) {
     setBusy(true);
@@ -84,6 +92,11 @@ export function SrrDashboardView({
           <span className="m">ordered by session time</span>
         </div>
         <div className="cbd" style={{ padding: "0 0 4px" }}>
+          {checkInBlocked && data.expected.some((row) => !row.checkin_id) && (
+            <div style={{ padding: "4px 18px 8px" }}>
+              <WhyNot reason={checkInBlocked} />
+            </div>
+          )}
           <table>
             <tbody>
               {data.expected.map((row) => {
@@ -184,7 +197,7 @@ function CheckInButton({
         ref={trigger}
         className="btn pri"
         disabled={disabled || free.length === 0}
-        title={free.length === 0 ? "Every station is in use" : undefined}
+        title={free.length === 0 ? "Every station is in use. Check a speaker out to free one." : undefined}
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
@@ -335,6 +348,8 @@ function StationsCard({
                           >
                             Remove
                           </button>
+                          {/* R33's pair: a busy desk can't be removed; say so, not only on hover (D-111). */}
+                          <WhyNot reason={station.busy ? "Check the speaker out to remove this station." : null} />
                         </>
                       ))}
                   </td>

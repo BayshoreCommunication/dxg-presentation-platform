@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { formatBytes, VERSION_STATE, wordsFor } from "@pmp/format";
 import { Icon } from "@/components/Icon";
+import { WhyNot } from "@/components/WhyNot";
 import { ApiError, downloadFilesZip, fileDownloadUrl, getEventFiles } from "@/lib/api";
 import { FloatingMenu, useFloatingMenu } from "@/components/FloatingMenu";
 import type { EventFiles, FileQuery, FileRow, FileStatus, FileVersionRow } from "@/lib/api";
@@ -145,15 +146,19 @@ export function FilesView({
             Every presentation uploaded for {eventName}, newest version first.
           </p>
         </div>
-        <button
-          type="button"
-          className="btn pri"
-          disabled={selected.size === 0 || zipping}
-          onClick={() => void downloadSelected()}
-        >
-          <Icon name="download" />
-          {zipping ? "Preparing zip…" : selected.size > 0 ? `Download selected (${selected.size})` : "Download selected"}
-        </button>
+        <div>
+          <button
+            type="button"
+            className="btn pri"
+            disabled={selected.size === 0 || zipping}
+            onClick={() => void downloadSelected()}
+          >
+            <Icon name="download" />
+            {zipping ? "Preparing zip…" : selected.size > 0 ? `Download selected (${selected.size})` : "Download selected"}
+          </button>
+          {/* D-111: said under the button, not left for the operator to guess. */}
+          <WhyNot reason={selected.size === 0 && pageRows.length > 0 ? "Tick the files you want first." : null} />
+        </div>
       </div>
 
       {error && (
@@ -264,6 +269,7 @@ export function FilesView({
                     <Check
                       checked={allOnPage}
                       disabled={selectable.length === 0}
+                      reason="None of the files on this page can be downloaded yet — see Status."
                       label="Select every file on this page"
                       onChange={toggleAll}
                     />

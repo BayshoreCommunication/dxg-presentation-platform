@@ -7,6 +7,7 @@ import { transitionVersion, ApiError } from "@/lib/api";
 import { Chip, SeverityChip } from "@/components/Chip";
 import { CommentsPanel } from "@/components/CommentsPanel";
 import { SlidePreview } from "@/components/SlidePreview";
+import { WhyNot } from "@/components/WhyNot";
 import { CHECK, formatBytes, INSPECTION_STATE, SEVERITY, VERSION_STATE, wordsFor } from "@pmp/format";
 
 const FINDING_COPY: Record<string, (detail: Record<string, unknown>) => string> = {
@@ -263,7 +264,12 @@ export function ReviewWorkspace({ initialQueue }: { initialQueue: QueueItem[] })
             <CommentsPanel versionId={selected.file_version_id} versionNumber={selected.version_number} />
 
             <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
-              <button className="btn good" disabled={busy || approveBlocked !== null} onClick={() => void decide("approve")}>
+              <button
+                className="btn good"
+                disabled={busy || approveBlocked !== null}
+                title={approveBlocked ?? undefined}
+                onClick={() => void decide("approve")}
+              >
                 Approve (A)
               </button>
               <button className="btn warnb" disabled={busy} onClick={() => setPending("request_changes")}>
@@ -273,11 +279,8 @@ export function ReviewWorkspace({ initialQueue }: { initialQueue: QueueItem[] })
                 Reject…
               </button>
             </div>
-            {approveBlocked && (
-              <div className="note" style={{ marginTop: 8 }}>
-                {approveBlocked}
-              </div>
-            )}
+            {/* The shared reason line (D-111). */}
+            <WhyNot reason={approveBlocked} />
 
             {pending && (
               <form
@@ -333,6 +336,7 @@ export function ReviewWorkspace({ initialQueue }: { initialQueue: QueueItem[] })
                     Cancel
                   </button>
                 </div>
+                <WhyNot reason={!message.trim() ? "Write the message to the speaker to continue." : null} />
               </form>
             )}
           </div>

@@ -3159,3 +3159,7 @@ prompt; until then item 7 records NEEDS_REVIEW), an embedded-font deck and a rea
 Shared vocabulary in @pmp/format used by both apps and the API; DXG's talk-status labels kept with visible meanings;
 R7 (silent room PC turns "Synchronized onsite" amber) done; API messages plain. Not committed yet. Next: batch 3
 (every disabled control explains itself).
+
+## 2026-09-28 — UX batch 3: every greyed-out control says why (D-111)
+Shared `WhyNot` line under greyed controls across setup, review/onsite, accounts and client portal; "Preview slides"
+made real; "Manual sync" → real "Check for updates". Not committed yet. Next: batch 4 (remove technical detail).

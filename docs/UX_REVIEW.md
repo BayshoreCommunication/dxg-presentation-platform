@@ -49,7 +49,7 @@ codes with meaning and next step, used by every chip, toast and error (R47, S38,
 A15, S31, S14 time zones as "Eastern Time (New York)", readable dates); one set of security words (A22–A26, A28);
 API errors worded by code (A-API list).
 
-**Batch 3 — every disabled control explains itself.** Visible reason + alternative (S12, S13, S21, S30, R14, R33,
+**Batch 3 — every disabled control explains itself.** ✔ Done 2026-09-28 (D-111). Visible reason + alternative (S12, S13, S21, S30, R14, R33,
 R35, R40, R45, A12, A20, A21, A30).
 
 **Batch 4 — remove technical detail staff never need.** Hashes/checksums/fingerprints (R15, R34, S36, S41), heartbeat /

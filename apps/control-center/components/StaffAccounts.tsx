@@ -15,6 +15,7 @@ import {
   ApiError,
 } from "@/lib/api";
 import { Chip } from "@/components/Chip";
+import { WhyNot } from "@/components/WhyNot";
 import { plural, SECURITY } from "@pmp/format";
 
 const when = (iso: string | null) =>
@@ -52,6 +53,26 @@ function TypeBadge({ type }: { type: AccountType }) {
 }
 
 const small = { padding: "3px 9px", fontSize: 12 } as const;
+
+/**
+ * Why a row's buttons are greyed out, on the page (A12, D-111). Mirrors the API's own
+ * refusals in services/admin.ts: no self-lockout, never lose the last active DXG
+ * administrator, and nothing to reset without a sign-in app.
+ */
+function rowReason(user: StaffRow, isMe: boolean, lastRoot: boolean): string | null {
+  const reasons: string[] = [];
+  if (isMe) {
+    reasons.push(
+      `You can't make yourself staff, deactivate or delete your own account — ask another ${SECURITY.admin}.`,
+    );
+  } else if (lastRoot) {
+    reasons.push(
+      `The only active ${SECURITY.admin} can't be made staff, deactivated or deleted — make someone else a ${SECURITY.admin} first.`,
+    );
+  }
+  if (!user.mfa_enrolled) reasons.push(`No ${SECURITY.factor} to reset — they haven't set one up yet.`);
+  return reasons.length ? reasons.join(" ") : null;
+}
 
 export function StaffAccounts({ initial, me }: { initial: StaffRow[]; me: string | null }) {
   const router = useRouter();
@@ -167,6 +188,7 @@ export function StaffAccounts({ initial, me }: { initial: StaffRow[]; me: string
           >
             Create account
           </button>
+          <WhyNot reason={!email ? "Enter their work email to create the account." : null} />
         </div>
       </div>
 
@@ -296,9 +318,7 @@ export function StaffAccounts({ initial, me }: { initial: StaffRow[]; me: string
                           disabled={busy || (user.account_type === "root_admin" && (isMe || lastRoot))}
                           title={
                             user.account_type === "root_admin"
-                              ? lastRoot
-                                ? "The only active DXG administrator cannot be made staff"
-                                : "Limit them to the events they are assigned to"
+                              ? "Limit them to the events they are assigned to"
                               : "Give them every event and account administration"
                           }
                           onClick={() =>
@@ -327,13 +347,7 @@ export function StaffAccounts({ initial, me }: { initial: StaffRow[]; me: string
                           className="btn danger"
                           style={small}
                           disabled={busy || isMe || lastRoot}
-                          title={
-                            isMe
-                              ? "You cannot delete your own account"
-                              : lastRoot
-                                ? "The only active DXG administrator cannot be deleted"
-                                : "Removes the account and its event access; its history stays in the audit trail"
-                          }
+                          title="Removes the account and its event access; its history stays in the audit trail"
                           onClick={() =>
                             void run(async () => {
                               if (
@@ -350,6 +364,7 @@ export function StaffAccounts({ initial, me }: { initial: StaffRow[]; me: string
                           delete
                         </button>
                       </div>
+                      <WhyNot reason={rowReason(user, isMe, lastRoot)} />
                     </td>
                   </tr>
                 );

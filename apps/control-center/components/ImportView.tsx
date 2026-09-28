@@ -22,6 +22,7 @@ import {
 import { formatBytes, IMPORT_ROW, timeZoneLabel, wordsFor } from "@pmp/format";
 import { Chip } from "@/components/Chip";
 import { DateField, TimeField } from "@/components/DateTimeField";
+import { WhyNot } from "@/components/WhyNot";
 
 /**
  * The headings DXG's own agenda sheet uses (D-029), so a field in this dialog and a
@@ -287,6 +288,14 @@ function RowEditor({
    */
   const leave = () => (dirty ? setConfirmingDiscard(true) : onCancel());
   const stillMissing = row.missing.filter((field) => !(draft[field] ?? "").trim());
+  // Why Save row is greyed, shown under it as well as on hover (D-111, S21).
+  const saveBlocked = outOfRange
+    ? "A time here is outside the range its field allows — fix the red boxes."
+    : stillMissing.length > 0
+      ? `Still needed: ${stillMissing.map((field) => FIELD_LABELS[field] ?? field).join(", ")}.`
+      : !dirty
+        ? "No changes to save."
+        : null;
 
   const set = (field: string, value: string) => setDraft({ ...draft, [field]: value });
 
@@ -339,6 +348,8 @@ function RowEditor({
             readOnly
             aria-label={`${full} in minutes`}
           />
+          {/* D-111: the greyed box says why on the page. */}
+          <WhyNot reason="Worked out from Start and End — change those to change the length." />
         </div>
       );
     }
@@ -651,25 +662,23 @@ function RowEditor({
               </button>
             </div>
           ) : (
-            <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
-              <button
-                className="btn pri"
-                disabled={busy || !dirty || stillMissing.length > 0 || outOfRange}
-                title={
-                  outOfRange
-                    ? "A time here is outside the range its field allows — the red boxes."
-                    : stillMissing.length > 0
-                      ? `Still needed: ${stillMissing.map((field) => FIELD_LABELS[field] ?? field).join(", ")}`
-                      : undefined
-                }
-                onClick={() => onSave(changed)}
-              >
-                Save row
-              </button>
-              <button className="btn" disabled={busy} onClick={leave}>
-                Cancel
-              </button>
-            </div>
+            <>
+              <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+                <button
+                  className="btn pri"
+                  disabled={busy || !dirty || stillMissing.length > 0 || outOfRange}
+                  title={saveBlocked ?? undefined}
+                  onClick={() => onSave(changed)}
+                >
+                  Save row
+                </button>
+                <button className="btn" disabled={busy} onClick={leave}>
+                  Cancel
+                </button>
+              </div>
+              {/* D-111, S21: the reason on the page, not only on hover. */}
+              <WhyNot reason={saveBlocked} />
+            </>
           )}
         </div>
       </div>

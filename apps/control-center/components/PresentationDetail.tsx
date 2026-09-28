@@ -4,8 +4,10 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { CommentRow, PresentationDetail } from "@/lib/api";
-import { rollBackTalk, convertArchivePdfs, ApiError } from "@/lib/api";
+import { rollBackTalk, convertArchivePdfs, previewUrl, requestPreview, ApiError } from "@/lib/api";
 import { Chip, StatusMeaning } from "@/components/Chip";
+import { SlideViewer } from "@/components/SlideViewer";
+import { WhyNot } from "@/components/WhyNot";
 import { staleNoteFor } from "@/lib/roomWords";
 import { COMMENT_LANE, formatBytes, SEVERITY, VERSION_STATE, wordsFor } from "@pmp/format";
 
@@ -73,6 +75,40 @@ export function PresentationDetailView({
   const latest = initial.versions[0];
   const approved = initial.versions.find((row) => row.review_state === "approved");
   const staleNote = staleNoteFor(initial.talk.status, initial.talk.room, rooms);
+
+  // "Preview slides" was always greyed ("M2-7"); it now shows the newest version's slides
+  // inline, from the same PDF the review screen uses (R14, D-111).
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const previewBlocked = !latest
+    ? "No file has been uploaded yet, so there are no slides to show."
+    : ["quarantined", "checksum_failed", "blocked"].includes(latest.processing_state)
+      ? `v${latest.version_number} didn't pass the file checks, so there are no slides to show.`
+      : latest.processing_state !== "stored"
+        ? `v${latest.version_number} is still being checked. Its slides can be previewed once that finishes.`
+        : latest.pdf_state === "queued" || latest.pdf_state === "converting"
+          ? "The slide preview is still being made. Refresh the page in a moment."
+          : null;
+
+  async function preview() {
+    if (!latest) return;
+    if (latest.pdf_state === "done") {
+      setPreviewOpen((open) => !open);
+      return;
+    }
+    // Never made (older upload) or failed: ask for it, as the review screen does.
+    setBusy(true);
+    setError(null);
+    try {
+      await requestPreview(latest.file_version_id);
+      setToast("Preparing the slide preview. Refresh the page in a moment.");
+      router.refresh();
+    } catch (caught) {
+      setError(caught instanceof ApiError ? caught.message : "Could not ask for a slide preview.");
+    } finally {
+      setBusy(false);
+      setTimeout(() => setToast(null), 4500);
+    }
+  }
 
   // An inline form, not window.prompt pre-filled with "wrong version approved" (D-108).
   const [rollTarget, setRollTarget] = useState<{ id: string; n: number; reason: string } | null>(null);
@@ -142,8 +178,14 @@ export function PresentationDetailView({
           </div>
 
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button className="btn" disabled title="Slide previews render in M2-7">
-              Preview slides
+            <button
+              className="btn"
+              disabled={busy || previewBlocked !== null}
+              title={previewBlocked ?? undefined}
+              aria-expanded={previewOpen}
+              onClick={() => void preview()}
+            >
+              {previewOpen ? "Hide slides" : "Preview slides"}
             </button>
             {latest && (
               <Link
@@ -160,6 +202,16 @@ export function PresentationDetailView({
               Replace file / USB intake
             </Link>
           </div>
+          <WhyNot reason={previewBlocked} />
+          {previewOpen && latest?.pdf_state === "done" && (
+            <div style={{ marginTop: 12 }}>
+              <SlideViewer
+                key={latest.file_version_id}
+                url={previewUrl(latest.file_version_id)}
+                title={`${initial.talk.title}, version ${latest.version_number}`}
+              />
+            </div>
+          )}
         </div>
       </div>
 
@@ -311,6 +363,7 @@ export function PresentationDetailView({
                   Cancel
                 </button>
               </div>
+              <WhyNot reason={!rollTarget.reason.trim() ? "Write the reason above to continue." : null} />
             </form>
           )}
         </div>

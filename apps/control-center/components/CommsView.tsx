@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import type { CommsView as CommsData } from "@/lib/api";
 import { sendBatch, updateTemplate, ApiError } from "@/lib/api";
 import { Chip } from "@/components/Chip";
+import { WhyNot } from "@/components/WhyNot";
 import { EMAIL_STATUS, wordsFor } from "@pmp/format";
 
 /** Kravio puts a glyph on every tile; these say what each delivery counter is. */
@@ -108,6 +109,7 @@ export function CommsView({ eventId, data }: { eventId: string; data: CommsData 
           <select
             value={selected}
             disabled={editing !== null}
+            title={editing !== null ? "Save or cancel your changes to switch to another template." : undefined}
             onChange={(event) => setSelected(event.target.value)}
           >
             {data.templates.map((row) => (
@@ -160,6 +162,14 @@ export function CommsView({ eventId, data }: { eventId: string; data: CommsData 
                   Cancel
                 </button>
               </div>
+              {/* D-111: one line for both greyed controls — Save template and the template list above. */}
+              <WhyNot
+                reason={
+                  !editing.subject.trim() || !editing.body.trim()
+                    ? "Add a subject and a message to save — or Cancel to switch to another template."
+                    : "Save or Cancel to switch to another template."
+                }
+              />
             </form>
           )}
           {template && !editing && (
@@ -246,7 +256,8 @@ export function CommsView({ eventId, data }: { eventId: string; data: CommsData 
         </div>
       </div>
 
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
+      <div style={{ marginBottom: 14 }}>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         {/* Asks first (D-108): it used to email everyone on one click. The "Test send"
             button beside it showed a message and sent nothing; it is gone until it is real. */}
         {confirmingSend ? (
@@ -273,12 +284,19 @@ export function CommsView({ eventId, data }: { eventId: string; data: CommsData 
             Send to {sendable.length} speaker{sendable.length === 1 ? "" : "s"}
           </button>
         )}
-        {sendable.length === 0 && audience.length > 0 && (
-          <span className="note" style={{ alignSelf: "center" }}>
-            Everyone in this list has already been sent this email, or has no working address.
-          </span>
-        )}
-
+      </div>
+      {/* D-111: the reason under the button, including an empty audience, which said nothing. */}
+      <WhyNot
+        reason={
+          sendable.length > 0
+            ? null
+            : audience.length > 0
+              ? "Everyone in this list has already been sent this email, or has no working address."
+              : isReminder
+                ? "Nobody is missing a file — there is nothing to chase."
+                : "No speakers yet — add them on Speakers first."
+        }
+      />
       </div>
 
       {/* The automatic reminders (D-096) — what the event is actually set to do, not a slogan. */}
@@ -318,7 +336,7 @@ export function CommsView({ eventId, data }: { eventId: string; data: CommsData 
             </ul>
           )}
           <div className="note" style={{ marginTop: 8 }}>
-            Change the days in the event&rsquo;s settings. Bulk remind on Speakers sends one now.
+            Change the days in the event&rsquo;s settings. &ldquo;Remind speakers missing files&rdquo; on Speakers sends one now.
           </div>
         </div>
       </div>

@@ -4,6 +4,7 @@ import type { ClientView } from "@/lib/api";
 import { Kpi } from "@/components/Kpi";
 import { archiveDownloadUrl } from "@/lib/api";
 import { DownloadLog } from "@/components/DownloadLog";
+import { WhyNot } from "@/components/WhyNot";
 import { ARCHIVE_STATE, formatDate, plural, wordsFor } from "@pmp/format";
 
 const pct = (part: number, total: number) => (total === 0 ? 0 : Math.round((part / total) * 100));
@@ -25,6 +26,16 @@ export function ClientPortalView({ data }: { data: ClientView }) {
   const approved = Number(data.totals.approved);
   const pkg = data.package;
   const delivered = pkg?.archive_state === "delivered";
+  // A30 (D-111): no PDF button when the package has no PDFs.
+  const hasPdf = !!pkg?.has_pdf && pkg.manifest?.pdf?.file_count !== 0;
+  // A30 (D-111): why the downloads are greyed, in the archive vocabulary.
+  const notYet = delivered
+    ? null
+    : pkg?.archive_state === "expired"
+      ? `${ARCHIVE_STATE.expired.label} — ask your DXG contact to send a new download link.`
+      : pkg?.archive_state === "deleted"
+        ? `${ARCHIVE_STATE.deleted.label} — ask your DXG contact if you still need these files.`
+        : "Not delivered yet — the downloads open here once DXG delivers the archive after the event.";
 
   return (
     <>
@@ -159,7 +170,7 @@ export function ClientPortalView({ data }: { data: ClientView }) {
                 <a className="btn pri" href={archiveDownloadUrl(pkg.id, "pptx")}>
                   Download PowerPoint package
                 </a>
-                {pkg.has_pdf && (
+                {hasPdf && (
                   <a className="btn pri" href={archiveDownloadUrl(pkg.id, "pdf")}>
                     Download PDF package
                   </a>
@@ -170,12 +181,15 @@ export function ClientPortalView({ data }: { data: ClientView }) {
                 <button className="btn pri" disabled>
                   Download PowerPoint package
                 </button>
-                <button className="btn pri" disabled>
-                  Download PDF package
-                </button>
+                {hasPdf && (
+                  <button className="btn pri" disabled>
+                    Download PDF package
+                  </button>
+                )}
               </>
             )}
           </div>
+          <WhyNot reason={notYet} />
         </div>
       </div>
 

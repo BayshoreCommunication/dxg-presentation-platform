@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { AgentView } from "@/lib/api";
 import { getAgentView, syncRoom, acknowledgeRoomFile, launchInRoom, ApiError } from "@/lib/api";
 import { formatBytes, ROOM_COPY, wordsFor } from "@pmp/format";
+import { WhyNot } from "@/components/WhyNot";
 
 const size = (bytes: string): string => {
   return formatBytes(bytes);
@@ -30,6 +31,17 @@ const dayLabel = (iso: string, timeZone: string) =>
   new Date(iso)
     .toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone })
     .toUpperCase();
+
+/**
+ * Why a row can't be launched, in the room technician's words (R45, D-111) — the same
+ * rule the server applies, so the button is never offered only to be refused.
+ */
+function launchBlocked(row: AgentView["schedule"][number]): string | null {
+  if (row.launchable) return null;
+  if (row.version_number === null || row.sync_state === null) return "No approved file on this room PC yet.";
+  if (row.sync_state === "synced" && !row.acknowledged) return `Switch to v${row.version_number} above to play it.`;
+  return `Not ready to play yet (${wordsFor(ROOM_COPY, row.sync_state).label.toLowerCase()}).`;
+}
 
 /**
  * Screen 15 — what the room technician sees on the room machine. The Windows
@@ -79,6 +91,10 @@ export function RoomAgentView({ initial }: { initial: AgentView }) {
   );
 
   const pending = view.schedule.find((row) => row.sync_state === "synced" && !row.acknowledged);
+  // Talks whose file isn't on this room PC yet: "all files present" must not show beside them (D-111).
+  const notHere = view.schedule.filter(
+    (row) => !["synced", "acknowledged", "active"].includes(row.sync_state ?? ""),
+  ).length;
   const offline = (view.agent.heartbeat_age ?? Number.MAX_SAFE_INTEGER) > 300;
 
   return (
@@ -109,9 +125,11 @@ export function RoomAgentView({ initial }: { initial: AgentView }) {
                 ? "Room PC not reporting"
                 : "Room PC connected"}
             {" · "}
-            {view.library.updates_waiting === 0
-              ? "all files present"
-              : `${view.library.updates_waiting} new version${view.library.updates_waiting === 1 ? "" : "s"} waiting to be switched in`}
+            {notHere > 0
+              ? `${notHere} of ${view.schedule.length} presentation${view.schedule.length === 1 ? "" : "s"} not on the room PC yet`
+              : view.library.updates_waiting === 0
+                ? "all files present"
+                : `${view.library.updates_waiting} new version${view.library.updates_waiting === 1 ? "" : "s"} waiting to be switched in`}
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -218,10 +236,12 @@ export function RoomAgentView({ initial }: { initial: AgentView }) {
                   ✓ logged
                 </span>
               )}
+              <div style={{ textAlign: "right", maxWidth: 220 }}>
               <button
                 className="btn pri"
                 style={{ padding: "5px 14px" }}
-                disabled={busy}
+                disabled={busy || !row.launchable}
+                title={launchBlocked(row) ?? undefined}
                 onClick={() =>
                   void run(async () => {
                     const result = await launchInRoom(view.room.id, row.slot_id);
@@ -235,6 +255,8 @@ export function RoomAgentView({ initial }: { initial: AgentView }) {
               >
                 ▶ Launch
               </button>
+              <WhyNot reason={launchBlocked(row)} />
+              </div>
             </div>
             </Fragment>
             );
@@ -265,12 +287,14 @@ export function RoomAgentView({ initial }: { initial: AgentView }) {
               className="mono"
               style={{
                 fontSize: 12,
-                color: view.library.updates_waiting > 0 ? "var(--warn)" : "var(--ok)",
+                color: view.library.updates_waiting > 0 || notHere > 0 ? "var(--warn)" : "var(--ok)",
               }}
             >
-              {view.library.updates_waiting > 0
-                ? `${view.library.updates_waiting} update waiting`
-                : "all current ✓"}
+              {notHere > 0
+                ? `${notHere} not here yet`
+                : view.library.updates_waiting > 0
+                  ? `${view.library.updates_waiting} update waiting`
+                  : "all current ✓"}
             </div>
             <div style={{ fontSize: 12, color: "var(--dim)", marginBottom: 10 }}>
               previous versions kept: {view.library.previous_versions}
@@ -288,7 +312,8 @@ export function RoomAgentView({ initial }: { initial: AgentView }) {
                 })
               }
             >
-              Manual sync
+              {/* R40/R46 (D-111): "Manual sync" — it does run a real check, so it stays, in plain words. */}
+              Check for updates
             </button>
           </div>
 

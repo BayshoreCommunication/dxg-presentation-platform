@@ -15,6 +15,7 @@ import {
 } from "@/lib/api";
 import { Chip, StatusMeaning } from "@/components/Chip";
 import { staleNoteFor } from "@/lib/roomWords";
+import { WhyNot } from "@/components/WhyNot";
 
 /**
  * Day and time on the event's clock — the actual date, not just a weekday, and never
@@ -82,8 +83,19 @@ export function CheckinView({
     [refresh],
   );
 
+  // What USB intake still needs, said before anything is uploaded (R35, D-111): the
+  // reason used to be refused only after the whole file had gone up.
+  const intakeBlocked =
+    !reason.trim() && !file
+      ? "To import, write a reason and choose the file from the USB drive."
+      : !reason.trim()
+        ? "To import, write a reason for the new version."
+        : !file
+          ? "To import, choose the file from the USB drive."
+          : null;
+
   async function scanAndImport() {
-    if (!file) return;
+    if (!file || !reason.trim()) return;
     await run(async () => {
       const session = await beginSrrUpload();
       const total = Math.max(1, Math.ceil(file.size / session.part_size));
@@ -115,6 +127,8 @@ export function CheckinView({
         ? `v${latestNumber} is still being checked. This takes a moment — refresh the page shortly.`
         : null;
 
+  const checkoutBlocked = detail.checkin.departed_at !== null ? "This speaker is already checked out." : null;
+
   const checkOut = (
     <>
       {confirmCheckout ? (
@@ -142,8 +156,8 @@ export function CheckinView({
       ) : (
         <button
           className="btn"
-          disabled={busy || detail.checkin.departed_at !== null}
-          title={detail.checkin.departed_at !== null ? "Already checked out" : undefined}
+          disabled={busy || checkoutBlocked !== null}
+          title={checkoutBlocked ?? undefined}
           onClick={() => setConfirmCheckout(true)}
         >
           Check out
@@ -258,6 +272,7 @@ export function CheckinView({
                   </button>
                   {checkOut}
                 </div>
+                <WhyNot reason={checkoutBlocked} />
                 {/* A newer file came in after sign-off (USB intake): offer to confirm it (D-108). */}
                 {signable && latestNumber !== undefined && latestNumber > detail.receipt.version_number && (
                   <div style={{ marginTop: 14, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
@@ -285,6 +300,7 @@ export function CheckinView({
                 {detail.latest && signOffButton(`Confirm v${latestNumber} as the final onsite version`)}
                 {checkOut}
               </div>
+              <WhyNot reason={checkoutBlocked} />
               {signable && (
                 <div className="note" style={{ marginTop: 8 }}>
                   Confirming locks the talk: the speaker can no longer replace the file from the portal, and
@@ -348,9 +364,15 @@ export function CheckinView({
             onChange={(event) => setFile(event.target.files?.[0] ?? null)}
           />
           <div style={{ marginTop: 10 }}>
-            <button className="btn pri" disabled={busy || !file} onClick={() => void scanAndImport()}>
+            <button
+              className="btn pri"
+              disabled={busy || intakeBlocked !== null}
+              title={intakeBlocked ?? undefined}
+              onClick={() => void scanAndImport()}
+            >
               {busy ? "Scanning…" : "Scan drive & import"}
             </button>
+            <WhyNot reason={intakeBlocked} />
           </div>
           {usb && <div className={usb.scan_result === "clean" ? "lane int" : "err"}>{usb.message}</div>}
         </div>

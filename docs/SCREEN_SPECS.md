@@ -126,14 +126,14 @@ Reading rules:
 
 **Data** `GET /events/{id}/speakers?q=` — name, organisation, talk count, derived status, release permission.
 
-**Elements** search box (server-side, debounced), table (Speaker · Organization · Talks · Status · Open →), `Bulk remind (n)` for speakers with missing files, `+ Add speaker`.
+**Elements** search box (server-side, debounced), table (Speaker · Organization · Talks · Status · Open →), `Remind speakers missing files (n)` for speakers with missing files, `+ Add speaker`.
 
 **Rules** duplicate detection runs on create and on import (email exact, then name+organisation fuzzy); merge (`POST /speakers/{id}:merge`) preserves both file histories and all assignments, and is audited. Release permission (`undecided|full|pdf_only|none`) is captured here and is what the archive builder honours.
 
 **Acceptance**
 - Search for 1 of 348 speakers returns in ≤1 s P95 server-side (shares the OBJ-5 budget).
 - Merging two speakers leaves zero orphaned assignments and both version histories reachable from the surviving record.
-- `Bulk remind` targets exactly the speakers whose derived status is Missing and who have a valid email.
+- `Remind speakers missing files` targets exactly the speakers whose derived status is Missing and who have a valid email.
 
 ---
 

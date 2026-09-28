@@ -55,7 +55,7 @@ export function ReminderDaysField({
       </div>
       <div className="note" style={{ marginTop: 6 }}>
         {value.length === 0
-          ? "Off — no reminder is sent automatically. Bulk remind still works."
+          ? "Off — no reminder is sent automatically. “Remind speakers missing files” on Speakers still works."
           : "Before the upload deadline, at 09:00 event time, to every speaker still missing a file. Starts once the event is activated."}
       </div>
     </div>

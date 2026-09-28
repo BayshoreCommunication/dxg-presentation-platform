@@ -19,6 +19,7 @@ import { Chip } from "@/components/Chip";
 import { Icon } from "@/components/Icon";
 import { InfoTip } from "@/components/InfoTip";
 import { HoverTip } from "@/components/HoverTip";
+import { WhyNot } from "@/components/WhyNot";
 import { EMAIL_STATUS, wordsFor } from "@pmp/format";
 
 /** Screen 5 — the speaker directory, its duplicates, and the chase list. */
@@ -65,8 +66,9 @@ export function SpeakersView({
     }
   }
 
-  // Anyone with a presentation still missing a file — what "Bulk remind" chases.
-  const missing = rows.filter(
+  // Anyone with a presentation still missing a file — what "Remind speakers missing files" chases.
+  // Counted over the whole event, not the search results: the send goes to everyone (D-111).
+  const missing = initial.filter(
     (row) => row.talks > 0 && row.talks_with_files < row.talks,
   );
 
@@ -163,56 +165,64 @@ export function SpeakersView({
         <h1 className="htitle" style={{ margin: 0 }}>
           Speakers · {rows.length}
         </h1>
-        <span style={{ display: "flex", gap: 8 }}>
-          {/*
-            It sends now. This said "Reminder queued to the N speakers without a
-            file" and queued nothing — the handler only set the toast — so the one
-            thing on the screen that claimed an action had happened was the one thing
-            that had not. It reports what actually happened instead, including the
-            recipients the send refused and why.
-          */}
-          <button
-            className="btn"
-            disabled={busy || missing.length === 0}
-            onClick={() => {
-              setBusy(true);
-              setError(null);
-              setToast(null);
-              void (async () => {
-                try {
-                  const result = await remindSpeakersWithoutFiles(eventId);
-                  const skipped = result.skipped
-                    .map((entry) => `${entry.count} ${entry.reason}`)
-                    .join(" · ");
-                  setToast(
-                    result.queued === 0 && skipped
-                      ? `Nobody was emailed — ${skipped}`
-                      : `Reminder sent to ${result.queued} speaker${result.queued === 1 ? "" : "s"}` +
-                          (skipped ? ` · skipped: ${skipped}` : ""),
-                  );
-                  // The log and the delivery counters live on Communications.
-                  router.refresh();
-                } catch (caught) {
-                  setError(
-                    caught instanceof ApiError
-                      ? caught.message
-                      : "The reminder could not be sent.",
-                  );
-                } finally {
-                  setBusy(false);
-                }
-              })();
-            }}
-          >
-            Bulk remind ({missing.length})
-          </button>
-          <button
-            className="btn pri"
-            disabled={busy}
-            onClick={() => setAdding(true)}
-          >
-            + Add speaker
-          </button>
+        {/* D-111, S30: the reminder button's reason sits under the button row. */}
+        <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
+          <span style={{ display: "flex", gap: 8 }}>
+            {/*
+              It sends now. This said "Reminder queued to the N speakers without a
+              file" and queued nothing — the handler only set the toast — so the one
+              thing on the screen that claimed an action had happened was the one thing
+              that had not. It reports what actually happened instead, including the
+              recipients the send refused and why.
+            */}
+            <button
+              className="btn"
+              disabled={busy || missing.length === 0}
+              onClick={() => {
+                setBusy(true);
+                setError(null);
+                setToast(null);
+                void (async () => {
+                  try {
+                    const result = await remindSpeakersWithoutFiles(eventId);
+                    const skipped = result.skipped
+                      .map((entry) => `${entry.count} ${entry.reason}`)
+                      .join(" · ");
+                    setToast(
+                      result.queued === 0 && skipped
+                        ? `Nobody was emailed — ${skipped}`
+                        : `Reminder sent to ${result.queued} speaker${result.queued === 1 ? "" : "s"}` +
+                            (skipped ? ` · skipped: ${skipped}` : ""),
+                    );
+                    // The log and the delivery counters live on Communications.
+                    router.refresh();
+                  } catch (caught) {
+                    setError(
+                      caught instanceof ApiError
+                        ? caught.message
+                        : "The reminder could not be sent.",
+                    );
+                  } finally {
+                    setBusy(false);
+                  }
+                })();
+              }}
+            >
+              Remind speakers missing files ({missing.length})
+            </button>
+            <button
+              className="btn pri"
+              disabled={busy}
+              onClick={() => setAdding(true)}
+            >
+              + Add speaker
+            </button>
+          </span>
+          <WhyNot
+            reason={
+              missing.length > 0 ? null : "Nobody to remind — every speaker with a presentation has sent a file."
+            }
+          />
         </span>
       </div>
 
@@ -463,6 +473,18 @@ export function SpeakersView({
                             </button>
                           </HoverTip>
                         </span>
+                        {/* D-111: why "Email link" is greyed, on the page and with the way round it. */}
+                        {!emailedAlready(row) && (
+                          <WhyNot
+                            reason={
+                              !row.email
+                                ? "No email address yet — use Edit email to add one."
+                                : row.talks === 0
+                                  ? "Not on a presentation yet — add them to one on the event's Agenda tab first."
+                                  : null
+                            }
+                          />
+                        )}
                       </td>
                     </tr>
                   );
@@ -519,6 +541,7 @@ export function SpeakersView({
                 Cancel
               </button>
             </div>
+            <WhyNot reason={!editingEmail.value.trim() ? "Enter an email address to save." : null} />
           </form>
         </div>
       )}
@@ -756,6 +779,10 @@ function AddSpeakerDialog({
               {saving ? "Adding…" : "Add speaker"}
             </button>
           </div>
+          {/* D-111. With no presentations at all, the note above the list already says why. */}
+          <WhyNot
+            reason={!slotId && talks.length > 0 ? "Choose the presentation this speaker gives to continue." : null}
+          />
         </div>
       </form>
     </div>

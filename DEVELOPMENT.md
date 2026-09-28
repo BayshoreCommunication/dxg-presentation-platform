@@ -186,7 +186,7 @@ the event's own timezone, so a 10:30 session is 10:30 in Tampa — not 10:30 UTC
 wrong in every room list.
 
 **Speakers** shows the directory with organization, talk count and live status, search across name,
-organization and email, a chase list (*Bulk remind*), and **possible duplicates** with a merge that
+organization and email, a chase list (*Remind speakers missing files*), and **possible duplicates** with a merge that
 preserves both file histories and every assignment.
 
 ### Archive builder and Client portal — the handover

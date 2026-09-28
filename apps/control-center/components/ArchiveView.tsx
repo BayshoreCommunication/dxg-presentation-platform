@@ -6,6 +6,7 @@ import type { ArchiveScope, PdfProgress } from "@/lib/api";
 import { buildArchive, deliverArchive, archiveDownloadUrl, convertArchivePdfs, ApiError } from "@/lib/api";
 import { DownloadLog } from "@/components/DownloadLog";
 import { Chip } from "@/components/Chip";
+import { WhyNot } from "@/components/WhyNot";
 import { ARCHIVE_STATE, formatBytes, formatDate, plural, wordsFor } from "@pmp/format";
 
 /** Chip tone per archive state; the words come from ARCHIVE_STATE (S39, D-110). */
@@ -40,6 +41,13 @@ export function ArchiveView({ eventId, initial }: { eventId: string; initial: Ar
           : pkg.archive_state !== "ready"
             ? "The last build didn't finish. Check any message above, then rebuild the package."
             : null;
+  // Why Build is greyed, shown on the page as well as on hover (D-111).
+  const buildBlocked =
+    initial.included.length > 0
+      ? null
+      : initial.excluded.length > 0
+        ? "Nothing can be packaged yet — the Excluded list above says why for each presentation."
+        : "Nothing is approved yet — the package only holds approved presentations.";
   const pdf = initial.pdf;
   // A package left as a draft is a build that stopped (D-108), so it reads "Build stopped";
   // no package at all reads "Not built yet" (S39, D-110).
@@ -188,13 +196,7 @@ export function ArchiveView({ eventId, initial }: { eventId: string; initial: Ar
             <button
               className="btn pri"
               disabled={busy || initial.included.length === 0}
-              title={
-                initial.included.length === 0
-                  ? initial.excluded.length > 0
-                    ? "Nothing can be packaged yet — see Excluded for why"
-                    : "Nothing is approved yet"
-                  : undefined
-              }
+              title={buildBlocked ?? undefined}
               onClick={() =>
                 void run(async () => {
                   const result = await buildArchive(eventId);
@@ -232,11 +234,8 @@ export function ArchiveView({ eventId, initial }: { eventId: string; initial: Ar
               </>
             )}
           </div>
-          {deliverBlocked && pkg && (
-            <div className="note" style={{ marginTop: 8 }}>
-              {deliverBlocked}
-            </div>
-          )}
+          {/* One line under the row (D-111): Build's reason first — it blocks Deliver too. */}
+          <WhyNot reason={buildBlocked ?? (pkg ? deliverBlocked : null)} />
 
           <div className="note" style={{ marginTop: 10 }}>
             Every file is checksum-verified as it is packaged; if stored bytes no longer match their

@@ -9,6 +9,7 @@ import { ReminderDaysField, reminderDaysFrom } from "@/components/ReminderDaysFi
 import { BrandAssetField, assetFrom } from "@/components/BrandAssetField";
 import { ImportView } from "@/components/ImportView";
 import { DateField } from "@/components/DateTimeField";
+import { WhyNot } from "@/components/WhyNot";
 import { timeZoneOptions } from "@pmp/format";
 
 /** Tomorrow on this computer, `YYYY-MM-DD` — the earliest an event may start (D-101). */
@@ -126,7 +127,8 @@ export function CreateEventWizard({
               key={label}
               className={`chip ${index + 1 === step ? "c-info" : index + 1 < step ? "c-ok" : "c-mut"}`}
               style={{ cursor: reachable(index + 1) ? "pointer" : "not-allowed" }}
-              title={reachable(index + 1) ? undefined : "Import the schedule first"}
+              // Before a draft exists the blocker is Basics, not the agenda (D-111, S13).
+              title={reachable(index + 1) ? undefined : !draft ? "Finish Basics first." : "Add the agenda first."}
               onClick={() => reachable(index + 1) && setStep(index + 1)}
             >
               {index + 1}. {label}
@@ -307,13 +309,24 @@ export function CreateEventWizard({
               </button>
             )}
 
+            {step === 1 && (
+              // Said on the page, not only on hover (D-111, S12).
+              <WhyNot
+                reason={
+                  !basics.name || !basics.starts_on || !basics.ends_on
+                    ? "Enter a name, start date and end date to continue."
+                    : null
+                }
+              />
+            )}
+
             {step > 1 && step < 4 && (
               <button
                 className="btn pri"
                 disabled={busy || !draft || (step === 2 && !hasAgenda)}
                 title={
                   step === 2 && !hasAgenda
-                    ? "Import the schedule to continue — rooms, days and sessions all come from it"
+                    ? "Add the agenda to continue — rooms, days and sessions all come from it."
                     : undefined
                 }
                 onClick={() =>
@@ -338,6 +351,16 @@ export function CreateEventWizard({
               >
                 Save &amp; continue ›
               </button>
+            )}
+
+            {step === 2 && (
+              <WhyNot
+                reason={
+                  !hasAgenda
+                    ? "Add the agenda to continue — import the schedule or enter it manually."
+                    : null
+                }
+              />
             )}
 
             {step === 4 && (

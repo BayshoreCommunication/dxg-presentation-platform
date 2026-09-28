@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import type { EventRow, StaffRow } from "@/lib/api";
 import { setStaffRole, EVENT_ROLE_NAMES, ApiError } from "@/lib/api";
 import { Chip } from "@/components/Chip";
+import { WhyNot } from "@/components/WhyNot";
 import { formatDateRange, ROLE, wordsFor } from "@pmp/format";
 
 /**
@@ -261,6 +262,16 @@ export function EventAssignments({ initial, events }: { initial: StaffRow[]; eve
                               {(draft[event.id]?.roles.length ?? 0) > 0 &&
                                 `${draft[event.id]!.roles.length} role${draft[event.id]!.roles.length > 1 ? "s" : ""}`}
                             </button>
+                            {/* D-111: the greyed boxes say why on the page, not only on hover. */}
+                            <WhyNot
+                              reason={
+                                EVENT_ROLE_NAMES.some((role) =>
+                                  people.some((p) => p.person.id === draft[event.id]?.who && p.roles.includes(role)),
+                                )
+                                  ? "Greyed roles are ones they already hold here — remove one with × above."
+                                  : null
+                              }
+                            />
                           </div>
                         )}
                       </div>
