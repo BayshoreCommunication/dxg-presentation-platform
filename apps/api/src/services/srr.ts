@@ -3,7 +3,7 @@ import { appendAudit } from "@pmp/db";
 import { deriveTalkStatus, TALK_STATUS_LABEL } from "@pmp/domain";
 import type { Actor, DomainError, Result } from "@pmp/domain";
 import { atLeast, err, hasAnyRole, ok } from "@pmp/domain";
-import { formatBytes, formatBytesDelta } from "@pmp/format";
+import { formatBytes, formatBytesDelta, formatSessionTime } from "@pmp/format";
 import { ingestVersion, versionFacts } from "./ingest.ts";
 import type { VersionFacts } from "./ingest.ts";
 
@@ -681,6 +681,88 @@ export async function signOff(
   });
 
   return ok({ receipt });
+}
+
+/**
+ * Emails the speaker their presentation receipt (FR-SRR-004). The button used to show
+ * "Receipt emailed" and send nothing. It is recorded in `communications` like every
+ * speaker email, so it shows in the event's mail log and the archive, and goes through
+ * the outbox and the dispatcher's guards (bounced or invalid addresses are not mailed).
+ */
+export async function emailReceipt(
+  tx: pg.PoolClient,
+  actor: Actor,
+  checkinId: string,
+): Promise<Result<{ emailed_to: string }, DomainError>> {
+  const detail = await checkinDetail(tx, checkinId);
+  if (!detail) return err({ code: "srr.checkin_not_found", message: "No such check-in." });
+  if (!detail.receipt) {
+    return err({
+      code: "srr.no_receipt_conflict",
+      message: "There is no receipt yet — confirm the final onsite version first.",
+    });
+  }
+
+  const { rows } = await tx.query<{
+    email: string | null;
+    event_id: string;
+    client_id: string;
+    event_name: string;
+    timezone: string;
+  }>(
+    `SELECT sp.email::text AS email, e.id AS event_id, e.client_id, e.name AS event_name, e.timezone
+       FROM pmp.srr_checkins c
+       JOIN pmp.speakers sp ON sp.id = c.speaker_id
+       JOIN pmp.events e ON e.id = c.event_id
+      WHERE c.id = $1`,
+    [checkinId],
+  );
+  const row = rows[0];
+  if (!row) return err({ code: "srr.checkin_not_found", message: "No such check-in." });
+  if (!row.email) {
+    return err({
+      code: "srr.no_email_conflict",
+      message: `${detail.speaker.name} has no email address on file, so the receipt cannot be emailed. Print it instead.`,
+    });
+  }
+
+  const receipt = detail.receipt;
+  const subject = `${row.event_name}: your presentation receipt for “${detail.talk.title}”`;
+  const body = [
+    `Hi ${detail.speaker.name},`,
+    "",
+    `This confirms the presentation that will be shown for your talk at ${row.event_name}:`,
+    "",
+    `  Talk:        ${detail.talk.title}`,
+    `  Room:        ${detail.talk.room ?? "to be confirmed"} · ${formatSessionTime(detail.talk.starts_at, row.timezone)}`,
+    `  Version:     v${receipt.version_number}`,
+    `  Signed off:  ${formatSessionTime(receipt.signed_at, row.timezone)}${receipt.station ? ` at ${receipt.station}` : ""}`,
+    `  Technician:  ${receipt.technician}`,
+    "",
+    "This version is now locked for the room. If you need to change anything, come back to the Speaker Ready Room",
+    "with the new file — it can no longer be replaced through the speaker portal.",
+    "",
+    "The DXG presentation team",
+  ].join("\n");
+
+  const { rows: comm } = await tx.query<{ id: string }>(
+    `INSERT INTO pmp.communications (event_id, client_id, speaker_id, to_address, subject, body, status)
+     VALUES ($1, $2, $3, $4::citext, $5, $6, 'queued') RETURNING id`,
+    [row.event_id, row.client_id, detail.speaker.id, row.email, subject, body],
+  );
+  await tx.query(`INSERT INTO pmp.outbox (topic, payload) VALUES ('email.send', $1)`, [
+    JSON.stringify({ communication_id: comm[0]!.id, to: row.email, subject, body }),
+  ]);
+  await appendAudit(tx, {
+    partitionId: row.event_id,
+    clientId: row.client_id,
+    actorUserId: actor.id,
+    action: "srr.receipt_emailed",
+    subjectType: "srr_checkin",
+    subjectId: checkinId,
+    detail: { to: row.email, version_number: receipt.version_number, communication_id: comm[0]!.id },
+  });
+  return ok({ emailed_to: row.email });
 }
 
 export async function depart(

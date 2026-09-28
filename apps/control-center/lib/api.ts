@@ -410,6 +410,10 @@ export const signOffCheckin = (checkinId: string, fileVersionId: string) =>
     { method: "POST", body: JSON.stringify({ file_version_id: fileVersionId }) },
   );
 
+/** Emails the speaker their presentation receipt (D-106). */
+export const emailCheckinReceipt = (checkinId: string) =>
+  request<{ emailed_to: string }>(`/srr/checkins/${checkinId}/receipt/email`, { method: "POST" });
+
 export const departCheckin = (checkinId: string) =>
   request<{ departed: true }>(`/srr/checkins/${checkinId}/depart`, { method: "POST" });
 

@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { formatBytes } from "@pmp/format";
 import { Icon } from "@/components/Icon";
 import { ApiError, downloadFilesZip, fileDownloadUrl, getEventFiles } from "@/lib/api";
+import { FloatingMenu, useFloatingMenu } from "@/components/FloatingMenu";
 import type { EventFiles, FileQuery, FileRow, FileStatus, FileVersionRow } from "@/lib/api";
 
 type Row = FileRow & { history: FileVersionRow[] };
@@ -549,32 +550,13 @@ function PagerButton({
 }
 
 /** Closes on Escape and on a click anywhere else. */
-function useDismiss(open: boolean, close: () => void) {
-  const root = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (event: MouseEvent) => {
-      if (root.current && !root.current.contains(event.target as Node)) close();
-    };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") close();
-    };
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open, close]);
-  return root;
-}
 
 function RowMenu({ row, eventId, onDetails }: { row: FileRow; eventId: string; onDetails: () => void }) {
-  const [open, setOpen] = useState(false);
-  const root = useDismiss(open, () => setOpen(false));
+  const { open, setOpen, trigger, menu } = useFloatingMenu();
   return (
-    <div className="rowmenu" ref={root}>
+    <div className="rowmenu">
       <button
+        ref={trigger}
         type="button"
         className="ibtn"
         aria-label={`Actions for ${row.filename}`}
@@ -585,8 +567,7 @@ function RowMenu({ row, eventId, onDetails }: { row: FileRow; eventId: string; o
       >
         <Icon name="more" />
       </button>
-      {open && (
-        <div className="menu" role="menu">
+      <FloatingMenu open={open} trigger={trigger} menu={menu}>
           {row.downloadable ? (
             <a className="item" role="menuitem" href={fileDownloadUrl(row.version_id)} onClick={() => setOpen(false)}>
               <Icon name="download" /> Download v{row.version_number}
@@ -610,8 +591,7 @@ function RowMenu({ row, eventId, onDetails }: { row: FileRow; eventId: string; o
           <Link href={`/events/${eventId}/talks/${row.slot_id}`} className="item" role="menuitem">
             <Icon name="review" /> Open talk
           </Link>
-        </div>
-      )}
+      </FloatingMenu>
     </div>
   );
 }
@@ -741,12 +721,12 @@ function RoomFilter({
   value: string | undefined;
   onChange: (room: string | undefined) => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const root = useDismiss(open, () => setOpen(false));
+  const { open, setOpen, trigger, menu } = useFloatingMenu();
   const options = useMemo(() => rooms.map((room) => ({ key: room.room_id ?? "none", label: room.room })), [rooms]);
   return (
-    <div className="rowmenu" ref={root}>
+    <div className="rowmenu">
       <button
+        ref={trigger}
         type="button"
         className={value ? "ibtn bordered on" : "ibtn bordered"}
         aria-label="Filter by room"
@@ -756,8 +736,7 @@ function RoomFilter({
       >
         <Icon name="filter" />
       </button>
-      {open && (
-        <div className="menu" role="menu">
+      <FloatingMenu open={open} trigger={trigger} menu={menu}>
           <div className="label">Room</div>
           <button
             type="button"
@@ -786,8 +765,7 @@ function RoomFilter({
               {option.label} {value === option.key && <span className="tick">✓</span>}
             </button>
           ))}
-        </div>
-      )}
+      </FloatingMenu>
     </div>
   );
 }

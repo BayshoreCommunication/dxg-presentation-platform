@@ -179,3 +179,27 @@ describe("a blocking finding holds approval until it is waived (D-105)", () => {
     assert.equal((await transition(clean, "approve")).status, 200, "approved once waived");
   });
 });
+
+describe("the presentation receipt (D-106)", () => {
+  test("it can only be emailed once there is one, and then goes to the speaker", async (t: TestContext) => {
+    if (!up || !clean) return t.skip("API not running");
+    const early = await call("POST", `/srr/checkins/${checkinId}/receipt/email`);
+    assert.equal(early.status, 409, "no receipt before sign-off");
+
+    const signed = await call("POST", `/srr/checkins/${checkinId}/sign-off`, { file_version_id: clean });
+    assert.equal(signed.status, 200);
+
+    const sent = await call("POST", `/srr/checkins/${checkinId}/receipt/email`);
+    assert.equal(sent.status, 200);
+    assert.equal(((await sent.json()) as { emailed_to: string }).emailed_to, `eligibility.${RUN}@example.invalid`);
+    const logged = await withSystemScope(async (tx) => {
+      const { rows } = await tx.query<{ n: number }>(
+        `SELECT count(*)::int AS n FROM pmp.communications
+          WHERE to_address = $1 AND subject LIKE '%presentation receipt%'`,
+        [`eligibility.${RUN}@example.invalid`],
+      );
+      return rows[0]!.n;
+    });
+    assert.equal(logged, 1, "the receipt email is in the event's mail log");
+  });
+});

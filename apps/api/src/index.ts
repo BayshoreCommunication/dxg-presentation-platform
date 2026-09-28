@@ -49,7 +49,7 @@ import {
 /** Carries the half-finished sign-in between the password and the code. */
 const MFA_COOKIE = "pmp_mfa";
 import { agentView, syncRoom, acknowledge, launch } from "./services/agent.ts";
-import { srrDashboard, checkIn, checkinDetail, usbIngest, signOff, depart, addStation, renameStation, retireStation } from "./services/srr.ts";
+import { srrDashboard, checkIn, checkinDetail, usbIngest, signOff, depart, emailReceipt, addStation, renameStation, retireStation } from "./services/srr.ts";
 import {
   presentationDetail,
   findingsFor,
@@ -1501,6 +1501,15 @@ app.post("/api/v1/srr/checkins/:checkinId/sign-off", async (req, res) => {
       fileVersionId: body.file_version_id as string,
     }),
   );
+  if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+  return res.json(result.value);
+});
+
+// Emails the speaker their presentation receipt (FR-SRR-004, D-106).
+app.post("/api/v1/srr/checkins/:checkinId/receipt/email", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  const result = await withScope(scopeFor(req), (tx) => emailReceipt(tx, actor, String(req.params.checkinId)));
   if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
   return res.json(result.value);
 });

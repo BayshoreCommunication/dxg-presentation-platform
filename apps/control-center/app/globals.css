@@ -770,6 +770,7 @@ input[type=time]:invalid,input[type=date]:invalid{border-color:var(--block)}
 .rowmenu{position:relative;display:inline-flex}
 .rowmenu .ibtn{margin:0}
 .rowmenu .menu{position:absolute;right:0;top:calc(100% + 6px);z-index:40;width:190px}
+.menu.floating{z-index:70}
 .rowmenu .menu .item svg{flex-shrink:0}
 .menu .tick{margin-left:auto;font-size:12px;color:var(--foreground)}
 .files-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:10px 10px 6px;font-size:12px;color:var(--muted-foreground)}
@@ -1088,8 +1089,27 @@ input,select,textarea{border-width:1px}
   .menu-scrim{position:fixed;inset:0;z-index:59;background:rgba(0,0,0,.35)}
   main{min-width:0;width:100%}
   /* A table wider than the screen scrolls inside its card instead of being cut off (Staff
-     accounts' action buttons were). Not tables with row menus (SRR, Files): a scrolling
-     box would clip their popup, the recurring bug class this file already guards. */
-  .cbd:has(> table):not(:has(.rowmenu)){overflow-x:auto}
+     accounts' action buttons were). Row menus are drawn on <body> (FloatingMenu, D-107),
+     so a scrolling card cannot clip them. */
+  .cbd:has(> table){overflow-x:auto}
 }
 @media (max-width:760px) and (prefers-reduced-motion:reduce){aside,.menu-open aside{transition:none}}
+
+/* ── Presentation receipt (D-106): a page made for paper ─────────────────────── */
+.receipt-page{max-width:640px}
+.receipt{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:28px 32px}
+.receipt header{margin-bottom:18px}
+.receipt .brand{font-weight:600;letter-spacing:.02em;color:var(--muted-foreground);font-size:13px}
+.receipt h1{font-size:22px;margin:4px 0 2px}
+.receipt table{width:100%;border-collapse:collapse;margin:8px 0 16px}
+.receipt th{width:120px;text-align:left;font-weight:500;color:var(--muted-foreground);vertical-align:top;background:transparent}
+.receipt th,.receipt td{padding:9px 0;border-bottom:1px solid var(--border);font-size:14px}
+.receipt .signatures{display:grid;grid-template-columns:1fr 1fr;gap:32px;margin-top:40px}
+.receipt .signatures div{border-top:1px solid var(--foreground);padding-top:6px;font-size:12px;color:var(--muted-foreground)}
+@media print{
+  aside,.topbar,.menu-scrim,.no-print,nextjs-portal{display:none!important}
+  body,.shell,main{background:#fff!important}
+  .receipt-page{max-width:none}
+  .receipt{border:none;padding:0;background:#fff;color:#000}
+  .receipt th,.receipt td{border-bottom-color:#ccc;color:#000}
+}

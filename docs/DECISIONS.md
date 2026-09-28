@@ -2067,3 +2067,23 @@ lists only stored files; and a `malware` finding cannot be waived (`inspection.n
 quarantined file stays the platform-admin override §1 describes (not built). Two invariant fixtures had relied on
 approving plain text named `.pptx` (a blocking "corruption" finding) and now upload a minimal real package.
 `tests/invariants/review-eligibility.test.ts`.
+
+## D-106 (2026-09-28): The presentation receipt can really be printed and emailed — Status: ACCEPTED (Travis's call)
+On check-in, after sign-off, "Print receipt" showed "Receipt sent to the station printer" and "Email receipt" showed
+"Receipt emailed to …" — and neither did anything. Now: **Email receipt** calls
+`POST /srr/checkins/{id}/receipt/email`, which emails the speaker (talk, room and time, version, signed-off time
+and station, technician — no file fingerprint, Travis's call; it stays in the stored receipt and audit) through the outbox, records it in `communications` (mail log, archive) and
+audits `srr.receipt_emailed`; no receipt yet → 409, no address → 409 saying to print instead. The message names the
+address it went to. **Print receipt** opens `/events/{id}/srr/{checkin}/receipt` in a new tab — a receipt laid out for
+paper with speaker/technician signature lines — which opens the browser's print dialog; `@media print` hides the
+sidebar, top bar and buttons. Printing goes to whatever printer the station computer has; there is no printer
+integration. Test in review-eligibility.test.ts.
+
+## D-107 (2026-09-28): Row menus are drawn on the page, never inside their card — Status: ACCEPTED (bug fix)
+The Speaker Ready Room's "Check in → At which station?" menu was cut off by the card around it: it showed the first
+two stations (both in use) and hid the third, the only free one — so no speaker could be checked in there. The same
+recurring bug class as D-094. `components/FloatingMenu.tsx` (`useFloatingMenu` + `FloatingMenu`) draws a row menu on
+<body> with fixed positioning under its button, flips it above when there is no room below, follows scrolling, and
+closes on an outside click or Escape. Used by the SRR station picker and the Files screen's row actions and room
+filter (the only other in-table menus). With no menu left to clip, every wide table now scrolls inside its card on
+narrow screens (the SRR/Files exception from the narrow-screen fix is gone).

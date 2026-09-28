@@ -11,6 +11,7 @@ import {
   signOffCheckin,
   departCheckin,
   ApiError,
+  emailCheckinReceipt,
 } from "@/lib/api";
 import { Chip } from "@/components/Chip";
 
@@ -153,12 +154,25 @@ export function CheckinView({
                   </tbody>
                 </table>
                 <div style={{ marginTop: 10, display: "flex", gap: 8 }}>
-                  <button className="btn" onClick={() => setToast("Receipt sent to the station printer")}>
+                  {/* Both used to show a success message and do nothing (D-106). Print opens a
+                      receipt page made for paper, which prints on the station's own printer. */}
+                  <a
+                    className="btn"
+                    href={`/events/${eventId}/srr/${detail.checkin.id}/receipt`}
+                    target="_blank"
+                    rel="noopener"
+                  >
                     Print receipt
-                  </button>
+                  </a>
                   <button
                     className="btn"
-                    onClick={() => setToast(`Receipt emailed to ${detail.speaker.name}`)}
+                    disabled={busy}
+                    onClick={() =>
+                      void run(async () => {
+                        const { emailed_to } = await emailCheckinReceipt(detail.checkin.id);
+                        return `Receipt emailed to ${emailed_to}`;
+                      })
+                    }
                   >
                     Email receipt
                   </button>

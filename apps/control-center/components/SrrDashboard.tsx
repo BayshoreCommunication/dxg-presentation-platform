@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { SrrDashboard, SrrStation } from "@/lib/api";
 import { addStation, renameStation, retireStation, startCheckin, ApiError } from "@/lib/api";
+import { FloatingMenu, useFloatingMenu } from "@/components/FloatingMenu";
 import { Chip } from "@/components/Chip";
 
 /**
@@ -146,25 +147,6 @@ export function SrrDashboardView({
 }
 
 /** Closes on Escape and on a click anywhere else. */
-function useDismiss(open: boolean, close: () => void) {
-  const root = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (event: MouseEvent) => {
-      if (root.current && !root.current.contains(event.target as Node)) close();
-    };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") close();
-    };
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open, close]);
-  return root;
-}
 
 /**
  * Check-in asks which desk (D-080). It was recorded at "Station 2" for every speaker;
@@ -180,8 +162,7 @@ function CheckInButton({
   disabled: boolean;
   onPick: (stationId: string) => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const root = useDismiss(open, () => setOpen(false));
+  const { open, setOpen, trigger, menu } = useFloatingMenu();
   const free = stations.filter((station) => !station.busy);
   if (stations.length === 0) {
     return (
@@ -191,8 +172,9 @@ function CheckInButton({
     );
   }
   return (
-    <div className="rowmenu" ref={root} style={{ verticalAlign: "middle" }}>
+    <div className="rowmenu" style={{ verticalAlign: "middle" }}>
       <button
+        ref={trigger}
         className="btn pri"
         disabled={disabled || free.length === 0}
         title={free.length === 0 ? "Every station is in use" : undefined}
@@ -202,8 +184,7 @@ function CheckInButton({
       >
         Check in →
       </button>
-      {open && (
-        <div className="menu" role="menu" style={{ width: 220, textAlign: "left" }}>
+      <FloatingMenu open={open} trigger={trigger} menu={menu} width={220}>
           <div className="label">At which station?</div>
           {stations.map((station) => (
             <button
@@ -223,8 +204,7 @@ function CheckInButton({
               {station.busy && <span className="tick">in use</span>}
             </button>
           ))}
-        </div>
-      )}
+      </FloatingMenu>
     </div>
   );
 }
