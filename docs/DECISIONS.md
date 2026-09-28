@@ -2042,3 +2042,16 @@ which would have stolen a second worker's live job). SIGTERM: stop taking work, 
 25 s (`stop_grace_period: 30s`). Liveness: `worker_heartbeats` (migration 023, one row per `worker@host#pid`, every
 30 s, removed on clean stop, pruned after a day); `/ops/health` adds `"worker":"up"|"stale"|"none"` without changing
 `status`, so the uptime alarms still mean "the sites are down". `tests/invariants/worker.test.ts`; CI starts a worker.
+
+## D-104 (2026-09-28): G0-6b visual acceptance passed — DXG approved all 17 screens — Status: ACCEPTED (DXG, via Travis)
+The VISUAL_ACCEPTANCE §3 sheet was run against the **built app**, not the enhanced prototype: each of the 17 baseline
+screens (prototype/client-baseline.html, left) beside the same screen in the application (right), 1440×900, with the
+speaker and client portals also at 375×812 — captured 2026-09-28 from local development on the demo event MedTech
+Forward 2026 (signed in as the seeded root admin, a presenter, and the client event admin). Each row listed its
+logged deviations; the sheet stated that items 1–3, 6 and 7 of VISUAL_ACCEPTANCE §2 still bind and that colour and
+type follow Kravio (D-078). Screen 18 (Event details) has no row: it was folded into the command centre (D-058).
+Shared by Travis with DXG as a claude.ai page (https://claude.ai/artifact/TyTPTwPeWB8Jdq6t3UK3bb) recording one
+decision per screen; **17/17 approved, no change requests or notes**, all recorded 2026-09-28 07:09–08:14 UTC by one
+reviewer account. This satisfies G0-6b and the SRS §22 prototype criterion; M1's [B] frontend tasks are no longer
+gated on it. The approved sheet is the baseline for visual regressions from here: re-run it at each milestone that
+touches UI and at M7 UAT.

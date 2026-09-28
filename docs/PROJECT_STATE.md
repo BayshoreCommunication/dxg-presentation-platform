@@ -3131,3 +3131,9 @@ PDF previews and automatic reminders moved out of the API into `worker` (same im
 The API queues and notifies; `/ops/health` reports `worker`. The "separate worker before multiple API instances" item
 is done. Locally: a queued preview converted by the worker in ~3.7 s with the API not involved; a second worker and a
 clean SIGTERM behave (found and fixed: two workers on one host shared a heartbeat name).
+
+## 2026-09-28 — G0-6b passed: DXG approved all 17 screens (D-104)
+Sign-off pack (baseline vs built app, 17 rows, portals at phone width too) published and shared with DXG; 17/17
+approved, no change requests. The "G0-6b visual approval must be re-run" item from D-078 is closed. Remaining product
+gate: G0-1 (Room Agent PowerPoint PoC, needs Windows hardware). Local dev: three test drafts archived for a clean
+portfolio capture.

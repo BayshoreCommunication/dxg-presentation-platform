@@ -29,7 +29,7 @@ Cadence: one task = one commit = one verification command (BUILD_SPEC §17). Mil
 
 | Gate | Status | Blocks | Unblocking action |
 |---|---|---|---|
-| **G0-6b visual acceptance 17/17** | Comparison sheet built; 0/17 approved | **All frontend scaffolding** (stream B) | Travis approves rows in `prototype/comparison.html`, then DXG |
+| **G0-6b visual acceptance 17/17** | **PASSED 2026-09-28** — DXG approved 17/17 against the built app (D-104) | — | Re-run the sheet at each milestone that touches UI (VISUAL_ACCEPTANCE §3) |
 | **G0-1 PowerPoint PoC** | Not started — no Windows/Office environment | Room Agent *decision* (D-002), stream C beyond the sync engine | Acquire Win 11 machine + Win 10 21H2 VM with M365 and dual/triple monitors |
 | **G0-2 offline delta-sync PoC** | Not started | Nothing hard — the protocol is specified (BUILD_SPEC §10); do it as M0-6 against the real spec | Run the PoC as the first agent task; it doubles as the sync engine's skeleton |
 | **G0-4 discovery** | Blocked on DXG | Fidelity of M1 import, M4 SRR ergonomics, M5 fleet assumptions | Send the P0-C5 input request (still outstanding) |

@@ -31,6 +31,10 @@ Deviations are allowed only for: real-data constraints, accessibility fixes (WCA
 - **Approval**: Travis signs off screen-by-screen; DXG sign-off on the sheet satisfies the SRS §22 prototype criterion. No frontend application scaffolding until all 17 rows are approved.
 - Ongoing: the same sheet is re-run at each milestone that touches UI (M1–M6) and at M7 UAT; visual regressions against approved rows are defects.
 
+- **Passed 2026-09-28 (D-104):** DXG approved 17/17 against the built app. The approved sheet is the regression baseline.
+- **Re-running it:** with the seeded local stack up (`npm run dev`), `npm run visual:capture` (or `-- portfolio,review` for
+  some screens) writes each baseline/app pair to `.data/visual-sheet/` — script: `scripts/visualSheet.ts`.
+
 ## 4. Behaviors to graft from the workflow study
 
 `prototype/workflow-study.html` interactions are reimplemented **inside the baseline's IA and design language** (never its own visuals):
