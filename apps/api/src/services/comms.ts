@@ -233,6 +233,8 @@ export async function recipientsFor(
   templateId: string,
   missingOnly: boolean,
   cooldownHours: number = RESEND_COOLDOWN_HOURS,
+  /** Count any email about this event towards the cooldown, not just this template (D-102). */
+  cooldownAnyTemplate = false,
 ): Promise<Recipient[]> {
   const { rows } = await tx.query<{
     speaker_id: string;
@@ -259,7 +261,7 @@ export async function recipientsFor(
                      WHERE (c.speaker_id = sp.id OR lower(c.to_address::text) = lower(sp.email::text))
                        AND c.status IN ('bounced','complained')) AS bounced,
             EXISTS (SELECT 1 FROM pmp.communications c
-                     WHERE c.speaker_id = sp.id AND c.template_id = $2
+                     WHERE c.speaker_id = sp.id AND ($4 OR c.template_id = $2)
                        AND c.created_at > now() - make_interval(hours => $3)) AS already_sent
        FROM pmp.speakers sp
        JOIN pmp.speaker_assignments sa ON sa.speaker_id = sp.id
@@ -268,7 +270,7 @@ export async function recipientsFor(
        LEFT JOIN pmp.rooms r ON r.id = se.room_id
       WHERE sp.event_id = $1 AND sp.merged_into IS NULL AND sp.removed_at IS NULL
       ORDER BY sp.full_name, se.starts_at`,
-    [eventId, templateId, cooldownHours],
+    [eventId, templateId, cooldownHours, cooldownAnyTemplate],
   );
 
   const perTalk = rows
@@ -421,6 +423,12 @@ export async function sendBatch(
     missingOnly: boolean;
     /** The automatic reminders use a shorter guard, so reminder days a day apart both go (D-096). */
     cooldownHours?: number;
+    /**
+     * The automatic reminders also stand back for anyone emailed about this event at all
+     * in the cooldown (D-102): a speaker just sent their upload link does not need a
+     * "reminder" of it a minute later.
+     */
+    cooldownAnyTemplate?: boolean;
   },
 ): Promise<Result<SendResult, DomainError>> {
   const { rows: readiness } = await tx.query<{
@@ -458,7 +466,14 @@ export async function sendBatch(
   if (!template) return err({ code: "comms.template_not_found", message: "No such template." });
 
   const cooldown = input.cooldownHours ?? RESEND_COOLDOWN_HOURS;
-  const recipients = await recipientsFor(tx, input.eventId, input.templateId, input.missingOnly, cooldown);
+  const recipients = await recipientsFor(
+    tx,
+    input.eventId,
+    input.templateId,
+    input.missingOnly,
+    cooldown,
+    input.cooldownAnyTemplate ?? false,
+  );
   const skipped = new Map<string, number>();
   const note = (reason: string) => skipped.set(reason, (skipped.get(reason) ?? 0) + 1);
 
@@ -475,7 +490,11 @@ export async function sendBatch(
     if (recipient.already_sent) {
       // Named by what it is, so an operator can tell "I already did this" from
       // "this address is dead" — the two reasons a chase list comes back empty.
-      note(`already emailed this in the last ${cooldown} hours`);
+      note(
+        input.cooldownAnyTemplate
+          ? `emailed about this event in the last ${cooldown} hours`
+          : `already emailed this in the last ${cooldown} hours`,
+      );
       continue;
     }
 

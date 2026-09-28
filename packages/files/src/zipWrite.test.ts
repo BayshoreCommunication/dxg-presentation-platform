@@ -45,4 +45,14 @@ describe("archive zip writer", () => {
       ["a.txt", "b.txt", "c.txt"],
     );
   });
+
+  test("non-ASCII names are marked UTF-8, so unzip tools show them as written (D-102)", () => {
+    const name = "emails/003 Dr. Müller - changes needed to “Keynote” · 23-59.txt";
+    const zip = writeZip([{ name, body: Buffer.from("x") }]);
+    // General-purpose flag, bit 11, in the local header (offset 6) and the central one.
+    assert.equal(zip.readUInt16LE(6) & 0x0800, 0x0800);
+    const central = zip.indexOf(Buffer.from([0x50, 0x4b, 0x01, 0x02]));
+    assert.equal(zip.readUInt16LE(central + 8) & 0x0800, 0x0800);
+    assert.equal(readZipEntries(zip)[0]!.name, name);
+  });
 });

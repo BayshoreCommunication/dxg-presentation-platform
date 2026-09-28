@@ -8,6 +8,13 @@ import { crc32 } from "node:zlib";
  */
 export type ZipInput = { name: string; body: Buffer };
 
+/**
+ * General-purpose bit 11: "file names are UTF-8". Without it, readers fall back to the
+ * old IBM PC code page, so a speaker's "Dr. Müller" or an email subject's "·" and curly
+ * quotes came out as "┬╖" and "ΓÇ£" in Windows Explorer and `unzip` (D-102).
+ */
+const UTF8_NAMES = 0x0800;
+
 const dosTime = (date: Date): { time: number; date: number } => ({
   time: (date.getHours() << 11) | (date.getMinutes() << 5) | (date.getSeconds() >> 1),
   date: ((date.getFullYear() - 1980) << 9) | ((date.getMonth() + 1) << 5) | date.getDate(),
@@ -26,7 +33,7 @@ export function writeZip(entries: ZipInput[], at: Date = new Date()): Buffer {
     const local = Buffer.alloc(30 + name.length);
     local.writeUInt32LE(0x04034b50, 0);
     local.writeUInt16LE(20, 4);
-    local.writeUInt16LE(0, 6);
+    local.writeUInt16LE(UTF8_NAMES, 6);
     local.writeUInt16LE(0, 8);
     local.writeUInt16LE(time, 10);
     local.writeUInt16LE(date, 12);
@@ -41,7 +48,7 @@ export function writeZip(entries: ZipInput[], at: Date = new Date()): Buffer {
     central.writeUInt32LE(0x02014b50, 0);
     central.writeUInt16LE(20, 4);
     central.writeUInt16LE(20, 6);
-    central.writeUInt16LE(0, 8);
+    central.writeUInt16LE(UTF8_NAMES, 8);
     central.writeUInt16LE(0, 10);
     central.writeUInt16LE(time, 12);
     central.writeUInt16LE(date, 14);

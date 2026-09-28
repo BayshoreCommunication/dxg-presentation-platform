@@ -217,8 +217,15 @@ async function convertOne(job: {
     await withSystemScope(async (tx) => {
       const { rows } = await tx.query<{ id: string }>(
         `INSERT INTO pmp.derived_objects (file_version_id, event_id, client_id, kind, bucket, s3_key)
-         VALUES ($1, $2, $3, 'pdf', 'local', $4) RETURNING id`,
-        [job.file_version_id, job.event_id, job.client_id, stored.key],
+         VALUES ($1, $2, $3, 'pdf', $5, $4) RETURNING id`,
+        // The bucket it really lives in: it was recorded as 'local' even on S3 (D-102).
+        [
+          job.file_version_id,
+          job.event_id,
+          job.client_id,
+          stored.key,
+          process.env.FILE_STORAGE === "s3" ? (process.env.S3_BUCKET ?? "s3") : "local",
+        ],
       );
       await tx.query(
         `UPDATE pmp.pdf_conversions SET state = 'done', error = NULL, derived_object_id = $2, updated_at = now()

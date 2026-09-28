@@ -2014,3 +2014,17 @@ start has no upper bound, and choosing a start after the current end moves the e
 `starts_on` on or before today in the event's own time zone (`events.bad_dates`, 422) when an event is created, and
 when a draft's start date is changed — re-saving a draft whose start has since passed, without changing it, is allowed.
 `tests/invariants/event-dates.test.ts`.
+
+## D-102 (2026-09-28): Reminders never go out at night, and never right after another email — Status: ACCEPTED (found in the first production end-to-end test)
+On production, an event activated after its 14- and 7-day reminder dates had passed sent its caught-up reminder at
+00:39 New York time, 32 seconds after the speaker's upload-link email. Two rules caused it: a missed reminder day was
+due at any hour (only "today" waited for 09:00), and the 12-hour cooldown counted only earlier reminders, not the
+upload link. Now nothing is sent before 09:00 event time, missed days included, and the automatic reminders skip any
+speaker emailed about the event at all in the last 12 hours (`sendBatch` `cooldownAnyTemplate`, used by the
+scheduler only; manual batch sends keep the per-template 24-hour guard). The skipped speaker is counted under
+"emailed about this event in the last 12 hours". Two new cases in `tests/invariants/automatic-reminders.test.ts`.
+Same entry: a PDF preview's `derived_objects.bucket` was always written as `'local'`, even on S3 where the file really
+is; it now records the S3 bucket (nothing read the column, so the only effect was a misleading row).
+Same entry: archive zips now set the UTF-8 file-name flag (general-purpose bit 11). Names carrying "·", curly
+quotes or accented speaker names were written as UTF-8 but unflagged, so Windows Explorer, bsdtar and Python read them
+in the DOS code page ("┬╖", "ΓÇ£"); macOS Archive Utility happened to guess right. `zipWrite.test.ts`.

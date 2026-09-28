@@ -3107,3 +3107,21 @@ as api/staff (it redacts the emailed password after sending); the email's sign-i
 Create event no longer greys out start dates after the chosen end date (the end moves with the start instead), and no
 longer offers today or past days. The API enforces the same rule in the event's time zone. Lint, 253 unit and
 287/287 invariants pass. Deployed 2026-09-27: D-100 (768fdf5) and uptime monitoring (Route 53 + CloudWatch, us-east-1).
+
+## 2026-09-28 — First production end-to-end test: PASSED, three bugs found (D-102)
+Event "E2E Test 2026-10" (the bootstrap placeholder "Platform setup", renamed and reused through the wizard), speaker
+"Test Speaker" = dxgrfptool@gmail.com, staff = Rakibul's root admin account, driven by Travis on
+https://pmp.av-rfpilot.com / https://speakers.av-rfpilot.com. Every step verified server-side:
+1. Create + import + deadline + activate — event, days, session (10:00 EDT stored 14:00 UTC), slot, speaker, audit. ✔
+2. Upload link — SES accepted and delivered (SNS Delivery event recorded). ✔ **Bug:** a caught-up reminder followed
+   32 s later at 00:39 New York time.
+3. Speaker upload v1 via portal — S3 object, sha256 matches audit, ClamAV `clamd` verdict clean, inspection passed,
+   LibreOffice PDF in 11 s (1 attempt) stored in S3, awaiting review. ✔ **Bug (cosmetic):** preview row labelled 'local'.
+4. Request revision — claim → changes_requested, speaker-visible comment, "changes needed" email delivered; v2
+   uploaded, scanned clean, PDF done, awaiting review. ✔
+5. Approve v2 — approved by Rakibul; room sync queued (no Room Agent in production yet). ✔
+6. Archive — PPTX + PDF packages in S3 `archives/`, manifest correct (v2 final, v1 under "earlier versions"),
+   final's sha256 byte-identical to the file uploaded, three emails included with personal links redacted,
+   link expires 2026-11-06, download audited. ✔ **Bug:** zip file names not flagged UTF-8 (garbled on Windows).
+All three fixed locally under D-102 (not yet deployed). Harmless notes: every email logs "sent" twice (dispatcher +
+SES Send event); an email file name is cut at the length limit ("…23-59 ED.txt").

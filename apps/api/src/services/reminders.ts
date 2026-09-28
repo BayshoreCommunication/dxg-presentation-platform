@@ -14,7 +14,8 @@ import { ensureTemplates, sendBatch } from "./comms.ts";
  *
  *   - only **active** events with an upload deadline (a draft sends nothing to anyone);
  *   - a reminder day is due from 09:00 on that day, in the *event's* timezone, until the
- *     deadline has passed;
+ *     deadline has passed — and nothing is ever sent before 09:00 event time, a missed day
+ *     included (D-102: a caught-up reminder used to go out at 00:39);
  *   - each reminder day runs **once** per event and deadline, recorded in `reminder_runs`, so
  *     a restart, a second API instance or a slow tick cannot repeat it — and moving the
  *     deadline starts a fresh set;
@@ -22,7 +23,7 @@ import { ensureTemplates, sendBatch } from "./comms.ts";
  *     the most recent day due and records the earlier ones as caught up — never a burst;
  *   - the send is the ordinary batch (`sendBatch`, missing files only), so every guard
  *     applies: no address, a bounced address, test domains (D-090), and anyone emailed
- *     this template in the last 12 hours.
+ *     about this event at all — upload link included — in the last 12 hours (D-102).
  */
 export const REMINDER_CHOICES = [14, 7, 3, 2, 1] as const;
 export const DEFAULT_REMINDER_DAYS = [14, 7, 2];
@@ -161,16 +162,18 @@ export async function runDueReminders(
     if (days.length === 0) continue;
     const { day: today, hour } = localNow(now, event.timezone);
     if (today > deadline) continue;
+    // Never before 09:00 event time — a missed day waits for the morning too (D-102).
+    if (hour < SEND_FROM_HOUR) continue;
 
     const { rows: ran } = await tx.query<{ days_before: number }>(
       `SELECT days_before FROM pmp.reminder_runs WHERE event_id = $1 AND deadline = $2::date`,
       [event.id, deadline],
     );
     const done = new Set(ran.map((row) => row.days_before));
-    // Due: its day has come (from 09:00 on the day itself), and it has not run.
+    // Due: its day has come (it is past 09:00, checked above), and it has not run.
     const due = days
       .map((daysBefore) => ({ daysBefore, dueOn: minusDays(deadline, daysBefore) }))
-      .filter(({ daysBefore, dueOn }) => !done.has(daysBefore) && (dueOn < today || (dueOn === today && hour >= SEND_FROM_HOUR)));
+      .filter(({ daysBefore, dueOn }) => !done.has(daysBefore) && dueOn <= today);
     if (due.length === 0) continue;
 
     // The most recent day due is sent; any earlier ones were missed and are folded into it.
@@ -189,6 +192,7 @@ export async function runDueReminders(
         templateId: template.id,
         missingOnly: true,
         cooldownHours: COOLDOWN_HOURS,
+        cooldownAnyTemplate: true,
       });
       if (result.ok) {
         outcome = "sent";

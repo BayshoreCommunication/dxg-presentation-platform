@@ -164,6 +164,8 @@ describe("automatic reminders (D-096)", () => {
   test("a missed reminder day is folded into the next, not sent as a burst", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
     await ageSends();
+    // A missed day waits for 09:00 like any other (D-102): it used to go out at 00:39.
+    assert.deepEqual(await run(at(before_(DEADLINE, 3), 1)), [], "nothing is sent in the night");
     // The 7-day reminder was never run (the server was "down"); the 2-day one is now due.
     const sent = await run(at(before_(DEADLINE, 2), 10));
     assert.equal(sent.length, 1);
@@ -191,6 +193,33 @@ describe("automatic reminders (D-096)", () => {
     assert.equal((await call("PATCH", `/events/${eventId}`, { settings: { upload_deadline: MOVED } })).status, 200);
     const sent = await run(at(before_(MOVED, 2), 10));
     assert.equal(sent.length, 1, "the new deadline's reminder goes");
+    assert.equal(await remindersTo(speakerId), 3);
+  });
+
+  test("a speaker just sent their upload link is not reminded of it (D-102)", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    await ageSends();
+    assert.equal(
+      (await call("PATCH", `/events/${eventId}`, { settings: { reminder_days: [14, 7, 2, 1] } })).status,
+      200,
+    );
+    // The upload-link email, just sent. Recorded directly: the real endpoint sends once per
+    // speaker ever, and this speaker has had reminders already, which count as that.
+    await withSystemScope((tx) =>
+      tx.query(
+        `INSERT INTO pmp.communications (event_id, client_id, speaker_id, template_id, to_address, subject, status)
+         SELECT e.id, e.client_id, $2, t.id, 'reminder.link@example.invalid', 'Please upload', 'sent'
+           FROM pmp.events e
+           JOIN pmp.communication_templates t ON t.event_id = e.id AND t.name !~* 'reminder'
+          WHERE e.id = $1
+          LIMIT 1`,
+        [eventId, speakerId],
+      ),
+    );
+
+    const sent = await run(at(before_(MOVED, 1), 10));
+    assert.equal(sent.length, 1, "the 1-day reminder runs");
+    assert.equal(sent[0]!.queued, 0, "but the speaker emailed minutes ago is skipped");
     assert.equal(await remindersTo(speakerId), 3);
   });
 
