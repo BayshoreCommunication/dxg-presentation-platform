@@ -152,8 +152,13 @@ The API drains in-flight requests on SIGTERM before exiting.
   `aws route53 get-health-check-status --health-check-id <id> --profile rfpilot`.
   `/ops/health` is not rate-limited; keep it that way or the checkers will trip the alarm.
 - **Worker**: `curl -s https://pmp.av-rfpilot.com/ops/health` → `"worker":"up"`. `"stale"` means it
-  stopped (`docker compose ps worker`, `docker compose logs worker`, `docker compose up -d worker`);
-  the uptime checks do not look at this field.
+  stopped (`docker compose ps worker`, `docker compose logs worker`, `docker compose up -d worker`).
+  Alerted (set up 2026-09-28): a third Route 53 check, `pmp-worker`
+  (`f8957cd0-18e2-44e8-966a-a413b2ebeaf1`), on the same URL passes only if the body contains
+  `"worker":"up"`; alarm `pmp-uptime-worker` (us-east-1, same 2-of-3-minutes rule) emails the same SNS
+  topic. It also fires when the staff site is down — read it together with `pmp-uptime-pmp`: both
+  firing means the site; only this one means the worker. The site checks match `"status":"ok"` only,
+  so a stopped worker never looks like a site outage.
 - **Logs**: `docker compose logs -f api worker dispatcher`. Worth watching: `[dispatcher] not sent to …`
   (suppressed or invalid addresses), `[reminders] …`, `pdf` failures, `refusing to start`.
 - **Disk**: Postgres volume and Docker images; alert at 80 %.
