@@ -32,6 +32,7 @@ const STATUS_TONE: Record<string, string> = {
 export function CommsView({ eventId, data }: { eventId: string; data: CommsData }) {
   const router = useRouter();
   const [selected, setSelected] = useState(data.templates[0]?.id ?? "");
+  const [confirmingSend, setConfirmingSend] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -244,16 +245,37 @@ export function CommsView({ eventId, data }: { eventId: string; data: CommsData 
       </div>
 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
-        <button className="btn pri" disabled={busy || sendable.length === 0} onClick={() => void send()}>
-          Send batch ({sendable.length})
-        </button>
-        <button
-          className="btn"
-          disabled={busy}
-          onClick={() => setToast("Test send goes to you only and is excluded from the counters")}
-        >
-          Test send
-        </button>
+        {/* Asks first (D-108): it used to email everyone on one click. The "Test send"
+            button beside it showed a message and sent nothing; it is gone until it is real. */}
+        {confirmingSend ? (
+          <span style={{ display: "inline-flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <b>
+              Email {sendable.length} speaker{sendable.length === 1 ? "" : "s"} now?
+            </b>
+            <button
+              className="btn pri"
+              disabled={busy}
+              onClick={() => {
+                setConfirmingSend(false);
+                void send();
+              }}
+            >
+              Send now
+            </button>
+            <button className="btn" onClick={() => setConfirmingSend(false)}>
+              Cancel
+            </button>
+          </span>
+        ) : (
+          <button className="btn pri" disabled={busy || sendable.length === 0} onClick={() => setConfirmingSend(true)}>
+            Send to {sendable.length} speaker{sendable.length === 1 ? "" : "s"}
+          </button>
+        )}
+        {sendable.length === 0 && audience.length > 0 && (
+          <span className="note" style={{ alignSelf: "center" }}>
+            Everyone in this list has already been sent this email, or has no working address.
+          </span>
+        )}
 
       </div>
 

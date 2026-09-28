@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { Sidebar } from "@/components/Sidebar";
+import { SignOutButton } from "@/components/SignOutButton";
 import { Glyph } from "@/components/Icon";
 import { applyTheme, readThemeChoice, saveThemeChoice } from "@/lib/theme";
 import type { ThemeChoice } from "@/lib/theme";
@@ -36,7 +37,32 @@ export function Shell({
   }
 
   if (pathname.startsWith("/client")) {
-    return <div style={{ maxWidth: 880, margin: "0 auto", padding: "24px 16px" }}>{children}</div>;
+    // Clients had no way to sign out or change their password anywhere (D-108).
+    const staff = principal?.roles.some((role) => !["client_event_admin", "scoped_reviewer"].includes(role));
+    return (
+      <div style={{ maxWidth: 880, margin: "0 auto", padding: "16px 16px 24px" }}>
+        {principal && (
+          <header
+            style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 16 }}
+          >
+            <b>DXG·PM</b>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <span className="note">{principal.display_name}</span>
+              {staff && (
+                <Link href="/" className="btn">
+                  Back to control center
+                </Link>
+              )}
+              <Link href="/account/password" className="btn">
+                Change password
+              </Link>
+              <SignOutButton />
+            </div>
+          </header>
+        )}
+        {children}
+      </div>
+    );
   }
 
   const crumbs = breadcrumb(pathname, events);

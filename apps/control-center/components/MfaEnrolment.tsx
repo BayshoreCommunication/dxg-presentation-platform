@@ -91,10 +91,11 @@ export function MfaEnrolment() {
   return (
     <div className="login">
       <div className="box" style={{ width: 460 }}>
-        <b>Set up your authenticator</b>
+        <b>Step 2 of 2 · Set up your sign-in app</b>
         <div style={{ fontSize: 13, margin: "4px 0 14px" }}>
-          DXG staff accounts need a second factor. Use any authenticator app — 1Password, Authy,
-          Google Authenticator, Microsoft Authenticator.
+          For security, DXG accounts ask for a 6-digit code from an app on your phone each time you
+          sign in. Use any authenticator app — Google Authenticator, Microsoft Authenticator,
+          1Password or Authy.
         </div>
 
         {error && (
@@ -113,7 +114,7 @@ export function MfaEnrolment() {
           <div className="note" style={{ marginBottom: 14, lineHeight: 1.6, color: "var(--dim)" }}>
             Your account is already protected, so there is nothing to do here. If you have lost the
             device that holds it, ask a DXG administrator to open <strong>Staff accounts</strong>,
-            find your name and choose <strong>reset 2FA</strong>. That clears the old authenticator
+            find your name and choose <strong>reset 2FA</strong>. That clears the old sign-in app
             and lets you set up a new one — it cannot be done from this screen, by design.
           </div>
         )}

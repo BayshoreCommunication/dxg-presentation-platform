@@ -102,17 +102,24 @@ export function RoomAgentView({ initial }: { initial: AgentView }) {
           <h1 style={{ fontSize: 20, color: "var(--white)" }}>
             Room Agent · <span style={{ color: "var(--white)", fontWeight: 600 }}>{view.room.name}</span>
           </h1>
-          <div className="mono" style={{ fontSize: 12, color: "var(--dim)" }}>
-            {view.agent.fingerprint ?? "no agent registered"} · agent {view.agent.version ?? "—"} ·{" "}
-            {view.library.updates_waiting === 0 ? "library complete" : "update waiting"} ·{" "}
-            {offline ? "offline" : "online"}
+          <div style={{ fontSize: 12, color: "var(--dim)" }}>
+            {!view.agent.fingerprint
+              ? "Room PC not connected yet"
+              : offline
+                ? "Room PC not reporting"
+                : "Room PC connected"}
+            {" · "}
+            {view.library.updates_waiting === 0
+              ? "all files present"
+              : `${view.library.updates_waiting} new version${view.library.updates_waiting === 1 ? "" : "s"} waiting to be switched in`}
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <span className="mono" style={{ fontSize: 16, color: "var(--white)" }}>
             {clock}
           </span>
-          <span className="chip c-ok">OFFLINE-SAFE ✓</span>
+          {/* Was a green "OFFLINE-SAFE ✓" on every room, reporting or not (D-108). */}
+          <span className={`chip ${offline ? "c-warn" : "c-ok"}`}>{offline ? "Not reporting" : "Connected"}</span>
         </div>
       </div>
 
@@ -217,9 +224,11 @@ export function RoomAgentView({ initial }: { initial: AgentView }) {
                 onClick={() =>
                   void run(async () => {
                     const result = await launchInRoom(view.room.id, row.slot_id);
+                    // Honest until the room agent opens PowerPoint itself (G0-1): the click is
+                    // recorded as presented; nothing is opened on the room PC yet (D-108).
                     return result.launched
-                      ? `Launched · logged ${new Date().toLocaleTimeString("en-US", { hour12: false, timeZone: view.event.timezone })}`
-                      : `Holding screen — ${result.reason}`;
+                      ? `Recorded as presented at ${new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: view.event.timezone })} — opening it on the room PC isn't connected yet`
+                      : `Not recorded — ${result.reason}`;
                   })
                 }
               >
@@ -324,8 +333,8 @@ export function RoomAgentView({ initial }: { initial: AgentView }) {
               </span>
             </div>
             <div className="note" style={{ color: "var(--dim)", marginTop: 8, fontSize: 11.5 }}>
-              Shown whenever there is nothing safe to play. Driving PowerPoint itself is M5-3,
-              pending the Windows PoC.
+              Shown whenever there is nothing safe to play. Opening PowerPoint on the room PC isn&rsquo;t
+              connected yet.
             </div>
           </div>
         </div>

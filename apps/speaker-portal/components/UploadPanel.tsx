@@ -30,7 +30,12 @@ export function UploadPanel({
   slotId: string;
   onComplete: (result: CompleteResult) => Promise<void>;
 }) {
-  const [phase, setPhase] = useState<Phase>("idle");
+  const [phase, setPhaseState] = useState<Phase>("idle");
+  const phaseRef = useRef<Phase>("idle");
+  const setPhase = (next: Phase) => {
+    phaseRef.current = next;
+    setPhaseState(next);
+  };
   const [file, setFile] = useState<File | null>(null);
   const [upload, setUpload] = useState<UploadSession | null>(null);
   const [sent, setSent] = useState(0);
@@ -39,6 +44,8 @@ export function UploadPanel({
   const [dragging, setDragging] = useState(false);
   const pausedRef = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  // The session being uploaded, so a dropped connection can resume it (D-108).
+  const sessionRef = useRef<UploadSession | null>(null);
 
   function select(chosen: File) {
     setError(null);
@@ -70,10 +77,43 @@ export function UploadPanel({
       if (alreadyHave.includes(part)) continue;
       const start = (part - 1) * session.part_size;
       const chunk = await chosen.slice(start, start + session.part_size).arrayBuffer();
-      await putPart(session.upload_id, part, chunk);
+      await putPartWithRetry(session.upload_id, part, chunk);
       alreadyHave.push(part);
       setSent(alreadyHave.length);
     }
+    return true;
+  }
+
+  /**
+   * A dropped part is tried again a few times before giving up (1 s, 3 s, 8 s): a brief
+   * network blip on venue wifi should not stop an upload.
+   */
+  async function putPartWithRetry(uploadId: string, part: number, chunk: ArrayBuffer) {
+    const waits = [1000, 3000, 8000];
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        return await putPart(uploadId, part, chunk);
+      } catch (caught) {
+        // A refusal from the server (4xx) will not change by retrying.
+        if (caught instanceof PortalError && caught.status < 500) throw caught;
+        if (attempt >= waits.length) throw caught;
+        await new Promise((resolve) => setTimeout(resolve, waits[attempt]));
+      }
+    }
+  }
+
+  /**
+   * The promise on the upload box is "uploads resume if your connection drops". A lost
+   * connection used to end in "The upload failed. Nothing was stored." and the empty drop
+   * zone, although the server had kept every part received. Now it pauses where it
+   * stopped and offers Resume (D-108).
+   */
+  function lostConnection(caught: unknown): boolean {
+    const refused = caught instanceof PortalError && caught.status < 500;
+    if (refused || !sessionRef.current) return false;
+    pausedRef.current = true;
+    setPhase("paused");
+    setMessage("Your connection dropped. What was already uploaded is saved — press Resume when you're back online.");
     return true;
   }
 
@@ -90,6 +130,7 @@ export function UploadPanel({
         total_bytes: chosen.size,
       });
       setUpload(session);
+      sessionRef.current = session;
       setPhase("uploading");
       setMessage(null);
       pausedRef.current = false;
@@ -98,7 +139,7 @@ export function UploadPanel({
       if (!finished) return;
 
       setPhase("completing");
-      setMessage("Verifying checksum and running automated checks…");
+      setMessage("Checking your file…");
       const result = await completeUpload(session.upload_id, {
         slot_id: slotId,
         file_name: chosen.name,
@@ -108,8 +149,13 @@ export function UploadPanel({
       setMessage(null);
       await onComplete(result);
     } catch (caught) {
+      if (phaseRef.current === "uploading" && lostConnection(caught)) return;
       setPhase("failed");
-      setError(caught instanceof PortalError ? caught.message : "The upload failed. Nothing was stored.");
+      setError(
+        caught instanceof PortalError
+          ? caught.message
+          : "The upload didn't finish. Please check your connection and try again.",
+      );
     }
   }
 
@@ -137,8 +183,13 @@ export function UploadPanel({
       setMessage(null);
       await onComplete(result);
     } catch (caught) {
+      if (phaseRef.current === "uploading" && lostConnection(caught)) return;
       setPhase("failed");
-      setError(caught instanceof PortalError ? caught.message : "The upload failed. Nothing was stored.");
+      setError(
+        caught instanceof PortalError
+          ? caught.message
+          : "The upload didn't finish. Please check your connection and try again.",
+      );
     }
   }
 
@@ -211,7 +262,7 @@ export function UploadPanel({
         >
           <b>Drag your presentation here</b>
           <div className="note" style={{ margin: "4px 0 10px" }}>
-            PPTX preferred · up to 10 GB · uploads resume automatically if your connection drops
+            PowerPoint (.pptx) preferred · up to 10 GB · if your connection drops, you can resume where it stopped
           </div>
           {fileInput}
           <button className="btn pri" onClick={() => inputRef.current?.click()}>
@@ -239,11 +290,13 @@ export function UploadPanel({
         <span className="note" style={phase === "paused" ? { color: "#8A5A12" } : undefined}>
           {message ??
             (phase === "hashing"
-              ? "Checking the file…"
+              ? "Preparing your file…"
               : phase === "completing"
-                ? "Verifying checksum and running automated checks…"
-                : `${percent}% · resumable`)}
+                ? "Checking your file…"
+                : `${percent}% uploaded`)}
         </span>
+        {/* A real pause (it stops after the part in flight). It replaced a demo-only
+            "Simulate connection loss" button that every speaker saw (D-108). */}
         {phase === "uploading" && (
           <button
             className="btn"
@@ -251,7 +304,7 @@ export function UploadPanel({
               pausedRef.current = true;
             }}
           >
-            Simulate connection loss
+            Pause
           </button>
         )}
         {phase === "paused" && (

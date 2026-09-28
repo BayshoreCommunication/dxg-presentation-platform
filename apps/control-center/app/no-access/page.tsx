@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SignOutButton } from "@/components/SignOutButton";
 
 export const dynamic = "force-dynamic";
 
@@ -9,44 +10,53 @@ export const dynamic = "force-dynamic";
  * a role — so the page says who can fix it and what they have to do, rather than
  * leaving someone staring at "forbidden".
  */
-export default async function NoAccessPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ reason?: string }>;
-}) {
-  const { reason } = await searchParams;
-
+export default async function NoAccessPage({ searchParams }: { searchParams: Promise<{ for?: string }> }) {
+  // The API's refusal text is not shown: it named an event the person never picked, and
+  // sent them to the wrong admin screen (D-108). The page says the one thing that is true.
+  const client = (await searchParams).for === "client";
+  if (client) {
+    return (
+      <div className="card" style={{ maxWidth: 560, margin: "40px auto" }}>
+        <div className="cbd">
+          <h1 className="htitle" style={{ marginTop: 0 }}>
+            No event has been shared with you yet
+          </h1>
+          <p className="note" style={{ marginTop: 14, lineHeight: 1.6 }}>
+            Your sign-in worked. Your DXG contact will share your event with you — once they have,
+            open this page again.
+          </p>
+          <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
+            <Link href="/client" className="btn pri">
+              Check again
+            </Link>
+            <SignOutButton />
+          </div>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="card" style={{ maxWidth: 560, margin: "40px auto" }}>
       <div className="cbd">
         <h1 className="htitle" style={{ marginTop: 0 }}>
-          You&rsquo;re signed in, but this area isn&rsquo;t open to your account
+          You haven&rsquo;t been added to an event yet
         </h1>
 
-        {reason && (
-          <div className="err" style={{ marginTop: 12 }}>
-            {reason}
-          </div>
-        )}
-
         <p className="note" style={{ marginTop: 14, lineHeight: 1.6 }}>
-          Your sign-in worked. What&rsquo;s missing is a <strong>role on an event</strong> — an
-          account is created first and given its access separately, so a new account starts with
-          none.
+          Your account is set up and your sign-in worked. What&rsquo;s missing is access to an
+          event: every DXG staff account is added to the events it works on separately.
         </p>
 
         <p className="note" style={{ marginTop: 10, lineHeight: 1.6 }}>
-          Ask a DXG administrator to open <strong>Staff accounts</strong>, find your name, and add
-          the role you need. Sign out and back in once they have, and this will be waiting for you.
+          Ask a DXG administrator to add you on <strong>Event assignments</strong>. Once they
+          have, open the platform again and your events will be there.
         </p>
 
         <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
-          <Link href="/" className="btn">
-            Try again
+          <Link href="/" className="btn pri">
+            Check again
           </Link>
-          <Link href="/login?reason=switch" className="btn">
-            Sign in as someone else
-          </Link>
+          <SignOutButton />
         </div>
       </div>
     </div>

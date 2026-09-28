@@ -55,12 +55,10 @@ export function PresentationDetailView({
   const latest = initial.versions[0];
   const approved = initial.versions.find((row) => row.review_state === "approved");
 
-  async function roll(targetVersionId: string, versionNumber: number) {
-    const reason = window.prompt(
-      `Roll back to v${versionNumber} — reason (required):`,
-      "wrong version approved",
-    );
-    if (reason === null) return;
+  // An inline form, not window.prompt pre-filled with "wrong version approved" (D-108).
+  const [rollTarget, setRollTarget] = useState<{ id: string; n: number; reason: string } | null>(null);
+
+  async function roll(targetVersionId: string, versionNumber: number, reason: string) {
     if (!reason.trim()) {
       setError("A rollback must record a reason — nothing was changed.");
       return;
@@ -69,8 +67,11 @@ export function PresentationDetailView({
     setError(null);
     try {
       const result = await rollBackTalk(initial.talk.slot_id, targetVersionId, reason);
+      setRollTarget(null);
       setToast(
-        `v${result.restored_version} restored byte-identically · ${result.rooms_notified} room${result.rooms_notified === 1 ? "" : "s"} notified`,
+        result.rooms_notified > 0
+          ? `v${result.restored_version} is back in use. The room technician must accept the change on the room PC before it plays.`
+          : `v${result.restored_version} is back in use.`,
       );
       router.refresh();
     } catch (caught) {
@@ -238,7 +239,7 @@ export function PresentationDetailView({
                         className="btn warnb"
                         style={{ padding: "4px 10px" }}
                         disabled={busy}
-                        onClick={() => void roll(row.file_version_id, row.version_number)}
+                        onClick={() => setRollTarget({ id: row.file_version_id, n: row.version_number, reason: "" })}
                       >
                         Roll back to this
                       </button>
@@ -248,6 +249,40 @@ export function PresentationDetailView({
               ))}
             </tbody>
           </table>
+          {rollTarget && (
+            <form
+              style={{ border: "1px solid var(--warn)", borderRadius: 8, padding: 12, margin: "12px" }}
+              onSubmit={(event) => {
+                event.preventDefault();
+                void roll(rollTarget.id, rollTarget.n, rollTarget.reason);
+              }}
+            >
+              <label htmlFor="rollback-reason" style={{ display: "block", fontWeight: 600, marginBottom: 4 }}>
+                Go back to v{rollTarget.n}? Say why (kept on record)
+              </label>
+              <textarea
+                id="rollback-reason"
+                rows={2}
+                style={{ width: "100%" }}
+                value={rollTarget.reason}
+                onChange={(event) => setRollTarget({ ...rollTarget, reason: event.target.value })}
+                placeholder="e.g. the newer version has a broken video"
+                autoFocus
+              />
+              <div className="note" style={{ margin: "6px 0 8px" }}>
+                v{rollTarget.n} becomes the approved version again. Its room&rsquo;s technician must accept the
+                change on the room PC before it plays.
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button className="btn warnb" disabled={busy || !rollTarget.reason.trim()}>
+                  Go back to v{rollTarget.n}
+                </button>
+                <button type="button" className="btn" onClick={() => setRollTarget(null)}>
+                  Cancel
+                </button>
+              </div>
+            </form>
+          )}
         </div>
       </div>
 

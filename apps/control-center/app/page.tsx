@@ -74,7 +74,7 @@ export default async function PortfolioPage({
       {items.map((event, index) => {
         const summary = summaries[index]!;
         const collected = summary.total === 0 ? 0 : Math.round((summary.collected / summary.total) * 100);
-        const chip = eventStatusChip(event.status);
+        const chip = eventStatusChip(event.status, event);
         return (
           <div key={event.id} className="card" style={event.status === "active" ? { boxShadow: "inset 0 0 0 .8px var(--ring)" } : undefined}>
             <div className="cbd">

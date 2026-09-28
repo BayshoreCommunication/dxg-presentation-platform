@@ -98,6 +98,7 @@ export function InspectionView({
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
+  const [form, setForm] = useState<{ id: string; kind: "waive" | "revision"; text: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
@@ -162,7 +163,9 @@ export function InspectionView({
           </span>
         </div>
         <div className="cbd">
-          {initialFindings.length === 0 && <div className="empty">Inspection has not run yet.</div>}
+          {initialFindings.length === 0 && (
+            <div className="empty">The automated checks are still running — refresh in a minute.</div>
+          )}
 
           {initialFindings.map((finding) => {
             const copy = explain(finding);
@@ -192,41 +195,84 @@ export function InspectionView({
                   )}
                 </div>
                 {!finding.waived_at && finding.severity !== "info" && (
-                  <div style={{ display: "flex", gap: 8, margin: "-2px 0 10px 12px", flexWrap: "wrap" }}>
-                    <button
-                      className="btn"
-                      disabled={busy}
-                      onClick={() =>
-                        void act(async () => {
-                          const note = `${copy.title}: ${copy.body}${copy.fix ? ` ${copy.fix}` : ""}`;
-                          const result = await requestRevision(version.file_version_id, {
-                            finding_id: finding.id,
-                            note,
+                  <div style={{ margin: "-2px 0 10px 12px" }}>
+                    {/*
+                      Inline forms, not window.prompt (D-108): the prompt came pre-filled with an
+                      invented waiver reason, and embedded browsers cancel it silently. A revision
+                      request used to email the speaker a message nobody on staff had seen.
+                    */}
+                    {form?.id === finding.id ? (
+                      <form
+                        style={{ border: "1px solid var(--line)", borderRadius: 8, padding: 10, maxWidth: 640 }}
+                        onSubmit={(event) => {
+                          event.preventDefault();
+                          const text = form.text.trim();
+                          if (!text) return;
+                          void act(async () => {
+                            if (form.kind === "waive") {
+                              await waiveFinding(finding.id, text);
+                              setForm(null);
+                              return "Waived — the reason stays on record with the finding";
+                            }
+                            await requestRevision(version.file_version_id, { finding_id: finding.id, note: text });
+                            setForm(null);
+                            return "Sent to the speaker — they get an email and see it in their portal";
                           });
-                          return `Revision requested — the speaker sees this finding as a comment (${result.review_state.replace("_", " ")})`;
-                        })
-                      }
-                    >
-                      Request revision (prefilled)
-                    </button>
-                    <button
-                      className="btn warnb"
-                      disabled={busy}
-                      onClick={() =>
-                        void act(async () => {
-                          const reason = window.prompt(
-                            "Waive finding — reason (required):",
-                            "fallback verified on the room build",
-                          );
-                          if (reason === null) return "Nothing waived";
-                          if (!reason.trim()) throw new ApiError("waiver", "A waiver needs a reason.", 422);
-                          await waiveFinding(finding.id, reason);
-                          return "Finding waived — the waiver and its reason stay visible forever";
-                        })
-                      }
-                    >
-                      Waive finding
-                    </button>
+                        }}
+                      >
+                        <label htmlFor={`form-${finding.id}`} style={{ display: "block", fontWeight: 600, marginBottom: 4 }}>
+                          {form.kind === "waive"
+                            ? "Why is it OK to accept this? (kept on record)"
+                            : "Message to the speaker (edit before sending)"}
+                        </label>
+                        <textarea
+                          id={`form-${finding.id}`}
+                          rows={form.kind === "waive" ? 2 : 4}
+                          style={{ width: "100%" }}
+                          value={form.text}
+                          onChange={(event) => setForm({ ...form, text: event.target.value })}
+                          placeholder={form.kind === "waive" ? "e.g. tested on the room PC, plays fine" : undefined}
+                          autoFocus
+                        />
+                        <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                          <button className={form.kind === "waive" ? "btn warnb" : "btn pri"} disabled={busy || !form.text.trim()}>
+                            {form.kind === "waive" ? "Waive with this reason" : "Send to speaker"}
+                          </button>
+                          <button type="button" className="btn" onClick={() => setForm(null)}>
+                            Cancel
+                          </button>
+                        </div>
+                      </form>
+                    ) : (
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                        <button
+                          className="btn"
+                          disabled={busy}
+                          onClick={() =>
+                            setForm({
+                              id: finding.id,
+                              kind: "revision",
+                              text: `${copy.title}: ${copy.body}${copy.fix ? ` ${copy.fix}` : ""}`,
+                            })
+                          }
+                        >
+                          Ask the speaker to fix this
+                        </button>
+                        {finding.check_code === "malware" ? (
+                          <span className="note">
+                            A virus finding can&rsquo;t be waived — the speaker needs to provide a clean file.
+                          </span>
+                        ) : (
+                          <button
+                            className="btn warnb"
+                            disabled={busy}
+                            onClick={() => setForm({ id: finding.id, kind: "waive", text: "" })}
+                          >
+                            Waive (accept anyway)
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -234,9 +280,9 @@ export function InspectionView({
           })}
 
           <div className="note" style={{ marginTop: 10 }}>
-            Automated checks cannot judge content, design, or how animations behave on the room fleet —
-            the reviewer and the fidelity test decide those. A blocking finding prevents approval until
-            it is waived by a Presentation Manager, with a reason.
+            Automated checks can&rsquo;t judge content, design or how animations behave on the room PC —
+            the reviewer decides those. A blocking problem prevents approval until a Presentation
+            Manager waives it with a reason, or the speaker sends a fixed file.
           </div>
 
           <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>

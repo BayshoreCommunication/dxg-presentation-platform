@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getClientView, ApiError } from "@/lib/api";
 import { ClientPortalView } from "@/components/ClientPortalView";
@@ -19,12 +20,15 @@ export default async function ClientPortalPage({ params }: { params: Promise<{ e
       return (
         <div className="card">
           <div className="cbd">
-            <h1 className="htitle">Client portal</h1>
-            <div className="err" style={{ marginTop: 10 }}>
-              {caught.message}
+            <h1 className="htitle">This event isn&rsquo;t shared with you</h1>
+            <div className="note" style={{ marginTop: 10, lineHeight: 1.6 }}>
+              This page shows one event to that client&rsquo;s contacts. Your account can&rsquo;t open
+              this event here. DXG staff can preview a client&rsquo;s view from events they work on.
             </div>
-            <div className="note" style={{ marginTop: 10 }}>
-              Sign in with a client account to see this page. Staff should use the Command center.
+            <div style={{ marginTop: 14 }}>
+              <Link href="/" className="btn pri">
+                Back to portfolio
+              </Link>
             </div>
           </div>
         </div>

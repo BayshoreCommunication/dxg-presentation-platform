@@ -119,6 +119,39 @@ export function PortalView({
 }
 
 /**
+ * What a speaker is told about their talk (D-108). The staff labels ("Update pending ack",
+ * "Approved — delivering", "Synchronized onsite") describe DXG's room delivery, which is
+ * none of the speaker's concern and meant nothing to them. Each status says, in the
+ * speaker's terms, where things stand and whether they need to do anything.
+ */
+const SPEAKER_STATUS: Record<string, { label: string; tone: string; next: string }> = {
+  missing: { label: "Not uploaded yet", tone: "c-bad", next: "Please upload your presentation below." },
+  processing: { label: "Received — checking", tone: "c-info", next: "We're checking your file. This usually takes a minute." },
+  submitted: {
+    label: "Received",
+    tone: "c-info",
+    next: "The DXG team will review it. Nothing more to do unless they ask for changes.",
+  },
+  needs_revision: {
+    label: "Changes requested",
+    tone: "c-warn",
+    next: "Please read the team's feedback below and upload a new version.",
+  },
+  attention: {
+    label: "Please upload again",
+    tone: "c-warn",
+    next: "Your last upload couldn't be accepted. Please check the file and upload it again.",
+  },
+  approved: { label: "Approved", tone: "c-ok", next: "Nothing more to do — your presentation is ready." },
+  approved_delivering: { label: "Approved", tone: "c-ok", next: "Nothing more to do — your presentation is ready." },
+  update_pending_ack: { label: "Approved", tone: "c-ok", next: "Nothing more to do — your presentation is ready." },
+  synchronized_onsite: { label: "Approved", tone: "c-ok", next: "Nothing more to do — your presentation is ready." },
+  canceled: { label: "Session canceled", tone: "c-info", next: "This session was canceled. The organisers will be in touch." },
+  archived: { label: "Event finished", tone: "c-info", next: "This event has finished." },
+};
+const APPROVED = ["approved", "approved_delivering", "update_pending_ack", "synchronized_onsite"];
+
+/**
  * The event's upload deadline as a speaker should read it (D-071) — worded by the same
  * `formatDeadline` the emails use, so the portal and the reminder cannot disagree.
  */
@@ -139,13 +172,18 @@ function TalkCard({
   onChange: () => Promise<void>;
 }) {
   const [result, setResult] = useState<CompleteResult | null>(null);
+  const [replacing, setReplacing] = useState(false);
   const latest = talk.versions[0];
-  // The upload box is for a first file, or a new one the team has asked for.
+  const status = SPEAKER_STATUS[talk.status] ?? { label: talk.status_label, tone: "c-info", next: "" };
+  const approved = APPROVED.includes(talk.status);
+  // The upload box opens by itself for a first file or one the team has asked for; otherwise a
+  // speaker can still send an updated deck until the talk is signed off onsite (D-108).
   const needsUpload =
     !latest ||
     latest.state === "quarantined" ||
     talk.status === "needs_revision" ||
     talk.status === "attention";
+  const showUpload = needsUpload || replacing;
   const when = new Date(talk.starts_at).toLocaleString("en-US", {
     weekday: "short",
     month: "short",
@@ -160,19 +198,22 @@ function TalkCard({
     <div className="card">
       <div className="chd">
         <h3>{talk.title}</h3>
-        <span className={`chip ${talk.status === "approved" || talk.status === "synchronized_onsite" ? "c-ok" : talk.status === "needs_revision" || talk.status === "attention" ? "c-warn" : talk.status === "missing" ? "c-bad" : "c-info"}`}>
-          {talk.status_label}
-        </span>
+        <span className={`chip ${status.tone}`}>{status.label}</span>
       </div>
       <div className="cbd">
-        <div className="note" style={{ marginBottom: 10 }}>
+        <div className="note" style={{ marginBottom: 4 }}>
           {talk.room} · {when}
         </div>
+        {status.next && !talk.final_locked && (
+          <div style={{ marginBottom: 12, fontSize: 14 }}>{status.next}</div>
+        )}
 
         <div className="grid2" style={{ marginBottom: 12 }}>
           <div>
             <div className="kl">Upload deadline</div>
-            {deadline ? (
+            {approved ? (
+              <span className="note">Done — your presentation is approved.</span>
+            ) : deadline ? (
               (() => {
                 const { label, passed } = deadlineText(deadline, timezone);
                 return (
@@ -215,7 +256,7 @@ function TalkCard({
               border: "1px solid var(--line)",
               borderRadius: 10,
               padding: "12px 14px",
-              marginBottom: needsUpload ? 12 : 0,
+              marginBottom: showUpload ? 12 : 0,
             }}
           >
             <span className="mono" style={{ overflowWrap: "anywhere" }}>
@@ -232,15 +273,36 @@ function TalkCard({
             <b>Locked as the final onsite version.</b> Your presentation was confirmed in the Speaker
             Ready Room, so it can no longer be replaced here. Please speak to the team onsite.
           </div>
-        ) : (
-          needsUpload && (
+        ) : showUpload ? (
+          <>
+            {replacing && !needsUpload && (
+              <div className="note" style={{ marginBottom: 8 }}>
+                Your new version goes to the DXG team for review.
+                {approved && " Your approved version stays in use until the new one is approved."}
+              </div>
+            )}
             <UploadPanel
               slotId={talk.slot_id}
               onComplete={async (completed) => {
                 setResult(completed);
+                setReplacing(false);
                 await onChange();
               }}
             />
+            {replacing && !needsUpload && (
+              <button className="btn" style={{ marginTop: 8 }} onClick={() => setReplacing(false)}>
+                Keep my current version
+              </button>
+            )}
+          </>
+        ) : (
+          latest && (
+            <div style={{ marginTop: 10 }}>
+              <span className="note">Need to change your slides? </span>
+              <button className="btn" onClick={() => setReplacing(true)}>
+                Upload a new version
+              </button>
+            </div>
           )
         )}
 
@@ -251,7 +313,7 @@ function TalkCard({
             {talk.feedback.map((note, index) => (
               <div className="lane cli" key={`${note.created_at}-${index}`} style={{ whiteSpace: "pre-wrap" }}>
                 <span className="note">
-                  On v{note.version_number} ·{" "}
+                  About upload {note.version_number} ·{" "}
                   {new Date(note.created_at).toLocaleString("en-US", {
                     month: "short",
                     day: "numeric",
@@ -269,19 +331,29 @@ function TalkCard({
 
         {result && (
           <div style={{ marginTop: 12 }}>
-            {result.processing_state === "quarantined" && (
+            {result.processing_state === "quarantined" ? (
               <div className="err">
-                <b>This file could not be accepted.</b> Our security scan flagged it, so it has been
-                quarantined and your previous version is untouched. Please check the file and upload
-                again.
+                <b>This file couldn't be accepted.</b> Our security check stopped it, so it was not
+                stored. Please check the file (for example, save a fresh copy) and upload it again. If
+                it keeps happening, contact the DXG team.
+              </div>
+            ) : result.findings.some((finding) => finding.severity === "blocking") ? (
+              <div className="err">
+                <b>We received your file, but it has a problem that needs fixing.</b> See below, then
+                upload a corrected version.
+              </div>
+            ) : (
+              <div className="lane cli">
+                <b>Thanks — we&rsquo;ve received your presentation.</b> The DXG team will review it and
+                let you know if anything needs to change.
               </div>
             )}
             {result.findings
-              .filter((finding) => finding.severity !== "info")
+              .filter((finding) => finding.severity !== "info" && finding.check_code !== "malware")
               .map((finding, index) => (
                 <div className="lane cli" key={index}>
                   <b>
-                    {finding.severity === "blocking" ? "⛔" : "⚠"} {finding.check_code.replace("_", " ")}
+                    {finding.severity === "blocking" ? "⛔" : "⚠"} {checkTitle(finding.check_code)}
                   </b>
                   <br />
                   {describe(finding)}
@@ -301,26 +373,40 @@ function TalkCard({
   );
 }
 
+/** A check's name as a speaker would say it (D-108). */
+function checkTitle(code: string): string {
+  const titles: Record<string, string> = {
+    aspect: "Slide shape",
+    codec: "Video format",
+    linked_media: "Videos or files not included",
+    macros: "Macros",
+    corruption: "File can't be opened",
+    size_type: "File too large",
+    fonts: "Fonts",
+  };
+  return titles[code] ?? "Something to check";
+}
+
 function describe(finding: { check_code: string; detail: Record<string, unknown> }): string {
   const detail = finding.detail;
   switch (finding.check_code) {
     case "aspect":
-      return `Slide size is ${String(detail.aspect)} and the room is set up for ${String(detail.room_profile)}.`;
+      return `Your slides are ${String(detail.aspect)}, but the room screens are ${String(detail.room_profile)}. Please change the slide size (Design → Slide Size in PowerPoint) and upload again.`;
     case "codec":
-      return `${String(detail.file)} is a QuickTime container — the room playback profile guarantees ${String(detail.expected)}. Re-export as H.264 .mp4 to be safe.`;
+      return `The video "${String(detail.file)}" may not play in the room. Please save it as an MP4 (H.264) and embed it again.`;
     case "linked_media":
-      return `${String(detail.count)} linked (not embedded) media reference(s) — the files will not travel with your deck.`;
+      return `${String(detail.count)} video or media file(s) are linked rather than embedded, so they won't come with your presentation. Please insert them into the slides and upload again.`;
     case "macros":
-      return "The file contains macros, which are blocked for security. Please save it without macros.";
-    case "malware":
-      return `Security signature: ${String(detail.signature)}.`;
+      return "The file contains macros, which can't be used in the room. Please save it as a regular .pptx (without macros).";
     case "corruption":
-      return String(detail.reason ?? "The file could not be opened.");
+      return "We couldn't open this file. Please save a fresh copy of your presentation and upload that.";
+    case "size_type":
+      return "The file is larger than 10 GB. Please compress the videos or images and try again.";
     case "metadata":
       if (detail.slides !== undefined) return `${String(detail.slides)} slides.`;
       if (detail.embedded_media !== undefined) return `${String(detail.embedded_media)} embedded media file(s).`;
-      return `${formatBytes(detail.bytes as number)} — within the 10 GB limit.`;
+      return `${formatBytes(detail.bytes as number)}.`;
     default:
-      return JSON.stringify(detail);
+      return "The DXG team will look at this and contact you if anything needs to change.";
   }
 }

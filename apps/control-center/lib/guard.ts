@@ -39,7 +39,7 @@ export async function guard<T>(work: Promise<T>, returnTo: string): Promise<T> {
       if (caught.code === "auth.mfa_required") {
         redirect("/account/mfa");
       }
-      redirect(`/no-access?reason=${encodeURIComponent(caught.message)}`);
+      redirect("/no-access");
     }
     throw caught;
   }

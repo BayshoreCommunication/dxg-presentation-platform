@@ -7,6 +7,7 @@ import { EventTabs } from "@/components/EventTabs";
 import { InfoTip } from "@/components/InfoTip";
 import { Kpi } from "@/components/Kpi";
 import type { KpiTone } from "@/components/Kpi";
+import { ROOM_LABEL, roomPcState } from "@/lib/roomWords";
 import { guard } from "@/lib/guard";
 
 export const dynamic = "force-dynamic";
@@ -272,7 +273,7 @@ export default async function CommandCenterPage({
       <div className="card">
         <div className="chd">
           <h3>Room readiness</h3>
-          <span className="m">heartbeat + file state · never asserted manually</span>
+          <span className="m">reported automatically by each room&rsquo;s presentation computer</span>
         </div>
         <div className="cbd" style={{ padding: "0 0 4px" }}>
           <table>
@@ -283,23 +284,13 @@ export default async function CommandCenterPage({
                     <b>{room.room}</b>
                     <br />
                     <span className="note">
-                      {room.files_current}/{room.files_total} files current ·{" "}
-                      {room.heartbeat_age === null
-                        ? "no agent registered"
-                        : `heartbeat ${room.heartbeat_age}s ago`}
-                      {room.agent_version ? ` · agent ${room.agent_version}` : ""}
+                      {room.files_current} of {room.files_total} files on the room PC · {roomPcState(room)}
                     </span>
                   </td>
                   <td style={{ textAlign: "right" }}>
                     <Chip
                       status={room.readiness}
-                      label={
-                        room.readiness === "ready"
-                          ? "Ready"
-                          : room.readiness === "agent_offline"
-                            ? "Agent offline"
-                            : "Attention"
-                      }
+                      label={ROOM_LABEL[room.readiness]}
                     />
                   </td>
                 </tr>

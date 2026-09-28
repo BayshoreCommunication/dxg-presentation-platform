@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { PasswordField } from "@/components/PasswordField";
 import Link from "next/link";
-import { changePassword, logout, ApiError } from "@/lib/api";
+import { changePassword, getSession, logout, ApiError } from "@/lib/api";
 
 /**
  * Changing a password ends every other session, so it returns you to sign-in.
@@ -33,7 +33,12 @@ export function ChangePasswordForm({ firstUse }: { firstUse: boolean }) {
     setError(null);
     try {
       await changePassword(current, next);
-      router.replace("/login?reason=password_changed");
+      // Still signed in (D-108): straight on to the sign-in app if it is not set up yet,
+      // instead of back to the sign-in page for one more round trip.
+      const session = await getSession().catch(() => null);
+      if (!session) router.replace("/login?reason=password_changed");
+      else router.replace(session.principal.mfa_enrolled ? "/" : "/account/mfa");
+      router.refresh();
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : "Could not change the password.");
       setBusy(false);
@@ -45,12 +50,13 @@ export function ChangePasswordForm({ firstUse }: { firstUse: boolean }) {
       <form className="box" onSubmit={submit}>
         <b>DXG·PM</b>
         <div style={{ fontSize: 13, margin: "4px 0 18px" }}>
-          {firstUse ? "Set your own password before continuing" : "Change your password"}
+          {firstUse ? "Step 1 of 2 · Choose your own password" : "Change your password"}
         </div>
 
         {firstUse && (
           <div className="note" style={{ color: "var(--blue)", marginBottom: 12 }}>
-            You signed in with a temporary password issued by DXG.
+            You signed in with the temporary password DXG emailed you. Choose your own now; next
+            you&rsquo;ll set up a sign-in app on your phone.
           </div>
         )}
         {error && (

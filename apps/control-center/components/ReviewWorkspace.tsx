@@ -18,6 +18,9 @@ const FINDING_COPY: Record<string, (detail: Record<string, unknown>) => string> 
 };
 
 
+/** Inspection states in which the automated checks have not finished (D-108). */
+const CHECKING = ["pending", "inspecting", "technician_review"];
+
 export function ReviewWorkspace({ initialQueue }: { initialQueue: QueueItem[] }) {
   const router = useRouter();
   const [queue, setQueue] = useState(initialQueue);
@@ -43,6 +46,16 @@ export function ReviewWorkspace({ initialQueue }: { initialQueue: QueueItem[] })
   }, [initialQueue]);
 
   const selected = queue.find((item) => item.file_version_id === selectedId) ?? null;
+  // Approval needs finished checks and no open blocking problem — the server refuses
+  // otherwise (D-105); here the reason is visible before anyone clicks (D-108).
+  const openBlocking = selected ? selected.findings.filter((finding) => finding.severity === "blocking").length : 0;
+  const approveBlocked = !selected
+    ? null
+    : CHECKING.includes(selected.inspection_state)
+      ? "Approve is available once the automated checks finish."
+      : openBlocking > 0
+        ? `This file has ${openBlocking} blocking problem${openBlocking === 1 ? "" : "s"}. Waive ${openBlocking === 1 ? "it" : "them"} with a reason in the inspection report, or ask the speaker for a new version.`
+        : null;
 
   // A half-written message belongs to the file it was written for.
   useEffect(() => {
@@ -136,13 +149,13 @@ export function ReviewWorkspace({ initialQueue }: { initialQueue: QueueItem[] })
         return;
       }
       if (event.metaKey || event.ctrlKey || event.altKey) return;
-      if (event.key === "a" || event.key === "A") void decide("approve");
+      if ((event.key === "a" || event.key === "A") && !approveBlocked) void decide("approve");
       // R opens the message form rather than acting: a revision needs a reason.
       if (event.key === "r" || event.key === "R") setPending("request_changes");
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [decide]);
+  }, [decide, approveBlocked]);
 
   return (
     <>
@@ -174,10 +187,15 @@ export function ReviewWorkspace({ initialQueue }: { initialQueue: QueueItem[] })
                       <b>{item.speaker}</b> · {item.title}
                     </td>
                     <td style={{ textAlign: "right" }}>
-                      {item.findings.length > 0 ? (
-                        <SeverityChip severity={item.findings[0]!.severity} />
+                      {/* The worst open problem, not the first (often a lowercase "info") (D-108). */}
+                      {CHECKING.includes(item.inspection_state) ? (
+                        <span className="chip c-info">Checks running</span>
+                      ) : item.findings.some((finding) => finding.severity === "blocking") ? (
+                        <SeverityChip severity="blocking" />
+                      ) : item.findings.some((finding) => finding.severity === "warning") ? (
+                        <SeverityChip severity="warning" />
                       ) : (
-                        <Chip status="submitted" label="Submitted" />
+                        <Chip status="submitted" label="Checks passed" />
                       )}
                     </td>
                   </tr>
@@ -216,7 +234,14 @@ export function ReviewWorkspace({ initialQueue }: { initialQueue: QueueItem[] })
                 </div>
               ))}
 
-            {selected.findings.some((finding) => finding.severity !== "info") ? null : (
+            {CHECKING.includes(selected.inspection_state) ? (
+              <div className="lane int">
+                <b>Checks still running</b>
+                <br />
+                The automated file checks usually finish within a minute. Approve becomes available
+                when they are done.
+              </div>
+            ) : selected.findings.some((finding) => finding.severity !== "info") ? null : (
               <div className="lane int">
                 <b>Checks passed</b>
                 <br />
@@ -229,7 +254,7 @@ export function ReviewWorkspace({ initialQueue }: { initialQueue: QueueItem[] })
             <CommentsPanel versionId={selected.file_version_id} versionNumber={selected.version_number} />
 
             <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
-              <button className="btn good" disabled={busy} onClick={() => void decide("approve")}>
+              <button className="btn good" disabled={busy || approveBlocked !== null} onClick={() => void decide("approve")}>
                 Approve (A)
               </button>
               <button className="btn warnb" disabled={busy} onClick={() => setPending("request_changes")}>
@@ -238,11 +263,12 @@ export function ReviewWorkspace({ initialQueue }: { initialQueue: QueueItem[] })
               <button className="btn danger" disabled={busy} onClick={() => setPending("reject")}>
                 Reject…
               </button>
-              <span className="note" style={{ alignSelf: "center" }}>
-                state: <span className="mono">{selected.review_state}</span> · lock{" "}
-                <span className="mono">{selected.lock_version}</span>
-              </span>
             </div>
+            {approveBlocked && (
+              <div className="note" style={{ marginTop: 8 }}>
+                {approveBlocked}
+              </div>
+            )}
 
             {pending && (
               <form

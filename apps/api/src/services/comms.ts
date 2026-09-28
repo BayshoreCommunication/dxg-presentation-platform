@@ -235,6 +235,8 @@ export async function recipientsFor(
   cooldownHours: number = RESEND_COOLDOWN_HOURS,
   /** Count any email about this event towards the cooldown, not just this template (D-102). */
   cooldownAnyTemplate = false,
+  /** The upload invitation goes to a speaker once, ever (D-086) — a batch must not repeat it (D-108). */
+  once = false,
 ): Promise<Recipient[]> {
   const { rows } = await tx.query<{
     speaker_id: string;
@@ -257,12 +259,17 @@ export async function recipientsFor(
               WHERE f.slot_id = s.id) AS versions,
             -- By speaker *or address* (D-097): an address that bounced or complained on any
             -- event is not mailed again, whichever speaker record now carries it.
+            -- By *address* (D-097, D-108): an address that bounced or complained on any event
+            -- is not mailed again — but a speaker whose address has since been corrected is.
             EXISTS (SELECT 1 FROM pmp.communications c
-                     WHERE (c.speaker_id = sp.id OR lower(c.to_address::text) = lower(sp.email::text))
+                     WHERE lower(c.to_address::text) = lower(sp.email::text)
                        AND c.status IN ('bounced','complained')) AS bounced,
             EXISTS (SELECT 1 FROM pmp.communications c
                      WHERE c.speaker_id = sp.id AND ($4 OR c.template_id = $2)
-                       AND c.created_at > now() - make_interval(hours => $3)) AS already_sent
+                       AND c.created_at > now() - make_interval(hours => $3))
+            OR ($5 AND EXISTS (SELECT 1 FROM pmp.communications c
+                     WHERE c.speaker_id = sp.id AND c.template_id = $2
+                       AND c.status NOT IN ('bounced','complained','failed'))) AS already_sent
        FROM pmp.speakers sp
        JOIN pmp.speaker_assignments sa ON sa.speaker_id = sp.id
        JOIN pmp.slots s ON s.id = sa.slot_id
@@ -270,7 +277,7 @@ export async function recipientsFor(
        LEFT JOIN pmp.rooms r ON r.id = se.room_id
       WHERE sp.event_id = $1 AND sp.merged_into IS NULL AND sp.removed_at IS NULL
       ORDER BY sp.full_name, se.starts_at`,
-    [eventId, templateId, cooldownHours, cooldownAnyTemplate],
+    [eventId, templateId, cooldownHours, cooldownAnyTemplate, once],
   );
 
   const perTalk = rows
@@ -466,6 +473,8 @@ export async function sendBatch(
   if (!template) return err({ code: "comms.template_not_found", message: "No such template." });
 
   const cooldown = input.cooldownHours ?? RESEND_COOLDOWN_HOURS;
+  // Anything but a reminder is the once-only upload invitation (D-086, D-108).
+  const once = !/reminder/i.test(template.name);
   const recipients = await recipientsFor(
     tx,
     input.eventId,
@@ -473,6 +482,7 @@ export async function sendBatch(
     input.missingOnly,
     cooldown,
     input.cooldownAnyTemplate ?? false,
+    once,
   );
   const skipped = new Map<string, number>();
   const note = (reason: string) => skipped.set(reason, (skipped.get(reason) ?? 0) + 1);
@@ -493,7 +503,9 @@ export async function sendBatch(
       note(
         input.cooldownAnyTemplate
           ? `emailed about this event in the last ${cooldown} hours`
-          : `already emailed this in the last ${cooldown} hours`,
+          : once
+            ? "already sent the upload invitation"
+            : `already emailed this in the last ${cooldown} hours`,
       );
       continue;
     }
@@ -612,10 +624,17 @@ export async function sendUploadLink(
       ORDER BY created_at DESC`,
     [input.speakerId, speaker.email],
   );
-  if (history.some((row) => row.status === "bounced" || row.status === "complained")) {
+  // Only a bounce on the address on file now blocks: once corrected, the link can go (D-108).
+  if (
+    history.some(
+      (row) =>
+        (row.status === "bounced" || row.status === "complained") &&
+        row.to_address.toLowerCase() === (speaker.email ?? "").toLowerCase(),
+    )
+  ) {
     return err({
       code: "comms.bounced_conflict",
-      message: `An earlier email to ${speaker.name} bounced. Check the address before sending again.`,
+      message: `An earlier email to ${speaker.email} bounced. Correct the address with "Edit email", then send the link again.`,
     });
   }
   // Only an upload-link email counts as "sent" (D-090) — a review decision's email is

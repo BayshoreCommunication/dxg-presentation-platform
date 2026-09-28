@@ -1,6 +1,6 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { formatBytes, formatBytesDelta, formatDeadline, formatSessionTime } from "./index.ts";
+import { formatBytes, formatBytesDelta, formatDeadline, formatSessionTime, friendlyError } from "./index.ts";
 
 describe("formatBytes", () => {
   // The bug this function exists to prevent: a real file must never read as "0".
@@ -68,5 +68,20 @@ describe("formatSessionTime", () => {
   test("uses the event's timezone, not UTC", () => {
     // 14:30 UTC is 10:30 in New York in March 2026 (EDT).
     assert.equal(formatSessionTime("2026-03-11T14:30:00Z", "America/New_York"), "Wed, Mar 11, 10:30 EDT");
+  });
+});
+
+describe("friendlyError (D-108)", () => {
+  test("keeps messages written for people", () => {
+    assert.equal(friendlyError("auth.bad_email", "That doesn't look like an email address.", 400), "That doesn't look like an email address.");
+  });
+  test("replaces messages that only a bug in the page can cause", () => {
+    for (const message of ["`action` and `lock_version` are required.", "lane must be one of internal, client_visible", "Malformed request."]) {
+      assert.match(friendlyError("request.invalid", message, 400), /^That didn't work\. Refresh the page/);
+    }
+  });
+  test("server faults and missing records get their own plain sentence", () => {
+    assert.match(friendlyError("internal", "Unexpected failure.", 500), /on our side/);
+    assert.match(friendlyError("resource.not_found", "No such record.", 404), /no longer exists/);
   });
 });

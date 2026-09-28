@@ -96,6 +96,7 @@ import {
   addSpeaker,
   removeSpeaker,
   setReleasePermission,
+  changeSpeakerEmail,
 } from "./services/agendaEdit.ts";
 import {
   ensureTemplates, updateTemplate, MERGE_FIELDS,
@@ -603,20 +604,21 @@ app.use((req, res, next) => {
   if (!actor) {
     return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   }
-  if (!actor.roles.some((role) => STAFF_ROLES.includes(role))) {
-    return res.status(403).json({
-      code: "auth.not_staff",
-      message: "This is a DXG staff area. Your account does not have a staff role on this event.",
-    });
-  }
-
   // NFR-SEC-02: staff accounts carry a second factor. An account that has not
-  // enrolled can reach the enrolment endpoints and nothing else.
+  // enrolled can reach the enrolment endpoints and nothing else. Checked before the role:
+  // a new account used to be told "not open to your account" first, and only reached its
+  // sign-in app setup after an administrator had assigned it an event (D-108).
   const principal = (req as express.Request & { principal?: Principal }).principal;
   if (principal?.kind === "staff" && !principal.mfa_enrolled) {
     return res.status(403).json({
       code: "auth.mfa_required",
-      message: "Set up your authenticator app before using the platform.",
+      message: "Set up your sign-in app before using the platform.",
+    });
+  }
+  if (!actor.roles.some((role) => STAFF_ROLES.includes(role))) {
+    return res.status(403).json({
+      code: "auth.not_staff",
+      message: "You haven't been added to an event yet.",
     });
   }
   return next();
@@ -850,6 +852,20 @@ app.delete(
   ),
 );
 
+/** Corrects a speaker's email address (D-108). */
+app.put(
+  "/api/v1/events/:eventId/speakers/:speakerId/email",
+  agendaRoute(200, (tx, actor, req) =>
+    changeSpeakerEmail(
+      tx,
+      actor,
+      String(req.params.eventId),
+      String(req.params.speakerId),
+      String((bodyOf(req) as { email?: unknown }).email ?? ""),
+    ),
+  ),
+);
+
 /** What the speaker allows the archive to share (D-089). */
 app.put(
   "/api/v1/events/:eventId/speakers/:speakerId/release-permission",
@@ -892,7 +908,7 @@ app.post("/api/v1/file-versions/:versionAndAction", async (req, res) => {
   if (typeof body.action !== "string" || typeof body.lock_version !== "number") {
     return res.status(400).json({
       code: "request.invalid",
-      message: "`action` and `lock_version` are required (BUILD_SPEC §6.3).",
+      message: "`action` and `lock_version` are required.",
     });
   }
 
@@ -2537,7 +2553,8 @@ app.get("/api/v1/events/:eventId/comms", async (req, res) => {
     return {
       templates,
       merge_fields: MERGE_FIELDS,
-      recipients: invitation ? await recipientsFor(tx, eventId, invitation.id, false) : [],
+      // The invitation audience marks everyone already invited (once only, D-086, D-108).
+      recipients: invitation ? await recipientsFor(tx, eventId, invitation.id, false, undefined, false, true) : [],
       missing: invitation ? await recipientsFor(tx, eventId, invitation.id, true) : [],
       log: await deliveryLog(tx, eventId),
       // The automatic reminders (D-096): what is on, what is next, what has gone.
@@ -2878,13 +2895,17 @@ app.post("/api/v1/auth/password", async (req, res) => {
     return res.status(400).json({ code: "request.invalid", message: "Both the current and new password are required." });
   }
   const result = await withScope(scopeFor(req), (tx) =>
-    changeOwnPassword(tx, principal.user_id, {
-      currentPassword: body.current_password as string,
-      newPassword: body.new_password as string,
-    }),
+    changeOwnPassword(
+      tx,
+      principal.user_id,
+      {
+        currentPassword: body.current_password as string,
+        newPassword: body.new_password as string,
+      },
+      readCookie(req, SESSION_COOKIE) ?? undefined,
+    ),
   );
   if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
-  res.clearCookie(SESSION_COOKIE, { path: "/" });
   return res.json(result.value);
 });
 

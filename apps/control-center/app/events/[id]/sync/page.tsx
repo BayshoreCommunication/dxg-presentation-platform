@@ -3,10 +3,9 @@ import { Chip } from "@/components/Chip";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { DeviceKeyButton } from "@/components/DeviceKeyButton";
 import { guard } from "@/lib/guard";
+import { ROOM_LABEL as LABEL, roomPcState } from "@/lib/roomWords";
 
 export const dynamic = "force-dynamic";
-
-const LABEL = { ready: "Ready", attention: "Attention", agent_offline: "Agent offline" } as const;
 
 export default async function RoomSyncPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -22,7 +21,8 @@ export default async function RoomSyncPage({ params }: { params: Promise<{ id: s
         <b className="num">
           {ready} / {items.length}
         </b>{" "}
-        rooms ready
+        rooms ready · each room&rsquo;s presentation computer (room PC) downloads its approved files and
+        reports back here
       </div>
 
       <div className="card">
@@ -35,14 +35,8 @@ export default async function RoomSyncPage({ params }: { params: Promise<{ id: s
                     <b>{room.room}</b>
                     <br />
                     <span className="note">
-                      {room.files_current}/{room.files_total} files current ·{" "}
-                      {room.heartbeat_age === null
-                        ? "no agent registered"
-                        : room.heartbeat_age > 300
-                          ? `no heartbeat for ${Math.round(room.heartbeat_age / 60)} min`
-                          : `sync ${room.heartbeat_age}s ago`}
-                      {" · "}
-                      {room.key_issued_at ? "device key issued" : "no device key — cannot check in"}
+                      {room.files_current} of {room.files_total} files on the room PC ·{" "}
+                      {roomPcState(room)}
                     </span>
                   </td>
                   <td style={{ textAlign: "right" }}>
@@ -52,10 +46,7 @@ export default async function RoomSyncPage({ params }: { params: Promise<{ id: s
                       room={room.room}
                       issuedAt={room.key_issued_at}
                       timezone={summary.event.timezone}
-                    />{" "}
-                    <button className="btn" style={{ padding: "4px 10px" }} disabled title="M5-5">
-                      Manual sync
-                    </button>
+                    />
                   </td>
                 </tr>
               ))}
@@ -65,7 +56,8 @@ export default async function RoomSyncPage({ params }: { params: Promise<{ id: s
       </div>
 
       <div className="note" style={{ marginTop: 6 }}>
-        Rooms keep complete offline libraries — internet loss pauses updates, never playback.
+        Each room PC keeps its own copy of every file it needs, so losing the internet stops new updates
+        from arriving — it never stops what&rsquo;s already there from playing.
       </div>
     </>
   );

@@ -17,7 +17,7 @@ export default async function ClientEventsPage() {
   if (!principal) redirect("/login?reason=required");
 
   const events = principal.client_events;
-  if (events.length === 0) redirect("/no-access?reason=No%20event%20is%20shared%20with%20your%20account%20yet.");
+  if (events.length === 0) redirect("/no-access?for=client");
   if (events.length === 1) redirect(`/client/${events[0]!.id}`);
 
   return (

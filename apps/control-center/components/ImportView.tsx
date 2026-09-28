@@ -214,6 +214,7 @@ function RowEditor({
   label,
   problems,
   timeZone,
+  savesAtOnce = false,
   busy,
   onCancel,
   onSave,
@@ -228,6 +229,8 @@ function RowEditor({
     suggestion?: { field: string; value: string };
   }[];
   timeZone: string;
+  /** Manual entry: each saved row goes into the event straight away (D-053, D-108). */
+  savesAtOnce?: boolean;
   busy: boolean;
   onCancel: () => void;
   onSave: (cells: Record<string, string>) => void;
@@ -626,8 +629,10 @@ function RowEditor({
           </Section>
 
           <div className="note" style={{ marginTop: 10 }}>
-            Times are read in {timeZone}, the event&rsquo;s own timezone. Nothing is written to the event
-            until you import.
+            Times are read in {timeZone}, the event&rsquo;s own timezone.{" "}
+            {savesAtOnce
+              ? "Saving this row adds the session to the event straight away."
+              : "Nothing is saved to the event until you press Import."}
           </div>
 
           {/*
@@ -1400,6 +1405,7 @@ export function ImportView({
               label={rowLabel(row)}
               problems={problemsByRow.get(editing) ?? []}
               timeZone={preview?.timezone ?? "UTC"}
+              savesAtOnce={Boolean(preview?.manual)}
               busy={busy}
               onCancel={() => {
                 setEditing(null);
@@ -1501,6 +1507,7 @@ export function ImportView({
               label={rows.length + 1}
               problems={[]}
               timeZone={preview.timezone}
+              savesAtOnce={Boolean(preview.manual)}
               busy={busy}
               onCancel={() => setAdding(false)}
               onSave={(cells) =>

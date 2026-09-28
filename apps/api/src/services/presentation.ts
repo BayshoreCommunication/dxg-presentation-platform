@@ -192,7 +192,7 @@ export async function waiveFinding(
   if (!hasAnyRole(actor, atLeast("presentation_manager"))) {
     return err({
       code: "inspection.forbidden",
-      message: `Waiving a finding requires one of: ${atLeast("presentation_manager").join(", ")}.`,
+      message: "Only a Presentation Manager (or a project manager or root admin) can waive a finding.",
     });
   }
   if (!input.reason.trim()) {

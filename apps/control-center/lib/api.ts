@@ -1,3 +1,4 @@
+import { friendlyError } from "@pmp/format";
 /**
  * Where the API is (production readiness). The browser always calls `/api/v1` on the
  * app's own address — the web server in production (Caddy) and Next's rewrite in
@@ -60,7 +61,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const error = body as { code?: string; message?: string; detail?: Record<string, unknown> };
     throw new ApiError(
       error.code ?? "unknown",
-      error.message ?? "Request failed.",
+      friendlyError(error.code, error.message, response.status),
       response.status,
       error.detail,
     );
@@ -179,6 +180,8 @@ export type QueueItem = {
   lock_version: number;
   review_state: string;
   version_number: number;
+  /** The automated checks: "pending"/"inspecting" while they run (D-108). */
+  inspection_state: string;
   slot_id: string;
   title: string;
   speaker: string | null;
@@ -547,6 +550,13 @@ export const getSpeakers = (eventId: string, q = "") =>
 export type NewSpeakerInput = { name: string; email: string; organization: string; slot_id: string };
 
 /** Removes a speaker from the event; their history stays (D-095). */
+/** Corrects a speaker's email address (D-108). */
+export const updateSpeakerEmail = (eventId: string, speakerId: string, email: string) =>
+  request<{ email: string }>(`/events/${eventId}/speakers/${speakerId}/email`, {
+    method: "PUT",
+    body: JSON.stringify({ email }),
+  });
+
 export const removeSpeaker = (eventId: string, speakerId: string) =>
   request<{ removed: true; presentations: number }>(`/events/${eventId}/speakers/${speakerId}`, { method: "DELETE" });
 

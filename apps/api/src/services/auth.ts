@@ -567,6 +567,8 @@ export async function changeOwnPassword(
   tx: pg.PoolClient,
   userId: string,
   input: { currentPassword: string; newPassword: string },
+  /** The session making the change, which stays signed in (D-108). */
+  keepToken?: string,
 ): Promise<Result<{ changed: true }, DomainError>> {
   const { rows } = await tx.query<{ password_hash: string | null; must_change_password: boolean }>(
     `SELECT password_hash, must_change_password FROM pmp.users WHERE id = $1`,
@@ -601,10 +603,14 @@ export async function changeOwnPassword(
       WHERE id = $2`,
     [await hashPassword(input.newPassword), userId],
   );
-  // Changing a password ends every other session for that account.
-  await tx.query(`UPDATE pmp.auth_sessions SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL`, [
-    userId,
-  ]);
+  // Changing a password ends every other session for that account. The one making the
+  // change stays signed in: a new account used to be sent back to the sign-in page right
+  // after choosing its password, one more bounce before it could set up its sign-in app.
+  await tx.query(
+    `UPDATE pmp.auth_sessions SET revoked_at = now()
+      WHERE user_id = $1 AND revoked_at IS NULL AND ($2::bytea IS NULL OR token_hash <> $2::bytea)`,
+    [userId, keepToken ? hashSecret(keepToken) : null],
+  );
   return ok({ changed: true });
 }
 

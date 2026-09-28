@@ -627,6 +627,53 @@ export async function addSpeaker(
  * merged duplicates. Files they uploaded stay with the presentations: those belong to
  * the talk, not the person. Audited with who they were and what they were on.
  */
+/**
+ * Corrects a speaker's email address (D-108). There was no way to: a bounced upload-link
+ * email was a dead end, because the address could not be fixed and the link could not be
+ * sent again. The new address is checked like any other (syntax, typos, a mail server);
+ * the upload link can then be sent to it.
+ */
+export async function changeSpeakerEmail(
+  tx: pg.PoolClient,
+  actor: Actor,
+  eventId: string,
+  speakerId: string,
+  typed: string,
+): Promise<Result<{ email: string }, DomainError>> {
+  if (!hasAnyRole(actor, EDITORS)) return err(forbidden("Changing a speaker's email"));
+  const checked = await checkedEmail(typed.trim());
+  if (!checked.ok) return checked;
+  if (!checked.value) return err({ code: "speakers.bad_email", message: "Enter the speaker's email address." });
+  const email = checked.value;
+  const { rows: clash } = await tx.query<{ full_name: string }>(
+    `SELECT full_name FROM pmp.speakers
+      WHERE event_id = $1 AND id <> $2 AND lower(email::text) = lower($3) AND merged_into IS NULL AND removed_at IS NULL`,
+    [eventId, speakerId, email],
+  );
+  if (clash[0]) {
+    return err({ code: "speakers.conflict", message: `${clash[0].full_name} already uses that address on this event.` });
+  }
+  const { rows } = await tx.query<{ client_id: string; old: string | null }>(
+    `UPDATE pmp.speakers sp SET email = $3::citext, lock_version = sp.lock_version + 1, updated_at = now()
+       FROM (SELECT email::text AS old FROM pmp.speakers WHERE id = $1) prev
+      WHERE sp.id = $1 AND sp.event_id = $2 AND sp.merged_into IS NULL AND sp.removed_at IS NULL
+      RETURNING sp.client_id, prev.old`,
+    [speakerId, eventId, email],
+  );
+  const row = rows[0];
+  if (!row) return err(notFound("speaker"));
+  await appendAudit(tx, {
+    partitionId: eventId,
+    clientId: row.client_id,
+    actorUserId: actor.id,
+    action: "speakers.email_changed",
+    subjectType: "speaker",
+    subjectId: speakerId,
+    detail: { from: row.old, to: email },
+  });
+  return ok({ email });
+}
+
 export async function removeSpeaker(
   tx: pg.PoolClient,
   actor: Actor,

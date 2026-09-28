@@ -2087,3 +2087,36 @@ recurring bug class as D-094. `components/FloatingMenu.tsx` (`useFloatingMenu` +
 closes on an outside click or Escape. Used by the SRR station picker and the Files screen's row actions and room
 filter (the only other in-table menus). With no menu left to clip, every wide table now scrolls inside its card on
 narrow screens (the SRR/Files exception from the narrow-screen fix is gone).
+
+## D-108 (2026-09-28): Staff-usability batch 1 — nothing misleads or dead-ends at a live event — Status: ACCEPTED (Travis's calls on three points)
+First batch of `docs/UX_REVIEW.md`: every High finding that would mislead or strand someone at a live event.
+**Speaker portal:** the demo "Simulate connection loss" button is gone (a real Pause instead); a dropped connection
+retries each part (1/3/8 s) then pauses with Resume, keeping what was uploaded — the promise on the upload box is now
+true; statuses are the speaker's words with a "what now" line (not "Update pending ack"); a speaker can **upload a new
+version until the talk is signed off** (Travis's call) — it goes to review and the approved copy stays in use; check
+results in plain words, never virus names or raw data; a thank-you after upload. **Onboarding:** the API asks for the
+sign-in app *before* checking for an event role, and changing a password keeps that session signed in, so a new
+account goes temporary password → own password → sign-in app ("Step 1/2 of 2") without bouncing; "no access" says
+"You haven't been added to an event yet", points to Event assignments, and has a real Sign out
+(`SignOutButton.tsx`); the client portal has a header with Sign out and Change password; staff refused a client
+page get a way back. **Speaker Ready Room:** Check out is always available (with a confirm when nothing is signed
+off); a blocked or unchecked newest version says why and what to do; sign-off stays allowed on any clean version
+(Travis's call) and the page says when the version is not yet approved; a version arriving after sign-off can be
+confirmed; the quarantine message mentions an approved copy only when one exists. **Rooms:** room words not talk
+words ("Not ready", "Room PC not reporting", "room PC last seen 6 days ago — check it is on and online") in one place
+(`lib/roomWords.ts`) for Room sync and the command centre; "Device key" → "connection code"; the always-green
+"OFFLINE-SAFE ✓" became a real Connected / Not reporting badge; Launch keeps its label until G0-1 but now says
+"Recorded as presented … opening it on the room PC isn't connected yet" (Travis: G0-1 comes next); dead "Manual sync"
+and milestone codes removed. **Review:** Approve is disabled with a visible reason while checks run or a blocking
+problem is open ("Checks passed" only when true); queue rows show the worst problem; no "state · lock" line; waive
+and roll back use inline forms with an empty required reason (no pre-filled `window.prompt`); "Ask the speaker to fix
+this" opens an editable message before sending; virus findings offer no waiver; reset 2FA confirms. **Setup:**
+event label from its dates (Upcoming / Onsite now / Event over — ready to archive); manual agenda rows say they save
+at once; **speakers' email can be corrected** (`PUT /events/{id}/speakers/{sid}/email`, same checks as adding) and
+the link resent after a bounce — bounces now block by the address on file; Merge asks which record to keep; the fake
+"Test send" is gone; batch send asks first and never repeats the once-only invitation; Archive's Deliver says the
+real reason (delivered / expired / build stopped) and the PDF message no longer names LibreOffice. **Errors:**
+`friendlyError` (@pmp/format) replaces API messages that only a page bug can cause, and server faults, with a plain
+sentence in both apps. Deferred to batch 2: talks shown "Synchronized onsite" while their room PC is silent (R7 —
+needs freshness in the status rules). Tests: admin (onboarding order, password session), speakers (email correction,
+conflict), format (friendlyError); 298/298 invariants.

@@ -98,6 +98,77 @@ export function CheckinView({
   }
 
   const signable = detail.latest && detail.latest.processing_state === "stored";
+  const [confirmCheckout, setConfirmCheckout] = useState(false);
+  const latestNumber = detail.latest?.version_number;
+  const approvedNumber = detail.approved?.version_number;
+  // Why the newest file can't be signed off, in words a technician can act on (D-108).
+  const blockedReason = !detail.latest
+    ? "The speaker hasn't uploaded a presentation yet. Bring their file in with USB intake below."
+    : detail.latest.processing_state === "quarantined"
+      ? `v${latestNumber} failed the virus check and can't be used. Ask the speaker for a clean copy and bring it in with USB intake below.`
+      : detail.latest.processing_state !== "stored"
+        ? `v${latestNumber} is still being checked. This takes a moment — refresh the page shortly.`
+        : null;
+
+  const checkOut = (
+    <>
+      {confirmCheckout ? (
+        <span style={{ display: "inline-flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <span className="note">
+            {detail.receipt ? "Check the speaker out?" : "Check out without a signed-off version?"}
+          </span>
+          <button
+            className="btn"
+            disabled={busy}
+            onClick={() =>
+              void run(async () => {
+                await departCheckin(detail.checkin.id);
+                router.push(`/events/${eventId}/srr`);
+                return "Checked out — the station is free";
+              })
+            }
+          >
+            Yes, check out
+          </button>
+          <button className="btn" onClick={() => setConfirmCheckout(false)}>
+            Stay
+          </button>
+        </span>
+      ) : (
+        <button
+          className="btn"
+          disabled={busy || detail.checkin.departed_at !== null}
+          title={detail.checkin.departed_at !== null ? "Already checked out" : undefined}
+          onClick={() => setConfirmCheckout(true)}
+        >
+          Check out
+        </button>
+      )}
+    </>
+  );
+
+  const signOffButton = (label: string) => (
+    <button
+      className="btn good"
+      disabled={busy || !signable}
+      onClick={() =>
+        void run(async () => {
+          const { receipt } = await signOffCheckin(detail.checkin.id, detail.latest!.file_version_id);
+          return `Confirmed v${receipt.version_number} as the final version — the speaker can no longer replace it from the portal`;
+        })
+      }
+    >
+      {label}
+    </button>
+  );
+
+  // Sign-off does not need an approval (Travis's call, 2026-09-28); say so where it matters.
+  const approvalNote =
+    signable && latestNumber !== approvedNumber
+      ? approvedNumber
+        ? `v${latestNumber} hasn't been approved by a reviewer yet. You can still confirm it as the speaker's final version; the room keeps playing v${approvedNumber} until v${latestNumber} is approved.`
+        : `v${latestNumber} hasn't been approved by a reviewer yet. You can still confirm it as the speaker's final version; nothing plays in the room until it is approved.`
+      : null;
 
   return (
     <>
@@ -176,43 +247,41 @@ export function CheckinView({
                   >
                     Email receipt
                   </button>
-                  <button
-                    className="btn"
-                    disabled={busy || detail.checkin.departed_at !== null}
-                    onClick={() =>
-                      void run(async () => {
-                        await departCheckin(detail.checkin.id);
-                        router.push(`/events/${eventId}/srr`);
-                        return "Checked out";
-                      })
-                    }
-                  >
-                    Check out
-                  </button>
+                  {checkOut}
                 </div>
+                {/* A newer file came in after sign-off (USB intake): offer to confirm it (D-108). */}
+                {signable && latestNumber !== undefined && latestNumber > detail.receipt.version_number && (
+                  <div style={{ marginTop: 14, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                    <span className="note">
+                      v{latestNumber} came in after this receipt. Confirm it to make it the final version.
+                    </span>
+                    {signOffButton(`Confirm v${latestNumber} as the final onsite version`)}
+                  </div>
+                )}
               </div>
             </div>
           ) : (
-            <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
-              <button
-                className="btn good"
-                disabled={busy || !signable}
-                title={signable ? undefined : "Only a scanned, stored version can be signed off"}
-                onClick={() =>
-                  void run(async () => {
-                    const { receipt } = await signOffCheckin(
-                      detail.checkin.id,
-                      detail.latest!.file_version_id,
-                    );
-                    return `Signed off · v${receipt.version_number} · logged — the speaker portal can no longer replace this file`;
-                  })
-                }
-              >
-                Confirm v{detail.latest?.version_number ?? "—"} as the final onsite version
-              </button>
-              <span className="note" style={{ alignSelf: "center" }}>
-                Sign-off locks the talk: further versions can only come from here.
-              </span>
+            <div style={{ marginTop: 14 }}>
+              {blockedReason && (
+                <div className="err" style={{ marginBottom: 10 }}>
+                  {blockedReason}
+                </div>
+              )}
+              {approvalNote && (
+                <div className="note" style={{ marginBottom: 10, lineHeight: 1.5 }}>
+                  {approvalNote}
+                </div>
+              )}
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                {detail.latest && signOffButton(`Confirm v${latestNumber} as the final onsite version`)}
+                {checkOut}
+              </div>
+              {signable && (
+                <div className="note" style={{ marginTop: 8 }}>
+                  Confirming locks the talk: the speaker can no longer replace the file from the portal, and
+                  any later change must come through this desk. You&rsquo;ll get a receipt to print or email.
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -336,9 +405,10 @@ export function CheckinView({
           </p>
           {usb?.scan_result === "clean" ? (
             <div className="lane spk">
-              <b>v{usb.version_number} accepted</b> · inspection: {usb.inspection_state} · now in the
-              Review presentations. Sign off above once DXG has approved it, or send the speaker back to the
-              room with the current approved version.
+              <b>v{usb.version_number} is in.</b> It now needs a reviewer&rsquo;s approval in Review
+              presentations
+              {approvedNumber ? `; the room keeps playing v${approvedNumber} until then` : ""}. You can
+              confirm it as the final version above.
             </div>
           ) : (
             <div className="note">Nothing to accept yet.</div>

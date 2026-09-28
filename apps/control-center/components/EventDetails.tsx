@@ -51,7 +51,7 @@ export function EventDetails({
   embedded?: boolean;
 }) {
   const router = useRouter();
-  const chip = eventStatusChip(setup.status);
+  const chip = eventStatusChip(setup.status, setup);
 
   const [name, setName] = useState(setup.name);
   const [venue, setVenue] = useState(setup.venue ?? "");

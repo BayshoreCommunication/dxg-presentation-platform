@@ -12,6 +12,7 @@ import {
   sendUploadLink,
   setReleasePermission,
   removeSpeaker,
+  updateSpeakerEmail,
   ApiError,
 } from "@/lib/api";
 import { Chip } from "@/components/Chip";
@@ -43,6 +44,8 @@ export function SpeakersView({
   const [toast, setToast] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [removing, setRemoving] = useState<SpeakerRow | null>(null);
+  const [mergeAsk, setMergeAsk] = useState<string | null>(null);
+  const [editingEmail, setEditingEmail] = useState<{ row: SpeakerRow; value: string } | null>(null);
 
   // The server component re-renders on refresh; the list here is client state, so a
   // new speaker is fetched rather than waiting on a prop that `useState` would ignore.
@@ -237,30 +240,50 @@ export function SpeakersView({
                       <span className="note">matched on {pair.reason}</span>
                     </td>
                     <td style={{ textAlign: "right" }}>
-                      <button
-                        className="btn"
-                        disabled={busy}
-                        onClick={() => {
-                          setBusy(true);
-                          void mergeSpeakers(pair.b_id, pair.a_id)
-                            .then(() => {
-                              setToast(
-                                `Merged into ${pair.a_name} — assignments and history preserved`,
-                              );
-                              router.refresh();
-                            })
-                            .catch((caught: unknown) =>
-                              setError(
-                                caught instanceof ApiError
-                                  ? caught.message
-                                  : "Merge failed.",
-                              ),
-                            )
-                            .finally(() => setBusy(false));
-                        }}
-                      >
-                        Merge into {pair.a_name}
-                      </button>
+                      {/* Merging asks which record to keep and says what it does (D-108): it
+                          used to run on one click, always keeping the first. */}
+                      {mergeAsk === `${pair.a_id}-${pair.b_id}` ? (
+                        <span style={{ display: "inline-flex", flexDirection: "column", gap: 6, alignItems: "flex-end" }}>
+                          <span className="note" style={{ maxWidth: 320, textAlign: "right" }}>
+                            Which record should stay? The other one&rsquo;s talks and history move across, and its
+                            upload link stops working.
+                          </span>
+                          <span style={{ display: "inline-flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                            {[
+                              { keep: pair.a_id, keepName: pair.a_name, drop: pair.b_id },
+                              { keep: pair.b_id, keepName: pair.b_name, drop: pair.a_id },
+                            ].map((choice) => (
+                              <button
+                                key={choice.keep}
+                                className="btn"
+                                disabled={busy}
+                                onClick={() => {
+                                  setBusy(true);
+                                  void mergeSpeakers(choice.drop, choice.keep)
+                                    .then(() => {
+                                      setMergeAsk(null);
+                                      setToast(`Merged into ${choice.keepName} — talks and history kept`);
+                                      router.refresh();
+                                    })
+                                    .catch((caught: unknown) =>
+                                      setError(caught instanceof ApiError ? caught.message : "Merge failed."),
+                                    )
+                                    .finally(() => setBusy(false));
+                                }}
+                              >
+                                Keep {choice.keepName}
+                              </button>
+                            ))}
+                            <button className="btn" onClick={() => setMergeAsk(null)}>
+                              Cancel
+                            </button>
+                          </span>
+                        </span>
+                      ) : (
+                        <button className="btn" disabled={busy} onClick={() => setMergeAsk(`${pair.a_id}-${pair.b_id}`)}>
+                          Merge…
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -417,6 +440,16 @@ export function SpeakersView({
                               <Icon name="clipboard" />
                             </button>
                           </HoverTip>
+                          <HoverTip label="Edit email">
+                            <button
+                              className="btn"
+                              style={ICON_BUTTON}
+                              aria-label={`Edit email for ${row.full_name}`}
+                              onClick={() => setEditingEmail({ row, value: row.email ?? "" })}
+                            >
+                              <Icon name="mail" />
+                            </button>
+                          </HoverTip>
                           <HoverTip label="Remove speaker">
                             <button
                               className="btn"
@@ -438,6 +471,56 @@ export function SpeakersView({
           )}
         </div>
       </div>
+
+      {/* Correcting an address (D-108): a bounced email was a dead end before. */}
+      {editingEmail && (
+        <div className="card" style={{ maxWidth: 560 }}>
+          <div className="chd">
+            <h3>Email address for {editingEmail.row.full_name}</h3>
+          </div>
+          <form
+            className="cbd"
+            onSubmit={(event) => {
+              event.preventDefault();
+              const who = editingEmail.row;
+              setPending(`${who.id}:email`);
+              setError(null);
+              void updateSpeakerEmail(eventId, who.id, editingEmail.value)
+                .then(({ email }) => {
+                  setRows((current) => current.map((row) => (row.id === who.id ? { ...row, email } : row)));
+                  setEditingEmail(null);
+                  setToast(`Saved. You can now email ${who.full_name} their upload link.`);
+                  router.refresh();
+                })
+                .catch((caught) => setError(caught instanceof ApiError ? caught.message : "Could not save the address."))
+                .finally(() => setPending(null));
+            }}
+          >
+            {editingEmail.row.last_email?.status === "bounced" && (
+              <div className="note" style={{ marginBottom: 8 }}>
+                The last email to {editingEmail.row.email} bounced — it couldn&rsquo;t be delivered. Check the
+                spelling with the speaker.
+              </div>
+            )}
+            <input
+              type="email"
+              aria-label="Email address"
+              style={{ width: "100%" }}
+              value={editingEmail.value}
+              onChange={(event) => setEditingEmail({ ...editingEmail, value: event.target.value })}
+              autoFocus
+            />
+            <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+              <button className="btn pri" disabled={pending === `${editingEmail.row.id}:email` || !editingEmail.value.trim()}>
+                Save address
+              </button>
+              <button type="button" className="btn" onClick={() => setEditingEmail(null)}>
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {removing && (
         <RemoveSpeakerDialog
@@ -683,7 +766,8 @@ function AddSpeakerDialog({
  * leaving leaves the button live; the server enforces the same rule.
  */
 const emailedAlready = (row: SpeakerRow) =>
-  row.last_email && row.last_email.status !== "failed" ? row.last_email : null;
+  // A bounced link can be sent again once the address is corrected (D-108).
+  row.last_email && !["failed", "bounced"].includes(row.last_email.status) ? row.last_email : null;
 
 /** What the archive may share (FR-SPK-003); "Not set" leaves the speaker's talks out. */
 const RELEASE_OPTIONS: [ReleasePermission, string][] = [
@@ -714,7 +798,14 @@ function EmailStatus({ email }: { email: SpeakerRow["last_email"] }) {
     complained: "missing",
     failed: "missing",
   };
-  const label = email.status.charAt(0).toUpperCase() + email.status.slice(1);
+  // In staff words (D-108): "Complained" and "Queued" meant nothing to anyone.
+  const words: Record<string, string> = {
+    queued: "Sending",
+    bounced: "Bounced — check the address",
+    complained: "Marked as spam",
+    failed: "Not sent",
+  };
+  const label = words[email.status] ?? email.status.charAt(0).toUpperCase() + email.status.slice(1);
   return <Chip status={tone[email.status] ?? "submitted"} label={label} />;
 }
 

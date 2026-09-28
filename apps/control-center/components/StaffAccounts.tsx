@@ -268,6 +268,8 @@ export function StaffAccounts({ initial, me }: { initial: StaffRow[]; me: string
                               );
                               if (reason === null) return;
                               await resetStaffMfa(user.id, reason);
+                              // It used to succeed silently (D-108).
+                              setNotice(`${user.display_name}'s sign-in app was removed. They'll set up a new one the next time they sign in.`);
                             })
                           }
                         >

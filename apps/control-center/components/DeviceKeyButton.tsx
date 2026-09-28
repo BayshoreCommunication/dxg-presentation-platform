@@ -50,7 +50,7 @@ export function DeviceKeyButton({
   if (key) {
     return (
       <div style={{ border: "1px solid var(--warn)", borderRadius: 6, padding: 10, marginTop: 8, textAlign: "left" }}>
-        <b>Device key for {room}</b>
+        <b>Room PC connection code for {room}</b>
         <div className="note" style={{ margin: "2px 0 6px" }}>
           Enter this on the room&rsquo;s presentation computer now. It will not be shown again.
         </div>
@@ -78,7 +78,9 @@ export function DeviceKeyButton({
   if (confirming) {
     return (
       <span style={{ display: "inline-flex", gap: 6, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
-        <span className="note">{issuedAt ? "The current key stops working." : "Issue the first key?"}</span>
+        <span className="note">
+          {issuedAt ? "The room PC disconnects until the new code is entered on it." : "Issue the first code?"}
+        </span>
         <button type="button" className="btn pri" style={{ padding: "4px 10px" }} disabled={busy} onClick={() => void issue()}>
           {busy ? "Issuing…" : "Issue key"}
         </button>
@@ -102,7 +104,7 @@ export function DeviceKeyButton({
       title={issuedAt ? `Key issued ${formatSessionTime(issuedAt, timezone)}` : "This room's computer has no key and cannot check in"}
       onClick={() => setConfirming(true)}
     >
-      {issuedAt ? "New device key" : "Issue device key"}
+      {issuedAt ? "New connection code" : "Issue connection code"}
     </button>
   );
 }

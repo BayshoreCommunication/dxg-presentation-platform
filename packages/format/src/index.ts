@@ -82,3 +82,23 @@ export function formatSessionTime(iso: string | Date, timeZone: string): string 
     timeZoneName: "short",
   });
 }
+
+/**
+ * What a person is shown when a request fails (D-108). API messages are written for people
+ * and shown as they are — except those that can only come from a bug in the page (field
+ * names in backticks, spec references, lists of allowed values) and server faults, which
+ * read as nonsense or blame the user. Those become one plain sentence with a next step.
+ */
+export function friendlyError(code: string | undefined, message: string | undefined, status: number): string {
+  const text = message ?? "";
+  if (status >= 500 || code === "internal") {
+    return "Something went wrong on our side. Please try again in a moment; if it keeps happening, contact DXG support.";
+  }
+  if (code === "resource.not_found") return "This item no longer exists — it may have been removed. Refresh the page.";
+  if (code === "request.cross_site") return "Your session changed in another tab. Refresh the page and try again.";
+  const internal = /`|BUILD_SPEC|must be one of|one of:|Malformed request|Empty part|Unknown field|is not a role/.test(text);
+  if ((code ?? "").startsWith("request.") && internal) {
+    return "That didn't work. Refresh the page and try again; if it keeps happening, contact DXG support.";
+  }
+  return text || "That didn't work. Please try again.";
+}

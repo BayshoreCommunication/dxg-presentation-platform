@@ -1,3 +1,4 @@
+import { friendlyError } from "@pmp/format";
 /**
  * Where the API is (production readiness). The browser always calls `/api/v1` on the
  * app's own address — the web server in production (Caddy) and Next's rewrite in
@@ -52,7 +53,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const body: unknown = await response.json().catch(() => ({}));
   if (!response.ok) {
     const error = body as { code?: string; message?: string };
-    throw new PortalError(error.code ?? "unknown", error.message ?? "Request failed.", response.status);
+    throw new PortalError(error.code ?? "unknown", friendlyError(error.code, error.message, response.status), response.status);
   }
   return body as T;
 }

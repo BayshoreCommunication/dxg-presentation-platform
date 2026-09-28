@@ -25,6 +25,20 @@ export function ArchiveView({ eventId, initial }: { eventId: string; initial: Ar
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const pkg = initial.latest_package;
+  // The real reason Deliver is unavailable, shown under the buttons too (D-108). It said
+  // "still being built" for a package already delivered, and after a failed build (which
+  // leaves the package as a draft).
+  const deliverBlocked = !pkg
+    ? "Build a package first."
+    : pkg.archive_state === "delivered"
+      ? `Already delivered to the client${pkg.link_expires_at ? ` — their download link works until ${new Date(pkg.link_expires_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}` : ""}.`
+      : pkg.archive_state === "expired"
+        ? "The client's download link has expired. Rebuild and deliver again to share a new one."
+        : pkg.archive_state === "building"
+          ? "The package is still being built — this page updates when it is ready."
+          : pkg.archive_state !== "ready"
+            ? "The last build didn't finish. Check any message above, then rebuild the package."
+            : null;
   const pdf = initial.pdf;
 
   // While PDFs are converting, re-read every few seconds so the count moves on its own.
@@ -197,19 +211,11 @@ export function ArchiveView({ eventId, initial }: { eventId: string; initial: Ar
             <button
               className="btn"
               disabled={busy || !pkg || pkg.archive_state !== "ready"}
-              title={
-                !pkg
-                  ? "Build a package first"
-                  : pkg.archive_state === "failed"
-                    ? "The last build failed — rebuild the package"
-                    : pkg.archive_state !== "ready"
-                      ? "The package is still being built"
-                      : undefined
-              }
+              title={deliverBlocked ?? undefined}
               onClick={() =>
                 void run(async () => {
                   const result = await deliverArchive(pkg!.id);
-                  return `Delivered to the client portal · link expires ${result.link_expires_at.slice(0, 10)}`;
+                  return `Delivered to the client portal · their link works until ${new Date(result.link_expires_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`;
                 })
               }
             >
@@ -228,6 +234,11 @@ export function ArchiveView({ eventId, initial }: { eventId: string; initial: Ar
               </>
             )}
           </div>
+          {deliverBlocked && pkg && (
+            <div className="note" style={{ marginTop: 8 }}>
+              {deliverBlocked}
+            </div>
+          )}
 
           <div className="note" style={{ marginTop: 10 }}>
             Every file is checksum-verified as it is packaged; if stored bytes no longer match their
@@ -312,7 +323,8 @@ function PdfStatus({
       </div>
       {!pdf.converter_available && (
         <div className="note" style={{ color: "var(--block)" }}>
-          LibreOffice is not installed on the server, so nothing can be converted yet.
+          PDF copies can&rsquo;t be made right now. Contact DXG support; the PowerPoint package can still
+          be built and delivered.
         </div>
       )}
       <div className="note">

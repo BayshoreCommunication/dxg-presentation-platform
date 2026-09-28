@@ -166,6 +166,7 @@ export type QueueItem = {
   file_version_id: string;
   lock_version: number;
   review_state: string;
+  inspection_state: string;
   version_number: number;
   slot_id: string;
   title: string;
@@ -185,6 +186,7 @@ export type QueueItem = {
 export async function reviewQueue(tx: pg.PoolClient, eventId: string): Promise<QueueItem[]> {
   const { rows } = await tx.query<QueueItem>(
     `SELECT fv.id AS file_version_id, fv.lock_version, fv.review_state, fv.version_number,
+            fv.inspection_state,
             s.id AS slot_id, s.title, r.name AS room, se.starts_at, fv.size_bytes::text,
             (SELECT sp.full_name FROM pmp.speaker_assignments sa
                JOIN pmp.speakers sp ON sp.id = sa.speaker_id

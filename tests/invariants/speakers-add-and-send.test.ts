@@ -417,6 +417,32 @@ describe("emailing the upload link (D-086)", () => {
     assert.equal(await codeOf(response), "comms.bounced_conflict");
   });
 
+  test("after a bounce the address can be corrected and the link sent again (D-108)", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const speakerId = await newSpeaker("Corrected", { email: `link.typo.${RUN}@example.invalid` });
+    assert.equal((await sendLink(speakerId)).status, 201);
+    const [first] = await communicationsFor(speakerId);
+    await setStatus(first!.id, "bounced");
+
+    const bad = await call(admin, "PUT", `/events/${sendEventId}/speakers/${speakerId}/email`, { email: "not-an-address" });
+    assert.equal(bad.status, 422);
+    const fixed = await call(admin, "PUT", `/events/${sendEventId}/speakers/${speakerId}/email`, {
+      email: `link.fixed.${RUN}@example.invalid`,
+    });
+    assert.equal(fixed.status, 200);
+    assert.equal((await sendLink(speakerId)).status, 201, "the corrected address gets the link");
+  });
+
+  test("an address another speaker on the event uses is refused (D-108)", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const taken = `link.taken.${RUN}@example.invalid`;
+    await newSpeaker("Taken", { email: taken });
+    const other = await newSpeaker("Other", { email: `link.other.${RUN}@example.invalid` });
+    const response = await call(admin, "PUT", `/events/${sendEventId}/speakers/${other}/email`, { email: taken });
+    assert.equal(response.status, 409);
+    assert.equal(await codeOf(response), "speakers.conflict");
+  });
+
   test("a speaker with no email address is refused with a reason", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
     const speakerId = await newSpeaker("NoEmail");

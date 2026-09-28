@@ -546,8 +546,10 @@ export async function usbIngest(
       inspection_state: null,
       compared_with: null,
       comparison: [],
-      message:
-        "Scan failed — the file is quarantined and did not enter the library. The approved version is untouched and still plays in the room.",
+      // Only claim an approved copy is playing when there is one (D-108).
+      message: detail.approved
+        ? `This file failed the virus check and was not stored. v${detail.approved.version_number} (approved) is unchanged and stays in use. Ask the speaker for another copy — re-saved, or from a different USB drive — and check it again.`
+        : "This file failed the virus check and was not stored. Ask the speaker for another copy — re-saved, or from a different USB drive — and check it again.",
     });
   }
 

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import type { TestContext } from "node:test";
 import { signInStaff } from "../helpers/signIn.ts";
 import { removeTestAccounts, removeTestEvents } from "../helpers/cleanup.ts";
+import { createStaffAccount } from "../helpers/account.ts";
 
 /**
  * Account administration is the one place an account can be created or handed
@@ -191,9 +192,45 @@ describe("a created account starts locked down", () => {
     });
     assert.ok(created.user_id);
     const cookie = (login.headers.getSetCookie?.() ?? []).map((entry) => entry.split(";")[0]).join("; ");
-    const blocked = await fetch(`${API}/events`, { headers: { cookie } });
+    // The sign-in app comes first (D-108): a new account is sent to set it up, not told
+    // it has no access.
+    const first = await fetch(`${API}/events`, { headers: { cookie } });
+    assert.equal(first.status, 403);
+    assert.equal((await json(first)).code, "auth.mfa_required");
+
+    // Set up, but on no event yet: now it is told so.
+    const enrolled = await createStaffAccount(API, admin, {
+      email: `roleless-enrolled-${Date.now()}@example.invalid`,
+      displayName: "Roleless Enrolled",
+      password: `Roleless-${Date.now()}-Kq7wZ`,
+    });
+    const blocked = await fetch(`${API}/events`, { headers: { cookie: enrolled.cookie } });
     assert.equal(blocked.status, 403);
     assert.equal((await json(blocked)).code, "auth.not_staff");
+  });
+
+  test("changing the password keeps the session that changed it (D-108)", async (t: TestContext) => {
+    if (!up || !admin) return t.skip("API not running");
+    const email = `roleless-pw-${Date.now()}@example.invalid`;
+    await fetch(`${API}/admin/users`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: admin },
+      body: JSON.stringify({ email, display_name: "Password Keeper", password: ISSUED }),
+    });
+    const login = await fetch(`${API}/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email, password: ISSUED }),
+    });
+    const cookie = (login.headers.getSetCookie?.() ?? []).map((entry) => entry.split(";")[0]).join("; ");
+    const changed = await fetch(`${API}/auth/password`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ current_password: ISSUED, new_password: `Kept-${Date.now()}-Zq8wX` }),
+    });
+    assert.equal(changed.status, 200);
+    const session = await fetch(`${API}/auth/session`, { headers: { cookie } });
+    assert.equal(session.status, 200, "still signed in, ready for sign-in app setup");
   });
 
   test("a staff account must change its password and enrol before doing anything", async (t: TestContext) => {
