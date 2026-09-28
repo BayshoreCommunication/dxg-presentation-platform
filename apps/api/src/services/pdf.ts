@@ -67,7 +67,7 @@ export async function convertToPdf(body: Buffer, filename: string): Promise<Buff
     throw new ConversionError(`“${extension || "no extension"}” files cannot be converted to PDF.`);
   }
   const soffice = await findLibreOffice();
-  if (!soffice) throw new ConversionError("LibreOffice is not installed on the server.");
+  if (!soffice) throw new ConversionError("Slide previews can't be made on this server yet. Contact DXG support.");
 
   const work = await mkdtemp(path.join(os.tmpdir(), "pmp-pdf-"));
   try {
@@ -105,18 +105,22 @@ export async function convertToPdf(body: Buffer, filename: string): Promise<Buff
       }, TIMEOUT_MS);
       child.on("error", (error) => {
         clearTimeout(timer);
-        reject(new ConversionError(`LibreOffice could not be started: ${error.message}`));
+        console.error("[pdf] converter could not be started:", error.message);
+        reject(new ConversionError("The slide preview couldn't be started. Try again later; if it keeps failing, contact DXG support."));
       });
       child.on("close", (code) => {
         clearTimeout(timer);
         if (code === 0) resolve();
-        else reject(new ConversionError(`LibreOffice exited with code ${code}. ${stderr.trim().slice(0, 300)}`));
+        else {
+          console.error(`[pdf] converter exited with code ${code}:`, stderr.trim().slice(0, 300));
+          reject(new ConversionError("This file couldn't be turned into slides. It may be damaged or password-protected."));
+        }
       });
     });
 
     const produced = (await readdir(outDir)).find((name) => name.toLowerCase().endsWith(".pdf"));
     if (!produced) {
-      throw new ConversionError("LibreOffice finished but produced no PDF — the file may be damaged or password-protected.");
+      throw new ConversionError("This file couldn't be turned into slides. It may be damaged or password-protected.");
     }
     return await readFile(path.join(outDir, produced));
   } finally {

@@ -68,7 +68,9 @@ export function SlidePreview({ item }: { item: QueueItem }) {
       <div style={{ ...frame, height: "auto", padding: 16 }}>
         <b>No preview for this file.</b>
         <div className="note" style={{ margin: "4px 0 10px" }}>
-          {item.pdf_error ?? "The conversion failed."}
+          {/* Plain words, not the converter's own error text (R30, D-110). */}
+          The slide preview couldn&rsquo;t be made from this file. Try again; if it still fails, check the file in
+          the inspection report.
         </div>
         {error && <div className="err">{error}</div>}
         <button

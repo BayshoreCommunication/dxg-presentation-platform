@@ -3154,3 +3154,8 @@ a Windows 11 PC with Microsoft 365 and up to 3 monitors, a Windows 10 machine, a
 Corpus: 40 test files + 3 linked-media files, 8.8 MB committed (85 MB large deck generated on demand, gitignored).
 Still to make by hand: `keynote-10-slides.key` (Mac: `generate.py --keynote` and approve the Keynote permission
 prompt; until then item 7 records NEEDS_REVIEW), an embedded-font deck and a real-macro deck (Windows PowerPoint).
+
+## 2026-09-28 — UX batch 2: one plain-language vocabulary (D-110)
+Shared vocabulary in @pmp/format used by both apps and the API; DXG's talk-status labels kept with visible meanings;
+R7 (silent room PC turns "Synchronized onsite" amber) done; API messages plain. Not committed yet. Next: batch 3
+(every disabled control explains itself).

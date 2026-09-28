@@ -3,7 +3,7 @@ import { Chip } from "@/components/Chip";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { DeviceKeyButton } from "@/components/DeviceKeyButton";
 import { guard } from "@/lib/guard";
-import { ROOM_LABEL as LABEL, roomPcState } from "@/lib/roomWords";
+import { ROOM_LABEL as LABEL, roomFilesLine, roomPcState } from "@/lib/roomWords";
 
 export const dynamic = "force-dynamic";
 
@@ -35,8 +35,7 @@ export default async function RoomSyncPage({ params }: { params: Promise<{ id: s
                     <b>{room.room}</b>
                     <br />
                     <span className="note">
-                      {room.files_current} of {room.files_total} files on the room PC ·{" "}
-                      {roomPcState(room)}
+                      {roomFilesLine(room)} · {roomPcState(room)}
                     </span>
                   </td>
                   <td style={{ textAlign: "right" }}>

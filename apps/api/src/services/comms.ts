@@ -4,7 +4,7 @@ import { appendAudit } from "@pmp/db";
 import { deriveTalkStatus } from "@pmp/domain";
 import type { Actor, DomainError, Result } from "@pmp/domain";
 import { atLeast, err, hasAnyRole, ok } from "@pmp/domain";
-import { formatDeadline, formatSessionTime } from "@pmp/format";
+import { EMAIL_STATUS, formatDeadline, formatSessionTime, wordsFor } from "@pmp/format";
 import { firstName } from "./firstName.ts";
 
 const hashToken = (token: string): Buffer => createHash("sha256").update(token).digest();
@@ -99,7 +99,7 @@ export async function updateTemplate(
   input: { subject?: unknown; body?: unknown },
 ): Promise<Result<TemplateRow, DomainError>> {
   if (!hasAnyRole(actor, TEMPLATE_EDITORS)) {
-    return err({ code: "comms.forbidden", message: "Only a presentation manager or above can edit email templates." });
+    return err({ code: "comms.forbidden", message: "Only a presentation manager, project manager or DXG administrator can edit email templates." });
   }
   const subject = typeof input.subject === "string" ? input.subject.trim() : "";
   const body = typeof input.body === "string" ? input.body.replace(/\r\n/g, "\n").trim() : "";
@@ -133,7 +133,7 @@ export async function updateTemplate(
     [templateId, eventId, subject, body],
   );
   const updated = rows[0];
-  if (!updated) return err({ code: "comms.template_not_found", message: "No such template on this event." });
+  if (!updated) return err({ code: "comms.template_not_found", message: "This template no longer exists on this event — it may have been removed. Refresh the page." });
   await appendAudit(tx, {
     partitionId: eventId,
     clientId: updated.client_id,
@@ -453,7 +453,7 @@ export async function sendBatch(
     [input.eventId],
   );
   const event = readiness[0];
-  if (!event) return err({ code: "comms.event_not_found", message: "No such event." });
+  if (!event) return err({ code: "comms.event_not_found", message: "This event no longer exists — it may have been removed. Refresh the page." });
 
   // The baseline's rule: invitations cannot go out before the event can host a
   // talk, because the link would point at nothing (SCREEN_SPECS §2).
@@ -470,7 +470,7 @@ export async function sendBatch(
     [input.templateId],
   );
   const template = templateRows[0];
-  if (!template) return err({ code: "comms.template_not_found", message: "No such template." });
+  if (!template) return err({ code: "comms.template_not_found", message: "This template no longer exists — it may have been removed. Refresh the page." });
 
   const cooldown = input.cooldownHours ?? RESEND_COOLDOWN_HOURS;
   // Anything but a reminder is the once-only upload invitation (D-086, D-108).
@@ -574,7 +574,7 @@ export async function sendUploadLink(
     [input.eventId],
   );
   const event = eventRows[0];
-  if (!event) return err({ code: "comms.event_not_found", message: "No such event." });
+  if (!event) return err({ code: "comms.event_not_found", message: "This event no longer exists — it may have been removed. Refresh the page." });
   if (Number(event.rooms) === 0 || Number(event.days) === 0) {
     return err({
       code: "comms.event_incomplete",
@@ -603,7 +603,7 @@ export async function sendUploadLink(
     [input.speakerId, input.eventId],
   );
   const speaker = speakerRows[0];
-  if (!speaker) return err({ code: "comms.speaker_not_found", message: "No such speaker on this event." });
+  if (!speaker) return err({ code: "comms.speaker_not_found", message: "This speaker no longer exists on this event — it may have been removed. Refresh the page." });
   if (!speaker.email) {
     return err({ code: "comms.no_email", message: `${speaker.name} has no email address. Add one first.` });
   }
@@ -643,7 +643,7 @@ export async function sendUploadLink(
   if (reached) {
     return err({
       code: "comms.already_sent_conflict",
-      message: `${speaker.name} was already emailed an upload link (${reached.status}, to ${reached.to_address}).`,
+      message: `${speaker.name} was already emailed an upload link (${wordsFor(EMAIL_STATUS, reached.status).label.toLowerCase()}, to ${reached.to_address}). Their link still works, so there is no need to send another.`,
     });
   }
 
@@ -757,7 +757,7 @@ export async function recordDeliveryEvent(
     `SELECT event_id, client_id FROM pmp.communications WHERE id = $1`,
     [input.communicationId],
   );
-  if (!rows[0]) return err({ code: "comms.not_found", message: "No such communication." });
+  if (!rows[0]) return err({ code: "comms.not_found", message: "This communication no longer exists — it may have been removed. Refresh the page." });
 
   await tx.query(
     `UPDATE pmp.communications

@@ -103,7 +103,7 @@ export async function reminderSchedule(tx: pg.PoolClient, eventId: string, now =
     [eventId, deadline ?? "1900-01-01"],
   );
   const off_reason = !event
-    ? "No such event."
+    ? "This event no longer exists — it may have been removed. Refresh the page."
     : days.length === 0
       ? "Automatic reminders are off for this event."
       : !deadline

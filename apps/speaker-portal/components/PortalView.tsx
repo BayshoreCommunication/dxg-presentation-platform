@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { portalAssetUrl, presenterLogout } from "@/lib/api";
 import type { CompleteResult, PortalSession, PortalTalk } from "@/lib/api";
 import { UploadPanel } from "./UploadPanel";
-import { formatBytes, formatDeadline } from "@pmp/format";
+import { formatBytes, formatDeadline, SPEAKER_TALK_STATUS } from "@pmp/format";
 
 
 export function PortalView({
@@ -119,35 +119,19 @@ export function PortalView({
 }
 
 /**
- * What a speaker is told about their talk (D-108). The staff labels ("Update pending ack",
- * "Approved — delivering", "Synchronized onsite") describe DXG's room delivery, which is
- * none of the speaker's concern and meant nothing to them. Each status says, in the
- * speaker's terms, where things stand and whether they need to do anything.
+ * What a speaker is told about their talk (D-108): the words come from the shared
+ * vocabulary (D-110), so the portal, emails and staff screens cannot drift apart. The
+ * staff labels ("Update pending ack", "Synchronized onsite") describe DXG's room
+ * delivery, which is none of the speaker's concern. Only the chip colour is chosen here.
  */
-const SPEAKER_STATUS: Record<string, { label: string; tone: string; next: string }> = {
-  missing: { label: "Not uploaded yet", tone: "c-bad", next: "Please upload your presentation below." },
-  processing: { label: "Received — checking", tone: "c-info", next: "We're checking your file. This usually takes a minute." },
-  submitted: {
-    label: "Received",
-    tone: "c-info",
-    next: "The DXG team will review it. Nothing more to do unless they ask for changes.",
-  },
-  needs_revision: {
-    label: "Changes requested",
-    tone: "c-warn",
-    next: "Please read the team's feedback below and upload a new version.",
-  },
-  attention: {
-    label: "Please upload again",
-    tone: "c-warn",
-    next: "Your last upload couldn't be accepted. Please check the file and upload it again.",
-  },
-  approved: { label: "Approved", tone: "c-ok", next: "Nothing more to do — your presentation is ready." },
-  approved_delivering: { label: "Approved", tone: "c-ok", next: "Nothing more to do — your presentation is ready." },
-  update_pending_ack: { label: "Approved", tone: "c-ok", next: "Nothing more to do — your presentation is ready." },
-  synchronized_onsite: { label: "Approved", tone: "c-ok", next: "Nothing more to do — your presentation is ready." },
-  canceled: { label: "Session canceled", tone: "c-info", next: "This session was canceled. The organisers will be in touch." },
-  archived: { label: "Event finished", tone: "c-info", next: "This event has finished." },
+const STATUS_TONE: Record<string, string> = {
+  missing: "c-bad",
+  needs_revision: "c-warn",
+  attention: "c-warn",
+  approved: "c-ok",
+  approved_delivering: "c-ok",
+  update_pending_ack: "c-ok",
+  synchronized_onsite: "c-ok",
 };
 const APPROVED = ["approved", "approved_delivering", "update_pending_ack", "synchronized_onsite"];
 
@@ -174,7 +158,12 @@ function TalkCard({
   const [result, setResult] = useState<CompleteResult | null>(null);
   const [replacing, setReplacing] = useState(false);
   const latest = talk.versions[0];
-  const status = SPEAKER_STATUS[talk.status] ?? { label: talk.status_label, tone: "c-info", next: "" };
+  const words = SPEAKER_TALK_STATUS[talk.status];
+  const status = {
+    label: words?.label ?? talk.status_label,
+    tone: STATUS_TONE[talk.status] ?? "c-info",
+    next: words ? [words.meaning, words.next].filter(Boolean).join(" ") : "",
+  };
   const approved = APPROVED.includes(talk.status);
   // The upload box opens by itself for a first file or one the team has asked for; otherwise a
   // speaker can still send an updated deck until the talk is signed off onsite (D-108).
@@ -244,7 +233,7 @@ function TalkCard({
         {/*
           Once a file is in, the card shows that file — its name and size — and no upload
           box. A new file is taken only when the team asks for one (a requested revision or
-          a problem found) or when the last one was quarantined.
+          a problem found) or when the last one failed the virus check.
         */}
         {latest && (
           <div

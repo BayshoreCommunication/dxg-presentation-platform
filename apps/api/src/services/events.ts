@@ -20,7 +20,7 @@ const CONFIGURERS = atLeast("presentation_manager");
 
 const forbidden = (attempt: string): DomainError => ({
   code: "events.forbidden",
-  message: `${attempt} needs a presentation manager, project manager or administrator.`,
+  message: `${attempt} needs a presentation manager, project manager or DXG administrator.`,
 });
 
 export type CreateEventInput = {
@@ -76,7 +76,7 @@ function checkBasics(input: CreateEventInput): DomainError | null {
   if (!isKnownTimezone(input.timezone)) {
     return {
       code: "events.unknown_timezone",
-      message: `“${input.timezone}” is not a supported timezone.`,
+      message: `“${input.timezone}” isn't a time zone we recognise. Choose one from the list.`,
     };
   }
   if (new Date(input.ends_on) < new Date(input.starts_on)) {
@@ -127,10 +127,10 @@ const REMINDER_CHOICES = [14, 7, 3, 2, 1];
 function checkSettings(settings: unknown, startsOn: string): DomainError | null {
   const bad = (message: string): DomainError => ({ code: "events.bad_settings", message });
   if (typeof settings !== "object" || settings === null || Array.isArray(settings)) {
-    return bad("Settings must be an object.");
+    return bad("Those settings couldn't be read. Refresh the page and try again.");
   }
   const unknown = Object.keys(settings).filter((key) => !(SETTING_KEYS as readonly string[]).includes(key));
-  if (unknown.length > 0) return bad(`Unknown setting${unknown.length === 1 ? "" : "s"}: ${unknown.join(", ")}.`);
+  if (unknown.length > 0) return bad("That isn't a setting this event has. Refresh the page and try again.");
 
   const { upload_deadline: deadline, reminder_days: reminderDays } = settings as Record<string, unknown>;
   if (deadline !== undefined && deadline !== null && deadline !== "") {
@@ -166,10 +166,10 @@ function checkSettings(settings: unknown, startsOn: string): DomainError | null 
 function checkBranding(branding: unknown): DomainError | null {
   const bad = (message: string): DomainError => ({ code: "events.bad_branding", message });
   if (typeof branding !== "object" || branding === null || Array.isArray(branding)) {
-    return bad("Branding must be an object.");
+    return bad("Those branding settings couldn't be read. Refresh the page and try again.");
   }
   const unknown = Object.keys(branding).filter((key) => key !== "accent");
-  if (unknown.length > 0) return bad(`Unknown branding field${unknown.length === 1 ? "" : "s"}: ${unknown.join(", ")}.`);
+  if (unknown.length > 0) return bad("Only the accent colour can be set for branding. Refresh the page and try again.");
   const { accent } = branding as { accent?: unknown };
   if (accent !== undefined && (typeof accent !== "string" || !/^#[0-9a-fA-F]{6}$/.test(accent))) {
     return bad("The accent colour must be a hex colour such as #44C7F4.");
@@ -284,7 +284,7 @@ export async function configureEvent(
        FROM pmp.events WHERE id = $1`,
     [eventId],
   );
-  if (!eventRows[0]) return err({ code: "events.not_found", message: "No such event." });
+  if (!eventRows[0]) return err({ code: "events.not_found", message: "This event no longer exists — it may have been removed. Refresh the page." });
   if (!hasAnyRole(actor, CONFIGURERS)) return err(forbidden("Changing an event's setup"));
   const clientId = eventRows[0].client_id;
 
@@ -515,7 +515,7 @@ export async function draftOf(tx: pg.PoolClient, eventId: string): Promise<Resul
     [eventId],
   );
   const row = rows[0];
-  if (!row) return err({ code: "events.not_found", message: "No such event." });
+  if (!row) return err({ code: "events.not_found", message: "This event no longer exists — it may have been removed. Refresh the page." });
   return ok({
     id: row.id,
     name: row.name,
@@ -606,7 +606,7 @@ export async function archiveEvent(
     [eventId],
   );
   const event = rows[0];
-  if (!event) return err({ code: "events.not_found", message: "No such event." });
+  if (!event) return err({ code: "events.not_found", message: "This event no longer exists — it may have been removed. Refresh the page." });
   if (event.status === "archived") {
     return err({ code: "events.archive_conflict", message: "This event is already archived." });
   }
@@ -648,7 +648,7 @@ export async function restoreEvent(
     [eventId],
   );
   const event = rows[0];
-  if (!event) return err({ code: "events.not_found", message: "No such event." });
+  if (!event) return err({ code: "events.not_found", message: "This event no longer exists — it may have been removed. Refresh the page." });
   if (event.status !== "archived") {
     return err({ code: "events.archive_conflict", message: "Only an archived event can be restored." });
   }
@@ -692,7 +692,7 @@ export async function duplicateEvent(
     branding: Record<string, unknown> | null;
   }>(`SELECT client_id, venue_id, timezone, settings, branding FROM pmp.events WHERE id = $1`, [sourceId]);
   const source = sourceRows[0];
-  if (!source) return err({ code: "events.not_found", message: "No such event." });
+  if (!source) return err({ code: "events.not_found", message: "This event no longer exists — it may have been removed. Refresh the page." });
 
   const { rows: created } = await tx.query<{ id: string }>(
     `INSERT INTO pmp.events (client_id, venue_id, name, starts_on, ends_on, timezone, status, settings, branding, duplicated_from)

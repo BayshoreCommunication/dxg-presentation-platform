@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import type { EventRow, StaffRow } from "@/lib/api";
 import { setStaffRole, EVENT_ROLE_NAMES, ApiError } from "@/lib/api";
 import { Chip } from "@/components/Chip";
+import { formatDateRange, ROLE, wordsFor } from "@pmp/format";
 
 /**
  * Who is on each event, inverted from the per-account list.
@@ -80,7 +81,7 @@ export function EventAssignments({ initial, events }: { initial: StaffRow[]; eve
       <h1 className="htitle">Event assignments</h1>
       <div className="note" style={{ margin: "-8px 0 14px" }}>
         A role is held on an event, not on the platform — so a staff member assigned nowhere can sign in
-        and reach nothing. Root admins reach every event already and are not listed here.
+        and reach nothing. DXG administrators reach every event already and are not listed here.
       </div>
 
       {error && <div className="err">{error}</div>}
@@ -108,9 +109,7 @@ export function EventAssignments({ initial, events }: { initial: StaffRow[]; eve
                   <tr key={event.id}>
                     <td style={{ verticalAlign: "top", whiteSpace: "nowrap" }}>
                       <div style={{ fontWeight: 600 }}>{event.name}</div>
-                      <span className="note mono">
-                        {event.starts_on}–{event.ends_on}
-                      </span>
+                      <span className="note">{formatDateRange(event.starts_on, event.ends_on)}</span>
                     </td>
                     <td>
                       {people.length === 0 ? (
@@ -137,7 +136,7 @@ export function EventAssignments({ initial, events }: { initial: StaffRow[]; eve
                             </span>
                             {!person.is_active && <Chip status="attention" label="deactivated" />}
                             {person.is_active && !person.mfa_enrolled && (
-                              <Chip status="needs_revision" label="2FA not set up" />
+                              <Chip status="needs_revision" label="Sign-in app not set up" />
                             )}
                             {/*
                               Each hat keeps its own remove, because they are removed one
@@ -149,10 +148,13 @@ export function EventAssignments({ initial, events }: { initial: StaffRow[]; eve
                                 key={role}
                                 style={{ display: "inline-flex", alignItems: "center", gap: 3 }}
                               >
-                                <span className="chip c-mut">{role.replace(/_/g, " ")}</span>
+                                {/* A17: role names from the shared vocabulary; the meaning on hover here, visible in the picker below. */}
+                                <span className="chip c-mut" title={wordsFor(ROLE, role).meaning}>
+                                  {wordsFor(ROLE, role).label}
+                                </span>
                                 <button
                                   className="btn"
-                                  title={`Remove ${role.replace(/_/g, " ")}`}
+                                  title={`Remove ${wordsFor(ROLE, role).label}`}
                                   style={{ padding: "0 5px", fontSize: 11, lineHeight: 1.5 }}
                                   disabled={busy}
                                   onClick={() =>
@@ -203,7 +205,7 @@ export function EventAssignments({ initial, events }: { initial: StaffRow[]; eve
                             <div className="note" style={{ marginBottom: 4 }}>
                               as — tick every role they hold on this event:
                             </div>
-                            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 6 }}>
+                            <div style={{ display: "grid", gap: 4, marginBottom: 6 }}>
                               {EVENT_ROLE_NAMES.map((role) => {
                                 const already = people.some(
                                   (p) => p.person.id === draft[event.id]?.who && p.roles.includes(role),
@@ -227,7 +229,10 @@ export function EventAssignments({ initial, events }: { initial: StaffRow[]; eve
                                       checked={already || (draft[event.id]?.roles ?? []).includes(role)}
                                       onChange={() => toggleRole(event.id, role)}
                                     />
-                                    {role.replace(/_/g, " ")}
+                                    <span>
+                                      <b style={{ fontWeight: 600 }}>{wordsFor(ROLE, role).label}</b>
+                                      <span style={{ color: "var(--dim)" }}> — {wordsFor(ROLE, role).meaning}</span>
+                                    </span>
                                   </label>
                                 );
                               })}

@@ -19,7 +19,7 @@ import {
   downloadAgendaTemplate,
   ApiError,
 } from "@/lib/api";
-import { formatBytes } from "@pmp/format";
+import { formatBytes, IMPORT_ROW, timeZoneLabel, wordsFor } from "@pmp/format";
 import { Chip } from "@/components/Chip";
 import { DateField, TimeField } from "@/components/DateTimeField";
 
@@ -629,7 +629,7 @@ function RowEditor({
           </Section>
 
           <div className="note" style={{ marginTop: 10 }}>
-            Times are read in {timeZone}, the event&rsquo;s own timezone.{" "}
+            Times are read in {timeZoneLabel(timeZone)}, the event&rsquo;s own time zone.{" "}
             {savesAtOnce
               ? "Saving this row adds the session to the event straight away."
               : "Nothing is saved to the event until you press Import."}
@@ -974,8 +974,8 @@ export function ImportView({
                   </div>
                   {/* Stated before anyone tries, not only when something is refused. */}
                   <div className="note" style={{ marginTop: 10 }}>
-                    {AGENDA_EXTENSIONS.join(" or ")} · up to {AGENDA_MAX_LABEL} · every row is checked
-                    before anything is written
+                    {AGENDA_EXTENSIONS.join(" or ")} · up to {AGENDA_MAX_LABEL} · nothing is saved until you
+                    press Import
                   </div>
                 </>
               )}
@@ -1203,19 +1203,18 @@ export function ImportView({
                               A typed row is on the event the moment it is saved, so
                               "create" — a thing it is about to do — would be a lie.
                             */}
+                            {/* Words and neutral tones from IMPORT_ROW (S19, D-110): an update is not a warning. */}
                             <Chip
                               status={
                                 blocked
                                   ? "needs_revision"
                                   : live
                                     ? "approved"
-                                    : row.action === "create"
-                                      ? "submitted"
-                                      : row.action === "update"
-                                        ? "needs_revision"
-                                        : "canceled"
+                                    : row.action === "unchanged"
+                                      ? "canceled"
+                                      : "submitted"
                               }
-                              label={blocked ? "incomplete" : live ? "on the event" : row.action}
+                              label={wordsFor(IMPORT_ROW, blocked ? "incomplete" : live ? "saved" : row.action).label}
                             />
                             {/*
                               Every row, including a complete one. The editor is how a
@@ -1337,9 +1336,9 @@ export function ImportView({
           ) : committed ? (
             <div className="card" style={{ borderColor: "var(--ok)" }}>
               <div className="cbd">
-                <b>Imported.</b> {committed.created} created · {committed.updated} updated ·{" "}
-                {committed.unchanged} unchanged.
- Re-importing the same file now reports every row as unchanged.
+                {/* S20, D-110: the result in words, without the re-import footnote. */}
+                <b>Done</b> – {committed.created} added, {committed.updated} updated
+                {committed.unchanged > 0 ? `, ${committed.unchanged} already up to date` : ""}.
                 <div style={{ marginTop: 10, display: "flex", gap: 8 }}>
                   {!embedded && (
                     <button className="btn" onClick={() => router.push(`/events/${eventId}`)}>

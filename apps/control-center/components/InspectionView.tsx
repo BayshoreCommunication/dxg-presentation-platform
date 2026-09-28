@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { FindingRow, PresentationDetail, VersionRow } from "@/lib/api";
 import { waiveFinding, requestRevision, ApiError } from "@/lib/api";
-import { formatBytes } from "@pmp/format";
+import { CHECK, formatBytes, INSPECTION_STATE, SEVERITY, VERSION_STATE, wordsFor } from "@pmp/format";
 
 /** On the event's clock (D-080) — it was pinned to New York for every event. */
 const when = (iso: string, timeZone: string) =>
@@ -26,7 +26,7 @@ function explain(finding: FindingRow): { title: string; body: string; fix?: stri
     case "codec":
       return {
         title: "Video codec outside the room profile",
-        body: `${String(detail.file ?? "A video")}${slides ? ` (slide ${slides})` : ""} uses ${String(detail.codec ?? detail.container ?? "an unverified codec")}. The room playback profile guarantees ${String(detail.expected ?? "H.264")} only — it may stutter or fail on this fleet.`,
+        body: `${String(detail.file ?? "A video")}${slides ? ` (slide ${slides})` : ""} uses ${String(detail.codec ?? detail.container ?? "an unverified codec")}. The room PCs are only guaranteed to play ${String(detail.expected ?? "H.264")} — it may stutter or fail in the room.`,
         fix: "Re-export the clip as H.264 .mp4 and re-insert it, or upload the clip separately and DXG will convert it.",
       };
     case "linked_media":
@@ -57,7 +57,7 @@ function explain(finding: FindingRow): { title: string; body: string; fix?: stri
     case "macros":
       return {
         title: "Macro-enabled content",
-        body: "The file contains macros. Macros are blocked on the room fleet for security, so anything depending on them will not run.",
+        body: "The file contains macros. Macros are blocked on the room PCs for security, so anything depending on them will not run.",
         fix: "Save the deck without macros.",
       };
     case "malware":
@@ -79,8 +79,14 @@ function explain(finding: FindingRow): { title: string; body: string; fix?: stri
         title: "File size",
         body: `${formatBytes(detail.bytes as number)} — within the 10 GB limit.`,
       };
-    default:
-      return { title: finding.check_code.replace("_", " "), body: JSON.stringify(detail) };
+    default: {
+      // R21 (D-110): a check without its own copy still reads as words — never raw JSON.
+      const words = wordsFor(CHECK, finding.check_code);
+      return {
+        title: words.label,
+        body: words.meaning || `${wordsFor(SEVERITY, finding.severity).label}. Open the file to see the detail.`,
+      };
+    }
   }
 }
 
@@ -114,6 +120,12 @@ export function InspectionView({
   }
 
   const open = initialFindings.filter((finding) => !finding.waived_at);
+  // A file the virus check held back never reaches the other checks: say that, not "running".
+  const heldBack = version.processing_state === "quarantined" || version.processing_state === "checksum_failed";
+  const checksWords = heldBack
+    ? wordsFor(VERSION_STATE, version.processing_state)
+    : wordsFor(INSPECTION_STATE, version.inspection_state);
+  const checksRunning = !heldBack && (version.inspection_state === "pending" || version.inspection_state === "inspecting");
   const counts = {
     blocking: open.filter((finding) => finding.severity === "blocking").length,
     warning: open.filter((finding) => finding.severity === "warning").length,
@@ -154,17 +166,29 @@ export function InspectionView({
           <h3>Findings</h3>
           <span>
             <span className={`chip ${counts.blocking > 0 ? "c-bad" : "c-mut"}`}>
-              {counts.blocking} blocking
+              {counts.blocking} {SEVERITY.blocking!.label.toLowerCase()}
             </span>{" "}
             <span className={`chip ${counts.warning > 0 ? "c-warn" : "c-mut"}`}>
-              {counts.warning} warning
+              {counts.warning} {SEVERITY.warning!.label.toLowerCase()}
+              {counts.warning === 1 ? "" : "s"}
             </span>{" "}
-            <span className="chip c-info">{counts.info} informational</span>
+            <span className="chip c-info">
+              {counts.info} {SEVERITY.info!.label.toLowerCase()}
+              {counts.info === 1 ? "" : "s"}
+            </span>
           </span>
         </div>
         <div className="cbd">
+          {/* R23 (D-110): where the checks are, in words, with what it means. */}
+          <div className="note" style={{ marginBottom: 8 }}>
+            <b>{checksWords.label}</b>
+            {checksWords.meaning ? ` — ${checksWords.meaning}` : ""}
+            {checksWords.next ? ` ${checksWords.next}` : ""}
+          </div>
           {initialFindings.length === 0 && (
-            <div className="empty">The automated checks are still running — refresh in a minute.</div>
+            <div className="empty">
+              {checksRunning ? "The file checks are still running — refresh in a minute." : "No findings for this version."}
+            </div>
           )}
 
           {initialFindings.map((finding) => {

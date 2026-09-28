@@ -80,6 +80,7 @@ import {
   supportedTimezones,
 } from "./services/events.ts";
 import { eventAgenda } from "./services/agenda.ts";
+import { roleList, SECURITY } from "@pmp/format";
 import { agentForKey, issueDeviceKey } from "./services/deviceKeys.ts";
 import { pdfStates, queuePdfs } from "./services/pdf.ts";
 import { reminderSchedule } from "./services/reminders.ts";
@@ -206,11 +207,45 @@ app.use((req, res, next) => {
     !["GET", "HEAD", "OPTIONS"].includes(req.method) &&
     !req.path.startsWith("/api/v1/webhooks/")
   ) {
-    return res.status(403).json({ code: "request.cross_site", message: "That request came from another site." });
+    return res.status(403).json({ code: "request.cross_site", message: "That request came from another site, so it was refused. Refresh the page and try again." });
   }
   next();
 });
 app.options(/.*/, (_req, res) => res.sendStatus(204));
+
+/*
+ * D-110: the workflow rules in @pmp/domain word their refusals for developers — action
+ * names and role codes ("requires one of: presentation_manager, …"). Every error body
+ * leaves through res.json, so those are re-worded here once, by code; the code itself
+ * is never changed (the screens and tests key on it).
+ */
+const plainError = (body: unknown): unknown => {
+  if (typeof body !== "object" || body === null) return body;
+  const error = body as { code?: unknown; message?: unknown; detail?: { required?: unknown } };
+  if (typeof error.code !== "string" || typeof error.message !== "string") return body;
+  const { code } = error;
+  const required = error.detail?.required;
+  let message: string | null = null;
+  if (code.endsWith(".illegal_transition")) {
+    message = "That can't be done at this stage — it may have changed since you opened it. Refresh the page to see where it stands.";
+  } else if (code.endsWith(".override_forbidden")) {
+    message = "Your access doesn't allow overriding this step. Ask a project manager or a DXG administrator.";
+  } else if (code.endsWith(".unknown_state")) {
+    message = "That isn't a step this can move to. Refresh the page and try again.";
+  } else if (code.endsWith(".forbidden") && Array.isArray(required)) {
+    message = `Only a ${roleList(required as string[])} can do this.`;
+  } else if (code.endsWith(".forbidden") && error.message.includes("performed by the system")) {
+    message = "This step happens automatically — there is nothing to do.";
+  } else if (code.endsWith(".reason_required") && /^"[a-z_]+" requires a reason\.$|^An override must record a reason\.$/.test(error.message)) {
+    message = "Add a reason — it is kept on the record.";
+  }
+  return message ? { ...error, message } : body;
+};
+app.use((_req, res, next) => {
+  const json = res.json.bind(res);
+  res.json = ((body: unknown) => json(res.statusCode >= 400 ? plainError(body) : body)) as typeof res.json;
+  next();
+});
 
 const readCookie = (req: express.Request, name: string): string | null => {
   const header = req.header("cookie") ?? "";
@@ -524,7 +559,7 @@ app.use(async (req, res, next) => {
   }
 
   if (!owner) {
-    return res.status(404).json({ code: "resource.not_found", message: "No such record." });
+    return res.status(404).json({ code: "resource.not_found", message: "This item no longer exists — it may have been removed. Refresh the page." });
   }
 
   const request = req as express.Request & { eventId?: string };
@@ -552,7 +587,7 @@ app.use(async (req, res, next) => {
 
   return res.status(403).json({
     code: "auth.not_on_this_event",
-    message: "Your account has no role on this event.",
+    message: "Your account has no role on this event. Ask a DXG administrator to add you in Event assignments.",
   });
 });
 
@@ -908,7 +943,7 @@ app.post("/api/v1/file-versions/:versionAndAction", async (req, res) => {
   if (typeof body.action !== "string" || typeof body.lock_version !== "number") {
     return res.status(400).json({
       code: "request.invalid",
-      message: "`action` and `lock_version` are required.",
+      message: "That request was incomplete. Refresh the page and try again.",
     });
   }
 
@@ -933,7 +968,7 @@ app.post("/api/v1/file-versions/:versionAndAction", async (req, res) => {
     return res.json(result.value);
   } catch (error) {
     console.error(error);
-    return res.status(500).json({ code: "internal", message: "Unexpected failure." });
+    return res.status(500).json({ code: "internal", message: "Something went wrong on our side. Please try again in a moment; if it keeps happening, contact DXG support." });
   }
 });
 
@@ -958,7 +993,7 @@ app.get("/api/v1/events/:eventId/summary", async (req, res) => {
   const summary = await withScope(scopeFor(req, eventId), (tx) =>
     eventSummary(tx, eventId),
   );
-  if (!summary) return res.status(404).json({ code: "events.not_found", message: "No such event." });
+  if (!summary) return res.status(404).json({ code: "events.not_found", message: "This event no longer exists — it may have been removed. Refresh the page." });
   return res.json(summary);
 });
 
@@ -1113,7 +1148,7 @@ app.get("/api/v1/rooms/:roomId/agent-view", async (req, res) => {
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   const roomId = String(req.params.roomId);
   const view = await withScope(scopeFor(req), (tx) => agentView(tx, roomId));
-  if (!view) return res.status(404).json({ code: "agent.room_not_found", message: "No such room." });
+  if (!view) return res.status(404).json({ code: "agent.room_not_found", message: "This room no longer exists — it may have been removed. Refresh the page." });
   return res.json(view);
 });
 
@@ -1136,7 +1171,7 @@ app.post("/api/v1/room-files/:roomFileId/acknowledge", async (req, res) => {
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   const body = req.body as { lock_version?: number };
   if (typeof body.lock_version !== "number") {
-    return res.status(400).json({ code: "request.invalid", message: "`lock_version` is required." });
+    return res.status(400).json({ code: "request.invalid", message: "That request was incomplete. Refresh the page and try again." });
   }
   const result = await withScope(scopeFor(req), (tx) =>
     acknowledge(tx, actor, String(req.params.roomFileId), body.lock_version as number),
@@ -1150,7 +1185,7 @@ app.post("/api/v1/rooms/:roomId/launch", async (req, res) => {
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   const body = req.body as { slot_id?: string };
   if (!body.slot_id) {
-    return res.status(400).json({ code: "request.invalid", message: "`slot_id` is required." });
+    return res.status(400).json({ code: "request.invalid", message: "Choose the presentation to open." });
   }
   const result = await withScope(scopeFor(req), (tx) =>
     launch(tx, actor, { roomId: String(req.params.roomId), slotId: body.slot_id as string }),
@@ -1285,7 +1320,7 @@ app.post("/api/v1/speakers/:speakerId/invite", async (req, res) => {
     );
     return rows[0].event_id;
   });
-  if (!issued) return res.status(404).json({ code: "speakers.not_found", message: "No such speaker." });
+  if (!issued) return res.status(404).json({ code: "speakers.not_found", message: "This speaker no longer exists — it may have been removed. Refresh the page." });
   return res.status(201).json({ token, url: `${process.env.PORTAL_BASE ?? "http://localhost:3001"}/t/${token}` });
 });
 
@@ -1345,7 +1380,7 @@ app.post("/api/v1/portal/uploads", (req, res) =>
     if (!body.slot_id || !body.file_name || typeof body.total_bytes !== "number") {
       return res.status(400).json({
         code: "request.invalid",
-        message: "`slot_id`, `file_name` and `total_bytes` are required.",
+        message: "Choose your presentation file and try the upload again.",
       });
     }
     const result = await beginUpload(tx, session, {
@@ -1368,7 +1403,7 @@ app.put("/api/v1/portal/uploads/:uploadId/parts/:partNumber", (req, res) =>
     const part = Number(req.params.partNumber);
     const body = req.body as Buffer;
     if (!Buffer.isBuffer(body) || body.length === 0) {
-      return res.status(400).json({ code: "request.invalid", message: "Empty part." });
+      return res.status(400).json({ code: "request.invalid", message: "Part of the file didn't arrive. Try the upload again." });
     }
     const { sha256 } = await storage.putPart(String(req.params.uploadId), part, body);
     return res.json({ part_number: part, size: body.length, sha256 });
@@ -1379,7 +1414,7 @@ app.post("/api/v1/portal/uploads/:uploadId/complete", (req, res) =>
   withPortalSession(req, res, async (session, tx) => {
     const body = req.body as { slot_id?: string; file_name?: string; sha256?: string };
     if (!body.slot_id || !body.file_name) {
-      return res.status(400).json({ code: "request.invalid", message: "`slot_id` and `file_name` are required." });
+      return res.status(400).json({ code: "request.invalid", message: "The upload couldn't be finished. Try the upload again." });
     }
     const result = await completeUpload(tx, session, {
       uploadId: String(req.params.uploadId),
@@ -1409,7 +1444,7 @@ app.post("/api/v1/events/:eventId/srr/checkins", async (req, res) => {
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   const body = req.body as { speaker_id?: string; station_id?: string };
   if (!body.speaker_id) {
-    return res.status(400).json({ code: "request.invalid", message: "`speaker_id` is required." });
+    return res.status(400).json({ code: "request.invalid", message: "Choose the speaker to check in." });
   }
   // No default station (D-080): the check-in names the desk the speaker is actually at.
   const result = await withScope(scopeFor(req), (tx) =>
@@ -1463,7 +1498,7 @@ app.get("/api/v1/srr/checkins/:checkinId", async (req, res) => {
   const detail = await withScope(scopeFor(req), (tx) =>
     checkinDetail(tx, String(req.params.checkinId)),
   );
-  if (!detail) return res.status(404).json({ code: "srr.checkin_not_found", message: "No such check-in." });
+  if (!detail) return res.status(404).json({ code: "srr.checkin_not_found", message: "This check-in no longer exists — it may have been removed. Refresh the page." });
   return res.json(detail);
 });
 
@@ -1479,7 +1514,7 @@ app.put("/api/v1/srr/uploads/:uploadId/parts/:partNumber", async (req, res) => {
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   const body = req.body as Buffer;
   if (!Buffer.isBuffer(body) || body.length === 0) {
-    return res.status(400).json({ code: "request.invalid", message: "Empty part." });
+    return res.status(400).json({ code: "request.invalid", message: "Part of the file didn't arrive. Try the upload again." });
   }
   const { sha256 } = await storage.putPart(String(req.params.uploadId), Number(req.params.partNumber), body);
   return res.json({ size: body.length, sha256 });
@@ -1490,7 +1525,7 @@ app.post("/api/v1/srr/checkins/:checkinId/usb-ingestions", async (req, res) => {
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   const body = req.body as { upload_id?: string; file_name?: string; reason?: string };
   if (!body.upload_id || !body.file_name) {
-    return res.status(400).json({ code: "request.invalid", message: "`upload_id` and `file_name` are required." });
+    return res.status(400).json({ code: "request.invalid", message: "The USB file couldn't be finished. Copy it again." });
   }
   const result = await withScope(scopeFor(req), (tx) =>
     usbIngest(tx, actor, {
@@ -1509,7 +1544,7 @@ app.post("/api/v1/srr/checkins/:checkinId/sign-off", async (req, res) => {
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   const body = req.body as { file_version_id?: string };
   if (!body.file_version_id) {
-    return res.status(400).json({ code: "request.invalid", message: "`file_version_id` is required." });
+    return res.status(400).json({ code: "request.invalid", message: "Choose the version the speaker is signing off." });
   }
   const result = await withScope(scopeFor(req), (tx) =>
     signOff(tx, actor, {
@@ -1548,7 +1583,7 @@ app.get("/api/v1/slots/:slotId", async (req, res) => {
   const detail = await withScope(scopeFor(req), (tx) =>
     presentationDetail(tx, String(req.params.slotId)),
   );
-  if (!detail) return res.status(404).json({ code: "slots.not_found", message: "No such talk." });
+  if (!detail) return res.status(404).json({ code: "slots.not_found", message: "This talk no longer exists — it may have been removed. Refresh the page." });
   return res.json(detail);
 });
 
@@ -1586,7 +1621,7 @@ app.get("/api/v1/file-versions/:versionId/preview", async (req, res) => {
   if (!state || state.state !== "done" || !state.s3_key) {
     return res.status(409).json({
       code: "preview.not_ready",
-      message: state?.state === "failed" ? `The preview could not be made: ${state.error}` : "The preview is still being prepared.",
+      message: state?.state === "failed" ? `The slide preview couldn't be made. ${state.error ?? ""}`.trim() : "The slide preview is still being prepared. Check back in a minute.",
       state: state?.state ?? null,
     });
   }
@@ -1637,7 +1672,7 @@ app.post("/api/v1/file-versions/:versionId/comments", async (req, res) => {
   const body = req.body as { lane?: string; body?: string };
   const lanes = ["internal", "client_visible", "speaker_visible"];
   if (!body.lane || !lanes.includes(body.lane)) {
-    return res.status(400).json({ code: "request.invalid", message: `lane must be one of ${lanes.join(", ")}.` });
+    return res.status(400).json({ code: "request.invalid", message: "Choose who can see this comment: the DXG team, the client or the speaker." });
   }
   const result = await withScope(scopeFor(req), (tx) =>
     addComment(tx, actor, {
@@ -1655,7 +1690,7 @@ app.post("/api/v1/file-versions/:versionId/request-revision", async (req, res) =
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   const body = req.body as { finding_id?: string; note?: string };
   if (!body.note) {
-    return res.status(400).json({ code: "request.invalid", message: "`note` is required." });
+    return res.status(400).json({ code: "request.invalid", message: "Write a note to the speaker saying what to change." });
   }
   const result = await withScope(scopeFor(req), (tx) =>
     requestRevisionFromFinding(tx, actor, {
@@ -1673,7 +1708,7 @@ app.post("/api/v1/slots/:slotId/roll-back", async (req, res) => {
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   const body = req.body as { target_version_id?: string; reason?: string };
   if (!body.target_version_id) {
-    return res.status(400).json({ code: "request.invalid", message: "`target_version_id` is required." });
+    return res.status(400).json({ code: "request.invalid", message: "Choose the earlier version to go back to." });
   }
   const result = await withScope(scopeFor(req), (tx) =>
     rollBack(tx, actor, {
@@ -1716,7 +1751,7 @@ app.post("/api/v1/speakers/:speakerId/merge", async (req, res) => {
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   const body = req.body as { into?: string };
   if (!body.into) {
-    return res.status(400).json({ code: "request.invalid", message: "`into` is required." });
+    return res.status(400).json({ code: "request.invalid", message: "Choose the speaker to keep." });
   }
   const survivor = body.into;
   const merged = String(req.params.speakerId);
@@ -1758,7 +1793,7 @@ app.post("/api/v1/speakers/:speakerId/merge", async (req, res) => {
     return { merged_into: survivor };
   });
 
-  if (!result) return res.status(404).json({ code: "speakers.not_found", message: "No such speaker." });
+  if (!result) return res.status(404).json({ code: "speakers.not_found", message: "This speaker no longer exists — it may have been removed. Refresh the page." });
   return res.json(result);
 });
 
@@ -1992,7 +2027,7 @@ app.post("/api/v1/imports/:uploadId/cells", async (req, res) => {
     cells?: Partial<Record<ImportField, string>>;
   };
   if (typeof body.row !== "number") {
-    return res.status(400).json({ code: "request.invalid", message: "`row` is required." });
+    return res.status(400).json({ code: "request.invalid", message: "That request was incomplete. Refresh the page and try again." });
   }
 
   /*
@@ -2003,11 +2038,11 @@ app.post("/api/v1/imports/:uploadId/cells", async (req, res) => {
   const patch: Partial<Record<ImportField, string>> =
     body.cells ?? (typeof body.field === "string" ? { [body.field]: body.value ?? "" } : {});
   if (Object.keys(patch).length === 0) {
-    return res.status(400).json({ code: "request.invalid", message: "`cells` or `field` is required." });
+    return res.status(400).json({ code: "request.invalid", message: "There was nothing to change in that row." });
   }
   const unknown = Object.keys(patch).filter((field) => !IMPORT_FIELDS.includes(field as ImportField));
   if (unknown.length > 0) {
-    return res.status(400).json({ code: "request.invalid", message: `Unknown field ${unknown[0]}.` });
+    return res.status(400).json({ code: "request.invalid", message: "That column isn't one the schedule import uses. Refresh the page and try again." });
   }
 
   const overrides: RowOverrides = {
@@ -2051,7 +2086,7 @@ app.post("/api/v1/imports/:uploadId/rows", async (req, res) => {
   const cells = body.cells ?? {};
   const unknown = Object.keys(cells).filter((field) => !IMPORT_FIELDS.includes(field as ImportField));
   if (unknown.length > 0) {
-    return res.status(400).json({ code: "request.invalid", message: `Unknown field ${unknown[0]}.` });
+    return res.status(400).json({ code: "request.invalid", message: "That column isn't one the schedule import uses. Refresh the page and try again." });
   }
 
   const blankRows = (cached.blankRows ?? 0) + 1;
@@ -2093,7 +2128,7 @@ app.delete("/api/v1/imports/:uploadId/rows/:row", async (req, res) => {
 
   const row = Number(req.params.row);
   if (!Number.isInteger(row)) {
-    return res.status(400).json({ code: "request.invalid", message: "`row` must be a row number." });
+    return res.status(400).json({ code: "request.invalid", message: "That row couldn't be found. Refresh the page and try again." });
   }
   if (cached.excluded?.includes(row)) {
     return res.status(409).json({ code: "import.already_removed", message: "That row is already out." });
@@ -2228,7 +2263,7 @@ app.post("/api/v1/imports/:uploadId/commit", async (req, res) => {
 
   const body = req.body as { rows?: StagedRow[] };
   if (!Array.isArray(body.rows)) {
-    return res.status(400).json({ code: "request.invalid", message: "`rows` is required." });
+    return res.status(400).json({ code: "request.invalid", message: "There are no rows to import. Upload the file again." });
   }
 
   const result = await withScope(scopeFor(req, cached.eventId), (tx) =>
@@ -2366,7 +2401,7 @@ app.get("/api/v1/client/events/:eventId", async (req, res) => {
   if (!isClient && !isStaff) {
     return res.status(403).json({
       code: "auth.not_a_client_role",
-      message: "The client portal is for client event admins and scoped reviewers.",
+      message: "The client portal is for the client's own team. Ask a DXG administrator if you need access.",
     });
   }
 
@@ -2450,7 +2485,7 @@ app.post("/api/v1/events", async (req, res) => {
   if (!clientId) {
     return res.status(422).json({
       code: "events.client_required",
-      message: "Say which client this event is for — `client_id` is required when more than one exists.",
+      message: "Choose which client this event is for.",
     });
   }
 
@@ -2601,7 +2636,7 @@ app.post("/api/v1/events/:eventId/comms/send", async (req, res) => {
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   const body = req.body as { template_id?: string; missing_only?: boolean };
   if (!body.template_id) {
-    return res.status(400).json({ code: "request.invalid", message: "`template_id` is required." });
+    return res.status(400).json({ code: "request.invalid", message: "Choose the email to send." });
   }
   const eventId = String(req.params.eventId);
   const result = await withScope(scopeFor(req, eventId), (tx) =>
@@ -2767,7 +2802,7 @@ app.post("/api/v1/auth/mfa/verify", async (req, res) => {
   }
   const body = req.body as { code?: string };
   if (!body.code) {
-    return res.status(400).json({ code: "request.invalid", message: "Enter the code from your authenticator." });
+    return res.status(400).json({ code: "request.invalid", message: `Enter the ${SECURITY.code}.` });
   }
 
   const outcome = await withSystemScope((tx) => answerChallenge(tx, { token: challenge, code: body.code as string }));
@@ -2813,7 +2848,7 @@ app.post("/api/v1/auth/mfa/confirm", async (req, res) => {
   }
   const body = req.body as { code?: string };
   if (!body.code) {
-    return res.status(400).json({ code: "request.invalid", message: "Enter the code from your authenticator." });
+    return res.status(400).json({ code: "request.invalid", message: `Enter the ${SECURITY.code}.` });
   }
   const result = await withSystemScope((tx) => confirmEnrolment(tx, principal.user_id, body.code as string));
   if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
@@ -2827,7 +2862,7 @@ app.post("/api/v1/auth/mfa/disable", async (req, res) => {
   }
   const body = req.body as { password?: string; code?: string };
   if (!body.password || !body.code) {
-    return res.status(400).json({ code: "request.invalid", message: "Both your password and a code are required." });
+    return res.status(400).json({ code: "request.invalid", message: `Enter your password and the ${SECURITY.code}.` });
   }
   const result = await withSystemScope((tx) =>
     disableMfa(tx, principal.user_id, { password: body.password as string, code: body.code as string }),
@@ -2914,7 +2949,7 @@ app.post("/api/v1/admin/users", async (req, res) => {
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in first." });
   const body = req.body as { email?: string; display_name?: string; password?: string; account_type?: string };
   if (!body.email) {
-    return res.status(400).json({ code: "request.invalid", message: "`email` is required." });
+    return res.status(400).json({ code: "request.invalid", message: "Enter the person's email address." });
   }
   const result = await withScope(scopeFor(req), (tx) =>
     createStaffUser(tx, actor, {
@@ -3024,7 +3059,7 @@ app.post("/api/v1/admin/users/:userId/unlock", async (req, res) => {
 app.post("/api/v1/admin/users/:userId/roles", async (req, res) => {
   const body = req.body as { event_id?: string; role?: string; grant?: boolean };
   if (!body.event_id || !body.role) {
-    return res.status(400).json({ code: "request.invalid", message: "`event_id` and `role` are required." });
+    return res.status(400).json({ code: "request.invalid", message: "Choose an event and a role." });
   }
 
   /*
@@ -3108,11 +3143,11 @@ app.use((err: unknown, _req: express.Request, res: express.Response, _next: expr
       return res.status(status).json({ code: typed.code, message: typed.message });
     }
     // Body-parser rejections are the client's fault and safe to name, but say no more.
-    return res.status(status).json({ code: "request.invalid", message: "Malformed request." });
+    return res.status(status).json({ code: "request.invalid", message: "That request couldn't be read. Refresh the page and try again." });
   }
 
   console.error("[api] unhandled error:", err);
-  return res.status(500).json({ code: "server.error", message: "Unexpected server error." });
+  return res.status(500).json({ code: "server.error", message: "Something went wrong on our side. Please try again in a moment; if it keeps happening, contact DXG support." });
 });
 
 const port = Number(process.env.PORT ?? 4000);

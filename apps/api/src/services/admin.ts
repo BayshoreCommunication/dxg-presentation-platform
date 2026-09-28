@@ -15,7 +15,7 @@ const ADMIN_ROLES: EventRole[] = ["platform_admin"];
 
 const forbidden = (what: string): DomainError => ({
   code: "admin.forbidden",
-  message: `${what} is for root admins only.`,
+  message: `${what} is for DXG administrators only.`,
 });
 
 type AccountType = "root_admin" | "staff";
@@ -68,7 +68,7 @@ export async function resetPassword(
 ): Promise<Result<{ emailed_to: string }, DomainError>> {
   if (!hasAnyRole(actor, ADMIN_ROLES)) return err(forbidden("Resetting a password"));
   const target = await accountOf(tx, userId);
-  if (!target) return err({ code: "admin.not_found", message: "No such account." });
+  if (!target) return err({ code: "admin.not_found", message: "This account no longer exists — it may have been removed. Refresh the page." });
 
   const temporary = generateAccessCode(4, 4);
   const problem = checkPassword(temporary);
@@ -81,7 +81,7 @@ export async function resetPassword(
       WHERE id = $2 AND deleted_at IS NULL`,
     [await hashPassword(temporary), userId],
   );
-  if (rowCount === 0) return err({ code: "admin.not_found", message: "No such account." });
+  if (rowCount === 0) return err({ code: "admin.not_found", message: "This account no longer exists — it may have been removed. Refresh the page." });
 
   // A reset password ends every session that account had open.
   await tx.query(`UPDATE pmp.auth_sessions SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL`, [
@@ -111,11 +111,11 @@ export async function resetMfa(
   userId: string,
   reason: string,
 ): Promise<Result<{ reset: true }, DomainError>> {
-  if (!hasAnyRole(actor, ADMIN_ROLES)) return err(forbidden("Resetting an authenticator"));
+  if (!hasAnyRole(actor, ADMIN_ROLES)) return err(forbidden("Resetting a sign-in app"));
   if (!reason.trim()) {
     return err({
       code: "admin.reason_required",
-      message: "Resetting an authenticator needs a reason — who asked, and how you verified them.",
+      message: "Say why you are resetting their sign-in app — who asked, and how you checked it was them.",
     });
   }
 
@@ -123,7 +123,7 @@ export async function resetMfa(
     `UPDATE pmp.users SET mfa_secret = NULL, mfa_enrolled_at = NULL, mfa_last_counter = NULL WHERE id = $1`,
     [userId],
   );
-  if (rowCount === 0) return err({ code: "admin.not_found", message: "No such account." });
+  if (rowCount === 0) return err({ code: "admin.not_found", message: "This account no longer exists — it may have been removed. Refresh the page." });
 
   await tx.query(`DELETE FROM pmp.mfa_recovery_codes WHERE user_id = $1`, [userId]);
   await tx.query(`UPDATE pmp.auth_sessions SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL`, [
@@ -153,7 +153,7 @@ export async function setActive(
     `UPDATE pmp.users SET is_active = $1 WHERE id = $2 AND deleted_at IS NULL`,
     [active, userId],
   );
-  if (rowCount === 0) return err({ code: "admin.not_found", message: "No such account." });
+  if (rowCount === 0) return err({ code: "admin.not_found", message: "This account no longer exists — it may have been removed. Refresh the page." });
 
   if (!active) {
     await tx.query(`UPDATE pmp.auth_sessions SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL`, [
@@ -182,20 +182,20 @@ export async function grantRole(
 ): Promise<Result<{ granted: true }, DomainError>> {
   if (!hasAnyRole(actor, ADMIN_ROLES)) return err(forbidden("Granting a role"));
   if (!EVENT_ROLES.includes(input.role)) {
-    return err({ code: "admin.unknown_role", message: `"${input.role}" is not a role.` });
+    return err({ code: "admin.unknown_role", message: "That isn't a role on an event. Choose one from the list." });
   }
   // Root admin is set on the account, not handed out per event (D-100).
   if (input.role === "platform_admin") {
     return err({
       code: "admin.unknown_role",
-      message: "Root admin is not an event role. Change the account type on Staff accounts instead.",
+      message: "DXG administrator isn't an event role. Change the access level on Staff accounts instead.",
     });
   }
   const target = await accountOf(tx, input.userId);
-  if (!target) return err({ code: "admin.not_found", message: "No such account." });
+  if (!target) return err({ code: "admin.not_found", message: "This account no longer exists — it may have been removed. Refresh the page." });
 
   const { rows } = await tx.query(`SELECT id FROM pmp.events WHERE id = $1`, [input.eventId]);
-  if (!rows[0]) return err({ code: "admin.event_not_found", message: "No such event." });
+  if (!rows[0]) return err({ code: "admin.event_not_found", message: "This event no longer exists — it may have been removed. Refresh the page." });
 
   await tx.query(
     `INSERT INTO pmp.event_roles (user_id, event_id, role) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`,
@@ -233,13 +233,13 @@ export async function setAccountType(
 ): Promise<Result<{ account_type: AccountType }, DomainError>> {
   if (!hasAnyRole(actor, ADMIN_ROLES)) return err(forbidden("Changing an account type"));
   if (accountType !== "root_admin" && accountType !== "staff") {
-    return err({ code: "admin.bad_account_type", message: "An account is either staff or a root admin." });
+    return err({ code: "admin.bad_account_type", message: "Choose an access level: staff or DXG administrator." });
   }
   const target = await accountOf(tx, userId);
-  if (!target) return err({ code: "admin.not_found", message: "No such account." });
+  if (!target) return err({ code: "admin.not_found", message: "This account no longer exists — it may have been removed. Refresh the page." });
   if (accountType === "staff") {
     if (userId === actor.id) {
-      return err({ code: "admin.self_lockout", message: "You cannot remove your own root admin access." });
+      return err({ code: "admin.self_lockout", message: "You can't remove your own DXG administrator access. Ask another DXG administrator." });
     }
     const refusal = await lastRootAdminRefusal(tx, userId, "make staff");
     if (refusal) return err(refusal);
@@ -273,7 +273,7 @@ export async function deleteAccount(
     return err({ code: "admin.self_lockout", message: "You cannot delete your own account." });
   }
   const target = await accountOf(tx, userId);
-  if (!target) return err({ code: "admin.not_found", message: "No such account." });
+  if (!target) return err({ code: "admin.not_found", message: "This account no longer exists — it may have been removed. Refresh the page." });
   const refusal = await lastRootAdminRefusal(tx, userId, "delete");
   if (refusal) return err(refusal);
 
@@ -331,7 +331,7 @@ async function lastRootAdminRefusal(
   if (row?.is_root_admin && row.others === 0) {
     return {
       code: "admin.last_admin",
-      message: `This is the only active root admin, so you cannot ${what} it. Make someone else a root admin first.`,
+      message: `This is the only active DXG administrator, so you can't ${what} it. Make someone else a DXG administrator first.`,
     };
   }
   return undefined;

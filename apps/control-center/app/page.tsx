@@ -5,18 +5,12 @@ import { Chip } from "@/components/Chip";
 import { guard } from "@/lib/guard";
 import { eventStatusChip } from "@/lib/eventStatus";
 import { ArchiveEventButton } from "@/components/ArchiveEventButton";
+import { formatDateRange, plural } from "@pmp/format";
 
 /** Who may archive an event. A hint for the UI; `services/events.ts` decides. */
 const CONFIGURERS = ["presentation_manager", "project_manager", "platform_admin"];
 
 export const dynamic = "force-dynamic";
-
-const formatRange = (from: string, to: string) => {
-  const opts: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" };
-  const start = new Date(`${from}T12:00:00Z`).toLocaleDateString("en-US", opts);
-  const end = new Date(`${to}T12:00:00Z`).toLocaleDateString("en-US", { ...opts, year: "numeric" });
-  return `${start}–${end}`;
-};
 
 export default async function PortfolioPage({
   searchParams,
@@ -82,14 +76,14 @@ export default async function PortfolioPage({
                 <h3 style={{ fontSize: 17 }}>{event.name}</h3>
                 <Chip status={chip.status} label={chip.label} />
               </div>
-              <div className="note">{formatRange(event.starts_on, event.ends_on)}</div>
+              <div className="note">{formatDateRange(event.starts_on, event.ends_on)}</div>
               <div className="bar" style={{ margin: "10px 0 4px" }}>
                 <i style={{ width: `${collected}%` }} />
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <span className={summary.warnings_open > 0 ? "chip c-warn" : "note"}>
                   {summary.warnings_open > 0
-                    ? `${summary.warnings_open} unresolved warnings`
+                    ? `${plural(summary.warnings_open, "unresolved warning")}`
                     : "No unresolved warnings"}
                 </span>
                 <span style={{ display: "inline-flex", alignItems: "flex-start", gap: 8 }}>

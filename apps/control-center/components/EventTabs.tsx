@@ -6,6 +6,8 @@ import Link from "next/link";
 import type { AgendaPresentation, AgendaSession, EventDraft, SpeakerRow } from "@/lib/api";
 import { agendaApi } from "@/lib/api";
 import { Chip } from "@/components/Chip";
+import { staleNoteFor } from "@/lib/roomWords";
+import { humanize, timeZoneLabel } from "@pmp/format";
 import { EventDetails } from "@/components/EventDetails";
 import {
   ConfirmDelete,
@@ -71,6 +73,7 @@ export function EventTabs({
   canEdit,
   agenda,
   speakers,
+  rooms,
   initialTab,
 }: {
   eventId: string;
@@ -80,6 +83,8 @@ export function EventTabs({
   canEdit: boolean;
   agenda: AgendaSession[];
   speakers: SpeakerRow[];
+  /** Room PCs' last reports, so a talk "Synchronized onsite" in a silent room says so (R7, D-110). */
+  rooms: readonly { room: string; heartbeat_age: number | null }[];
   initialTab: string | undefined;
 }) {
   const [tab, setTab] = useState<Tab>(
@@ -132,6 +137,7 @@ export function EventTabs({
                 presentations={presentationCount}
                 setup={setup}
                 canEdit={canEdit}
+                rooms={rooms}
               />
             </div>
           </div>
@@ -139,7 +145,7 @@ export function EventTabs({
         {tab === "speakers" && (
           <div className="card">
             <div className="cbd">
-              <SpeakersPanel eventId={eventId} agenda={agenda} speakers={speakers} />
+              <SpeakersPanel eventId={eventId} agenda={agenda} speakers={speakers} rooms={rooms} />
             </div>
           </div>
         )}
@@ -155,12 +161,14 @@ function AgendaPanel({
   presentations,
   setup,
   canEdit,
+  rooms,
 }: {
   eventId: string;
   timezone: string;
   agenda: AgendaSession[];
   presentations: number;
   setup: EventDraft;
+  rooms: readonly { room: string; heartbeat_age: number | null }[];
   canEdit: boolean;
 }) {
   const [query, setQuery] = useState("");
@@ -246,7 +254,7 @@ function AgendaPanel({
         )}
       </div>
       <div className="note" style={{ marginBottom: 6 }}>
-        {agenda.length} sessions · {presentations} presentations · times in {timezone}
+        {agenda.length} sessions · {presentations} presentations · times in {timeZoneLabel(timezone)}
         {canEdit && " · changes save straight to the event"}
       </div>
 
@@ -378,6 +386,7 @@ function AgendaPanel({
                           eventId={eventId}
                           timezone={timezone}
                           item={item}
+                          stale={staleNoteFor(item.status, session.room, rooms)}
                           canEdit={canEdit}
                           open={open}
                           toggle={toggle}
@@ -400,6 +409,7 @@ function PresentationRow({
   eventId,
   timezone,
   item,
+  stale,
   canEdit,
   open,
   toggle,
@@ -408,6 +418,7 @@ function PresentationRow({
   eventId: string;
   timezone: string;
   item: AgendaPresentation;
+  stale: string | null;
   canEdit: boolean;
   open: string | null;
   toggle: (key: string) => void;
@@ -454,7 +465,7 @@ function PresentationRow({
                     {index > 0 && ", "}
                     {person.name}
                     {person.organization ? ` (${person.organization})` : ""}
-                    {person.role !== "speaker" ? ` · ${person.role}` : ""}
+                    {person.role !== "speaker" ? ` · ${humanize(person.role).toLowerCase()}` : ""}
                     {canEdit && (
                       <RemovePresenter
                         eventId={eventId}
@@ -469,7 +480,7 @@ function PresentationRow({
         </td>
         <td style={{ textAlign: "right", width: 200 }}>
           <div style={{ display: "flex", gap: 6, justifyContent: "flex-end", alignItems: "center" }}>
-            <Chip status={item.status} label={item.status_label} />
+            <Chip status={item.status} label={item.status_label} stale={stale} />
             {canEdit && (
               <ActionMenu
                 label={`Actions for presentation ${item.title}`}
@@ -498,25 +509,31 @@ function SpeakersPanel({
   eventId,
   agenda,
   speakers,
+  rooms,
 }: {
   eventId: string;
   agenda: AgendaSession[];
   speakers: SpeakerRow[];
+  rooms: readonly { room: string; heartbeat_age: number | null }[];
 }) {
   const [query, setQuery] = useState("");
 
   // Which talks each speaker gives, from the agenda already loaded for the other tab.
   const talksBySpeaker = useMemo(() => {
-    const map = new Map<string, { slot_id: string; title: string; status: string; status_label: string }[]>();
+    const map = new Map<
+      string,
+      { slot_id: string; title: string; status: string; status_label: string; stale: string | null }[]
+    >();
     for (const session of agenda) {
       for (const item of session.presentations) {
+        const talk = { ...item, stale: staleNoteFor(item.status, session.room, rooms) };
         for (const person of item.speakers) {
-          map.set(person.id, [...(map.get(person.id) ?? []), item]);
+          map.set(person.id, [...(map.get(person.id) ?? []), talk]);
         }
       }
     }
     return map;
-  }, [agenda]);
+  }, [agenda, rooms]);
 
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -597,7 +614,7 @@ function SpeakersPanel({
                             style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", margin: "2px 0" }}
                           >
                             <Link href={`/events/${eventId}/talks/${item.slot_id}`}>{item.title}</Link>
-                            <Chip status={item.status} label={item.status_label} />
+                            <Chip status={item.status} label={item.status_label} stale={item.stale} />
                           </div>
                         ))
                       )}

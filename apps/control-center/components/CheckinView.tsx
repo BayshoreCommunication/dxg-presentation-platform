@@ -13,7 +13,8 @@ import {
   ApiError,
   emailCheckinReceipt,
 } from "@/lib/api";
-import { Chip } from "@/components/Chip";
+import { Chip, StatusMeaning } from "@/components/Chip";
+import { staleNoteFor } from "@/lib/roomWords";
 
 /**
  * Day and time on the event's clock — the actual date, not just a weekday, and never
@@ -39,10 +40,13 @@ export function CheckinView({
   eventId,
   timezone,
   initial,
+  rooms = [],
 }: {
   eventId: string;
   timezone: string;
   initial: CheckinDetail;
+  /** Room sync's room list, for R7's room-PC freshness (D-110). */
+  rooms?: { room: string; heartbeat_age: number | null }[];
 }) {
   const router = useRouter();
   const [detail, setDetail] = useState(initial);
@@ -98,6 +102,7 @@ export function CheckinView({
   }
 
   const signable = detail.latest && detail.latest.processing_state === "stored";
+  const staleNote = staleNoteFor(detail.talk.status, detail.talk.room, rooms);
   const [confirmCheckout, setConfirmCheckout] = useState(false);
   const latestNumber = detail.latest?.version_number;
   const approvedNumber = detail.approved?.version_number;
@@ -179,9 +184,13 @@ export function CheckinView({
       <div className="card">
         <div className="chd">
           <h3>{detail.talk.title}</h3>
-          <Chip status={detail.talk.status} label={detail.talk.status_label} />
+          <Chip status={detail.talk.status} label={detail.talk.status_label} stale={staleNote} />
         </div>
         <div className="cbd">
+          {/* R47: what the status means, visibly; R7: amber when the room PC is quiet (D-110). */}
+          <div style={{ marginBottom: 6 }}>
+            <StatusMeaning status={detail.talk.status} stale={staleNote} />
+          </div>
           <div className="note" style={{ marginBottom: 6 }}>
             {detail.talk.room} · {when(detail.talk.starts_at, timezone)} · current approved:{" "}
             <b className="mono">

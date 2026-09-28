@@ -15,6 +15,7 @@ import { openChallenge, isEnrolled } from "./mfa.ts";
 import { queueTemporaryPasswordEmail } from "./accountMail.ts";
 import type { Actor, DomainError, EventRole, Result } from "@pmp/domain";
 import { err, ok, atLeast, hasAnyRole } from "@pmp/domain";
+import { agoWords, SECURITY } from "@pmp/format";
 
 /** Staff sessions per SECURITY_MODEL §2; presenters get a shorter portal session. */
 const IDLE_MINUTES = { staff: 12 * 60, presenter: 8 * 60 } as const;
@@ -174,7 +175,9 @@ export async function staffLogin(
     await record(tx, { kind: "staff", identifier: email, outcome: "locked", ip: input.ip, userAgent: input.userAgent });
     return err({
       code: "auth.locked",
-      message: `Too many failed attempts. Try again after ${lock.until!.toISOString().slice(11, 16)} UTC, or ask a platform admin to reset it.`,
+      // A28: the API knows nothing of the reader's time zone, so the wait is said as a
+      // length of time ("in 12 minutes"), never as a UTC clock time.
+      message: `Too many failed attempts. Try again in ${agoWords(Math.max(60, (lock.until!.getTime() - now.getTime()) / 1000))}, or ask a ${SECURITY.admin} to unlock your account.`,
     });
   }
 
@@ -510,12 +513,12 @@ export async function createStaffUser(
   if (!hasAnyRole(actor, ["platform_admin"])) {
     return err({
       code: "auth.forbidden",
-      message: "Only a root admin can create accounts.",
+      message: `Only a ${SECURITY.admin} can create accounts.`,
     });
   }
   const accountType = input.accountType ?? "staff";
   if (accountType !== "staff" && accountType !== "root_admin") {
-    return err({ code: "auth.bad_account_type", message: "An account is either staff or a root admin." });
+    return err({ code: "auth.bad_account_type", message: "Choose an access level: staff or DXG administrator." });
   }
   const email = input.email.trim().toLowerCase();
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
@@ -637,7 +640,7 @@ export async function issuePresenterCredential(
   if (!hasAnyRole(actor, atLeast("srr_technician"))) {
     return err({
       code: "auth.forbidden",
-      message: "Issuing presenter credentials requires an SRR technician or above.",
+      message: "Only a Speaker Ready Room technician, a manager or a DXG administrator can issue a speaker's access code.",
     });
   }
 
@@ -653,7 +656,7 @@ export async function issuePresenterCredential(
     [input.speakerId],
   );
   const speaker = rows[0];
-  if (!speaker) return err({ code: "auth.speaker_not_found", message: "No such speaker." });
+  if (!speaker) return err({ code: "auth.speaker_not_found", message: "This speaker no longer exists — it may have been removed. Refresh the page." });
 
   // Only one live credential per presenter: issuing a new one retires the old.
   await tx.query(
@@ -698,7 +701,7 @@ export async function revokePresenterCredential(
   speakerId: string,
 ): Promise<Result<{ revoked: number }, DomainError>> {
   if (!hasAnyRole(actor, atLeast("srr_technician"))) {
-    return err({ code: "auth.forbidden", message: "Revoking credentials requires an SRR technician or above." });
+    return err({ code: "auth.forbidden", message: "Only a Speaker Ready Room technician, a manager or a DXG administrator can withdraw a speaker's access code." });
   }
   const { rowCount } = await tx.query(
     `UPDATE pmp.speaker_tokens SET revoked_at = now() WHERE speaker_id = $1 AND revoked_at IS NULL`,

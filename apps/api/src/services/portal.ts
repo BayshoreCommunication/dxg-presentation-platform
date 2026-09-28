@@ -149,11 +149,11 @@ export async function beginUpload(
     return {
       ok: false,
       code: "file.type_not_allowed",
-      message: `Only ${allowed.join(", ")} files are accepted.`,
+      message: "Only PowerPoint (.pptx or .ppt), Keynote (.key) or PDF files can be uploaded. Save your presentation in one of these and try again.",
     };
   }
   if (input.totalBytes > 10 * 1024 * 1024 * 1024) {
-    return { ok: false, code: "file.too_large", message: "The limit is 10 GB." };
+    return { ok: false, code: "file.too_large", message: "That file is larger than 10 GB, the most we can accept. Make it smaller (for example, compress the videos) and try again." };
   }
 
   const { rows: locked } = await tx.query<{ final_locked: boolean }>(

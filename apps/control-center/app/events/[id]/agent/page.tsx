@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getFleet } from "@/lib/api";
 import { guard } from "@/lib/guard";
+import { roomFilesLine, roomPcState } from "@/lib/roomWords";
 
 export const dynamic = "force-dynamic";
 
@@ -23,8 +24,8 @@ export default async function PickRoomPage({ params }: { params: Promise<{ id: s
                     <b>{room.room}</b>
                     <br />
                     <span className="note">
-                      {room.files_current}/{room.files_total} files current
-                      {room.agent_version ? ` · agent ${room.agent_version}` : " · no agent"}
+                      {/* Was "3/4 files current · agent 1.4.2" / "no agent" (R43, D-110). */}
+                      {roomFilesLine(room)} · {roomPcState(room)}
                     </span>
                   </td>
                   <td style={{ textAlign: "right" }}>

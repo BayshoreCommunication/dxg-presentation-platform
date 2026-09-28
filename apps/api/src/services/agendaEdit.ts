@@ -4,6 +4,7 @@ import type { Actor, DomainError, Result } from "@pmp/domain";
 import { atLeast, err, hasAnyRole, ok } from "@pmp/domain";
 import { normalise, resolveDay, resolveRoom, resolveTrack, syncPresenters } from "./scheduleImport.ts";
 import { verifyAddress } from "@pmp/email";
+import { formatDateRange } from "@pmp/format";
 
 /**
  * A typed address, checked before it is stored (D-097): its shape, known typos, and that
@@ -40,10 +41,10 @@ const EDITORS = atLeast("presentation_manager");
 
 const forbidden = (attempt: string): DomainError => ({
   code: "agenda.forbidden",
-  message: `${attempt} needs a presentation manager, project manager or administrator.`,
+  message: `${attempt} needs a presentation manager, project manager or DXG administrator.`,
 });
 
-const notFound = (what: string): DomainError => ({ code: "agenda.not_found", message: `No such ${what} on this event.` });
+const notFound = (what: string): DomainError => ({ code: "agenda.not_found", message: `This ${what} no longer exists on this event — it may have been removed. Refresh the page.` });
 
 const CLOCK = /^([01]\d|2[0-3]):[0-5]\d$/;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -90,7 +91,7 @@ function checkSession(input: SessionInput, event: EventRow): DomainError | null 
   if (input.date < event.starts_on || input.date > event.ends_on) {
     return {
       code: "agenda.bad_dates",
-      message: `That day is outside the event, which runs ${event.starts_on} to ${event.ends_on}.`,
+      message: `That day is outside the event, which runs ${formatDateRange(event.starts_on, event.ends_on)}. Choose a day within it.`,
     };
   }
   if (input.end <= input.start) {
@@ -104,7 +105,7 @@ function checkPresentation(input: PresentationInput): DomainError | null {
   const start = input.start ?? "";
   const end = input.end ?? "";
   if ((start && !CLOCK.test(start)) || (end && !CLOCK.test(end))) {
-    return { code: "agenda.bad_times", message: "Times are `HH:MM`." };
+    return { code: "agenda.bad_times", message: "Enter times as hours and minutes, such as 09:30 or 14:00." };
   }
   if (start && end && end <= start) {
     return { code: "agenda.bad_times", message: "A presentation has to end after it starts." };
@@ -736,7 +737,7 @@ export async function setReleasePermission(
   if (typeof value !== "string" || !(RELEASE_PERMISSIONS as readonly string[]).includes(value)) {
     return err({
       code: "speakers.bad_release_permission",
-      message: "Release permission must be one of: undecided, full, pdf_only, none.",
+      message: "Choose a release permission from the list: Not set, Full release, PDF only or No release.",
     });
   }
   const { rows } = await tx.query<{ client_id: string; before: string }>(

@@ -6,11 +6,12 @@ import type { ArchiveScope, PdfProgress } from "@/lib/api";
 import { buildArchive, deliverArchive, archiveDownloadUrl, convertArchivePdfs, ApiError } from "@/lib/api";
 import { DownloadLog } from "@/components/DownloadLog";
 import { Chip } from "@/components/Chip";
-import { formatBytes } from "@pmp/format";
+import { ARCHIVE_STATE, formatBytes, formatDate, plural, wordsFor } from "@pmp/format";
 
-
+/** Chip tone per archive state; the words come from ARCHIVE_STATE (S39, D-110). */
 const STATE_TONE: Record<string, string> = {
   draft: "canceled",
+  failed: "attention",
   building: "submitted",
   ready: "submitted",
   delivered: "synchronized_onsite",
@@ -40,6 +41,11 @@ export function ArchiveView({ eventId, initial }: { eventId: string; initial: Ar
             ? "The last build didn't finish. Check any message above, then rebuild the package."
             : null;
   const pdf = initial.pdf;
+  // A package left as a draft is a build that stopped (D-108), so it reads "Build stopped";
+  // no package at all reads "Not built yet" (S39, D-110).
+  const stateCode = !pkg ? "draft" : pkg.archive_state === "draft" ? "failed" : pkg.archive_state;
+  const state = wordsFor(ARCHIVE_STATE, stateCode);
+  const expiry = expirySentence(initial.rules, pkg?.link_expires_at ?? null);
 
   // While PDFs are converting, re-read every few seconds so the count moves on its own.
   const converting = pdf.in_progress > 0;
@@ -91,7 +97,7 @@ export function ArchiveView({ eventId, initial }: { eventId: string; initial: Ar
               <tr>
                 <td>Included</td>
                 <td>
-                  <b className="num">{initial.included.length}</b> final files ·{" "}
+                  <b className="num">{plural(initial.included.length, "final file")}</b> ·{" "}
                   <span className="mono">{formatBytes(initial.total_bytes)}</span>
                 </td>
               </tr>
@@ -102,8 +108,8 @@ export function ArchiveView({ eventId, initial }: { eventId: string; initial: Ar
               <tr>
                 <td>Emails</td>
                 <td>
-                  <span className="num">{initial.emails}</span>{" "}
-                  <span className="note">personal sign-in links are removed</span>
+                  <span className="num">{plural(initial.emails, "email")}</span>{" "}
+                  <span className="note">(personal sign-in links are removed)</span>
                 </td>
               </tr>
               <tr>
@@ -150,39 +156,31 @@ export function ArchiveView({ eventId, initial }: { eventId: string; initial: Ar
       <div className="card">
         <div className="chd">
           <h3>Package</h3>
-          {pkg ? (
-            <Chip status={STATE_TONE[pkg.archive_state] ?? "canceled"} label={pkg.archive_state} />
-          ) : (
-            <Chip status="canceled" label="Not built" />
-          )}
+          <Chip status={STATE_TONE[stateCode] ?? "canceled"} label={state.label} />
         </div>
         <div className="cbd">
+          {/* What the state means and what to do next; the Deliver reason below covers the rest. */}
+          {(!pkg || !deliverBlocked) && (
+            <p className="note" style={{ margin: "0 0 10px" }}>
+              {state.meaning} {state.next ? `Next: ${state.next}` : ""}
+            </p>
+          )}
           {/*
             These were two ticked, read-only checkboxes — options that looked choosable and
             were not. They are the package's rules, stated for this event (D-080).
           */}
           <ul className="note" style={{ margin: "0 0 12px", paddingLeft: 18, lineHeight: 1.7 }}>
             <li>Every package carries a manifest: file, version, checksum and approval record.</li>
-            <li>
-              The client link expires {initial.rules.retention_days} days after the event ends
-              {initial.rules.event_ends_on ? ` (${initial.rules.event_ends_on})` : ""}
-              {pkg?.link_expires_at
-                ? ` — this package's link expires ${pkg.link_expires_at.slice(0, 10)}`
-                : initial.rules.link_expires_if_delivered_now
-                  ? ` — delivered today, it would expire ${initial.rules.link_expires_if_delivered_now.slice(0, 10)}`
-                  : ""}
-              . Every download is logged.
-            </li>
+            <li>{expiry} Every download is logged.</li>
           </ul>
 
           <PdfStatus eventId={eventId} pdf={pdf} busy={busy} run={run} />
 
           {pkg && (
             <div className="note" style={{ marginBottom: 10 }}>
-              PowerPoint package: {pkg.manifest?.file_count ?? 0} files
-              {pkg.has_pdf ? ` · PDF package: ${pkg.manifest?.pdf?.file_count ?? 0} files` : " · no PDF package (built before PDFs — rebuild)"}
-              {pkg.link_expires_at ? ` · link expires ${pkg.link_expires_at.slice(0, 10)}` : ""} ·{" "}
-              {pkg.downloads} download{pkg.downloads === "1" ? "" : "s"} logged
+              PowerPoint package: {plural(pkg.manifest?.file_count ?? 0, "file")}
+              {pkg.has_pdf ? ` · PDF package: ${plural(pkg.manifest?.pdf?.file_count ?? 0, "file")}` : " · no PDF package (built before PDFs — rebuild)"} ·{" "}
+              {plural(Number(pkg.downloads), "download")} logged
             </div>
           )}
 
@@ -200,7 +198,7 @@ export function ArchiveView({ eventId, initial }: { eventId: string; initial: Ar
               onClick={() =>
                 void run(async () => {
                   const result = await buildArchive(eventId);
-                  return `Built · PowerPoint ${result.file_count} files · PDF ${result.pdf_file_count} files${
+                  return `Built · PowerPoint ${plural(result.file_count, "file")} · PDF ${plural(result.pdf_file_count, "file")}${
                     result.pdf_not_converted > 0 ? ` (${result.pdf_not_converted} not converted yet)` : ""
                   } · ${result.excluded} excluded`;
                 })
@@ -252,6 +250,31 @@ export function ArchiveView({ eventId, initial }: { eventId: string; initial: Ar
       <div className={`toast ${toast ? "show" : ""}`}>{toast}</div>
     </>
   );
+}
+
+/**
+ * The client link's expiry as one readable sentence (S40, D-110). It used to state the rule
+ * and a second, different ISO date side by side. The link runs RETENTION days past the
+ * event's end, or longer when delivered late (never shorter than the API's minimum).
+ */
+function expirySentence(rules: ArchiveScope["rules"], expiresAt: string | null): string {
+  const days = rules.retention_days;
+  const ruleDate = rules.event_ends_on ? addDays(rules.event_ends_on, days) : null;
+  const why = (date: string) => (date === ruleDate ? ` (${days} days after the event ends)` : "");
+  if (expiresAt) {
+    const date = expiresAt.slice(0, 10);
+    return `The client's download link expires ${formatDate(date)}${why(date)}.`;
+  }
+  const ifNow = rules.link_expires_if_delivered_now?.slice(0, 10);
+  if (ifNow) return `Delivered today, the client's download link would expire ${formatDate(ifNow)}${why(ifNow)}.`;
+  return `The client's download link expires ${days} days after the event ends.`;
+}
+
+/** "2026-03-12" + 30 → "2026-04-11", on the calendar, not through a time zone. */
+function addDays(date: string, days: number): string {
+  const day = new Date(`${date}T12:00:00Z`);
+  day.setUTCDate(day.getUTCDate() + days);
+  return day.toISOString().slice(0, 10);
 }
 
 /**

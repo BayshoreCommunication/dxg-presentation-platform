@@ -5,8 +5,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { CommentRow, PresentationDetail } from "@/lib/api";
 import { rollBackTalk, convertArchivePdfs, ApiError } from "@/lib/api";
-import { Chip } from "@/components/Chip";
-import { formatBytes } from "@pmp/format";
+import { Chip, StatusMeaning } from "@/components/Chip";
+import { staleNoteFor } from "@/lib/roomWords";
+import { COMMENT_LANE, formatBytes, SEVERITY, VERSION_STATE, wordsFor } from "@pmp/format";
 
 const short = (sha: string | null) => (sha ? `${sha.slice(0, 4)}…${sha.slice(-4)}` : "—");
 /** On the event's clock (D-080) — it was pinned to New York for every event. */
@@ -28,6 +29,12 @@ const SOURCE_LABEL: Record<string, string> = {
 };
 
 const VERSION_TONE: Record<string, string> = {
+  quarantined: "attention",
+  checksum_failed: "attention",
+  blocked: "attention",
+  uploading: "processing",
+  uploaded: "processing",
+  scanning: "processing",
   approved: "synchronized_onsite",
   superseded: "canceled",
   rolled_back: "needs_revision",
@@ -37,15 +44,26 @@ const VERSION_TONE: Record<string, string> = {
   in_review: "submitted",
 };
 
+/**
+ * A version's own state (R16, D-110): its review state, unless processing stopped it
+ * first — in shared words, never "rolled back" or "awaiting review" as codes.
+ */
+const STOPPED = ["uploading", "uploaded", "scanning", "quarantined", "checksum_failed"];
+const versionState = (row: { processing_state: string; review_state: string }) =>
+  STOPPED.includes(row.processing_state) ? row.processing_state : row.review_state;
+
 /** Screen 6 — the whole life of one presentation, and the actions on it. */
 export function PresentationDetailView({
   eventId,
   initial,
   comments,
+  rooms = [],
 }: {
   eventId: string;
   initial: PresentationDetail;
   comments: CommentRow[];
+  /** Room sync's room list, for R7's room-PC freshness (D-110). */
+  rooms?: { room: string; heartbeat_age: number | null }[];
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -54,6 +72,7 @@ export function PresentationDetailView({
 
   const latest = initial.versions[0];
   const approved = initial.versions.find((row) => row.review_state === "approved");
+  const staleNote = staleNoteFor(initial.talk.status, initial.talk.room, rooms);
 
   // An inline form, not window.prompt pre-filled with "wrong version approved" (D-108).
   const [rollTarget, setRollTarget] = useState<{ id: string; n: number; reason: string } | null>(null);
@@ -90,9 +109,13 @@ export function PresentationDetailView({
       <div className="card">
         <div className="chd">
           <h3>{initial.talk.title}</h3>
-          <Chip status={initial.talk.status} label={initial.talk.status_label} />
+          <Chip status={initial.talk.status} label={initial.talk.status_label} stale={staleNote} />
         </div>
         <div className="cbd">
+          {/* R47: what the status means, visibly; R7: amber when the room PC is quiet (D-110). */}
+          <div style={{ marginBottom: 6 }}>
+            <StatusMeaning status={initial.talk.status} stale={staleNote} />
+          </div>
           <div className="note" style={{ marginBottom: 6 }}>
             {initial.speaker?.name ?? "No speaker assigned"}
             {initial.speaker?.organization ? `, ${initial.speaker.organization}` : ""} · {initial.talk.room} ·{" "}
@@ -171,19 +194,26 @@ export function PresentationDetailView({
                   <td className="note">{SOURCE_LABEL[row.source] ?? row.source}</td>
                   <td>
                     {row.finding_counts.blocking > 0 && (
-                      <span className="chip c-bad">{row.finding_counts.blocking} blocking</span>
+                      <span className="chip c-bad">
+                        {row.finding_counts.blocking} {SEVERITY.blocking!.label.toLowerCase()}
+                      </span>
                     )}{" "}
                     {row.finding_counts.warning > 0 && (
-                      <span className="chip c-warn">{row.finding_counts.warning} warning</span>
+                      <span className="chip c-warn">
+                        {row.finding_counts.warning} {SEVERITY.warning!.label.toLowerCase()}
+                        {row.finding_counts.warning === 1 ? "" : "s"}
+                      </span>
                     )}{" "}
                     {row.finding_counts.blocking + row.finding_counts.warning === 0 && (
                       <span className="chip c-ok">clean</span>
                     )}
                   </td>
                   <td>
+                    {/* A dense table: the meaning is the hover text here (R47). */}
                     <Chip
-                      status={VERSION_TONE[row.review_state] ?? "canceled"}
-                      label={row.review_state.replace("_", " ")}
+                      status={VERSION_TONE[versionState(row)] ?? "canceled"}
+                      label={wordsFor(VERSION_STATE, versionState(row)).label}
+                      hint={wordsFor(VERSION_STATE, versionState(row)).meaning}
                     />
                     {row.room_states.includes("active") && (
                       <>
@@ -299,7 +329,7 @@ export function PresentationDetailView({
                 key={comment.id}
               >
                 <b>{comment.author ?? "—"}</b>
-                <span className="aud">{comment.lane.replace("_", " ")}</span>
+                <span className="aud">{wordsFor(COMMENT_LANE, comment.lane).label}</span>
                 <span className="note"> · v{comment.version_number}</span>
                 <br />
                 {comment.body}

@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import type { CommsView as CommsData } from "@/lib/api";
 import { sendBatch, updateTemplate, ApiError } from "@/lib/api";
 import { Chip } from "@/components/Chip";
+import { EMAIL_STATUS, wordsFor } from "@pmp/format";
 
 /** Kravio puts a glyph on every tile; these say what each delivery counter is. */
 const COUNTER_ICON = {
@@ -26,6 +27,7 @@ const STATUS_TONE: Record<string, string> = {
   bounced: "attention",
   complained: "attention",
   failed: "attention",
+  suppressed: "attention",
 };
 
 /** Screen 9 — templates, batches, and who each batch would actually reach. */
@@ -91,7 +93,7 @@ export function CommsView({ eventId, data }: { eventId: string; data: CommsData 
         {(["queued", "delivered", "opened", "clicked", "bounced"] as const).map((key) => (
           <Kpi
             key={key}
-            label={key[0].toUpperCase() + key.slice(1)}
+            label={wordsFor(EMAIL_STATUS, key).label}
             icon={COUNTER_ICON[key]}
             value={data.stats[key]}
             caption={key === "bounced" && data.stats.bounced > 0 ? "could not be delivered" : undefined}
@@ -309,7 +311,7 @@ export function CommsView({ eventId, data }: { eventId: string; data: CommsData 
                   {run.outcome === "sent"
                     ? `sent to ${run.queued} speaker${run.queued === 1 ? "" : "s"}`
                     : run.outcome === "caught_up"
-                      ? "missed while the server was down — covered by the next reminder"
+                      ? "skipped because the system was offline that day — the next reminder covers it"
                       : "could not send"}
                 </li>
               ))}
@@ -344,9 +346,12 @@ export function CommsView({ eventId, data }: { eventId: string; data: CommsData 
                   <tr key={row.id}>
                     <td>{row.speaker ?? "—"}</td>
                     <td className="mono note">{row.to_address}</td>
-                    <td className="note">{row.subject.slice(0, 52)}</td>
-                    <td>
-                      <Chip status={STATUS_TONE[row.status] ?? "canceled"} label={row.status} />
+                    {/* S35, D-110: a cut subject says so, and the status reads as words. */}
+                    <td className="note" title={row.subject.length > 52 ? row.subject : undefined}>
+                      {row.subject.length > 52 ? `${row.subject.slice(0, 51).trimEnd()}…` : row.subject}
+                    </td>
+                    <td title={wordsFor(EMAIL_STATUS, row.status).meaning || undefined}>
+                      <Chip status={STATUS_TONE[row.status] ?? "canceled"} label={wordsFor(EMAIL_STATUS, row.status).label} />
                     </td>
                   </tr>
                 ))}

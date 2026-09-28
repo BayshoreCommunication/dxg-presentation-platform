@@ -11,16 +11,11 @@ import { DateField } from "@/components/DateTimeField";
 import { ColorPicker } from "@/components/ColorPicker";
 import { ReminderDaysField, reminderDaysFrom, sameDays } from "@/components/ReminderDaysField";
 import { BrandAssetField, assetFrom } from "@/components/BrandAssetField";
+import { formatDateRange, timeZoneLabel } from "@pmp/format";
 
 const TIMEZONE_NOTE =
   "Every time in this event — session times, deadlines, reminders — is read in this zone.";
 
-const dateRange = (from: string, to: string) => {
-  const opts: Intl.DateTimeFormatOptions = { month: "short", day: "numeric", timeZone: "UTC" };
-  const start = new Date(`${from}T00:00:00Z`).toLocaleDateString("en-US", opts);
-  const end = new Date(`${to}T00:00:00Z`).toLocaleDateString("en-US", { ...opts, year: "numeric" });
-  return `${start} – ${end}`;
-};
 
 /**
  * An event's own setup, readable and correctable in one place.
@@ -122,7 +117,7 @@ export function EventDetails({
               {setup.name}
             </h1>
             <span className="note">
-              {[setup.venue, dateRange(setup.starts_on, setup.ends_on), setup.timezone]
+              {[setup.venue, formatDateRange(setup.starts_on, setup.ends_on), timeZoneLabel(setup.timezone)]
                 .filter(Boolean)
                 .join(" · ")}
             </span>
@@ -186,19 +181,19 @@ export function EventDetails({
               <tr>
                 <td>Time zone</td>
                 <td>
-                  <span className="mono">{setup.timezone}</span>
+                  {/* "Eastern Time (New York)", not the IANA code (S14, D-110). */}
+                  <span>{timeZoneLabel(setup.timezone)}</span>
                   <div className="note">{TIMEZONE_NOTE}</div>
                 </td>
               </tr>
               <tr>
                 <td>Dates</td>
                 <td>
-                  <span className="mono">
-                    {setup.starts_on} → {setup.ends_on}
-                  </span>
+                  {/* Readable dates and a person to ask, not "a re-import" (S23, D-110). */}
+                  <span>{formatDateRange(setup.starts_on, setup.ends_on)}</span>
                   <div className="note">
-                    Fixed once the event is live — its sessions, deadlines and room files are all set
-                    against these. Moving an event is a re-import, not an edit here.
+                    Dates can&rsquo;t change after activation – ask a DXG administrator. Sessions,
+                    deadlines and room files are all set against them.
                   </div>
                 </td>
               </tr>

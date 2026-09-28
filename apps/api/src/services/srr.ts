@@ -3,7 +3,7 @@ import { appendAudit } from "@pmp/db";
 import { deriveTalkStatus, TALK_STATUS_LABEL } from "@pmp/domain";
 import type { Actor, DomainError, Result } from "@pmp/domain";
 import { atLeast, err, hasAnyRole, ok } from "@pmp/domain";
-import { formatBytes, formatBytesDelta, formatSessionTime } from "@pmp/format";
+import { formatBytes, formatBytesDelta, formatSessionTime, VERSION_STATE, wordsFor } from "@pmp/format";
 import { ingestVersion, versionFacts } from "./ingest.ts";
 import type { VersionFacts } from "./ingest.ts";
 
@@ -190,7 +190,7 @@ export async function addStation(
     [eventId, name, actor.id],
   );
   const created = rows[0];
-  if (!created) return err({ code: "events.not_found", message: "No such event." });
+  if (!created) return err({ code: "events.not_found", message: "This event no longer exists — it may have been removed. Refresh the page." });
   await appendAudit(tx, {
     partitionId: eventId,
     clientId: created.client_id,
@@ -228,7 +228,7 @@ export async function renameStation(
   const name = cleanName(rawName);
   if (!name) return err({ code: "srr.station_name_invalid", message: "Give the station a name of 1–60 characters." });
   const current = await stationRow(tx, eventId, stationId);
-  if (!current) return err({ code: "srr.station_not_found", message: "No such station at this event." });
+  if (!current) return err({ code: "srr.station_not_found", message: "This station no longer exists at this event — it may have been removed. Refresh the page." });
   if (await nameTaken(tx, eventId, name, stationId)) {
     return err({ code: "srr.station_conflict", message: `There is already a station called "${name}".` });
   }
@@ -259,7 +259,7 @@ export async function retireStation(
     return err({ code: "srr.forbidden", message: "Only the Speaker Ready Room team and managers can set up stations." });
   }
   const current = await stationRow(tx, eventId, stationId);
-  if (!current) return err({ code: "srr.station_not_found", message: "No such station at this event." });
+  if (!current) return err({ code: "srr.station_not_found", message: "This station no longer exists at this event — it may have been removed. Refresh the page." });
   if (current.busy) {
     return err({
       code: "srr.station_conflict",
@@ -298,7 +298,7 @@ export async function checkIn(
     `SELECT client_id FROM pmp.speakers WHERE id = $1 AND event_id = $2`,
     [input.speakerId, input.eventId],
   );
-  if (!speaker[0]) return err({ code: "srr.speaker_not_found", message: "No such speaker at this event." });
+  if (!speaker[0]) return err({ code: "srr.speaker_not_found", message: "This speaker no longer exists at this event — it may have been removed. Refresh the page." });
 
   // A check-in happens at a real desk of this event (D-080) — it used to be recorded at
   // "Station 2" whatever the speaker sat at.
@@ -495,7 +495,7 @@ export async function usbIngest(
   }
 
   const detail = await checkinDetail(tx, input.checkinId);
-  if (!detail) return err({ code: "srr.checkin_not_found", message: "No such check-in." });
+  if (!detail) return err({ code: "srr.checkin_not_found", message: "This check-in no longer exists — it may have been removed. Refresh the page." });
 
   const { rows: scope } = await tx.query<{ event_id: string; client_id: string }>(
     `SELECT event_id, client_id FROM pmp.srr_checkins WHERE id = $1`,
@@ -575,7 +575,7 @@ export async function usbIngest(
     inspection_state: ingested.value.inspection_state,
     compared_with: comparedWith,
     comparison,
-    message: `Scan clean · imported as v${ingested.value.version_number} · sent to re-approval. The room keeps the approved version until this one is approved and re-synced.`,
+    message: `Virus check passed. Saved as version ${ingested.value.version_number} and sent for review. The room keeps the approved version until this one is approved and copied to the room.`,
   });
 }
 
@@ -619,7 +619,7 @@ export async function signOff(
   input: { checkinId: string; fileVersionId: string },
 ): Promise<Result<{ receipt: NonNullable<CheckinDetail["receipt"]> }, DomainError>> {
   const detail = await checkinDetail(tx, input.checkinId);
-  if (!detail) return err({ code: "srr.checkin_not_found", message: "No such check-in." });
+  if (!detail) return err({ code: "srr.checkin_not_found", message: "This check-in no longer exists — it may have been removed. Refresh the page." });
 
   const { rows: version } = await tx.query<{
     id: string;
@@ -633,13 +633,13 @@ export async function signOff(
        FROM pmp.file_versions WHERE id = $1`,
     [input.fileVersionId],
   );
-  if (!version[0]) return err({ code: "srr.version_not_found", message: "No such version." });
+  if (!version[0]) return err({ code: "srr.version_not_found", message: "This version no longer exists — it may have been removed. Refresh the page." });
 
   // I-2 again, at the last gate: nothing unscanned is ever signed for.
   if (version[0].processing_state !== "stored") {
     return err({
       code: "srr.not_signable",
-      message: `This version is "${version[0].processing_state}" — only a scanned, stored version can be signed off.`,
+      message: `This version can't be signed off (${wordsFor(VERSION_STATE, version[0].processing_state).label.toLowerCase()}). Only a version that has passed the virus check can be signed off.`,
     });
   }
 
@@ -697,7 +697,7 @@ export async function emailReceipt(
   checkinId: string,
 ): Promise<Result<{ emailed_to: string }, DomainError>> {
   const detail = await checkinDetail(tx, checkinId);
-  if (!detail) return err({ code: "srr.checkin_not_found", message: "No such check-in." });
+  if (!detail) return err({ code: "srr.checkin_not_found", message: "This check-in no longer exists — it may have been removed. Refresh the page." });
   if (!detail.receipt) {
     return err({
       code: "srr.no_receipt_conflict",
@@ -720,7 +720,7 @@ export async function emailReceipt(
     [checkinId],
   );
   const row = rows[0];
-  if (!row) return err({ code: "srr.checkin_not_found", message: "No such check-in." });
+  if (!row) return err({ code: "srr.checkin_not_found", message: "This check-in no longer exists — it may have been removed. Refresh the page." });
   if (!row.email) {
     return err({
       code: "srr.no_email_conflict",

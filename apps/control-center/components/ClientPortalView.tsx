@@ -4,6 +4,7 @@ import type { ClientView } from "@/lib/api";
 import { Kpi } from "@/components/Kpi";
 import { archiveDownloadUrl } from "@/lib/api";
 import { DownloadLog } from "@/components/DownloadLog";
+import { ARCHIVE_STATE, formatDate, plural, wordsFor } from "@pmp/format";
 
 const pct = (part: number, total: number) => (total === 0 ? 0 : Math.round((part / total) * 100));
 
@@ -38,8 +39,8 @@ export function ClientPortalView({ data }: { data: ClientView }) {
           <div className="cbd" style={{ paddingTop: 10, paddingBottom: 10 }}>
             <strong>Preview — this is what {data.event.client_name} sees.</strong>{" "}
             <span className="note">
-              Restricted talks are excluded from every figure here, so these counts are lower than
-              the command centre&rsquo;s. Nothing on this page can be changed.
+              Talks marked private (restricted) are left out of every figure here, so these counts are
+              lower than the command centre&rsquo;s. Nothing on this page can be changed.
             </span>
           </div>
         </div>
@@ -57,7 +58,7 @@ export function ClientPortalView({ data }: { data: ClientView }) {
         }}
       >
         <b style={{ color: "var(--white)" }}>
-          {data.event.client_name} · <span style={{ color: "var(--white)", fontWeight: 600 }}>Client Oversight</span>
+          {data.event.client_name} · <span style={{ color: "var(--white)", fontWeight: 600 }}>Event overview</span>
         </b>
         <span style={{ fontSize: 12.5 }}>{data.event.name}</span>
       </div>
@@ -85,7 +86,7 @@ export function ClientPortalView({ data }: { data: ClientView }) {
           tone={approved > 0 ? "ok" : undefined}
         />
         <Kpi
-          label="Need review"
+          label="Waiting for approval"
           icon="clock"
           value={collected - approved}
           caption="uploaded, not yet approved"
@@ -133,18 +134,22 @@ export function ClientPortalView({ data }: { data: ClientView }) {
           <div className="frow" style={{ borderTop: "none" }}>
             <span className="mono">
               {data.event.name.replace(/\s+/g, "_")}_final_presentations
-              {pkg?.manifest?.file_count ? ` · ${pkg.manifest.file_count} PowerPoint files` : ""}
-              {pkg?.has_pdf && pkg.manifest?.pdf ? ` · ${pkg.manifest.pdf.file_count} PDFs` : ""}
+              {pkg?.manifest?.file_count ? ` · ${plural(pkg.manifest.file_count, "PowerPoint file")}` : ""}
+              {pkg?.has_pdf && pkg.manifest?.pdf ? ` · ${plural(pkg.manifest.pdf.file_count, "PDF")}` : ""}
             </span>
-            <span className={`chip ${delivered ? "c-ok" : "c-mut"}`}>
-              {delivered ? "Delivered" : pkg ? pkg.archive_state : "Available after the event"}
+            {/* A29: the package state in words, never the raw code. */}
+            <span
+              className={`chip ${delivered ? "c-ok" : "c-mut"}`}
+              title={pkg ? wordsFor(ARCHIVE_STATE, pkg.archive_state).meaning : undefined}
+            >
+              {pkg ? wordsFor(ARCHIVE_STATE, pkg.archive_state).label : "Available after the event"}
             </span>
           </div>
           <div className="note">
             DXG publishes the event archive here within 4 hours of event close: every approved
-            presentation with its earlier versions, and the event&rsquo;s emails. Restricted talks are
-            excluded. The link expires 30 days after the event ends and every download is logged.
-            {pkg?.link_expires_at && delivered ? ` This link expires ${pkg.link_expires_at.slice(0, 10)}.` : ""}
+            presentation with its earlier versions, and the event&rsquo;s emails. Talks marked private
+            are left out. The link expires 30 days after the event ends and every download is logged.
+            {pkg?.link_expires_at && delivered ? ` This link expires ${formatDate(pkg.link_expires_at)}.` : ""}
           </div>
           {/* Two packages (D-067): the original decks, and PDFs — which also carry the talks
               whose speakers allowed a PDF only. */}

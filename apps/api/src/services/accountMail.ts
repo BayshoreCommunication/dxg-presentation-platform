@@ -23,7 +23,7 @@ export async function queueTemporaryPasswordEmail(
   const opening =
     input.reason === "created"
       ? [
-          `A DXG·PM ${input.accountType === "root_admin" ? "root admin" : "staff"} account has been created for you.`,
+          `A DXG·PM ${input.accountType === "root_admin" ? "DXG administrator" : "staff"} account has been created for you.`,
           "Sign in with this email address and the temporary password below:",
         ]
       : [
@@ -45,8 +45,8 @@ export async function queueTemporaryPasswordEmail(
         "",
         signIn,
         "",
-        "You will be asked to choose your own password straight away, and then to set up an",
-        "authenticator app (such as Google Authenticator or 1Password) before you can use the platform.",
+        "You will be asked to choose your own password straight away, and then to set up a",
+        "sign-in app on your phone (such as Google Authenticator or 1Password) before you can use the platform.",
         "",
         "If you were not expecting this email, tell the DXG presentation team.",
         "",

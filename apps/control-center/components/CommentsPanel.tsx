@@ -1,14 +1,18 @@
 "use client";
 
+import { COMMENT_LANE } from "@pmp/format";
 import { useCallback, useEffect, useState } from "react";
 import type { CommentRow } from "@/lib/api";
 import { addComment, getComments, ApiError } from "@/lib/api";
 
-const LANE: Record<string, { label: string; tone: string; audience: string }> = {
-  internal: { label: "Internal", tone: "int", audience: "DXG staff only" },
-  speaker_visible: { label: "To speaker", tone: "spk", audience: "shown to the speaker in their portal" },
-  client_visible: { label: "Client lane", tone: "cli", audience: "client review lane" },
-};
+// Lane names and audiences from the shared vocabulary (D-110); only the tones are local.
+const TONE: Record<string, string> = { internal: "int", speaker_visible: "spk", client_visible: "cli" };
+const LANE: Record<string, { label: string; tone: string; audience: string }> = Object.fromEntries(
+  Object.entries(COMMENT_LANE).map(([lane, words]) => [
+    lane,
+    { label: words.label, tone: TONE[lane] ?? "int", audience: words.meaning.replace(/\.$/, "") },
+  ]),
+);
 
 /**
  * The real comment thread for a talk (D-070), replacing two invented comments that

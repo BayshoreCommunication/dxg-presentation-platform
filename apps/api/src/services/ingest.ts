@@ -53,7 +53,7 @@ export async function ingestVersion(
       ok: false,
       error: {
         code: "file.checksum_mismatch",
-        message: "The uploaded bytes did not match the checksum — nothing was stored.",
+        message: "The file was damaged on its way here, so nothing was saved. Please upload it again.",
       },
     };
   }
@@ -72,7 +72,7 @@ export async function ingestVersion(
     ]);
     fileId = rows[0]?.id;
   }
-  if (!fileId) return { ok: false, error: { code: "file.no_slot", message: "No such talk." } };
+  if (!fileId) return { ok: false, error: { code: "file.no_slot", message: "This talk no longer exists — it may have been removed. Refresh the page." } };
 
   const { rows: nextRows } = await tx.query<{ next: number }>(
     `SELECT COALESCE(max(version_number), 0) + 1 AS next FROM pmp.file_versions WHERE file_id = $1`,

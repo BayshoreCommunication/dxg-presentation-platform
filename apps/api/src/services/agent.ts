@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type pg from "pg";
 import { appendAudit } from "@pmp/db";
+import { ROOM_COPY, wordsFor } from "@pmp/format";
 import {
   roomSyncLifecycle,
   transition,
@@ -448,11 +449,12 @@ export async function launch(
     return ok({
       launched: false,
       reason:
+        // In plain words (R45, D-110): the last branch quoted the raw state ("sync_failed").
         row.sync_state === null
-          ? "There is no approved copy of this presentation in this room. Holding screen shown."
+          ? "There is no approved copy of this presentation in this room yet. The holding screen stays up."
           : row.sync_state === "synced"
-            ? "A newer approved version is waiting to be acknowledged. Acknowledge it first — the room will not swap files on its own."
-            : `The room copy is "${row.sync_state}", not the current playable copy. Holding screen shown.`,
+            ? "A newer approved version is waiting. Switch to it first — the room never swaps files on its own."
+            : `This room's copy isn't ready to play (${wordsFor(ROOM_COPY, row.sync_state).label.toLowerCase()}). The holding screen stays up.`,
     });
   }
 

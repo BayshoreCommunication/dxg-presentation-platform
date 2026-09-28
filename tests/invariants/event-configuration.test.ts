@@ -254,8 +254,8 @@ describe("what the event's settings will and will not accept", () => {
 
   test("unknown settings and reminder days not on offer are refused (D-096)", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
-    await refused({ upload_deadline: "2027-05-20", portal_closed: true }, /Unknown setting: portal_closed/);
-    await refused({ reminders: "T-14 · T-7" }, /Unknown setting: reminders/);
+    await refused({ upload_deadline: "2027-05-20", portal_closed: true }, /isn't a setting this event has/);
+    await refused({ reminders: "T-14 · T-7" }, /isn't a setting this event has/);
     await refused({ reminder_days: [10] }, /Reminder days must be chosen/);
     await refused({ reminder_days: [7, 7] }, /Reminder days must be chosen/);
     await refused({ reminder_days: "7" }, /Reminder days must be chosen/);

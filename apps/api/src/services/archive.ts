@@ -7,6 +7,7 @@ import { writeZip, sha256Of } from "@pmp/files";
 import { archiveLifecycle, transition } from "@pmp/domain";
 import type { Actor, DomainError, Result } from "@pmp/domain";
 import { err, ok } from "@pmp/domain";
+import { ARCHIVE_STATE, wordsFor } from "@pmp/format";
 import { storage } from "./ingest.ts";
 import { findLibreOffice, pdfStates } from "./pdf.ts";
 
@@ -295,7 +296,7 @@ export async function buildPackage(
     `SELECT client_id, name FROM pmp.events WHERE id = $1`,
     [eventId],
   );
-  if (!eventRows[0]) return err({ code: "archive.event_not_found", message: "No such event." });
+  if (!eventRows[0]) return err({ code: "archive.event_not_found", message: "This event no longer exists — it may have been removed. Refresh the page." });
 
   const start = transition(archiveLifecycle, { from: "draft", action: "build", actor });
   if (!start.ok) return err(start.error);
@@ -334,7 +335,7 @@ export async function buildPackage(
       await tx.query(`UPDATE pmp.archive_packages SET archive_state = 'draft' WHERE id = $1`, [packageId]);
       return err({
         code: "archive.checksum_mismatch",
-        message: `The stored bytes for “${candidate.title}” no longer match their recorded checksum. Nothing was packaged.`,
+        message: `The stored file for “${candidate.title}” has changed or is damaged, so nothing was packaged. Contact DXG support before building again.`,
       });
     }
     const entryName = `${candidate.room ?? "Unassigned"}/${candidate.original_filename ?? "presentation.pptx"}`;
@@ -374,7 +375,7 @@ export async function buildPackage(
       await tx.query(`UPDATE pmp.archive_packages SET archive_state = 'draft' WHERE id = $1`, [packageId]);
       return err({
         code: "archive.checksum_mismatch",
-        message: `Version ${version.version_number} of “${version.title}” no longer matches its checksum. Nothing was packaged.`,
+        message: `Version ${version.version_number} of “${version.title}” has changed or is damaged, so nothing was packaged. Contact DXG support before building again.`,
       });
     }
     const entryName = `${version.room ?? "Unassigned"}/earlier versions/${safeName(version.title)}/v${version.version_number} ${version.original_filename ?? "presentation.pptx"}`;
@@ -545,7 +546,7 @@ export async function deliverPackage(
       WHERE p.id = $1 FOR UPDATE OF p`,
     [packageId],
   );
-  if (!rows[0]) return err({ code: "archive.not_found", message: "No such package." });
+  if (!rows[0]) return err({ code: "archive.not_found", message: "This package no longer exists — it may have been removed. Refresh the page." });
 
   const decision = transition(archiveLifecycle, {
     from: rows[0].archive_state as never,
@@ -595,7 +596,7 @@ export async function downloadPackage(
     [packageId],
   );
   const row = rows[0];
-  if (!row || !row.s3_key) return err({ code: "archive.not_found", message: "No such package." });
+  if (!row || !row.s3_key) return err({ code: "archive.not_found", message: "This package no longer exists — it may have been removed. Refresh the page." });
   const objectKey = format === "pdf" ? row.pdf_s3_key : row.s3_key;
   if (!objectKey) {
     return err({
@@ -607,7 +608,7 @@ export async function downloadPackage(
   if (row.archive_state !== "delivered") {
     return err({
       code: "archive.not_delivered",
-      message: `This package is “${row.archive_state}” — it has not been delivered to the client portal yet.`,
+      message: `This package can't be downloaded right now (${wordsFor(ARCHIVE_STATE, row.archive_state).label.toLowerCase()}). Ask the DXG team to deliver it to you.`,
     });
   }
   if (row.link_expires_at && new Date(row.link_expires_at) < new Date()) {

@@ -19,6 +19,7 @@ import { Chip } from "@/components/Chip";
 import { Icon } from "@/components/Icon";
 import { InfoTip } from "@/components/InfoTip";
 import { HoverTip } from "@/components/HoverTip";
+import { EMAIL_STATUS, wordsFor } from "@pmp/format";
 
 /** Screen 5 — the speaker directory, its duplicates, and the chase list. */
 export function SpeakersView({
@@ -405,7 +406,7 @@ export function SpeakersView({
                                     aria-label={label}
                                     onClick={() => void emailLink(row)}
                                   >
-                                    <Icon name="send" />
+                                    <Icon name="send" /> Email link
                                   </button>
                                 </HoverTip>
                               );
@@ -437,7 +438,7 @@ export function SpeakersView({
                                   .finally(() => setPending(null));
                               }}
                             >
-                              <Icon name="clipboard" />
+                              <Icon name="clipboard" /> Copy link
                             </button>
                           </HoverTip>
                           <HoverTip label="Edit email">
@@ -447,7 +448,7 @@ export function SpeakersView({
                               aria-label={`Edit email for ${row.full_name}`}
                               onClick={() => setEditingEmail({ row, value: row.email ?? "" })}
                             >
-                              <Icon name="mail" />
+                              <Icon name="mail" /> Edit email
                             </button>
                           </HoverTip>
                           <HoverTip label="Remove speaker">
@@ -458,7 +459,7 @@ export function SpeakersView({
                               aria-label={`Remove ${row.full_name} from this event`}
                               onClick={() => setRemoving(row)}
                             >
-                              <Icon name="trash" />
+                              <Icon name="trash" /> Remove
                             </button>
                           </HoverTip>
                         </span>
@@ -777,13 +778,15 @@ const RELEASE_OPTIONS: [ReleasePermission, string][] = [
   ["none", "No release"],
 ];
 
+/** Icon plus a short word (S31, D-110): icon-only actions left staff guessing. */
 const ICON_BUTTON: React.CSSProperties = {
-  width: 32,
   height: 32,
-  padding: 0,
+  padding: "0 10px",
   display: "inline-flex",
   alignItems: "center",
   justifyContent: "center",
+  gap: 6,
+  whiteSpace: "nowrap",
 };
 
 function EmailStatus({ email }: { email: SpeakerRow["last_email"] }) {
@@ -797,16 +800,17 @@ function EmailStatus({ email }: { email: SpeakerRow["last_email"] }) {
     bounced: "missing",
     complained: "missing",
     failed: "missing",
+    suppressed: "missing",
   };
-  // In staff words (D-108): "Complained" and "Queued" meant nothing to anyone.
-  const words: Record<string, string> = {
-    queued: "Sending",
-    bounced: "Bounced — check the address",
-    complained: "Marked as spam",
-    failed: "Not sent",
-  };
-  const label = words[email.status] ?? email.status.charAt(0).toUpperCase() + email.status.slice(1);
-  return <Chip status={tone[email.status] ?? "submitted"} label={label} />;
+  // In staff words from EMAIL_STATUS (D-108, S31, D-110): "Complained" and "Queued" meant
+  // nothing to anyone. A problem status carries its next step underneath.
+  const words = wordsFor(EMAIL_STATUS, email.status);
+  return (
+    <span title={words.meaning || undefined}>
+      <Chip status={tone[email.status] ?? "submitted"} label={words.label} />
+      {words.next && <div className="note">{words.next}</div>}
+    </span>
+  );
 }
 
 /**

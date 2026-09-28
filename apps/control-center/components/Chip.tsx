@@ -1,3 +1,4 @@
+import { SEVERITY, TALK_STATUS, wordsFor } from "@pmp/format";
 import { STATUS_HELP, statusMeaning } from "@/lib/statusHelp";
 
 const labelOf = (status: string) => STATUS_HELP.find((entry) => entry.status === status)?.label;
@@ -19,18 +20,66 @@ const TONE: Record<string, string> = {
   archived: "c-mut",
 };
 
-export function Chip({ status, label }: { status: string; label: string }) {
+/**
+ * `stale` (R7, D-110): the room PC behind this status has gone quiet — the pill turns
+ * amber and says so on hover, instead of a green all-clear. Where there is room, show
+ * the same line visibly with <StatusMeaning stale=…>.
+ */
+export function Chip({
+  status,
+  label,
+  stale,
+  hint,
+}: {
+  status: string;
+  label: string;
+  stale?: string | null;
+  /** Hover text for pills outside the talk vocabulary (a version's state, say). */
+  hint?: string;
+}) {
   // Hover explains the pill (D-065). Only talk statuses have a meaning recorded; other
   // pills (room readiness, event status) share tones but not this vocabulary.
   const meaning = statusMeaning(status);
   return (
-    <span className={`chip ${TONE[status] ?? "c-mut"}`} title={meaning && label === labelOf(status) ? meaning : undefined}>
+    <span
+      className={`chip ${stale ? "c-warn" : (TONE[status] ?? "c-mut")}`}
+      title={stale ?? hint ?? (meaning && label === labelOf(status) ? meaning : undefined)}
+    >
       {label}
     </span>
   );
 }
 
-export function SeverityChip({ severity }: { severity: string }) {
+/**
+ * R47 (D-110): a talk status's meaning and next step as a visible line beside the chip —
+ * hover alone is lost on touch screens and in print. With `stale`, the amber room-PC
+ * note replaces it (R7). Renders nothing for codes outside the talk vocabulary.
+ */
+export function StatusMeaning({ status, stale }: { status: string; stale?: string | null }) {
+  if (stale) {
+    return (
+      <div className="note" style={{ color: "var(--amber-text)" }}>
+        {stale}
+      </div>
+    );
+  }
+  const words = TALK_STATUS[status];
+  if (!words) return null;
+  return (
+    <div className="note">
+      {words.meaning}
+      {words.next ? ` ${words.next}` : ""}
+    </div>
+  );
+}
+
+/** A finding's severity in words ("Must fix" / "Warning" / "Note"), never the raw code. */
+export function SeverityChip({ severity, count }: { severity: string; count?: number }) {
   const tone = severity === "blocking" ? "c-bad" : severity === "warning" ? "c-warn" : "c-info";
-  return <span className={`chip ${tone}`}>{severity}</span>;
+  const words = wordsFor(SEVERITY, severity);
+  return (
+    <span className={`chip ${tone}`} title={words.meaning || undefined}>
+      {count !== undefined && count > 1 ? `${words.label} · ${count}` : words.label}
+    </span>
+  );
 }

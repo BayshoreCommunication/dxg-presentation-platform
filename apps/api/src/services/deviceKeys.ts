@@ -29,7 +29,7 @@ export async function issueDeviceKey(
     [roomId],
   );
   const room = rooms[0];
-  if (!room) return err({ code: "agent.room_not_found", message: "No such room." });
+  if (!room) return err({ code: "agent.room_not_found", message: "This room no longer exists — it may have been removed. Refresh the page." });
 
   // The room's agent, or a new one if the room has never had a computer registered.
   const { rows: existing } = await tx.query<{ id: string }>(

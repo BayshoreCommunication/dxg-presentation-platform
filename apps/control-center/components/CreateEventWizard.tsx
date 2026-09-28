@@ -9,6 +9,7 @@ import { ReminderDaysField, reminderDaysFrom } from "@/components/ReminderDaysFi
 import { BrandAssetField, assetFrom } from "@/components/BrandAssetField";
 import { ImportView } from "@/components/ImportView";
 import { DateField } from "@/components/DateTimeField";
+import { timeZoneOptions } from "@pmp/format";
 
 /** Tomorrow on this computer, `YYYY-MM-DD` — the earliest an event may start (D-101). */
 const tomorrow = () => {
@@ -63,7 +64,7 @@ export function CreateEventWizard({
   const [basics, setBasics] = useState({
     name: resume?.name ?? "",
     venue: resume?.venue ?? "",
-    timezone: resume?.timezone ?? timezones[0] ?? "UTC",
+    timezone: resume?.timezone ?? timeZoneOptions(timezones)[0]?.zone ?? "UTC",
     starts_on: resume?.starts_on ?? "",
     ends_on: resume?.ends_on ?? "",
   });
@@ -162,8 +163,11 @@ export function CreateEventWizard({
                     value={basics.timezone}
                     onChange={(event) => setBasics({ ...basics, timezone: event.target.value })}
                   >
-                    {timezones.map((zone) => (
-                      <option key={zone}>{zone}</option>
+                    {/* Named zones, US venues first; the stored value stays IANA (S14, D-110). */}
+                    {timeZoneOptions(timezones).map(({ zone, label }) => (
+                      <option key={zone} value={zone}>
+                        {label}
+                      </option>
                     ))}
                   </select>
                 </div>

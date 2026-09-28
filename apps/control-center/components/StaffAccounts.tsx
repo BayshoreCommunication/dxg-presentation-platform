@@ -15,6 +15,7 @@ import {
   ApiError,
 } from "@/lib/api";
 import { Chip } from "@/components/Chip";
+import { plural, SECURITY } from "@pmp/format";
 
 const when = (iso: string | null) =>
   iso
@@ -32,19 +33,19 @@ const when = (iso: string | null) =>
  * comes into existence — and the only way back in for someone who has lost their
  * phone or their password.
  *
- * Root admins only (D-100). An account is a root admin (every event, every account) or
+ * DXG administrators only (D-100; "root admin" in the code). An account is a DXG administrator (every event, every account) or
  * staff (the events it is assigned to, nothing else). Temporary passwords go to the
  * account's own email address; this screen never shows one.
  */
 
 const ACCOUNT_TYPES: { value: AccountType; label: string; hint: string }[] = [
   { value: "staff", label: "Staff", hint: "Works only on the events they are assigned to." },
-  { value: "root_admin", label: "Root admin", hint: "Every event, plus staff accounts and assignments." },
+  { value: "root_admin", label: "DXG administrator", hint: "Every event, plus staff accounts and assignments." },
 ];
 
 function TypeBadge({ type }: { type: AccountType }) {
   return type === "root_admin" ? (
-    <span className="chip c-sync">root admin</span>
+    <span className="chip c-sync">DXG administrator</span>
   ) : (
     <span className="chip c-info">staff</span>
   );
@@ -81,9 +82,9 @@ export function StaffAccounts({ initial, me }: { initial: StaffRow[]; me: string
     <>
       <h1 className="htitle">Staff accounts</h1>
       <div className="note" style={{ margin: "-8px 0 14px" }}>
-        There is no signup. Accounts are created here, and every account needs an authenticator
-        before it can use the platform. Root admins see every event and every account; staff see
-        only the events they are assigned to.
+        There is no signup. Accounts are created here, and every account sets up a sign-in app on
+        their phone before it can use the platform. DXG administrators see every event and every
+        account; staff see only the events they are assigned to.
       </div>
 
       {error && <div className="err">{error}</div>}
@@ -129,7 +130,8 @@ export function StaffAccounts({ initial, me }: { initial: StaffRow[]; me: string
             </div>
           </div>
           <div className="field" style={{ marginTop: 10 }}>
-            <label htmlFor="account-type">Role</label>
+            {/* A16: "Role" is kept for event jobs; the account's own type is its access level. */}
+            <label htmlFor="account-type">Access level</label>
             <select
               id="account-type"
               style={{ minWidth: 220 }}
@@ -155,7 +157,7 @@ export function StaffAccounts({ initial, me }: { initial: StaffRow[]; me: string
               void run(async () => {
                 const created = await createStaff(email, name, accountType);
                 setNotice(
-                  `${accountType === "root_admin" ? "Root admin" : "Staff"} account created — temporary password emailed to ${created.emailed_to ?? email}.`,
+                  `${accountType === "root_admin" ? "DXG administrator" : "Staff"} account created — temporary password emailed to ${created.emailed_to ?? email}.`,
                 );
                 setEmail("");
                 setName("");
@@ -177,7 +179,7 @@ export function StaffAccounts({ initial, me }: { initial: StaffRow[]; me: string
         <div className="chd">
           <h3>Accounts · {initial.length}</h3>
           <span className="m">
-            passwords, authenticators, access
+            passwords, sign-in apps, access
             <Link
               href="/admin/assignments"
               className="btn"
@@ -192,7 +194,7 @@ export function StaffAccounts({ initial, me }: { initial: StaffRow[]; me: string
             <thead>
               <tr>
                 <th>Account</th>
-                <th>Role</th>
+                <th>Access level</th>
                 <th>Status</th>
                 <th>Last sign-in</th>
                 <th />
@@ -216,12 +218,13 @@ export function StaffAccounts({ initial, me }: { initial: StaffRow[]; me: string
                     </td>
                     <td style={{ whiteSpace: "nowrap" }}>
                       {!user.is_active && <Chip status="attention" label="deactivated" />}
-                      {user.is_active && user.mfa_enrolled && <Chip status="synchronized_onsite" label="2FA on" />}
-                      {user.is_active && !user.mfa_enrolled && <Chip status="needs_revision" label="2FA not set up" />}
+                      {/* A15: status in plain words, one security vocabulary. */}
+                      {user.is_active && user.mfa_enrolled && <Chip status="synchronized_onsite" label="Sign-in app set up" />}
+                      {user.is_active && !user.mfa_enrolled && <Chip status="needs_revision" label="Sign-in app not set up" />}
                       {user.must_change_password && (
                         <>
                           <br />
-                          <span className="note">temporary password</span>
+                          <span className="note">Must choose a password</span>
                         </>
                       )}
                       {locked && (
@@ -233,7 +236,9 @@ export function StaffAccounts({ initial, me }: { initial: StaffRow[]; me: string
                       {user.mfa_enrolled && (
                         <>
                           <br />
-                          <span className="note">{user.recovery_codes_left} recovery codes left</span>
+                          <span className="note">
+                            {plural(user.recovery_codes_left, "backup code")} left
+                          </span>
                         </>
                       )}
                     </td>
@@ -263,7 +268,7 @@ export function StaffAccounts({ initial, me }: { initial: StaffRow[]; me: string
                           onClick={() =>
                             void run(async () => {
                               const reason = window.prompt(
-                                `Reset ${user.display_name}'s authenticator — who asked, and how did you verify them?`,
+                                `Reset ${user.display_name}'s sign-in app — who asked, and how did you check it was them?`,
                                 "",
                               );
                               if (reason === null) return;
@@ -273,7 +278,7 @@ export function StaffAccounts({ initial, me }: { initial: StaffRow[]; me: string
                             })
                           }
                         >
-                          reset 2FA
+                          reset sign-in app
                         </button>
                         {locked && (
                           <button
@@ -292,7 +297,7 @@ export function StaffAccounts({ initial, me }: { initial: StaffRow[]; me: string
                           title={
                             user.account_type === "root_admin"
                               ? lastRoot
-                                ? "The only active root admin cannot be made staff"
+                                ? "The only active DXG administrator cannot be made staff"
                                 : "Limit them to the events they are assigned to"
                               : "Give them every event and account administration"
                           }
@@ -301,14 +306,14 @@ export function StaffAccounts({ initial, me }: { initial: StaffRow[]; me: string
                               const next: AccountType = user.account_type === "root_admin" ? "staff" : "root_admin";
                               const question =
                                 next === "root_admin"
-                                  ? `Make ${user.display_name} a root admin? They will see every event and every account.`
+                                  ? `Make ${user.display_name} a ${SECURITY.admin}? They will see every event and every account.`
                                   : `Make ${user.display_name} staff? They will only see the events they are assigned to.`;
                               if (!window.confirm(question)) return;
                               await setStaffAccountType(user.id, next);
                             })
                           }
                         >
-                          {user.account_type === "root_admin" ? "make staff" : "make root admin"}
+                          {user.account_type === "root_admin" ? "make staff" : "make DXG administrator"}
                         </button>
                         <button
                           className={user.is_active ? "btn danger" : "btn"}
@@ -326,7 +331,7 @@ export function StaffAccounts({ initial, me }: { initial: StaffRow[]; me: string
                             isMe
                               ? "You cannot delete your own account"
                               : lastRoot
-                                ? "The only active root admin cannot be deleted"
+                                ? "The only active DXG administrator cannot be deleted"
                                 : "Removes the account and its event access; its history stays in the audit trail"
                           }
                           onClick={() =>

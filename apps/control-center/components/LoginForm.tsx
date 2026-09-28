@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { login, verifyMfa, ApiError } from "@/lib/api";
 import { landingFor } from "@/lib/landing";
 import { PasswordField } from "@/components/PasswordField";
+import { SECURITY } from "@pmp/format";
 
 const REASONS: Record<string, string> = {
   expired: "Your session expired. Please sign in again.",
@@ -68,12 +69,9 @@ export function LoginForm({ next, reason }: { next: string; reason: string | nul
 
         {step === "code" ? (
           <>
-            <div className="note" style={{ marginBottom: 12 }}>
-              Enter the six-digit code from your authenticator app. If you have lost your phone, use
-              one of your recovery codes instead.
-            </div>
+            {/* A26: one set of security words, and a way out for a lost phone. */}
             <div className="field">
-              <label htmlFor="code">Authentication code</label>
+              <label htmlFor="code">{SECURITY.code}</label>
               <input
                 id="code"
                 className="mono"
@@ -86,6 +84,9 @@ export function LoginForm({ next, reason }: { next: string; reason: string | nul
                 onChange={(event) => setCode(event.target.value)}
                 placeholder="000000"
               />
+              <div className="note" style={{ marginTop: 6, color: "var(--dim)" }}>
+                {SECURITY.lostPhone}
+              </div>
             </div>
             <button
               className="btn pri"

@@ -99,7 +99,7 @@ export async function putAsset(
   }
   const { rows } = await tx.query<{ client_id: string }>(`SELECT client_id FROM pmp.events WHERE id = $1`, [eventId]);
   const event = rows[0];
-  if (!event) return err({ code: "events.not_found", message: "No such event." });
+  if (!event) return err({ code: "events.not_found", message: "This event no longer exists — it may have been removed. Refresh the page." });
 
   const body = input.body;
   if (!Buffer.isBuffer(body) || body.length === 0) return err(bad("The file is empty."));
@@ -155,7 +155,7 @@ export async function removeAsset(
       WHERE id = $1 RETURNING client_id`,
     [eventId, kind],
   );
-  if (!rows[0]) return err({ code: "events.not_found", message: "No such event." });
+  if (!rows[0]) return err({ code: "events.not_found", message: "This event no longer exists — it may have been removed. Refresh the page." });
   await appendAudit(tx, {
     partitionId: eventId,
     clientId: rows[0].client_id,

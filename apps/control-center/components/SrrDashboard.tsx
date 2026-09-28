@@ -5,7 +5,9 @@ import { useRouter } from "next/navigation";
 import type { SrrDashboard, SrrStation } from "@/lib/api";
 import { addStation, renameStation, retireStation, startCheckin, ApiError } from "@/lib/api";
 import { FloatingMenu, useFloatingMenu } from "@/components/FloatingMenu";
-import { Chip } from "@/components/Chip";
+import { CHECK, wordsFor } from "@pmp/format";
+import { Chip, SeverityChip, StatusMeaning } from "@/components/Chip";
+import { staleNoteFor } from "@/lib/roomWords";
 
 /**
  * A session's day and time, on the event's clock. The day is spelled out rather than
@@ -29,11 +31,14 @@ export function SrrDashboardView({
   eventName,
   timezone,
   data,
+  rooms = [],
 }: {
   eventId: string;
   eventName: string;
   timezone: string;
   data: SrrDashboard;
+  /** Room sync's room list, for R7's room-PC freshness (D-110). */
+  rooms?: { room: string; heartbeat_age: number | null }[];
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -81,7 +86,10 @@ export function SrrDashboardView({
         <div className="cbd" style={{ padding: "0 0 4px" }}>
           <table>
             <tbody>
-              {data.expected.map((row) => (
+              {data.expected.map((row) => {
+                // R7: amber when the room PC has gone quiet; R47: the meaning, visibly (D-110).
+                const stale = staleNoteFor(row.status, row.room, rooms);
+                return (
                 <tr key={row.speaker_id}>
                   <td>
                     <b>{row.speaker}</b>
@@ -89,9 +97,10 @@ export function SrrDashboardView({
                     <span className="note">
                       {row.room} · {when(row.starts_at, timezone)} · {row.title}
                     </span>
+                    <StatusMeaning status={row.status} stale={stale} />
                   </td>
                   <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-                    <Chip status={row.status} label={row.status_label} />{" "}
+                    <Chip status={row.status} label={row.status_label} stale={stale} />{" "}
                     {row.checkin_id ? (
                       <a className="btn" href={`/events/${eventId}/srr/${row.checkin_id}`}>
                         Open check-in →
@@ -105,7 +114,8 @@ export function SrrDashboardView({
                     )}
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -125,13 +135,10 @@ export function SrrDashboardView({
                 {data.warnings.map((warning, index) => (
                   <tr key={`${warning.slot_id}-${index}`}>
                     <td>
-                      {warning.speaker} · {warning.check_code.replace("_", " ")}
+                      {warning.speaker} · {wordsFor(CHECK, warning.check_code).label}
                     </td>
                     <td style={{ textAlign: "right" }}>
-                      <Chip
-                        status={warning.severity === "blocking" ? "attention" : "needs_revision"}
-                        label={warning.severity === "blocking" ? "Blocking" : "Tech review"}
-                      />
+                      <SeverityChip severity={warning.severity} />
                     </td>
                   </tr>
                 ))}

@@ -1,6 +1,7 @@
 import type pg from "pg";
 import { deriveTalkStatus, deriveRoomReadiness, TALK_STATUS_LABEL } from "@pmp/domain";
 import type { TalkSnapshot, VersionSnapshot, RoomCopySnapshot } from "@pmp/domain";
+import { talkRoomNote } from "@pmp/format";
 
 export type EventSummary = {
   event: {
@@ -132,24 +133,34 @@ export type RiskItem = {
   status_label: string;
 };
 
-/** "Today's risk list" — anything not yet safely onsite (screen 4). */
+/**
+ * "Today's risk list" — anything not yet safely onsite (screen 4), including talks shown
+ * "Synchronized onsite" whose room PC is not reporting (R7).
+ */
 export async function riskList(tx: pg.PoolClient, eventId: string): Promise<RiskItem[]> {
-  const { rows } = await tx.query<TalkAggRow & { starts_at: string; title: string; speaker: string | null }>(
+  const { rows } = await tx.query<
+    TalkAggRow & { starts_at: string; title: string; speaker: string | null; heartbeat_age: number | null }
+  >(
     `SELECT agg.*, se.starts_at, s.title,
             (SELECT sp.full_name FROM pmp.speaker_assignments sa
                JOIN pmp.speakers sp ON sp.id = sa.speaker_id
-              WHERE sa.slot_id = s.id LIMIT 1) AS speaker
+              WHERE sa.slot_id = s.id LIMIT 1) AS speaker,
+            EXTRACT(EPOCH FROM (now() - ra.last_heartbeat_at))::int AS heartbeat_age
        FROM (${TALK_AGG}) agg
        JOIN pmp.slots s ON s.id = agg.slot_id
        JOIN pmp.sessions se ON se.id = s.session_id
+       LEFT JOIN pmp.room_agents ra ON ra.room_id = agg.room_id AND ra.revoked_at IS NULL
       ORDER BY se.starts_at`,
     [eventId],
   );
 
-  return rows
-    .map((row) => {
-      const status = deriveTalkStatus(snapshotOf(row));
-      return {
+  return rows.flatMap((row) => {
+    const status = deriveTalkStatus(snapshotOf(row));
+    // R7 (D-110): "synchronized" on a room PC that has gone quiet is not safely onsite.
+    const silent = row.room_id !== null && talkRoomNote(status, row.heartbeat_age) !== null;
+    if (status === "archived" || (status === "synchronized_onsite" && !silent)) return [];
+    return [
+      {
         slot_id: row.slot_id,
         room: row.room_name,
         starts_at: row.starts_at,
@@ -157,9 +168,9 @@ export async function riskList(tx: pg.PoolClient, eventId: string): Promise<Risk
         title: row.title,
         status,
         status_label: TALK_STATUS_LABEL[status],
-      };
-    })
-    .filter((item) => item.status !== "synchronized_onsite" && item.status !== "archived");
+      },
+    ];
+  });
 }
 
 export type QueueItem = {

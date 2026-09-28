@@ -1,3 +1,5 @@
+import { humanize } from "@pmp/format";
+
 /**
  * How an event's stored status is shown. One copy, because the portfolio card and the
  * details header must not be able to disagree about what `draft` is called — and the
@@ -23,5 +25,5 @@ export function eventStatusChip(
     if (today < dates.starts_on) return { status: "processing", label: "Upcoming" };
     if (today > dates.ends_on) return { status: "canceled", label: "Event over — ready to archive" };
   }
-  return EVENT_STATUS[status] ?? { status: "canceled", label: status };
+  return EVENT_STATUS[status] ?? { status: "canceled", label: humanize(status) }; // never the raw code (D-110)
 }

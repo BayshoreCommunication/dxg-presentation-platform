@@ -44,7 +44,7 @@ an updated deck · A5 inspection jargon/virus names to speakers · A6/A7/A8 new-
 "no access" advice · A9 client portal has no Sign out · A10 staff dead end on the client portal · API messages
 quoting BUILD_SPEC / field names.
 
-**Batch 2 — one plain-language vocabulary.** Shared map for talk, file, room, speaker-email, archive, role and check
+**Batch 2 — one plain-language vocabulary.** ✔ Done 2026-09-28 (D-110), including R7; talk-status labels kept (DXG-approved) with visible meanings. Shared map for talk, file, room, speaker-email, archive, role and check
 codes with meaning and next step, used by every chip, toast and error (R47, S38, A17, A29, S39, S19, R16, R24, R44,
 A15, S31, S14 time zones as "Eastern Time (New York)", readable dates); one set of security words (A22–A26, A28);
 API errors worded by code (A-API list).

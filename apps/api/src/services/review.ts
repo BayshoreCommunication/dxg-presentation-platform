@@ -53,7 +53,7 @@ export async function decide(
   );
   const version = rows[0];
   if (!version) {
-    return err({ code: "review.not_found", message: "No such file version." });
+    return err({ code: "review.not_found", message: "This file version no longer exists — it may have been removed. Refresh the page." });
   }
 
   if (version.lock_version !== input.lockVersion) {
@@ -231,8 +231,8 @@ async function reviewIneligibility(
       code: "review.ineligible_conflict",
       message:
         version.processing_state === "quarantined"
-          ? "This file failed its virus scan and is quarantined. It can never be approved — ask the speaker for a new file."
-          : `This file has not finished its virus scan (${version.processing_state}), so it cannot be reviewed yet.`,
+          ? "This file failed the virus check, so it is held back and can never be approved. Ask the speaker for a clean copy."
+          : "This file is still going through the virus check, so it can't be reviewed yet. Try again in a minute.",
     };
   }
   if (action !== "approve") return undefined;

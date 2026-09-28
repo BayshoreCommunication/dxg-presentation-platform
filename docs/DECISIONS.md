@@ -2143,3 +2143,27 @@ scripted items measure themselves, visual ones ask the operator; short runs reco
 report template `docs/poc/ROOM_AGENT_POC.md`. Proved on macOS against the fake driver: 23 unit tests (supervisor
 rules, helper protocol, helper death and hang, tasklist parsing) and the harness end to end (items 1, 15, 16). **Not
 proved, by design:** anything about real PowerPoint — that is Phase B, and D-002 stays provisional until it passes.
+
+## D-110 (2026-09-28): Staff-usability batch 2 — one plain-language vocabulary — Status: ACCEPTED (Travis: keep DXG's status labels, explain them inline)
+Second batch of `docs/UX_REVIEW.md`. **One vocabulary** (`packages/format/src/vocabulary.ts`, both apps and the API):
+talk status (label + meaning + next step), a speaker's own talk status, file-version, inspection, check, severity,
+room-copy, email, archive, import-row, comment-lane and role words, one set of sign-in words ("sign-in app", "backup
+codes", "DXG administrator"), time zones by name with US zones first ("Eastern Time (New York)", stored values stay
+IANA), readable dates and ranges, plurals; an unknown code is humanised, never shown raw. **Talk-status labels are
+unchanged** — VISUAL_ACCEPTANCE §2.2 forbids renaming without DXG; instead the meaning and next step are shown
+visibly on detail, check-in and SRR headers (hover on dense tables). **R7:** a talk "Synchronized onsite" /
+"Approved — delivering" / "Update pending ack" whose room PC has not reported for 5 minutes (the readiness threshold)
+turns amber with "Last confirmed … ago — the room PC is not reporting"; the risk list keeps such talks;
+`deriveTalkStatus` is unchanged. **Screens:** Files ("Older version", "Held back — failed the virus check…" as the
+reason a file can't be downloaded), Archive (state + next step, one expiry sentence), Import ("New / Will update / No
+change", neutral), Speakers (email states "Sending", "Marked as spam" with next steps; text on the row actions),
+Communications, event dates and zones, Review (worst finding as "Must fix · 2"), Inspection (no JSON), Presentation
+detail, Room Agent ("Switch to v3", "New version ready — switch needed"), receipt ("venue local time"), Staff accounts
+("Sign-in app set up", "Must choose a password", "Access level"), Event assignments (role names with one-line hints),
+sign-in and sign-in-app setup (backup codes can be copied, downloaded and printed; lost-phone path; no "SHA1"),
+client portal, speaker portal (shared speaker words). **API messages:** every message quoting BUILD_SPEC, backticked
+fields, value lists, "No such …", LibreOffice or checksum internals is a plain sentence with a next step; workflow
+refusals from @pmp/domain are reworded centrally by code (`plainError`, e.g. "Only a Reviewer or Project manager can
+do this."); lockout says "Try again in 12 minutes"; no error `code` changed. Speakers' "access code" is kept (it is
+their sign-in code, not a backup code). Tests: vocabulary unit tests; one invariant updated for the new wording;
+298/298 invariants.

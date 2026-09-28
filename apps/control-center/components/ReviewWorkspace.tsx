@@ -7,11 +7,11 @@ import { transitionVersion, ApiError } from "@/lib/api";
 import { Chip, SeverityChip } from "@/components/Chip";
 import { CommentsPanel } from "@/components/CommentsPanel";
 import { SlidePreview } from "@/components/SlidePreview";
-import { formatBytes } from "@pmp/format";
+import { CHECK, formatBytes, INSPECTION_STATE, SEVERITY, VERSION_STATE, wordsFor } from "@pmp/format";
 
 const FINDING_COPY: Record<string, (detail: Record<string, unknown>) => string> = {
   codec: (detail) =>
-    `Slide ${(detail.slide_refs as number[] | undefined)?.join(", ") ?? "?"} · video uses ${String(detail.codec ?? "an unsupported codec")}. The room playback profile guarantees ${String(detail.expected ?? "H.264")} only — it may stutter or fail on this fleet.`,
+    `Slide ${(detail.slide_refs as number[] | undefined)?.join(", ") ?? "?"} · video uses ${String(detail.codec ?? "an unsupported codec")}. The room PCs are only guaranteed to play ${String(detail.expected ?? "H.264")} — it may stutter or fail in the room.`,
   fonts: () => "Fonts are not embedded — the deck may reflow on the room machine.",
   linked_media: (detail) =>
     `Linked (not embedded) media on slide ${(detail.slide_refs as number[] | undefined)?.join(", ") ?? "?"}.`,
@@ -103,7 +103,7 @@ export function ReviewWorkspace({ initialQueue }: { initialQueue: QueueItem[] })
               ? `Sent back for revision${told(result.notice)}`
               : result.review_state === "rejected"
                 ? `Rejected${told(result.notice)}`
-                : `Claimed · now ${result.review_state.replace("_", " ")}`,
+                : `Claimed · now ${wordsFor(VERSION_STATE, result.review_state).label.toLowerCase()}`,
         );
         setPending(null);
         setMessage("");
@@ -187,13 +187,22 @@ export function ReviewWorkspace({ initialQueue }: { initialQueue: QueueItem[] })
                       <b>{item.speaker}</b> · {item.title}
                     </td>
                     <td style={{ textAlign: "right" }}>
-                      {/* The worst open problem, not the first (often a lowercase "info") (D-108). */}
+                      {/* The worst open problem, not the first (often a lowercase "info") (D-108),
+                          in shared words with how many (R24, D-110). */}
                       {CHECKING.includes(item.inspection_state) ? (
-                        <span className="chip c-info">Checks running</span>
+                        <span className="chip c-info" title={wordsFor(INSPECTION_STATE, item.inspection_state).meaning}>
+                          {wordsFor(INSPECTION_STATE, item.inspection_state).label}
+                        </span>
                       ) : item.findings.some((finding) => finding.severity === "blocking") ? (
-                        <SeverityChip severity="blocking" />
+                        <SeverityChip
+                          severity="blocking"
+                          count={item.findings.filter((finding) => finding.severity === "blocking").length}
+                        />
                       ) : item.findings.some((finding) => finding.severity === "warning") ? (
-                        <SeverityChip severity="warning" />
+                        <SeverityChip
+                          severity="warning"
+                          count={item.findings.filter((finding) => finding.severity === "warning").length}
+                        />
                       ) : (
                         <Chip status="submitted" label="Checks passed" />
                       )}
@@ -225,12 +234,12 @@ export function ReviewWorkspace({ initialQueue }: { initialQueue: QueueItem[] })
               .map((finding, index) => (
                 <div className="lane cli" key={`${finding.check_code}-${index}`}>
                   <b>
-                    {finding.severity === "blocking" ? "⛔" : "⚠"} {finding.severity} ·{" "}
-                    {finding.check_code.replace("_", " ")}
+                    {finding.severity === "blocking" ? "⛔" : "⚠"} {wordsFor(SEVERITY, finding.severity).label} ·{" "}
+                    {wordsFor(CHECK, finding.check_code).label}
                   </b>
                   <br />
                   {FINDING_COPY[finding.check_code]?.(finding.detail) ??
-                    "See the inspection report for the detail."}
+                    (wordsFor(CHECK, finding.check_code).meaning || "See the inspection report for the detail.")}
                 </div>
               ))}
 

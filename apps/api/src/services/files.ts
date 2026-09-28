@@ -18,10 +18,10 @@ import { storage } from "./ingest.ts";
 export type FileStatus = "review" | "approved" | "changes" | "blocked" | "other";
 
 export const FILE_STATUS_LABEL: Record<FileStatus, string> = {
-  review: "Awaiting review",
+  review: "Waiting for review",
   approved: "Approved",
   changes: "Changes requested",
-  blocked: "Blocked",
+  blocked: "Held back or blocked",
   other: "Other",
 };
 
@@ -299,7 +299,7 @@ export async function downloadVersion(
   versionId: string,
 ): Promise<Result<{ filename: string; body: Buffer }>> {
   const [version] = await loadVersions(tx, [versionId]);
-  if (!version) return { ok: false, error: { code: "file_version.not_found", message: "No such file." } };
+  if (!version) return { ok: false, error: { code: "file_version.not_found", message: "This file no longer exists — it may have been removed. Refresh the page." } };
   if (!canDownload(version.processing_state)) {
     return {
       ok: false,
@@ -307,8 +307,8 @@ export async function downloadVersion(
         code: "file.not_downloadable",
         message:
           version.processing_state === "quarantined"
-            ? "This file was quarantined by the virus scan and cannot be downloaded."
-            : "This file has not finished processing yet.",
+            ? "This file failed the virus check, so it is held back and can't be downloaded. Ask the speaker for a clean copy."
+            : "This file is still being checked. Try again in a minute.",
       },
     };
   }
@@ -359,7 +359,7 @@ export async function bulkDownload(
       ok: false,
       error: {
         code: "file.not_downloadable",
-        message: `${blocked.length} of the chosen files cannot be downloaded (quarantined or still processing). Deselect them and try again.`,
+        message: `${blocked.length} of the chosen files can't be downloaded — they failed the virus check or are still being checked. Deselect them and try again.`,
       },
     };
   }

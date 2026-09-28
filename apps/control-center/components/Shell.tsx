@@ -208,7 +208,7 @@ function StaffFrame({
                 Change password
               </Link>
               <Link href="/account/mfa" className="item" role="menuitem">
-                Two-factor authentication
+                Sign-in app (security code)
               </Link>
               <div className="sep" />
               <div className="label">Appearance</div>

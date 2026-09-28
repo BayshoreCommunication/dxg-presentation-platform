@@ -4,7 +4,7 @@ import { Fragment, useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { AgentView } from "@/lib/api";
 import { getAgentView, syncRoom, acknowledgeRoomFile, launchInRoom, ApiError } from "@/lib/api";
-import { formatBytes } from "@pmp/format";
+import { formatBytes, ROOM_COPY, wordsFor } from "@pmp/format";
 
 const size = (bytes: string): string => {
   return formatBytes(bytes);
@@ -138,7 +138,7 @@ export function RoomAgentView({ initial }: { initial: AgentView }) {
         >
           ⚠ <b>Change alert:</b> {pending.speaker} v{pending.version_number} approved — replaces the
           copy in this room for the {time(pending.starts_at, view.event.timezone)} slot. The previous version is kept for
-          rollback and stays on screen until you acknowledge.
+          rollback and stays in use until you switch.
           <button
             className="btn"
             style={{ marginLeft: 8 }}
@@ -146,11 +146,12 @@ export function RoomAgentView({ initial }: { initial: AgentView }) {
             onClick={() =>
               void run(async () => {
                 await acknowledgeRoomFile(pending.room_file_id!, pending.lock_version!);
-                return `Acknowledged — v${pending.version_number} is now the copy this room plays`;
+                return `Switched — v${pending.version_number} is now the copy this room plays`;
               })
             }
           >
-            Acknowledge &amp; sync v{pending.version_number}
+            {/* R44 (D-110): was "Acknowledge & sync v3". */}
+            Switch to v{pending.version_number}
           </button>
         </div>
       )}
@@ -283,7 +284,7 @@ export function RoomAgentView({ initial }: { initial: AgentView }) {
                   const result = await syncRoom(view.room.id);
                   return result.downloaded === 0 && result.failed === 0
                     ? "Already current — nothing to download"
-                    : `Checksum-verified sync: ${result.downloaded} downloaded, ${result.awaiting_ack} awaiting acknowledgment${result.failed > 0 ? `, ${result.failed} failed` : ""}`;
+                    : `${result.downloaded} downloaded, ${result.awaiting_ack} waiting to be switched in${result.failed > 0 ? `, ${result.failed} failed — it retries by itself` : ""}`;
                 })
               }
             >
@@ -345,23 +346,11 @@ export function RoomAgentView({ initial }: { initial: AgentView }) {
   );
 }
 
+/**
+ * A room copy's state in the shared words (R44, D-110): "update pending ack" became
+ * "New version ready — switch needed".
+ */
 function describeState(state: string | null, acknowledged: boolean): string {
-  switch (state) {
-    case "active":
-      return "current · ready";
-    case "synced":
-      return acknowledged ? "synced" : "update pending ack";
-    case "acknowledged":
-      return "acknowledged · activating";
-    case "assigned":
-      return "queued for download";
-    case "syncing":
-      return "downloading";
-    case "sync_failed":
-      return "sync failed — will retry";
-    case "obsolete":
-      return "previous version (kept for rollback)";
-    default:
-      return "not delivered to this room";
-  }
+  if (state === "synced" && !acknowledged) return wordsFor(ROOM_COPY, "switch_needed").label;
+  return wordsFor(ROOM_COPY, state ?? "not_sent").label;
 }

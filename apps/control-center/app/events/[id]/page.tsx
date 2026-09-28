@@ -1,13 +1,13 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSummary, getRiskList, getFleet, getDraft, getSession, getAgenda, getSpeakers, getReviewQueue } from "@/lib/api";
-import { Chip } from "@/components/Chip";
+import { Chip, StatusMeaning } from "@/components/Chip";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { EventTabs } from "@/components/EventTabs";
 import { InfoTip } from "@/components/InfoTip";
 import { Kpi } from "@/components/Kpi";
 import type { KpiTone } from "@/components/Kpi";
-import { ROOM_LABEL, roomPcState } from "@/lib/roomWords";
+import { ROOM_LABEL, roomFilesLine, roomPcState, staleNoteFor } from "@/lib/roomWords";
 import { guard } from "@/lib/guard";
 
 export const dynamic = "force-dynamic";
@@ -212,6 +212,7 @@ export default async function CommandCenterPage({
         canEdit={canConfigure && !archived}
         agenda={agenda.items}
         speakers={speakers.items}
+        rooms={fleet.items}
         initialTab={tab}
       />
 
@@ -251,19 +252,24 @@ export default async function CommandCenterPage({
           ) : (
             <table>
               <tbody>
-                {risk.items.map((item) => (
-                  <tr className="rb" key={item.slot_id}>
-                    <td>
-                      <Link href={`/events/${id}/talks/${item.slot_id}`} style={{ display: "block" }}>
-                      {item.room} · {time(item.starts_at, summary.event.timezone)} · {item.speaker} —{" "}
-                      {item.title}
-                      </Link>
-                    </td>
-                    <td style={{ textAlign: "right" }}>
-                      <Chip status={item.status} label={item.status_label} />
-                    </td>
-                  </tr>
-                ))}
+                {risk.items.map((item) => {
+                  // R7 (D-110): a talk on a room PC that has gone quiet is amber, with why.
+                  const stale = staleNoteFor(item.status, item.room, fleet.items);
+                  return (
+                    <tr className="rb" key={item.slot_id}>
+                      <td>
+                        <Link href={`/events/${id}/talks/${item.slot_id}`} style={{ display: "block" }}>
+                        {item.room} · {time(item.starts_at, summary.event.timezone)} · {item.speaker} —{" "}
+                        {item.title}
+                        </Link>
+                        {stale && <StatusMeaning status={item.status} stale={stale} />}
+                      </td>
+                      <td style={{ textAlign: "right" }}>
+                        <Chip status={item.status} label={item.status_label} stale={stale} />
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}
@@ -284,7 +290,7 @@ export default async function CommandCenterPage({
                     <b>{room.room}</b>
                     <br />
                     <span className="note">
-                      {room.files_current} of {room.files_total} files on the room PC · {roomPcState(room)}
+                      {roomFilesLine(room)} · {roomPcState(room)}
                     </span>
                   </td>
                   <td style={{ textAlign: "right" }}>

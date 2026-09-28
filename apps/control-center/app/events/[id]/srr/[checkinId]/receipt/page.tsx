@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getCheckin, getSummary } from "@/lib/api";
+import { timeZoneLabel } from "@pmp/format";
 import { guard } from "@/lib/guard";
 import { PrintButton } from "@/components/PrintButton";
 
@@ -62,7 +63,7 @@ export default async function ReceiptPage({ params }: { params: Promise<{ id: st
           </table>
           <p className="note">
             This version is locked for the room. Any change must come back through the Speaker Ready Room; it can no
-            longer be replaced through the speaker portal. Times are {tz}.
+            longer be replaced through the speaker portal. Times are venue local time ({timeZoneLabel(tz)}).
           </p>
           <div className="signatures">
             <div><span>Speaker</span></div>

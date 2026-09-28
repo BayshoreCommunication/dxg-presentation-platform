@@ -192,7 +192,7 @@ export async function waiveFinding(
   if (!hasAnyRole(actor, atLeast("presentation_manager"))) {
     return err({
       code: "inspection.forbidden",
-      message: "Only a Presentation Manager (or a project manager or root admin) can waive a finding.",
+      message: "Only a presentation manager, project manager or DXG administrator can accept a problem with a reason.",
     });
   }
   if (!input.reason.trim()) {
@@ -207,7 +207,7 @@ export async function waiveFinding(
     [input.findingId],
   );
   const finding = rows[0];
-  if (!finding) return err({ code: "inspection.not_found", message: "No such finding." });
+  if (!finding) return err({ code: "inspection.not_found", message: "This finding no longer exists — it may have been removed. Refresh the page." });
   if (finding.waived_at) {
     return err({ code: "inspection.already_waived", message: "This finding is already waived." });
   }
@@ -216,7 +216,7 @@ export async function waiveFinding(
   if (finding.check_code === "malware") {
     return err({
       code: "inspection.not_waivable_conflict",
-      message: "A virus finding can't be waived. The file stays quarantined — ask the speaker for a clean file.",
+      message: "A file that failed the virus check can't be accepted. It stays held back — ask the speaker for a clean copy.",
     });
   }
 
@@ -256,7 +256,7 @@ export async function addComment(
     `SELECT event_id, client_id FROM pmp.file_versions WHERE id = $1`,
     [input.versionId],
   );
-  if (!scope[0]) return err({ code: "comments.not_found", message: "No such version." });
+  if (!scope[0]) return err({ code: "comments.not_found", message: "This version no longer exists — it may have been removed. Refresh the page." });
 
   const { rows } = await tx.query<{ id: string }>(
     `INSERT INTO pmp.comments (event_id, client_id, file_version_id, lane, author_user_id, body)
@@ -281,7 +281,7 @@ export async function requestRevisionFromFinding(
     [input.versionId],
   );
   const version = rows[0];
-  if (!version) return err({ code: "review.not_found", message: "No such version." });
+  if (!version) return err({ code: "review.not_found", message: "This version no longer exists — it may have been removed. Refresh the page." });
 
   let from = version.review_state;
   if (from === "awaiting_review") {

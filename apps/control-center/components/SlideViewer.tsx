@@ -76,8 +76,9 @@ export function SlideViewer({ url, title }: { url: string; title: string }) {
           return;
         }
         setDoc(loaded);
-      } catch (failure) {
-        if (!cancelled) setError(failure instanceof Error ? failure.message : "The preview could not be loaded.");
+      } catch {
+        // Plain words, not pdf.js's own message (R30, D-110).
+        if (!cancelled) setError("The slide preview couldn't be shown. Refresh the page, or use “Open as PDF” below.");
       }
     })();
     return () => {

@@ -67,7 +67,7 @@ export async function requestReset(
         "",
         `It stops working in ${TOKEN_MINUTES} minutes, and only once.`,
         "",
-        "If it wasn't you, nothing has changed and you can ignore this email — but tell a platform admin,",
+        "If it wasn't you, nothing has changed and you can ignore this email — but tell a DXG administrator,",
         "because it means someone knows your address.",
         "",
         "The DXG presentation team",

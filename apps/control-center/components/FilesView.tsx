@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { formatBytes } from "@pmp/format";
+import { formatBytes, VERSION_STATE, wordsFor } from "@pmp/format";
 import { Icon } from "@/components/Icon";
 import { ApiError, downloadFilesZip, fileDownloadUrl, getEventFiles } from "@/lib/api";
 import { FloatingMenu, useFloatingMenu } from "@/components/FloatingMenu";
@@ -128,10 +128,10 @@ export function FilesView({
 
   const TABS: { key: FileStatus | "all"; label: string }[] = [
     { key: "all", label: "View all" },
-    { key: "review", label: "Awaiting review" },
+    { key: "review", label: VERSION_STATE.awaiting_review!.label },
     { key: "approved", label: "Approved" },
     { key: "changes", label: "Changes requested" },
-    { key: "blocked", label: "Blocked" },
+    { key: "blocked", label: "Held back or blocked" },
   ];
 
   return (
@@ -284,6 +284,7 @@ export function FilesView({
                       <Check
                         checked={selected.has(row.version_id)}
                         disabled={!row.downloadable}
+                        reason={cantDownload(row)}
                         label={`Select ${row.filename}`}
                         onChange={() => toggle(row)}
                       />
@@ -334,6 +335,7 @@ export function FilesView({
                   <Check
                     checked={selected.has(row.version_id)}
                     disabled={!row.downloadable}
+                    reason={cantDownload(row)}
                     label={`Select ${row.filename}`}
                     onChange={() => toggle(row)}
                   />
@@ -386,15 +388,25 @@ export function FilesView({
 
 /* ── pieces ─────────────────────────────────────────────────────────────── */
 
-const REVIEW_LABEL: Record<string, string> = {
-  awaiting_review: "Awaiting review",
-  in_review: "In review",
-  changes_requested: "Changes requested",
-  approved: "Approved",
-  superseded: "Superseded",
-  rejected: "Rejected",
-  rolled_back: "Rolled back",
-};
+/**
+ * One version's state in the shared vocabulary (S38, D-110): a processing stop (held back,
+ * damaged, still checking) wins over the review state, and a failed check reads "Blocked".
+ */
+function versionCode(version: { processing_state: string; review_state: string; inspection_state?: string }): string {
+  if (version.processing_state !== "stored") return version.processing_state;
+  if (version.inspection_state === "failed") return "blocked";
+  return version.review_state;
+}
+
+/** Why a version can't be downloaded, as a sentence with a next step (S37, D-110). */
+function cantDownload(version: { processing_state: string; downloadable: boolean }): string | undefined {
+  if (version.downloadable) return undefined;
+  const words = wordsFor(VERSION_STATE, version.processing_state);
+  if (version.processing_state === "quarantined" || version.processing_state === "checksum_failed") {
+    return `${words.label} — ${words.meaning} ${words.next ?? ""}`.trim();
+  }
+  return "Still being checked — it can be downloaded in a minute or two.";
+}
 
 const SOURCE_LABEL: Record<string, string> = {
   portal: "Speaker portal",
@@ -414,7 +426,9 @@ const CHIP: Record<FileStatus, string> = {
 function StatusChip({ row }: { row: FileRow }) {
   return (
     <span className="status-cell">
-      <span className={CHIP[row.status]}>{row.status === "other" ? REVIEW_LABEL[row.review_state] ?? row.status_label : row.status_label}</span>
+      <span className={CHIP[row.status]} title={wordsFor(VERSION_STATE, versionCode(row)).meaning}>
+        {wordsFor(VERSION_STATE, versionCode(row)).label}
+      </span>
       {row.open_findings > 0 && (
         <span className="findings" title="Inspection findings nobody has fixed or waived">
           {row.open_findings} {row.open_findings === 1 ? "warning" : "warnings"}
@@ -425,9 +439,9 @@ function StatusChip({ row }: { row: FileRow }) {
 }
 
 function versionState(version: FileVersionRow): { label: string; className: string } {
-  if (version.processing_state === "quarantined") return { label: "Quarantined", className: "chip c-bad" };
-  if (version.processing_state !== "stored") return { label: "Processing", className: "chip c-mut" };
-  const label = REVIEW_LABEL[version.review_state] ?? version.review_state;
+  const label = wordsFor(VERSION_STATE, versionCode(version)).label;
+  if (version.processing_state === "quarantined" || version.processing_state === "checksum_failed") return { label, className: "chip c-bad" };
+  if (version.processing_state !== "stored") return { label, className: "chip c-mut" };
   const className =
     version.review_state === "approved"
       ? "chip c-ok"
@@ -480,16 +494,18 @@ function FolderArt() {
 function Check({
   checked,
   disabled,
+  reason,
   label,
   onChange,
 }: {
   checked: boolean;
   disabled?: boolean;
+  reason?: string;
   label: string;
   onChange: () => void;
 }) {
   return (
-    <label className={disabled ? "cb disabled" : "cb"} title={disabled ? "Quarantined or still processing — cannot be downloaded" : undefined}>
+    <label className={disabled ? "cb disabled" : "cb"} title={disabled ? reason ?? "Can't be downloaded yet" : undefined}>
       <input type="checkbox" checked={checked} disabled={disabled} aria-label={label} onChange={onChange} />
       <span className="track" />
       <span className="knob">
@@ -573,8 +589,8 @@ function RowMenu({ row, eventId, onDetails }: { row: FileRow; eventId: string; o
               <Icon name="download" /> Download v{row.version_number}
             </a>
           ) : (
-            <span className="item" aria-disabled="true" style={{ opacity: 0.5 }}>
-              <Icon name="download" /> Not downloadable
+            <span className="item" aria-disabled="true" style={{ opacity: 0.5 }} title={cantDownload(row)}>
+              <Icon name="download" /> {wordsFor(VERSION_STATE, row.processing_state).label} — can't download
             </span>
           )}
           <button
@@ -657,13 +673,15 @@ function FileDrawer({
             </a>
           ) : (
             <span className="btn" aria-disabled="true" style={{ opacity: 0.5 }}>
-              Not downloadable
+              Can't download
             </span>
           )}
           <Link className="btn" href={`/events/${eventId}/talks/${row.slot_id}`}>
             Open talk
           </Link>
         </div>
+
+        {!row.downloadable && <p className="note">{cantDownload(row)}</p>}
 
         <dl className="drawer-facts">
           {facts.map(([label, value]) => (
@@ -692,14 +710,17 @@ function FileDrawer({
                     {version.uploaded_by ?? SOURCE_LABEL[version.source] ?? version.source}
                     {version.sha256 ? ` · sha256 ${version.sha256.slice(0, 12)}…` : ""}
                   </small>
-                  <span className={state.className}>{state.label}</span>
+                  <span className={state.className} title={wordsFor(VERSION_STATE, versionCode(version)).meaning}>
+                    {state.label}
+                  </span>
+                  {!version.downloadable && <small>{cantDownload(version)}</small>}
                 </div>
                 {version.downloadable ? (
                   <a className="ibtn" href={fileDownloadUrl(version.id)} aria-label={`Download v${version.version_number}`}>
                     <Icon name="download" />
                   </a>
                 ) : (
-                  <span className="ibtn" aria-hidden="true" style={{ opacity: 0.3 }}>
+                  <span className="ibtn" title={cantDownload(version)} style={{ opacity: 0.3 }}>
                     <Icon name="download" />
                   </span>
                 )}

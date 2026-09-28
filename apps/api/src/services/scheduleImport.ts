@@ -1201,7 +1201,7 @@ export async function saveTypedRow(
     [input.eventId],
   );
   const clientId = eventRows[0]?.client_id;
-  if (!clientId) return err({ code: "import.event_not_found", message: "No such event." });
+  if (!clientId) return err({ code: "import.event_not_found", message: "This event no longer exists — it may have been removed. Refresh the page." });
 
   const { rows: roomRows } = await tx.query<{ id: string; name: string }>(
     `SELECT id, name FROM pmp.rooms WHERE event_id = $1`,
@@ -1351,7 +1351,7 @@ export async function commitImport(
     [input.eventId],
   );
   const clientId = eventRows[0]?.client_id;
-  if (!clientId) return err({ code: "import.event_not_found", message: "No such event." });
+  if (!clientId) return err({ code: "import.event_not_found", message: "This event no longer exists — it may have been removed. Refresh the page." });
 
   /*
    * The event's locations, read once and keyed the way `buildPreview` compares them.

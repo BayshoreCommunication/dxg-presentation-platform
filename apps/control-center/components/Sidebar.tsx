@@ -1,5 +1,6 @@
 "use client";
 
+import { formatDateRange } from "@pmp/format";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { usePathname, useParams, useRouter } from "next/navigation";
@@ -118,9 +119,7 @@ function dayLabel(event: EventRow | undefined): string {
   const endsAt = new Date(`${event.ends_on}T00:00:00`).getTime();
   const today = new Date(new Date().toDateString()).getTime();
   if (today < startsAt || today > endsAt) {
-    const fmt = (iso: string) =>
-      new Date(`${iso}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric" });
-    return `${fmt(event.starts_on)}–${fmt(event.ends_on)}`;
+    return formatDateRange(event.starts_on, event.ends_on);
   }
   return `Day ${Math.round((today - startsAt) / day) + 1}`;
 }
@@ -290,7 +289,7 @@ function AccountMenu({ principal }: { principal: Principal }) {
             <Icon name="lock" /> Password
           </Link>
           <Link href="/account/mfa" className="item" role="menuitem" onClick={() => setOpen(false)}>
-            <Icon name="key" /> 2FA
+            <Icon name="key" /> Sign-in app (security code)
           </Link>
           <div className="sep" />
           <button
@@ -318,8 +317,8 @@ function AccountMenu({ principal }: { principal: Principal }) {
         </span>
         <span className="who">
           <b>{principal.display_name}</b>
-          {/* Root admin or staff (D-100); raw role codes read like a stack trace. */}
-          <small>{principal.is_root_admin ? "Root admin" : "Staff"}</small>
+          {/* DXG administrator or staff (D-100, D-110); raw role codes read like a stack trace. */}
+          <small>{principal.is_root_admin ? "DXG administrator" : "Staff"}</small>
         </span>
         <span style={{ color: "var(--subtle-foreground)", display: "flex" }}>
           <Icon name="chevrons" size={12} />

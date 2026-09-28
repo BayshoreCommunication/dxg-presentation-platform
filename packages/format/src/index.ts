@@ -102,3 +102,4 @@ export function friendlyError(code: string | undefined, message: string | undefi
   }
   return text || "That didn't work. Please try again.";
 }
+export * from "./vocabulary.ts";

@@ -39,11 +39,11 @@ export async function startEnrolment(
     [userId],
   );
   const user = rows[0];
-  if (!user) return err({ code: "mfa.not_found", message: "No such account." });
+  if (!user) return err({ code: "mfa.not_found", message: "This account no longer exists — it may have been removed. Refresh the page." });
   if (user.mfa_enrolled_at) {
     return err({
       code: "mfa.already_enrolled",
-      message: "This account already has an authenticator. Remove it first to enrol a new one.",
+      message: "Your sign-in app is already set up. To move to a new phone, turn the current one off first, then set it up again.",
     });
   }
 
@@ -73,17 +73,17 @@ export async function confirmEnrolment(
   );
   const user = rows[0];
   if (!user?.mfa_secret) {
-    return err({ code: "mfa.not_started", message: "Start enrolment before confirming it." });
+    return err({ code: "mfa.not_started", message: "Start setting up your sign-in app first — scan the QR code, then enter a code." });
   }
   if (user.mfa_enrolled_at) {
-    return err({ code: "mfa.already_enrolled", message: "This account is already enrolled." });
+    return err({ code: "mfa.already_enrolled", message: "Your sign-in app is already set up. Nothing more to do." });
   }
 
   const check = verifyTotp(user.mfa_secret, code);
   if (!check.valid) {
     return err({
       code: "mfa.bad_code",
-      message: "That code didn't match. Check your authenticator and try the next one.",
+      message: "That code didn't match. Check your sign-in app and enter the code it shows now.",
     });
   }
 
@@ -124,7 +124,7 @@ export async function disableMfa(
     [userId],
   );
   const user = rows[0];
-  if (!user?.mfa_secret) return err({ code: "mfa.not_enrolled", message: "This account has no authenticator." });
+  if (!user?.mfa_secret) return err({ code: "mfa.not_enrolled", message: "This account has no sign-in app set up." });
   if (!(await verifyPassword(input.password, user.password_hash))) {
     return err({ code: "auth.invalid_credentials", message: "Your password is not correct." });
   }
@@ -217,7 +217,7 @@ export async function answerChallenge(
   );
   const user = userRows[0];
   if (!user?.mfa_secret) {
-    return { ok: false, error: { code: "mfa.not_enrolled", message: "This account has no authenticator." } };
+    return { ok: false, error: { code: "mfa.not_enrolled", message: "This account has no sign-in app set up." } };
   }
 
   const check = verifyTotp(user.mfa_secret, input.code);
@@ -229,7 +229,7 @@ export async function answerChallenge(
         ok: false,
         error: {
           code: "mfa.code_reused",
-          message: "That code has already been used. Wait for your authenticator to show the next one.",
+          message: "That code has already been used. Wait for your sign-in app to show the next one.",
         },
       };
     }
@@ -276,7 +276,7 @@ export async function answerChallenge(
     ok: false,
     error: {
       code: "mfa.bad_code",
-      message: "That code didn't match. Check your authenticator, or use a recovery code.",
+      message: "That code didn't match. Check your sign-in app, or use one of your backup codes.",
     },
   };
 }

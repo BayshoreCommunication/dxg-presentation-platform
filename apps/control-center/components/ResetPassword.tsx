@@ -37,7 +37,7 @@ export function ResetPassword({ token }: { token: string }) {
         <div className="box">
           <b>DXG·PM</b>
           <div className="err" style={{ margin: "12px 0" }}>
-            That link is missing its token. Request a new one.
+            This reset link is incomplete. Request a new one.
           </div>
           <Link className="btn" style={{ width: "100%", display: "block", textAlign: "center" }} href="/forgot-password">
             Request a reset link
@@ -56,7 +56,7 @@ export function ResetPassword({ token }: { token: string }) {
           <div className="note" style={{ color: "var(--blue)", marginBottom: 12 }}>
             Every session on your account has been signed out.
             {done.mfa
-              ? " You will still need your authenticator to sign in — resetting a password does not replace your second factor."
+              ? " You will still need the 6-digit code from your sign-in app — resetting a password doesn't replace it."
               : ""}
           </div>
           <button
