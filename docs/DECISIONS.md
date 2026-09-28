@@ -2120,3 +2120,26 @@ real reason (delivered / expired / build stopped) and the PDF message no longer 
 sentence in both apps. Deferred to batch 2: talks shown "Synchronized onsite" while their room PC is silent (R7 —
 needs freshness in the status rules). Tests: admin (onboarding order, password session), speakers (email correction,
 conflict), format (friendlyError); 298/298 invariants.
+
+## D-109 (2026-09-28): G0-1 Phase A — the Room Agent PoC is built and waits only for Windows — Status: ACCEPTED (plan: `docs/poc/G0-1_PLAN.md`)
+Everything in G0-1 that can be built and proved without Windows is done, so the Windows run (Phase B) is setup plus
+one command per matrix item. **`apps/room-agent`** (Electron 38, not deployed anywhere; servers and CI skip its
+binary via `ELECTRON_SKIP_BINARY_DOWNLOAD`): a **supervisor** that owns the rules — one show at a time (a second
+launch is refused as busy), only files inside the library that exist, are not Keynote and match the approved
+SHA-256 may launch, the holding screen is up whenever nothing is showing, a crash or a PowerPoint that stops
+answering (two missed status polls) is relaunched once and then given up to the holding screen, leftover PowerPoint
+processes are ended at start and on reset, and the current show is written to disk so a restarted agent resumes it
+(and a stopped show is not resumed); decks that link to video missing from the PC still launch and the gap is
+reported. Three interchangeable **playback drivers**: `com` (in-process COM through `winax`, installed only on the
+Windows test box), `helper` (a PowerShell process speaking JSON lines, the D-002 fallback) and `fake` (Mac/CI). Both
+real drivers open decks read-only with macros forced off (AutomationSecurity 3) and alerts off, and pick the monitor
+through PowerPoint's DisplayMonitor setting. A loopback-only **control port** (127.0.0.1:47800: status, launch,
+stop, reset, displays, show) is what the harness drives today and what the real Launch (M5-3) can use later. A
+**watchdog** and a sign-in scheduled task cover items 10 and 13 without admin rights. **Harness**
+(`apps/room-agent/harness/run.ts`): one command per item 1–16, writing `docs/poc/evidence/<os>/item-NN/result.json`;
+scripted items measure themselves, visual ones ask the operator; short runs record NEEDS_REVIEW rather than PASS;
+`report` builds the summary table. **Corpus** (G0-7 slice): generated test decks and media in
+`tests/fixtures/g0-1/` (MANIFEST.md; generator in `scripts/g0-1-corpus/`). Runbook `docs/poc/G0-1_RUNBOOK.md`,
+report template `docs/poc/ROOM_AGENT_POC.md`. Proved on macOS against the fake driver: 23 unit tests (supervisor
+rules, helper protocol, helper death and hang, tasklist parsing) and the harness end to end (items 1, 15, 16). **Not
+proved, by design:** anything about real PowerPoint — that is Phase B, and D-002 stays provisional until it passes.

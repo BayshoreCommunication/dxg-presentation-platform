@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Holding screen</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #0b0d0c; color: #e9ece9; cursor: none;
+    font-family: "Segoe UI", system-ui, sans-serif; overflow: hidden; }
+  main { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2vh; }
+  .event { font-size: 5vh; font-weight: 600; letter-spacing: .01em; text-align: center; padding: 0 6vw; }
+  .room { font-size: 2.6vh; color: #9aa39e; text-transform: uppercase; letter-spacing: .12em; }
+  .note { position: fixed; bottom: 3vh; font-size: 1.6vh; color: #5d6661; }
+</style>
+</head>
+<body>
+<main>
+  <div class="room" id="room"></div>
+  <div class="event" id="event"></div>
+</main>
+<div class="note" id="note"></div>
+<script>
+  // Shown whenever nothing is playing, and in every failure path (G0-1 item 11).
+  const q = new URLSearchParams(location.search);
+  document.getElementById("event").textContent = q.get("event") || "";
+  document.getElementById("room").textContent = q.get("room") || "";
+  const reason = q.get("reason") || "";
+  document.getElementById("note").textContent = reason && reason !== "ready" ? reason : "";
+</script>
+</body>
+</html>

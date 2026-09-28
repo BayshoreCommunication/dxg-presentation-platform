@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Media</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; cursor: none; }
+  video, img { width: 100%; height: 100%; object-fit: contain; display: block; }
+</style>
+</head>
+<body>
+<script>
+  // Plays a video or shows an image full screen (G0-1 item 7). PDFs open in the built-in viewer.
+  const src = new URLSearchParams(location.search).get("src");
+  const isVideo = /\.(mp4|mov|m4v)$/i.test(src || "");
+  const el = document.createElement(isVideo ? "video" : "img");
+  el.src = src;
+  if (isVideo) { el.autoplay = true; el.controls = false; }
+  document.body.appendChild(el);
+</script>
+</body>
+</html>

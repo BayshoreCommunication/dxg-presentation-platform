@@ -1,0 +1,30 @@
+{
+  "standard": "normal-10-slides-notes.pptx",
+  "legacy_ppt": "legacy-10-slides.ppt",
+  "pdf": "pdf-10-pages.pdf",
+  "video": "video-h264-1080p.mp4",
+  "image": "image-1920x1080.png",
+  "keynote": [],
+  "macro": "macro-enabled-structural.pptm",
+  "external_links": "external-linked-ole-and-picture.pptx",
+  "corrupted": "corrupt-broken-xml.pptx",
+  "animations": [
+    "anim-entrance-appear.pptx",
+    "anim-entrance-fade.pptx",
+    "anim-mixed-sequence.pptx",
+    "anim-motion-path.pptx",
+    "transition-fade.pptx",
+    "transition-variety.pptx",
+    "transition-auto-advance-loop.pptx",
+    "legacy-animations.ppt"
+  ],
+  "embedded_video": [
+    "video-embedded-h264.pptx",
+    "video-embedded-h264-autoplay.pptx",
+    "video-embedded-hevc.pptx",
+    "video-embedded-prores.pptx"
+  ],
+  "linked_video": ["video-linked-relative.pptx"],
+  "missing_linked_video": "video-linked-missing.pptx",
+  "fonts": ["font-custom-montserrat.pptx", "font-missing.pptx", "font-mac-only.pptx"]
+}

@@ -9,6 +9,10 @@ on:
     branches: [main]
   pull_request:
 
+# The Room Agent's tests use the fake driver; no job needs Electron's binary.
+env:
+  ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -24,7 +28,7 @@ jobs:
       - run: npm run lint
       - name: Type-check every app
         run: |
-          for app in api dispatcher control-center speaker-portal; do
+          for app in api dispatcher control-center speaker-portal room-agent; do
             echo "::group::$app"; (cd apps/$app && npx tsc --noEmit -p .); echo "::endgroup::"
           done
       - run: npm test

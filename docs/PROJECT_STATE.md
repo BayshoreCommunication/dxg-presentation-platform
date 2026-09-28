@@ -3144,3 +3144,13 @@ SRR exercised through the API on the demo event: dashboard, add/retire station, 
 all worked; sign-off is guarded to scanned versions. One serious defect found and fixed: quarantined files could be
 approved and queued to a room (D-105). There was no SRR test suite; review-eligibility.test.ts now covers USB intake's
 quarantine path. 294/294 invariants.
+
+## 2026-09-28 — G0-1 Phase A built: Room Agent PoC ready for Windows (D-109)
+`apps/room-agent` (supervisor, COM / PowerShell-helper / fake drivers, holding screen, loopback control port,
+watchdog, sign-in autostart), the 16-item harness, the generated test corpus in `tests/fixtures/g0-1/`, the Windows
+runbook and the report template. Proved on macOS with the fake driver (23 unit tests; harness items 1, 15, 16 end to
+end). Next: Phase B needs the hardware in `docs/poc/G0-1_PLAN.md` ("What we need that only you can provide") —
+a Windows 11 PC with Microsoft 365 and up to 3 monitors, a Windows 10 machine, a non-admin account. Not committed yet.
+Corpus: 40 test files + 3 linked-media files, 8.8 MB committed (85 MB large deck generated on demand, gitignored).
+Still to make by hand: `keynote-10-slides.key` (Mac: `generate.py --keynote` and approve the Keynote permission
+prompt; until then item 7 records NEEDS_REVIEW), an embedded-font deck and a real-macro deck (Windows PowerPoint).
