@@ -3,6 +3,7 @@
 # One Dockerfile, four images (production readiness — one-server deployment):
 #
 #   --target api          the API, with LibreOffice for PDF previews; also runs migrations
+#                         and the background worker (compose service `worker`, D-103)
 #                         and the first-admin bootstrap (`docker compose run --rm api …`)
 #   --target dispatcher   the mail process (outbox → SES)
 #   --target staff        the control center (Next.js standalone server, :3000)

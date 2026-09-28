@@ -2028,3 +2028,17 @@ is; it now records the S3 bucket (nothing read the column, so the only effect wa
 Same entry: archive zips now set the UTF-8 file-name flag (general-purpose bit 11). Names carrying "·", curly
 quotes or accented speaker names were written as UTF-8 but unflagged, so Windows Explorer, bsdtar and Python read them
 in the DOS code page ("┬╖", "ΓÇ£"); macOS Archive Utility happened to guess right. `zipWrite.test.ts`.
+
+## D-103 (2026-09-28): Background jobs run in a separate worker process — Status: ACCEPTED (Travis's call)
+PDF previews (D-067/D-074) and automatic reminders (D-096) ran inside the API, so a second API instance would have run
+two copies of every loop, and a busy conversion shared the API's process. They now run in `worker` —
+`apps/api/src/worker.ts`, the API's own code and image (LibreOffice included) started with a different entry point;
+compose service `worker`, `npm run dev:worker` (part of `npm run dev`). BUILD_SPEC's `apps/worker` + BullMQ is not
+adopted: the queue is already Postgres (`pdf_conversions`, `reminder_runs`), and a second copy of the services in
+another app would drift. The API only queues: a row plus `pg_notify('pmp_pdf_queued')`, delivered on commit, which the
+worker LISTENs for (a 5-second poll covers a dropped connection). Claims are taken with `SKIP LOCKED`; a
+`converting` claim older than the conversion timeout + 1 minute is put back (it replaces "reset every claim at start",
+which would have stolen a second worker's live job). SIGTERM: stop taking work, finish the file in hand for up to
+25 s (`stop_grace_period: 30s`). Liveness: `worker_heartbeats` (migration 023, one row per `worker@host#pid`, every
+30 s, removed on clean stop, pruned after a day); `/ops/health` adds `"worker":"up"|"stale"|"none"` without changing
+`status`, so the uptime alarms still mean "the sites are down". `tests/invariants/worker.test.ts`; CI starts a worker.

@@ -5,7 +5,7 @@ import { constants } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type pg from "pg";
-import { withSystemScope } from "@pmp/db";
+import { getPool, withSystemScope } from "@pmp/db";
 import { storage } from "./ingest.ts";
 
 /**
@@ -16,9 +16,10 @@ import { storage } from "./ingest.ts";
  * each other out, and a profile left behind by a crashed run poisons the next one.
  *
  * Conversion is slow — seconds per deck, minutes for a large one — so it never runs
- * inside a request. Work is queued in `pdf_conversions` and drained here, in the API
- * process, one file at a time. The queue lives in Postgres rather than memory, so a
- * restart loses nothing: `resumePdfQueue` puts interrupted work back in line.
+ * inside a request. The API queues work in `pdf_conversions` and wakes the worker with a
+ * Postgres NOTIFY; the **worker process** (`src/worker.ts`, D-103) drains it one file at a
+ * time. The queue lives in Postgres, so a restart loses nothing, and a claim held by a
+ * worker that died is taken back once it is older than a conversion can last.
  */
 
 const TIMEOUT_MS = Number(process.env.PDF_TIMEOUT_MS ?? 180_000);
@@ -127,14 +128,20 @@ export async function convertToPdf(body: Buffer, filename: string): Promise<Buff
 
 let draining = false;
 
+/** The channel the API notifies when there is PDF work; the worker listens on it (D-103). */
+export const PDF_CHANNEL = "pmp_pdf_queued";
+
+/** Wakes the worker. Inside a transaction Postgres delivers it on commit, so the row is visible. */
+export const notifyPdfWorker = (tx: pg.PoolClient) => tx.query(`SELECT pg_notify('${PDF_CHANNEL}', '')`);
+
 /**
- * Puts these approved versions in line for conversion and starts the worker. Versions
- * already converted are left alone; failed ones are retried only when `retry` is set,
- * so a deck that cannot convert is not re-run every time someone opens the builder.
+ * Puts these versions in line for conversion and wakes the worker. Versions already
+ * converted are left alone; failed ones are retried only when `retry` is set, so a deck
+ * that cannot convert is not re-run every time someone opens the builder.
  */
 export async function queuePdfs(fileVersionIds: string[], retry = false): Promise<number> {
   if (fileVersionIds.length === 0) return 0;
-  const queued = await withSystemScope(async (tx) => {
+  return withSystemScope(async (tx) => {
     const { rowCount } = await tx.query(
       `INSERT INTO pmp.pdf_conversions (file_version_id, event_id, client_id)
        SELECT fv.id, fv.event_id, fv.client_id
@@ -145,35 +152,88 @@ export async function queuePdfs(fileVersionIds: string[], retry = false): Promis
         WHERE $2 AND pmp.pdf_conversions.state = 'failed'`,
       [fileVersionIds, retry],
     );
+    if (rowCount) await notifyPdfWorker(tx);
     return rowCount ?? 0;
   });
-  void drain();
-  return queued;
 }
 
 /**
- * Work interrupted by a restart goes back in line; then the worker starts, and keeps
- * looking every few seconds (D-074). Uploads queue their PDF inside the upload's own
- * transaction, which the queue cannot see until it commits — the poll is what picks
- * those up, a cheap indexed query when there is nothing to do.
+ * A claim older than the longest a conversion may run (plus a minute) belongs to a worker
+ * that died mid-file — a crash, or a deploy that stopped it — so it goes back in line.
+ * Only stale claims: a second worker's live job is never taken from it.
+ */
+const STALE_CLAIM_MS = TIMEOUT_MS + 60_000;
+
+async function reclaimStale(): Promise<void> {
+  await withSystemScope((tx) =>
+    tx.query(
+      `UPDATE pmp.pdf_conversions SET state = 'queued', updated_at = now()
+        WHERE state = 'converting' AND updated_at < now() - make_interval(secs => $1)`,
+      [STALE_CLAIM_MS / 1000],
+    ),
+  );
+}
+
+/**
+ * The poll is the fallback for a missed notification (a dropped LISTEN connection), a
+ * cheap indexed query when there is nothing to do.
  */
 const POLL_MS = Number(process.env.PDF_POLL_MS ?? 5000);
 let polling: NodeJS.Timeout | undefined;
+let listener: pg.PoolClient | undefined;
+let stopping = false;
+let current: Promise<void> = Promise.resolve();
 
-export async function resumePdfQueue(): Promise<void> {
-  await withSystemScope((tx) =>
-    tx.query(`UPDATE pmp.pdf_conversions SET state = 'queued', updated_at = now() WHERE state = 'converting'`),
-  );
-  void drain();
-  polling ??= setInterval(() => void drain(), POLL_MS);
-  polling.unref();
+/** Starts converting — in the worker process only (D-103). */
+export async function startPdfWorker(): Promise<void> {
+  stopping = false;
+  await reclaimStale();
+  await listen();
+  wake();
+  polling ??= setInterval(() => {
+    void reclaimStale().catch((error: unknown) => console.error("[pdf] reclaim failed", error));
+    wake();
+  }, POLL_MS);
+}
+
+/** Stops taking new files and waits for the one in hand, up to `graceMs`. */
+export async function stopPdfWorker(graceMs = 25_000): Promise<void> {
+  stopping = true;
+  if (polling) clearInterval(polling);
+  polling = undefined;
+  listener?.release();
+  listener = undefined;
+  await Promise.race([current, new Promise((resolve) => setTimeout(resolve, graceMs).unref())]);
+}
+
+const wake = () => {
+  if (!draining && !stopping) current = drain();
+};
+
+/** A dedicated connection that LISTENs; re-established after a drop, the poll covering the gap. */
+async function listen(): Promise<void> {
+  try {
+    const client = await getPool().connect();
+    client.on("notification", wake);
+    client.on("error", (error) => {
+      console.error("[pdf] listen connection lost", error.message);
+      client.release(true);
+      if (listener === client) listener = undefined;
+      if (!stopping) setTimeout(() => void listen(), 5_000).unref();
+    });
+    await client.query(`LISTEN ${PDF_CHANNEL}`);
+    listener = client;
+  } catch (error) {
+    console.error("[pdf] could not listen; polling only", error);
+    if (!stopping) setTimeout(() => void listen(), 5_000).unref();
+  }
 }
 
 async function drain(): Promise<void> {
   if (draining) return;
   draining = true;
   try {
-    for (;;) {
+    while (!stopping) {
       const job = await withSystemScope(async (tx) => {
         const { rows } = await tx.query<{
           file_version_id: string;

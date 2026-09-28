@@ -41,7 +41,7 @@ export function productionProblems(env: NodeJS.ProcessEnv = process.env): string
 export function assertProductionConfig(): void {
   const problems = productionProblems();
   if (problems.length === 0) return;
-  console.error(`[api] refusing to start — production configuration is incomplete:\n  - ${problems.join("\n  - ")}`);
+  console.error(`[pmp] refusing to start — production configuration is incomplete:\n  - ${problems.join("\n  - ")}`);
   process.exit(1);
 }
 

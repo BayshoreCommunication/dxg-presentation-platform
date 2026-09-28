@@ -3125,3 +3125,9 @@ https://pmp.av-rfpilot.com / https://speakers.av-rfpilot.com. Every step verifie
    link expires 2026-11-06, download audited. ✔ **Bug:** zip file names not flagged UTF-8 (garbled on Windows).
 All three fixed locally under D-102 (not yet deployed). Harmless notes: every email logs "sent" twice (dispatcher +
 SES Send event); an email file name is cut at the length limit ("…23-59 ED.txt").
+
+## 2026-09-28 — Separate background worker (D-103)
+PDF previews and automatic reminders moved out of the API into `worker` (same image, `node apps/api/src/worker.ts`).
+The API queues and notifies; `/ops/health` reports `worker`. The "separate worker before multiple API instances" item
+is done. Locally: a queued preview converted by the worker in ~3.7 s with the API not involved; a second worker and a
+clean SIGTERM behave (found and fixed: two workers on one host shared a heartbeat name).

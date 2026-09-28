@@ -115,13 +115,16 @@ export async function ingestVersion(
 
   // A clean file is queued for its PDF straight away (D-074): the reviewer previews it as
   // slides, and the archive's PDF is ready before anyone approves. Queued in this
-  // transaction; the PDF worker polls, so it starts within seconds of the commit.
+  // transaction, and the worker woken (D-103) — Postgres delivers the NOTIFY on commit,
+  // once the row is visible. The channel is `PDF_CHANNEL` in pdf.ts; spelled out here
+  // because pdf.ts imports this module.
   if (processingState === "stored") {
     await tx.query(
       `INSERT INTO pmp.pdf_conversions (file_version_id, event_id, client_id)
        VALUES ($1, $2, $3) ON CONFLICT (file_version_id) DO NOTHING`,
       [versionId, input.eventId, input.clientId],
     );
+    await tx.query(`SELECT pg_notify('pmp_pdf_queued', '')`);
 
     /*
      * A newer clean upload replaces any earlier version still waiting for a decision

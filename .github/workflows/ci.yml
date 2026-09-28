@@ -51,14 +51,15 @@ jobs:
         with: { node-version: 24.4.1, cache: npm }
       - run: npm ci --no-audit --no-fund
       - run: npm run db:migrate && npm run db:seed
-      - name: Start the API and the mail dispatcher
+      - name: Start the API, the background worker and the mail dispatcher
         run: |
           node apps/api/src/index.ts > api.log 2>&1 &
+          node apps/api/src/worker.ts > worker.log 2>&1 &
           node apps/dispatcher/src/index.ts > dispatcher.log 2>&1 &
           for i in $(seq 1 60); do curl -sf http://localhost:4000/ops/health && break; sleep 1; done
       - run: npm run test:invariants
       - if: failure()
-        run: tail -n 200 api.log dispatcher.log
+        run: tail -n 200 api.log worker.log dispatcher.log
 
   images:
     runs-on: ubuntu-latest

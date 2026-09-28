@@ -64,6 +64,28 @@ services:
       postgres: { condition: service_healthy }
       clamav: { condition: service_healthy }
 
+  # Background jobs (D-103): PDF previews (LibreOffice, which the api image carries) and
+  # automatic reminders. Same image as the API, its own process; answers no requests.
+  worker:
+    image: pmp-api
+    restart: unless-stopped
+    command: ["node", "apps/api/src/worker.ts"]
+    environment:
+      <<: *app-env
+      WORKER_ALIVE_FILE: /tmp/pmp-worker-alive
+    # Lets the file in hand finish on a deploy (the worker waits up to 25 s).
+    stop_grace_period: 30s
+    healthcheck:
+      # The worker touches this file every 30 s; two minutes without means it is stuck.
+      test: ["CMD", "node", "-e", "const s=require('fs').statSync('/tmp/pmp-worker-alive');process.exit(Date.now()-s.mtimeMs<120000?0:1)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 60s
+      retries: 3
+    depends_on:
+      postgres: { condition: service_healthy }
+      api: { condition: service_started }
+
   dispatcher:
     build: { context: ../.., dockerfile: deploy/server/Dockerfile, target: dispatcher }
     image: pmp-dispatcher

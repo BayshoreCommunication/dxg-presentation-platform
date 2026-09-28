@@ -23,8 +23,9 @@ One Linux server running Docker Compose (`deploy/server/docker-compose.yml`):
                                             ├─▶ portal   (Next.js, :3001)
                                             └─▶ api      (/api/*, :4000) ──┬─▶ postgres (volume)
                                                                           ├─▶ clamav   (virus scan)
-             dispatcher (outbox → SES) ─────────────────────────────────── ├─▶ S3       (files, backups)
-             backup (nightly pg_dump → S3)                                 └─▶ SES      (email)
+             worker (PDF previews, reminders) ──────────────────────────── ├─▶ S3       (files, backups)
+             dispatcher (outbox → SES) ─────────────────────────────────── └─▶ SES      (email)
+             backup (nightly pg_dump → S3)
 ```
 
 Only Caddy is published. It obtains and renews TLS certificates itself (Let's Encrypt), adds HSTS
@@ -32,8 +33,13 @@ and security headers, and replaces `X-Forwarded-For` with the address it saw. Ea
 share one origin, so the staff cookie (`pmp_session`) and the speaker cookie (`pmp_presenter`) each
 stay on their own site, and the browser never makes a cross-site call.
 
-Inside the API: PDF previews (LibreOffice, in the API image) and automatic reminders run in-process.
-That is correct for one API instance; running several needs the planned worker (not built).
+Background jobs run in **`worker`** (D-103), not the API: PDF previews (LibreOffice, in the API
+image, which the worker shares) and automatic reminders. The API only queues work — a row in
+Postgres plus a `NOTIFY` — so the API can now be run as more than one instance. More than one worker
+is also safe (conversions are claimed with `SKIP LOCKED`, reminders run under an advisory lock).
+If the worker stops, the sites keep working but previews stay "queued" and no reminders go out:
+`/ops/health` then reports `"worker":"stale"` (see §8). Its container health check fails after two
+minutes without a heartbeat.
 
 ## 2. Cost (estimate, us-east-2)
 
@@ -126,7 +132,7 @@ The API drains in-flight requests on SIGTERM before exiting.
 - **Restore drill (do it once before launch, and after any schema change you are nervous about):**
   ```bash
   aws s3 cp s3://<bucket>/backups/<file>.dump ./restore.dump
-  docker compose stop api dispatcher
+  docker compose stop api worker dispatcher
   docker compose exec -T postgres pg_restore -U pmp -d pmp --clean --if-exists --no-owner < restore.dump
   docker compose --profile ops run --rm migrate
   docker compose up -d
@@ -145,7 +151,10 @@ The API drains in-flight requests on SIGTERM before exiting.
   Status: Route 53 console → Health checks, or
   `aws route53 get-health-check-status --health-check-id <id> --profile rfpilot`.
   `/ops/health` is not rate-limited; keep it that way or the checkers will trip the alarm.
-- **Logs**: `docker compose logs -f api dispatcher`. Worth watching: `[dispatcher] not sent to …`
+- **Worker**: `curl -s https://pmp.av-rfpilot.com/ops/health` → `"worker":"up"`. `"stale"` means it
+  stopped (`docker compose ps worker`, `docker compose logs worker`, `docker compose up -d worker`);
+  the uptime checks do not look at this field.
+- **Logs**: `docker compose logs -f api worker dispatcher`. Worth watching: `[dispatcher] not sent to …`
   (suppressed or invalid addresses), `[reminders] …`, `pdf` failures, `refusing to start`.
 - **Disk**: Postgres volume and Docker images; alert at 80 %.
 - **SES**: bounce and complaint rates in the SES console (keep bounce < 2 %, complaints < 0.1 %).

@@ -81,8 +81,8 @@ import {
 } from "./services/events.ts";
 import { eventAgenda } from "./services/agenda.ts";
 import { agentForKey, issueDeviceKey } from "./services/deviceKeys.ts";
-import { pdfStates, queuePdfs, resumePdfQueue } from "./services/pdf.ts";
-import { reminderSchedule, startReminderScheduler } from "./services/reminders.ts";
+import { pdfStates, queuePdfs } from "./services/pdf.ts";
+import { reminderSchedule } from "./services/reminders.ts";
 import {
   createSession,
   updateSession,
@@ -693,10 +693,20 @@ const statusFor = (error: DomainError): number => {
   return 400;
 };
 
+/**
+ * `status` is about the API and its database — what the uptime checks match on. `worker`
+ * (D-103) says whether background jobs are running: "up" if any worker has beaten in the
+ * last two minutes, "stale" if one stopped, "none" if none ever started. A stopped worker
+ * leaves the sites usable, with previews stuck at "queued" and no reminders.
+ */
 app.get("/ops/health", async (_req, res) => {
   try {
-    await getPool().query("SELECT 1");
-    res.json({ status: "ok", database: "up" });
+    const { rows } = await getPool().query<{ age: number | null }>(
+      `SELECT extract(epoch FROM now() - max(beat_at))::float AS age FROM pmp.worker_heartbeats`,
+    );
+    const age = rows[0]?.age;
+    const worker = age === null || age === undefined ? "none" : age < 120 ? "up" : "stale";
+    res.json({ status: "ok", database: "up", worker });
   } catch {
     res.status(503).json({ status: "degraded", database: "down" });
   }
@@ -3078,10 +3088,7 @@ app.use((err: unknown, _req: express.Request, res: express.Response, _next: expr
 const port = Number(process.env.PORT ?? 4000);
 const server = app.listen(port, () => {
   console.error(`api listening on http://localhost:${port}`);
-  // Conversions interrupted by a restart go back in line (D-067).
-  resumePdfQueue().catch((error: unknown) => console.error("pdf queue resume failed", error));
-  // Automatic upload reminders (D-096): every quarter hour, from a minute after start.
-  startReminderScheduler();
+  // PDF previews and automatic reminders run in the worker process, not here (D-103).
 });
 
 /*

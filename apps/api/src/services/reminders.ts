@@ -17,7 +17,7 @@ import { ensureTemplates, sendBatch } from "./comms.ts";
  *     deadline has passed — and nothing is ever sent before 09:00 event time, a missed day
  *     included (D-102: a caught-up reminder used to go out at 00:39);
  *   - each reminder day runs **once** per event and deadline, recorded in `reminder_runs`, so
- *     a restart, a second API instance or a slow tick cannot repeat it — and moving the
+ *     a restart, a second worker or a slow tick cannot repeat it — and moving the
  *     deadline starts a fresh set;
  *   - if the API was down across a reminder day, the next run sends **one** reminder for
  *     the most recent day due and records the earlier ones as caught up — never a burst;
@@ -220,22 +220,32 @@ export async function runDueReminders(
   return outcomes;
 }
 
-/** Every quarter hour, in the API process, like the PDF queue. Off with REMINDERS_DISABLED=1. */
+/** Every quarter hour, in the worker process (D-103). Off with REMINDERS_DISABLED=1. */
 const TICK_MS = Number(process.env.REMINDER_TICK_MS ?? 15 * 60 * 1000);
 let ticking: NodeJS.Timeout | undefined;
+let first: NodeJS.Timeout | undefined;
+let running: Promise<void> = Promise.resolve();
 
 export function startReminderScheduler(): void {
   if (process.env.REMINDERS_DISABLED === "1" || ticking) return;
-  const tick = () =>
-    void withSystemScope((tx) => runDueReminders(tx))
+  const tick = () => {
+    running = withSystemScope((tx) => runDueReminders(tx))
       .then((sent) => {
         for (const run of sent) {
           console.error(`[reminders] event ${run.event_id} · ${run.days_before} days before · ${run.outcome} · ${run.queued} queued`);
         }
       })
       .catch((error) => console.error("[reminders] run failed", error));
+  };
   // A minute after start, so a restart does not race the rest of boot.
-  setTimeout(tick, 60_000).unref();
+  first = setTimeout(tick, 60_000);
   ticking = setInterval(tick, TICK_MS);
-  ticking.unref();
+}
+
+/** Stops the schedule and waits for a run in progress (it is one short transaction). */
+export async function stopReminderScheduler(): Promise<void> {
+  if (first) clearTimeout(first);
+  if (ticking) clearInterval(ticking);
+  first = ticking = undefined;
+  await running;
 }
