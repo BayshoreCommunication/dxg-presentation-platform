@@ -79,6 +79,39 @@ function StaffFrame({
     }
   }, []);
 
+  /*
+   * Narrow screens (≤760px — phones, small tablets, a narrow window) get the sidebar as a
+   * slide-out menu. It used to stack the whole sidebar above the page, so the screen
+   * opened on 900px of navigation with the page itself below the fold. The menu starts
+   * closed, opens from the top bar, and closes on a tap outside, Escape, or a page change.
+   * The desktop "collapsed" preference is left untouched.
+   */
+  const pathname = usePathname();
+  const [narrow, setNarrow] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  useEffect(() => {
+    const query = window.matchMedia("(max-width: 760px)");
+    const update = () => {
+      setNarrow(query.matches);
+      if (!query.matches) setMenuOpen(false);
+    };
+    update();
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
+
+  useEffect(() => setMenuOpen(false), [pathname]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMenuOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [menuOpen]);
+
   const setAndRemember = (next: boolean) => {
     setCollapsed(next);
     try {
@@ -89,15 +122,27 @@ function StaffFrame({
   };
 
   return (
-    <div className={collapsed ? "shell sidebar-collapsed" : "shell"}>
-      <Sidebar principal={principal} events={events} onCollapse={() => setAndRemember(true)} />
+    <div className={`shell${collapsed && !narrow ? " sidebar-collapsed" : ""}${menuOpen ? " menu-open" : ""}`}>
+      <Sidebar
+        principal={principal}
+        events={events}
+        collapseLabel={narrow ? "Close menu" : "Collapse sidebar"}
+        onCollapse={() => (narrow ? setMenuOpen(false) : setAndRemember(true))}
+      />
+      {narrow && menuOpen && <div className="menu-scrim" aria-hidden="true" onClick={() => setMenuOpen(false)} />}
       <main>
         <header className="topbar">
           <div className="left">
             {/* As in Kravio, the top bar only offers a way back once the sidebar is shut;
                 the glyph is mirrored to point the way the rail will open. */}
-            {collapsed && (
-              <button type="button" className="ibtn toggle open" aria-label="Open sidebar" onClick={() => setAndRemember(false)}>
+            {(collapsed || narrow) && (
+              <button
+                type="button"
+                className="ibtn toggle open"
+                aria-label={narrow ? "Open menu" : "Open sidebar"}
+                aria-expanded={narrow ? menuOpen : undefined}
+                onClick={() => (narrow ? setMenuOpen(true) : setAndRemember(false))}
+              >
                 <Glyph name="sidebar" />
               </button>
             )}

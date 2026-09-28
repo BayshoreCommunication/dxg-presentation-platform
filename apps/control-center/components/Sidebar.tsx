@@ -129,11 +129,14 @@ export function Sidebar({
   principal,
   events,
   onCollapse,
+  collapseLabel = "Collapse sidebar",
 }: {
   principal: Principal | null;
   events: EventRow[];
   /** Kravio keeps the collapse control in the sidebar's own logo row (D-078). */
   onCollapse?: () => void;
+  /** "Close menu" when the sidebar is the narrow-screen slide-out. */
+  collapseLabel?: string;
 }) {
   const pathname = usePathname();
   const params = useParams<{ id?: string }>();
@@ -157,7 +160,7 @@ export function Sidebar({
           <b>DXG·PM</b>
         </Link>
         {onCollapse && (
-          <button type="button" className="ibtn toggle" aria-label="Collapse sidebar" onClick={onCollapse}>
+          <button type="button" className="ibtn toggle" aria-label={collapseLabel} onClick={onCollapse}>
             <Glyph name="sidebar" />
           </button>
         )}

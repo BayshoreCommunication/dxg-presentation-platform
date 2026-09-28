@@ -43,8 +43,14 @@ describe("the background worker (D-103)", () => {
     if (!up) return t.skip("API not running");
     const versionId = await withSystemScope(async (tx) => {
       const { rows } = await tx.query<{ id: string }>(
-        `SELECT id FROM pmp.file_versions WHERE s3_key IS NOT NULL AND processing_state = 'stored'
-          ORDER BY created_at DESC LIMIT 1`,
+        // Not a file another suite just uploaded: the worker may be converting it right
+        // now, and its finish would land on the row re-queued here (attempts 0, "done").
+        `SELECT fv.id FROM pmp.file_versions fv
+          WHERE fv.s3_key IS NOT NULL AND fv.processing_state = 'stored'
+            AND fv.created_at < now() - interval '10 minutes'
+            AND NOT EXISTS (SELECT 1 FROM pmp.pdf_conversions pc
+                             WHERE pc.file_version_id = fv.id AND pc.state IN ('queued', 'converting'))
+          ORDER BY fv.created_at DESC LIMIT 1`,
       );
       if (rows[0]) await tx.query(`DELETE FROM pmp.pdf_conversions WHERE file_version_id = $1`, [rows[0].id]);
       return rows[0]?.id;

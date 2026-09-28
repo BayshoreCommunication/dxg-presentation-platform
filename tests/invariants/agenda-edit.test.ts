@@ -2,6 +2,7 @@ import { test, describe, before, after } from "node:test";
 import assert from "node:assert/strict";
 import type { TestContext } from "node:test";
 import { signInStaff } from "../helpers/signIn.ts";
+import { getOwnerPool } from "@pmp/db";
 import { removeTestEvents } from "../helpers/cleanup.ts";
 
 /**
@@ -73,7 +74,25 @@ before(async () => {
 });
 
 after(async () => {
-  if (up) await removeTestEvents([NAME]);
+  if (!up) return;
+  /*
+   * The archive test below archives and restores the probe, which writes workflow
+   * history, and `removeTestEvents` keeps history — so the probe used to be archived
+   * instead of deleted, one more copy every run (32 by 2026-09-28). That history is
+   * this suite's own test traffic on its own probe, so it goes first; every earlier
+   * copy by this name is cleared with it.
+   */
+  // The same guard as the helper: history is only ever cleared in a development database.
+  if (!/^pmp_(dev|test)/.test(process.env.PGDATABASE ?? "pmp_dev")) return;
+  // As the database owner: the app's role may not delete history at all (append-only).
+  const owner = getOwnerPool();
+  await owner.query(
+    `DELETE FROM pmp.workflow_transitions
+      WHERE event_id IN (SELECT id FROM pmp.events WHERE name = $1)`,
+    [NAME],
+  );
+  await owner.end();
+  await removeTestEvents([NAME]);
 });
 
 describe("sessions", () => {

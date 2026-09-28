@@ -295,10 +295,6 @@ label{display:block;margin-bottom:6px;font-size:12px;font-weight:500;color:var(-
 .live i{width:7px;height:7px;border-radius:50%;background:var(--success);display:inline-block;box-shadow:0 0 0 3px rgba(5,150,105,.15)}
 
 @media (max-width:760px){
-  .shell{flex-direction:column}
-  aside{position:static;width:100%;height:auto}
-  aside nav{max-height:none}
-  .account{display:none}
   .grid2{grid-template-columns:1fr}
 }
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
@@ -1080,3 +1076,20 @@ input,select,textarea{border-width:1px}
 /* Accent picker swatches (D-092): a small lift on hover and keyboard focus. */
 .cp-swatch{transition:transform .15s var(--ease-out-expo)}
 .cp-swatch:hover,.cp-swatch:focus-visible{transform:scale(1.1);outline:none}
+
+/* ── Narrow screens: the sidebar is a slide-out menu ──────────────────────────
+   Last in the file so the shared geometry above cannot undo it. It used to stack the
+   whole sidebar above the page. Hidden by CSS alone, so it never flashes open before
+   the page's script runs; Shell.tsx adds .menu-open and the scrim. */
+@media (max-width:760px){
+  aside,.sidebar-collapsed aside{position:fixed;top:0;left:0;bottom:0;z-index:60;width:min(280px,86vw);height:100%;opacity:1;pointer-events:auto;background:var(--background);box-shadow:0 12px 40px rgba(0,0,0,.18);transform:translateX(-100%);visibility:hidden;transition:transform .25s var(--ease-out-expo),visibility 0s linear .25s}
+  aside .logo,aside .sidebody{width:auto}
+  .menu-open aside{transform:none;visibility:visible;transition:transform .25s var(--ease-out-expo)}
+  .menu-scrim{position:fixed;inset:0;z-index:59;background:rgba(0,0,0,.35)}
+  main{min-width:0;width:100%}
+  /* A table wider than the screen scrolls inside its card instead of being cut off (Staff
+     accounts' action buttons were). Not tables with row menus (SRR, Files): a scrolling
+     box would clip their popup, the recurring bug class this file already guards. */
+  .cbd:has(> table):not(:has(.rowmenu)){overflow-x:auto}
+}
+@media (max-width:760px) and (prefers-reduced-motion:reduce){aside,.menu-open aside{transition:none}}
