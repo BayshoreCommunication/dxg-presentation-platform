@@ -2229,3 +2229,23 @@ name in the tab (never the access code) and says who to ask for a new code, a cl
 deadline box hides once approved, minimum password length shown up front. API: additive fields only (presentation
 detail `srr`, SRR dashboard sign-off/approval/room states and richer warnings, check-in approval detail, archive
 excluded `slot_id`). **Open:** R48 "Technician review" — see UX_REVIEW. Tests: one new invariant; 299/299.
+
+## D-114 (2026-09-29): "Technician review" is removed — Status: ACCEPTED (Travis's call)
+R48 in `docs/UX_REVIEW.md`: the inspection state `technician_review` blocked approval, but nothing ever set it (ingest
+writes passed / passed with warnings / failed; `refer_to_technician` was never called) and nothing could clear it on
+screen. Rather than build a technician pass/fail step nobody asked for, the state is dropped: from the inspection
+lifecycle (with its `refer_to_technician`, `technician_pass`, `technician_fail` transitions), the vocabulary, the
+approval gate and the review screen, and from the database check (migration 024, which first moves any row in the
+state to `failed` so it can never be approved unseen; production had none). A file that needs a person's judgement is
+a warning the reviewer reads, or a failure with a waiver. Logged as a deviation in VISUAL_ACCEPTANCE §5.
+
+## D-115 (2026-09-29): In-app Help — task guides and a glossary — Status: ACCEPTED
+The last step of the staff-usability plan (`docs/UX_REVIEW.md`): DXG staff learn the platform from the platform. A
+**Help** page (`/help`, `components/HelpView.tsx`) with: the three confirmations explained once; short task guides —
+create an event, give a colleague access, invite speakers, change an email template, review and approve, when a file
+fails a check, go back to an earlier version, check a speaker in, take a version by USB, room PCs, build and deliver
+the archive, signing in and backup codes — each with who can do it, numbered steps in the words the screens use, and a
+tip; a **glossary built from the shared vocabulary** (`@pmp/format`), so it cannot disagree with the screens; and one
+search box over both. A **? Help** button in the top bar (not a sidebar entry: the sidebar's structure is DXG-approved)
+opens the guide for the current screen (`guideForPath`). The guides are hand-written: when a flow changes, its guide
+changes in the same commit.

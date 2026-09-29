@@ -51,6 +51,12 @@ Deviations are allowed only for: real-data constraints, accessibility fixes (WCA
 §2 allows deviations for real-data constraints, accessibility, and behaviours the baseline lacks, each
 logged here with a reason.
 
+### 2026-09-29 — "Technician review" state removed (D-114)
+
+**Deviation.** §2.2 lists "Technician review" among the baseline's state labels. The state is gone: nothing
+ever put a file into it, and if reached it blocked approval with no action to clear it. A file that needs a
+person's judgement shows as a warning the reviewer reads, or as failed. Travis's call, 2026-09-29.
+
 ### 2026-09-20 — sidebar hides destinations the signed-in account is refused
 
 **Deviation.** §2.1 fixes the sidebar's structure, grouping, order and names. The sidebar now omits an

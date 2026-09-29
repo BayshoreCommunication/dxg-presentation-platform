@@ -22,7 +22,7 @@ const FINDING_COPY: Record<string, (detail: Record<string, unknown>) => string> 
 
 
 /** Inspection states in which the automated checks have not finished (D-108). */
-const CHECKING = ["pending", "inspecting", "technician_review"];
+const CHECKING = ["pending", "inspecting"];
 
 export function ReviewWorkspace({
   eventId,
@@ -69,10 +69,7 @@ export function ReviewWorkspace({
   const openBlocking = selected ? selected.findings.filter((finding) => finding.severity === "blocking").length : 0;
   const approveBlocked = !selected
     ? null
-    : selected.inspection_state === "technician_review"
-      ? // R48 (D-113): nothing on screen resolves this state yet — say so, not "wait".
-        "A check needs a technician to look at this file by hand before it can be approved, and that can't be recorded on screen yet. Contact DXG support, or ask the speaker for a new version."
-      : CHECKING.includes(selected.inspection_state)
+    : CHECKING.includes(selected.inspection_state)
       ? "Approve is available once the automated checks finish."
       : openBlocking > 0
         ? `This file has ${openBlocking} blocking problem${openBlocking === 1 ? "" : "s"}. Waive ${openBlocking === 1 ? "it" : "them"} with a reason in the inspection report, or ask the speaker for a new version.`
@@ -269,13 +266,7 @@ export function ReviewWorkspace({
                 </div>
               ))}
 
-            {selected.inspection_state === "technician_review" ? (
-              <div className="lane cli">
-                <b>{wordsFor(INSPECTION_STATE, selected.inspection_state).label}</b>
-                <br />
-                {approveBlocked}
-              </div>
-            ) : CHECKING.includes(selected.inspection_state) ? (
+            {CHECKING.includes(selected.inspection_state) ? (
               <div className="lane int">
                 <b>Checks still running</b>
                 <br />

@@ -122,7 +122,6 @@ describe("inspection gates review eligibility (FR-INSP-003)", () => {
   test("a failed inspection blocks review unless every blocking finding is waived", () => {
     assert.equal(isReviewEligible("failed", false), false);
     assert.equal(isReviewEligible("failed", true), true);
-    assert.equal(isReviewEligible("technician_review", true), false);
     assert.equal(isReviewEligible("passed_with_warnings", false), true);
   });
 });

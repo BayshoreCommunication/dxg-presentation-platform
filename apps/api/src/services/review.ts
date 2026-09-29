@@ -236,7 +236,7 @@ async function reviewIneligibility(
     };
   }
   if (action !== "approve") return undefined;
-  if (["pending", "inspecting", "technician_review"].includes(version.inspection_state)) {
+  if (["pending", "inspecting"].includes(version.inspection_state)) {
     return {
       code: "review.ineligible_conflict",
       message: "This file is still being inspected. It can be approved once inspection finishes.",

@@ -101,7 +101,6 @@ export const INSPECTION_STATE: Readonly<Record<string, Words>> = {
   inspecting: { label: "Checks running", meaning: "Refresh in a minute." },
   passed: { label: "Checks passed", meaning: "No problems found." },
   passed_with_warnings: { label: "Passed with warnings", meaning: "Nothing blocks approval, but read the warnings." },
-  technician_review: { label: "Technician review", meaning: "A check needs a person to look at it before approval." },
   failed: { label: "Checks failed", meaning: "A problem must be fixed before this can be approved." },
 };
 

@@ -37,10 +37,9 @@ FR-INSP-001..004. Starts automatically when `processing_state = stored`.
 | `inspecting` | Checks running | no |
 | `passed` | No findings above info; "pass with limitations" copy shown (FR-INSP-004) | yes |
 | `passed_with_warnings` | Non-blocking findings | yes |
-| `technician_review` | Findings need human judgment (corrupted, macros, linked media…) | no |
 | `failed` | Blocking findings | yes (new version required, or waiver) |
 
-Legal: `pending→inspecting→{passed, passed_with_warnings, technician_review, failed}`; `technician_review→{passed_with_warnings, failed}` (technician decision, reason required); waiver (FR-INSP-003) does not change state — it annotates a finding (visible forever, audited) and unblocks review eligibility. Re-upload creates a new FileVersion with a fresh inspection lifecycle. Roles: system; technician decisions require SRR Technician or above; waivers require Presentation Manager or above + reason.
+Legal: `pending→inspecting→{passed, passed_with_warnings, failed}` (`technician_review` was removed by D-114: nothing ever referred a file to it and it blocked approval with no way out); waiver (FR-INSP-003) does not change state — it annotates a finding (visible forever, audited) and unblocks review eligibility. Re-upload creates a new FileVersion with a fresh inspection lifecycle. Roles: system; waivers require Presentation Manager or above + reason.
 
 ## 3. Review/approval state (per FileVersion) — `review_state`
 

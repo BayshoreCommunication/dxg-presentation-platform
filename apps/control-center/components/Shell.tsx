@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { guideForPath } from "@/components/HelpView";
 import { usePathname } from "next/navigation";
 import { Sidebar } from "@/components/Sidebar";
 import { SignOutButton } from "@/components/SignOutButton";
@@ -203,6 +204,8 @@ function StaffFrame({
           <div className="right">
             {/* No notifications bell: nothing in the product raises notifications yet, so it would
                 open onto an empty panel. Kravio's bell glyph is kept in Icon.tsx for when they exist. */}
+            {/* Help for the screen you're on (D-115). */}
+            <HelpLink />
             <HeaderMenu label="Settings" className="gear" icon={<Glyph name="settings" />} title="Account">
               <Link href="/account/password" className="item" role="menuitem">
                 Change password
@@ -219,6 +222,17 @@ function StaffFrame({
         <div className="content">{children}</div>
       </main>
     </div>
+  );
+}
+
+/** The top bar's Help button: opens the guide for the current screen, or Help's start. */
+function HelpLink() {
+  const pathname = usePathname() ?? "";
+  const guide = guideForPath(pathname);
+  return (
+    <Link href={guide ? `/help#${guide}` : "/help"} className="btn help-link" title="How this screen works">
+      ? Help
+    </Link>
   );
 }
 
@@ -306,6 +320,7 @@ const SCREENS: [RegExp, string][] = [
   [/^\/admin\/users$/, "Staff accounts"],
   [/^\/admin\/assignments$/, "Event assignments"],
   [/^\/no-access$/, "No access"],
+  [/^\/help$/, "Help"],
 ];
 
 function breadcrumb(pathname: string, events: EventRow[]): { label: string; href?: string }[] {

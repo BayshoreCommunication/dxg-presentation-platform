@@ -3172,3 +3172,7 @@ Next: batch 5 (confirmations and guidance), then the Help page and practice even
 ## 2026-09-29 — UX batch 5: ask first, next steps, the three confirmations (D-113)
 All five UX_REVIEW batches done. Open decision R48 (Technician review). Not committed yet. Next: in-app Help page
 (task guides + glossary) and a practice event for training.
+
+## 2026-09-29 — "Technician review" removed (D-114); in-app Help (D-115)
+Migration 024 drops the unreachable state. /help: task guides + glossary from the shared vocabulary, ? Help in the top
+bar opens the current screen's guide. Not committed yet. Next: a practice event for training.

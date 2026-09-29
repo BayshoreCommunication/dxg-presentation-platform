@@ -1124,3 +1124,8 @@ input,select,textarea{border-width:1px}
 .confirm-inline.danger{border-color:var(--destructive)}
 .confirm-inline .note{margin-top:4px}
 .confirm-inline-actions{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+
+/* Help (D-115): the top-bar button and a guide scrolled to from it. */
+.topbar .help-link{padding:4px 10px;font-size:13px}
+.help-guide{scroll-margin-top:72px}
+.help-guide:target h4{background:var(--muted);border-radius:6px;padding:2px 6px;margin-left:-6px}
