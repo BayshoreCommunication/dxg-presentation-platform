@@ -1129,3 +1129,7 @@ input,select,textarea{border-width:1px}
 .topbar .help-link{padding:4px 10px;font-size:13px}
 .help-guide{scroll-margin-top:72px}
 .help-guide:target h4{background:var(--muted);border-radius:6px;padding:2px 6px;margin-left:-6px}
+
+/* Practice event (D-116): a thin, always-visible line on every screen of one. */
+.practice-banner{margin:0 0 12px;padding:6px 12px;border:1px solid var(--amber);border-radius:8px;background:var(--warn-soft);color:var(--amber-text);font-size:12.5px;line-height:1.4}
+[data-theme="dark"] .practice-banner{color:#f59e0b;border-color:rgba(245,158,11,.45)}

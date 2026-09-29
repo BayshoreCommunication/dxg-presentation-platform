@@ -157,6 +157,8 @@ export const EMAIL_STATUS: Readonly<Record<string, Words>> = {
   complained: { label: "Marked as spam", meaning: "The speaker marked it as spam; we won't email them again.", next: "Contact the speaker another way." },
   failed: { label: "Not sent", meaning: "The mail service refused it.", next: "Try again; if it keeps failing, contact DXG support." },
   suppressed: { label: "Not sent", meaning: "This address bounced or complained before, so we didn't send.", next: "Correct the email address." },
+  // D-116: what a practice event's emails end as — recorded, never sent.
+  practice: { label: "Practice — not sent", meaning: "This is a practice event, so no email left the system." },
 };
 
 // ── archive ──────────────────────────────────────────────────────────────────────────

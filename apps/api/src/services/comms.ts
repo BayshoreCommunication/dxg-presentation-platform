@@ -699,7 +699,16 @@ export async function deliveryLog(tx: pg.PoolClient, eventId: string): Promise<D
   return rows;
 }
 
-export type Stats = { queued: number; sent: number; delivered: number; opened: number; clicked: number; bounced: number };
+export type Stats = {
+  queued: number;
+  sent: number;
+  delivered: number;
+  opened: number;
+  clicked: number;
+  bounced: number;
+  /** A practice event's emails, recorded and never sent (D-116). */
+  practice: number;
+};
 
 export async function deliveryStats(tx: pg.PoolClient, eventId: string): Promise<Stats> {
   const { rows } = await tx.query<Record<string, string>>(
@@ -708,7 +717,8 @@ export async function deliveryStats(tx: pg.PoolClient, eventId: string): Promise
             count(*) FILTER (WHERE status = 'delivered')::text AS delivered,
             count(*) FILTER (WHERE status = 'opened')::text AS opened,
             count(*) FILTER (WHERE status = 'clicked')::text AS clicked,
-            count(*) FILTER (WHERE status IN ('bounced','complained'))::text AS bounced
+            count(*) FILTER (WHERE status IN ('bounced','complained'))::text AS bounced,
+            count(*) FILTER (WHERE status = 'practice')::text AS practice
        FROM pmp.communications WHERE event_id = $1`,
     [eventId],
   );
@@ -720,6 +730,7 @@ export async function deliveryStats(tx: pg.PoolClient, eventId: string): Promise
     opened: Number(row.opened ?? 0),
     clicked: Number(row.clicked ?? 0),
     bounced: Number(row.bounced ?? 0),
+    practice: Number(row.practice ?? 0),
   };
 }
 

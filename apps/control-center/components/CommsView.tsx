@@ -31,6 +31,7 @@ const STATUS_TONE: Record<string, string> = {
   complained: "attention",
   failed: "attention",
   suppressed: "attention",
+  practice: "canceled",
 };
 
 /**
@@ -102,7 +103,18 @@ const fill = (text: string, values: Record<string, string>) =>
   text.replace(/\{\{\s*([a-z_]+)\s*\}\}/gi, (match, key: string) => values[key.toLowerCase()] ?? match);
 
 /** Screen 9 — templates, batches, and who each batch would actually reach. */
-export function CommsView({ eventId, data, event }: { eventId: string; data: CommsData; event: PreviewEvent }) {
+export function CommsView({
+  eventId,
+  data,
+  event,
+  practice = false,
+}: {
+  eventId: string;
+  data: CommsData;
+  event: PreviewEvent;
+  /** A practice event (D-116): nothing is sent, so nothing "will send". */
+  practice?: boolean;
+}) {
   const router = useRouter();
   const subjectRef = useRef<HTMLInputElement>(null);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
@@ -193,6 +205,15 @@ export function CommsView({ eventId, data, event }: { eventId: string; data: Com
             tone={key === "bounced" && data.stats.bounced > 0 ? "bad" : undefined}
           />
         ))}
+        {/* D-116: a practice event's emails are counted here, never under Sent. */}
+        {(data.stats.practice ?? 0) > 0 && (
+          <Kpi
+            label={wordsFor(EMAIL_STATUS, "practice").label}
+            icon="mail"
+            value={data.stats.practice}
+            caption="nothing left the system"
+          />
+        )}
       </div>
 
       <div className="card">
@@ -338,6 +359,8 @@ export function CommsView({ eventId, data, event }: { eventId: string; data: Com
                       <td style={{ textAlign: "right" }}>
                         {reason ? (
                           <span className="chip c-mut">{reason}</span>
+                        ) : practice ? (
+                          <span className="chip c-mut">practice — not sent</span>
                         ) : (
                           <span className="chip c-ok">will send</span>
                         )}

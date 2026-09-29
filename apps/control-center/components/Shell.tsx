@@ -219,9 +219,23 @@ function StaffFrame({
             </HeaderMenu>
           </div>
         </header>
-        <div className="content">{children}</div>
+        <div className="content">
+          <PracticeBanner pathname={pathname ?? ""} events={events} />
+          {children}
+        </div>
       </main>
     </div>
+  );
+}
+
+/** On every screen of a practice event (D-116), so nobody forgets which kind they are in. */
+function PracticeBanner({ pathname, events }: { pathname: string; events: EventRow[] }) {
+  const eventId = /^\/events\/([^/]+)/.exec(pathname)?.[1];
+  if (!eventId || !events.some((event) => event.id === eventId && event.is_practice)) return null;
+  return (
+    <p className="practice-banner" role="note">
+      Practice event — nothing here reaches real speakers or clients. Emails are shown in Communications but never sent.
+    </p>
   );
 }
 

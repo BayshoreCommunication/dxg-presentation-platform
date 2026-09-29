@@ -122,6 +122,7 @@ import {
 import type { ImportField, StagedRow, RowOverrides, ImportPreview } from "./services/scheduleImport.ts";
 import type { PortalSession } from "./services/portal.ts";
 import { decide } from "./services/review.ts";
+import { createPracticeEvent } from "./services/practice.ts";
 
 assertProductionConfig();
 
@@ -766,18 +767,19 @@ app.get("/api/v1/events", async (req, res) => {
     principal?.kind === "staff" && principal.roles.some((role) => PLATFORM_WIDE_ROLES.includes(role));
   const own = principal?.kind === "staff" ? [...new Set(principal.event_roles.map((held) => held.event_id))] : [];
 
+  // Practice events (D-116) come back flagged, with whose they are, so the portfolio can
+  // list them apart and never count them with real events.
+  const columns = `e.id, e.name, e.starts_on::text, e.ends_on::text, e.timezone, e.status,
+                   e.is_practice, e.practice_owner, u.display_name AS practice_owner_name`;
+  const from = `pmp.events e LEFT JOIN pmp.users u ON u.id = e.practice_owner`;
   const items = await withScope(scopeFor(req), async (tx) => {
     if (seesAll) {
-      const { rows } = await tx.query(
-        `SELECT id, name, starts_on::text, ends_on::text, timezone, status
-           FROM pmp.events ORDER BY starts_on DESC`,
-      );
+      const { rows } = await tx.query(`SELECT ${columns} FROM ${from} ORDER BY e.starts_on DESC`);
       return rows;
     }
     if (own.length === 0) return [];
     const { rows } = await tx.query(
-      `SELECT id, name, starts_on::text, ends_on::text, timezone, status
-         FROM pmp.events WHERE id = ANY($1::uuid[]) ORDER BY starts_on DESC`,
+      `SELECT ${columns} FROM ${from} WHERE e.id = ANY($1::uuid[]) ORDER BY e.starts_on DESC`,
       [own],
     );
     return rows;
@@ -2470,7 +2472,8 @@ app.get("/api/v1/clients", async (req, res) => {
   const actor = actorFrom(req);
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   const items = await withScope(scopeFor(req), async (tx) => {
-    const { rows } = await tx.query(`SELECT id, name FROM pmp.clients ORDER BY name`);
+    // The practice client (D-116) is made up; a real event is never created under it.
+    const { rows } = await tx.query(`SELECT id, name FROM pmp.clients WHERE NOT is_practice ORDER BY name`);
     return rows;
   });
   return res.json({ items });
@@ -2484,8 +2487,16 @@ app.post("/api/v1/events", async (req, res) => {
   // An event belongs to a client. If the caller did not say which and there is
   // exactly one, use it; otherwise ask rather than guess.
   const clientId = await withScope(scopeFor(req), async (tx) => {
-    if (body.client_id) return body.client_id;
-    const { rows } = await tx.query<{ id: string }>(`SELECT id FROM pmp.clients`);
+    // Never the practice client (D-116): practice events are started from the portfolio.
+    if (body.client_id) {
+      if (!UUID.test(body.client_id)) return null;
+      const { rows } = await tx.query<{ id: string }>(
+        `SELECT id FROM pmp.clients WHERE id = $1 AND NOT is_practice`,
+        [body.client_id],
+      );
+      return rows[0]?.id ?? null;
+    }
+    const { rows } = await tx.query<{ id: string }>(`SELECT id FROM pmp.clients WHERE NOT is_practice`);
     return rows.length === 1 ? rows[0]!.id : null;
   });
   if (!clientId) {
@@ -2506,6 +2517,29 @@ app.post("/api/v1/events", async (req, res) => {
   );
   if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
   return res.status(201).json(result.value);
+});
+
+/**
+ * Start a practice event (D-116): any DXG staff member, for themselves. The staff check
+ * above has already refused client accounts. Built in one transaction through the same
+ * services people use; at most PRACTICE_LIMIT open at once per person.
+ */
+app.post("/api/v1/practice-events", async (req, res) => {
+  const actor = actorFrom(req);
+  const principal = (req as express.Request & { principal?: Principal }).principal;
+  if (!actor || principal?.kind !== "staff") {
+    return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  }
+  const result = await withScope(scopeFor(req), (tx) =>
+    createPracticeEvent(tx, { id: principal.user_id, displayName: principal.display_name }),
+  );
+  if (!result.ok) {
+    return res.status(result.error.code === "practice.limit_reached" ? 422 : statusFor(result.error)).json(result.error);
+  }
+  const { approved_version_ids: approved, ...created } = result.value;
+  // As the review route does: the approved version's PDF copy is made after the commit.
+  if (approved.length > 0) void queuePdfs(approved).catch((error: unknown) => console.error("pdf queue", error));
+  return res.status(201).json(created);
 });
 
 app.get("/api/v1/events/:eventId/draft", async (req, res) => {

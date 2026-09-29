@@ -222,7 +222,12 @@ export function Sidebar({
         </div>
         <nav>
           {GROUPS.map(({ group, roles, items }) => {
-            const held = principal?.roles ?? [];
+            // Roles held anywhere, plus those on this event — a practice event's roles
+            // count only inside it (D-116).
+            const held = [
+              ...(principal?.roles ?? []),
+              ...(principal?.event_roles ?? []).filter((entry) => entry.event_id === eventId).map((entry) => entry.role),
+            ];
             const allowed = (needed?: string[]) => !needed || needed.some((role) => held.includes(role));
             // A whole group can be out of reach, and an item within a reachable one.
             const visible = allowed(roles) ? items.filter((item) => allowed(item.roles)) : [];

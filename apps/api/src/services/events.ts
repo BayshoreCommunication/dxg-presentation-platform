@@ -692,9 +692,17 @@ export async function duplicateEvent(
     timezone: string;
     settings: Record<string, unknown>;
     branding: Record<string, unknown> | null;
-  }>(`SELECT client_id, venue_id, timezone, settings, branding FROM pmp.events WHERE id = $1`, [sourceId]);
+    is_practice: boolean;
+  }>(`SELECT client_id, venue_id, timezone, settings, branding, is_practice FROM pmp.events WHERE id = $1`, [sourceId]);
   const source = sourceRows[0];
   if (!source) return err({ code: "events.not_found", message: "This event no longer exists — it may have been removed. Refresh the page." });
+  // D-116: a copy would be a real event under the made-up practice client.
+  if (source.is_practice) {
+    return err({
+      code: "events.practice_conflict",
+      message: "A practice event can't be copied. Start a new practice event from the Portfolio instead.",
+    });
+  }
 
   const { rows: created } = await tx.query<{ id: string }>(
     `INSERT INTO pmp.events (client_id, venue_id, name, starts_on, ends_on, timezone, status, settings, branding, duplicated_from)

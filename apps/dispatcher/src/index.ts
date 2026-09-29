@@ -1,7 +1,7 @@
 import { withSystemScope, closePool } from "@pmp/db";
 import { senderFromEnv } from "@pmp/email";
-import type { Message } from "@pmp/email";
-import { suppressionReason } from "./guard.ts";
+import { handle as handleRow } from "./handle.ts";
+import type { OutboxRow } from "./handle.ts";
 
 /**
  * The outbox dispatcher (BUILD_SPEC §6.2). Side effects are written inside the
@@ -12,70 +12,6 @@ import { suppressionReason } from "./guard.ts";
 const sender = senderFromEnv();
 const INTERVAL_MS = Number(process.env.DISPATCH_INTERVAL_MS ?? 1000);
 const BATCH = 20;
-
-type OutboxRow = { id: string; topic: string; payload: Record<string, unknown> };
-
-async function handle(row: OutboxRow): Promise<void> {
-  if (row.topic !== "email.send") return; // other topics belong to the worker
-
-  const payload = row.payload as {
-    to?: string;
-    subject?: string;
-    body?: string;
-    communication_id?: string;
-  };
-  if (!payload.to || !payload.subject) {
-    throw new Error("email.send payload needs `to` and `subject`");
-  }
-
-  // Never hand the provider an address that will bounce, or one that already has (D-097).
-  const refused = await withSystemScope((tx) => suppressionReason(tx, payload.to!));
-  if (refused) {
-    console.error(`[dispatcher] not sent to ${payload.to} — ${refused}`);
-    if (payload.communication_id) {
-      await withSystemScope(async (tx) => {
-        await tx.query(
-          `UPDATE pmp.communications SET status = 'failed', status_detail = $2 WHERE id = $1 AND status = 'queued'`,
-          [payload.communication_id, JSON.stringify({ reason: refused })],
-        );
-        await tx.query(
-          `INSERT INTO pmp.communication_events
-             (communication_id, event_id, client_id, event_type, payload, occurred_at)
-           SELECT id, event_id, client_id, 'failed', $2, now() FROM pmp.communications WHERE id = $1`,
-          [payload.communication_id, JSON.stringify({ reason: refused })],
-        );
-      });
-    }
-    return; // Dispatched: it was decided, not deferred — retrying would refuse again.
-  }
-
-  const message: Message = {
-    to: payload.to,
-    subject: payload.subject,
-    body: payload.body ?? "",
-    kind: row.topic,
-    ref: payload.communication_id,
-  };
-  const delivery = await sender.send(message);
-
-  // Speaker mail has a communication row to update; account mail does not.
-  if (payload.communication_id) {
-    await withSystemScope(async (tx) => {
-      await tx.query(
-        `UPDATE pmp.communications
-            SET status = 'sent', sent_at = now(), provider_message_id = $2
-          WHERE id = $1 AND status = 'queued'`,
-        [payload.communication_id, delivery.id],
-      );
-      await tx.query(
-        `INSERT INTO pmp.communication_events
-           (communication_id, event_id, client_id, event_type, payload, occurred_at)
-         SELECT id, event_id, client_id, 'sent', $2, now() FROM pmp.communications WHERE id = $1`,
-        [payload.communication_id, JSON.stringify({ transport: sender.name, ...delivery.detail })],
-      );
-    });
-  }
-}
 
 async function drain(): Promise<number> {
   return withSystemScope(async (tx) => {
@@ -91,7 +27,7 @@ async function drain(): Promise<number> {
 
     for (const row of rows) {
       try {
-        await handle(row);
+        await handleRow(row, { sender, db: withSystemScope });
         // A `sensitive` email carries a temporary password (D-100): once it has been
         // handled, the stored copy keeps who and what, but not the password.
         await tx.query(

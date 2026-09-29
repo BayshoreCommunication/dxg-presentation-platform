@@ -2249,3 +2249,32 @@ tip; a **glossary built from the shared vocabulary** (`@pmp/format`), so it cann
 search box over both. A **? Help** button in the top bar (not a sidebar entry: the sidebar's structure is DXG-approved)
 opens the guide for the current screen (`guideForPath`). The guides are hand-written: when a flow changes, its guide
 changes in the same commit.
+
+## D-116 (2026-09-29): Practice events — learn by doing, with nothing reaching anyone — Status: ACCEPTED
+DXG staff learn the platform by doing every job on a realistic event, in production, with no risk of emailing anyone or
+touching a real event. **Start a practice event** on the Portfolio (`POST /api/v1/practice-events`, any staff account;
+client accounts are refused by the staff check) builds, in one transaction and through the ordinary services — so
+audit, outbox, RLS and the file pipeline behave as in real use — an active event "Practice — <name> — <Mon D>" for
+14 days ahead (2 days, America/New_York, upload deadline and reminders set), 3 rooms, 2 Speaker Ready Room desks, six
+talks with six made-up speakers (release permissions mixed), under one made-up client "DXG practice (not a real
+client)". Four small real decks (`apps/api/assets/practice/`, from the G0-1 corpus) go through the real intake — stored,
+virus-scanned, inspected, PDF preview queued — and are decided as the owner: one **approved** (queued to its room), one
+**changes requested** (with a message, so a speaker email is produced), one **waiting for review**, one **waiting with
+a warning** (linked video); two talks have nothing yet. Scan and inspection run inside the upload, so every state is
+reached synchronously; no polling. The owner is the event's project manager (migration 025: `events.is_practice`,
+`events.practice_owner`, `clients.is_practice`). At most **3** open (not archived) per person — `practice.limit_reached`
+(422) says to archive one. **Archive** (unchanged) is how one is put away.
+**Email, two locks:** (1) the dispatcher asks, before anything else — before even the address check — whether the
+communication's event is a practice event; if so it records `communications.status = 'practice'` plus a
+`communication_events` row, marks the outbox row dispatched and never calls the transport (`apps/dispatcher/src/
+handle.ts`, tested with a stub sender and against the real database); (2) every practice speaker's address is
+`first.last@practice.invalid`, a reserved domain the SES transport already diverts to disk (D-090). Shown as
+"Practice — not sent" (`EMAIL_STATUS.practice`), counted in its own Communications tile, never under Sent.
+**Containment:** a practice event's role is left out of the account's *flat* roles (`rolesFor`), so a room technician
+who manages their own practice event is not a manager anywhere a flat question is asked (creating a real event stays
+refused); inside it, the per-event roles apply as usual (the sidebar and event page now read roles on the current
+event). A practice event cannot be duplicated (`events.practice_conflict`), and its client is never offered or
+auto-picked for a real event. **Portfolio:** its own "Practice events" section (a Practice chip; an administrator sees
+everyone's, with the owner's name), never counted with real events; archived ones leave the portfolio. **Every screen**
+of one carries a thin banner. **Help:** "Practise safely" is the first guide. Reminders run on practice events (their
+mail is diverted); the client portal, suppression guard and uptime checks are unaffected.

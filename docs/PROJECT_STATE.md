@@ -3176,3 +3176,11 @@ All five UX_REVIEW batches done. Open decision R48 (Technician review). Not comm
 ## 2026-09-29 — "Technician review" removed (D-114); in-app Help (D-115)
 Migration 024 drops the unreachable state. /help: task guides + glossary from the shared vocabulary, ? Help in the top
 bar opens the current screen's guide. Not committed yet. Next: a practice event for training.
+
+## 2026-09-29 — Practice events (D-116)
+"Start a practice event" on the Portfolio builds a realistic event of your own (six made-up speakers on
+`practice.invalid`, real decks approved / changes requested / waiting / waiting with a warning / missing) through the
+real services. Its emails end as "Practice — not sent" in the dispatcher and never reach a transport; its manager role
+counts only inside it; 3 open per person; Archive removes it. Migration 025. **Deploy note:** the dispatcher must be
+restarted with this code (it is not under --watch locally); until then the reserved domain alone keeps mail on disk.
+Not committed yet.

@@ -78,6 +78,8 @@ export type Principal = {
   /** Root admin (D-100): every event and every account. */
   is_root_admin: boolean;
   client_ids: string[];
+  /** Which roles are held on which event — per-event, unlike `roles`. */
+  event_roles: { event_id: string; role: string }[];
   /** Events a client-only account may open. Empty for DXG staff. */
   client_events: { id: string; name: string }[];
   must_change_password: boolean;
@@ -149,6 +151,10 @@ export type EventRow = {
   starts_on: string;
   ends_on: string;
   status: string;
+  /** A practice event (D-116): made-up speakers, no email ever sent. */
+  is_practice?: boolean;
+  practice_owner?: string | null;
+  practice_owner_name?: string | null;
 };
 
 export type Summary = {
@@ -1062,6 +1068,16 @@ export const archiveEvent = (eventId: string, reason = "") =>
 export const restoreEvent = (eventId: string) =>
   request<EventDraft>(`/events/${eventId}/restore`, { method: "POST" });
 
+/** Start a practice event for yourself (D-116). */
+export type PracticeCreated = {
+  event_id: string;
+  name: string;
+  files: { title: string; speaker: string; state: string }[];
+};
+export const startPracticeEvent = () => request<PracticeCreated>("/practice-events", { method: "POST" });
+/** How many practice events one person may have open at once — the API holds the rule. */
+export const PRACTICE_LIMIT = 3;
+
 export type CommRecipient = {
   speaker_id: string;
   name: string;
@@ -1102,7 +1118,7 @@ export type CommsView = {
     sent_at: string | null;
     created_at: string;
   }[];
-  stats: { queued: number; sent: number; delivered: number; opened: number; clicked: number; bounced: number };
+  stats: { queued: number; sent: number; delivered: number; opened: number; clicked: number; bounced: number; practice?: number };
 };
 
 export const getComms = (eventId: string) =>

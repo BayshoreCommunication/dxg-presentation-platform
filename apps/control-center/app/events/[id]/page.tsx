@@ -107,7 +107,10 @@ export default async function CommandCenterPage({
   })}`;
 
   const archived = summary.event.status === "archived";
-  const canConfigure = session.principal.roles.some((role) => CONFIGURERS.includes(role));
+  // The roles held on *this* event (D-116: a practice event's manager is not one elsewhere).
+  const canConfigure =
+    session.principal.is_root_admin ||
+    (session.principal.event_roles ?? []).some((held) => held.event_id === id && CONFIGURERS.includes(held.role));
   const header = [summary.event.venue, days ?? dateRange].filter(Boolean) as string[];
 
   /*

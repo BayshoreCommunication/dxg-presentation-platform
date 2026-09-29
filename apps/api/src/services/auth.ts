@@ -277,9 +277,17 @@ export async function completeMfaLogin(
   return { token, principal };
 }
 
+/**
+ * The roles this account holds anywhere — the flat set that answers "is this staff" and
+ * "may this account create an event". A practice event's role is left out (D-116): being
+ * project manager of your own practice event must not make a room technician a manager
+ * everywhere a flat question is asked. Roles *on* the practice event still apply there,
+ * through `event_roles`.
+ */
 async function rolesFor(tx: pg.PoolClient, userId: string): Promise<EventRole[]> {
   const { rows } = await tx.query<{ role: EventRole }>(
-    `SELECT DISTINCT role FROM pmp.event_roles WHERE user_id = $1 AND role <> 'platform_admin'`,
+    `SELECT DISTINCT er.role FROM pmp.event_roles er JOIN pmp.events e ON e.id = er.event_id
+      WHERE er.user_id = $1 AND er.role <> 'platform_admin' AND NOT e.is_practice`,
     [userId],
   );
   return rows.map((row) => row.role);

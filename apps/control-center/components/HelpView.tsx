@@ -26,6 +26,25 @@ type Section = { title: string; guides: Guide[] };
 
 export const GUIDES: Section[] = [
   {
+    title: "Start here",
+    guides: [
+      {
+        id: "practice",
+        title: "Practise safely",
+        who: "Any DXG staff member",
+        steps: [
+          "On the Portfolio, under Practice events, press Start a practice event. In a few seconds you have an event of your own: rooms, a two-day agenda and six made-up speakers.",
+          "Its files are in every state you will meet: one approved and on its way to its room, one sent back for changes, one waiting for review, one waiting with a warning, and two not uploaded yet.",
+          "You are its project manager, so you can do every job: review and approve, request a revision, set up the Speaker Ready Room, sync rooms, build the archive.",
+          "To act as a speaker, open Speakers, press Copy link on a speaker's row, and open the link in a private browser window.",
+          "Emails are written as usual and appear in Communications as \"Practice — not sent\". Nothing ever reaches a real speaker or client.",
+          "When you are done, press Archive on the Portfolio. You can have up to three practice events open at once.",
+        ],
+        tip: "Every screen of a practice event shows a yellow line at the top, so you always know which kind you are in.",
+      },
+    ],
+  },
+  {
     title: "Before the event",
     guides: [
       {
