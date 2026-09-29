@@ -1,5 +1,7 @@
 "use client";
 
+import { copyText } from "@/lib/copy";
+import { CopyFallback } from "@/components/CopyFallback";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { DuplicatePair, ReleasePermission, SpeakerRow } from "@/lib/api";
@@ -51,6 +53,8 @@ export function SpeakersView({
   // D-113: emailing asks first — the reminder batch, and a speaker's once-only link.
   const [askRemind, setAskRemind] = useState(false);
   const [askLink, setAskLink] = useState<string | null>(null);
+  // A link the browser wouldn't let us copy, shown under its row to copy by hand (D-117).
+  const [linkFor, setLinkFor] = useState<{ id: string; url: string } | null>(null);
   const [editingEmail, setEditingEmail] = useState<{ row: SpeakerRow; value: string } | null>(null);
 
   // The server component re-renders on refresh; the list here is client state, so a
@@ -435,22 +439,16 @@ export function SpeakersView({
                               aria-label={`Copy upload link for ${row.full_name}`}
                               onClick={() => {
                                 setPending(`${row.id}:copy`);
-                                void inviteSpeaker(row.id)
-                                  .then(async (invite) => {
-                                    try {
-                                      await navigator.clipboard.writeText(
-                                        invite.url,
-                                      );
-                                      setToast(
-                                        `Link copied for ${row.full_name}`,
-                                      );
-                                    } catch {
-                                      setToast(`Upload link · ${invite.url}`);
-                                    }
+                                setLinkFor(null);
+                                // The copy starts inside this click, before the link arrives (D-117).
+                                const url = inviteSpeaker(row.id).then((invite) => invite.url);
+                                void copyText(url)
+                                  .then(async (copied) => {
+                                    if (copied) setToast(`Link copied for ${row.full_name}`);
+                                    // Refused: show the link to copy or open by hand, not a passing toast.
+                                    else setLinkFor({ id: row.id, url: await url });
                                   })
-                                  .catch(() =>
-                                    setError("Could not issue a link."),
-                                  )
+                                  .catch(() => setError("Could not issue a link."))
                                   .finally(() => setPending(null));
                               }}
                             >
@@ -479,6 +477,17 @@ export function SpeakersView({
                             </button>
                           </HoverTip>
                         </span>
+                        {linkFor?.id === row.id && (
+                          <CopyFallback
+                            label={`${row.full_name}'s upload link`}
+                            text={linkFor.url}
+                            onCopied={() => {
+                              setLinkFor(null);
+                              setToast(`Link copied for ${row.full_name}`);
+                            }}
+                            onClose={() => setLinkFor(null)}
+                          />
+                        )}
                         {askLink === row.id && (
                           <ConfirmInline
                             question={`Email ${row.full_name} their upload link?`}

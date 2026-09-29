@@ -1,5 +1,6 @@
 "use client";
 
+import { copyText } from "@/lib/copy";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { startMfaEnrolment, confirmMfaEnrolment, ApiError } from "@/lib/api";
@@ -97,10 +98,7 @@ export function MfaEnrolment() {
               type="button"
               className="btn"
               onClick={() =>
-                void navigator.clipboard
-                  .writeText(codes.join("\n"))
-                  .then(() => setCopied(true))
-                  .catch(() => setCopied(false))
+                void copyText(codes.join("\n")).then(setCopied)
               }
             >
               {copied ? "Copied" : "Copy"}

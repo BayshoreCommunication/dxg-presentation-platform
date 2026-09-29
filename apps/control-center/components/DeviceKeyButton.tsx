@@ -1,5 +1,6 @@
 "use client";
 
+import { copyText } from "@/lib/copy";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatSessionTime } from "@pmp/format";
@@ -64,7 +65,7 @@ export function DeviceKeyButton({
             type="button"
             className="btn"
             onClick={() => {
-              void navigator.clipboard?.writeText(key).then(() => setCopied(true));
+              void copyText(key).then(setCopied);
             }}
           >
             {copied ? "Copied" : "Copy"}

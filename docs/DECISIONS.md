@@ -2278,3 +2278,12 @@ auto-picked for a real event. **Portfolio:** its own "Practice events" section (
 everyone's, with the owner's name), never counted with real events; archived ones leave the portfolio. **Every screen**
 of one carries a thin banner. **Help:** "Practise safely" is the first guide. Reminders run on practice events (their
 mail is diverted); the client portal, suppression guard and uptime checks are unaffected.
+
+## D-117 (2026-09-29): Copy link copies — and never loses the link — Status: ACCEPTED (bug fix)
+On production, Speakers → Copy link issued a link but copied nothing: the page fetched the link first and wrote the
+clipboard afterwards, when the browser no longer counted the click, so the write was refused and the link flashed in
+a toast for a few seconds. `lib/copy.ts` `copyText` now starts the write inside the click with a ClipboardItem whose
+content is still being fetched, then falls back to a plain write and to `execCommand("copy")`. If every route is
+refused, `CopyFallback` keeps the link on screen under the speaker's row, selected, with Copy and Open. Backup codes
+and room PC connection codes use the same helper. Checked in the desktop app's browser: "Link copied" and the system
+clipboard holds the speaker's link.
