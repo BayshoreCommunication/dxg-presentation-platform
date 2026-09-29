@@ -136,7 +136,7 @@ export function BrandAssetField({
       )}
 
       <div className="note" style={{ marginTop: 6 }}>
-        {copy.hint}
+        {copy.hint} Saved as soon as uploaded.{/* S24 (D-113): not part of any "Save" button. */}
       </div>
       {error && (
         <div className="err" style={{ marginTop: 8, marginBottom: 0 }}>

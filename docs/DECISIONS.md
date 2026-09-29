@@ -2206,3 +2206,26 @@ presentations.zip" instead of a UUID; the speaker portal's resume line is plain;
 asset.", device-key refusals, raw converter errors, "YYYY-MM-DD") are plain sentences. The DXG-approved screen name
 "Room Agent" and the talk-status labels stay. Tests: one invariant asserts the receipt's file name; three deadline
 assertions updated; 298/298 invariants.
+
+## D-113 (2026-09-29): Staff-usability batch 5 — ask first, say what's next, show the three confirmations — Status: ACCEPTED
+Last batch of `docs/UX_REVIEW.md`. **Ask first, on the page** (`components/ConfirmInline.tsx`; `window.confirm` /
+`prompt` are gone — the desktop app's browser dismisses them, D-073): Staff accounts (new password, reset sign-in app
+with a written reason, make staff / DXG administrator, deactivate, delete — each says what happens to that person, and
+a notice afterwards says what they do next), removing an event role, removing a presenter, emailing one speaker's
+link, "Remind speakers missing files", and pressing **A** in the review queue (the Approve button itself still acts
+directly). **The three confirmations** (`components/ConfirmationStrip.tsx`) on Presentation detail, Check-in and (one
+line per speaker) the Speaker Ready Room: 1 approved by a reviewer → 2 signed off by the speaker → 3 on the room PC and
+switched in — each done / waiting with who and when, a "Next:" line, and the reminder that they are separate steps;
+a newer approval re-opens sign-off; a quiet room PC shows amber. **Next steps:** "2 file warnings to review →", "Set
+the deadline →", excluded archive rows link to their presentation and to where the reason is fixed (the API returns
+the presentation id), "Next: assign them to an event →" after creating an account (Event assignments reads
+`?assign=`), each not-ready room says what to do, Review deep-links a file (`?v=`), "Replace file" goes to the speaker's
+check-in, approval says which room PC gets the file or that the session has no room. **Polish:** labelled portfolio
+progress, reminders warn without a deadline, activation explained, "Deadlines & reminders", import problems listed
+under each row, "Saved as soon as uploaded/picked", risk rows say why, no "live" dot after an event, a "Sent" counter,
+rebuild warns about the client link, PDF retry is per version and reports the real outcome, SRR warnings show room,
+time and "Open report", Check out marks, a real Sign out on "no access", the speaker login keeps the email and event
+name in the tab (never the access code) and says who to ask for a new code, a clear thank-you after upload, the
+deadline box hides once approved, minimum password length shown up front. API: additive fields only (presentation
+detail `srr`, SRR dashboard sign-off/approval/room states and richer warnings, check-in approval detail, archive
+excluded `slot_id`). **Open:** R48 "Technician review" — see UX_REVIEW. Tests: one new invariant; 299/299.

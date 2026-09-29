@@ -50,6 +50,14 @@ export type PresentationDetail = {
   speaker: { id: string; name: string; organization: string | null } | null;
   versions: VersionRow[];
   retained_versions: number;
+  /**
+   * The Speaker Ready Room side of the talk (D-113), for the approval → sign-off → room
+   * strip: the latest sign-off on any of its versions, and the speaker's open check-in.
+   */
+  srr: {
+    checkin_id: string | null;
+    sign_off: { version_number: number; signed_at: string; technician: string | null; station: string | null } | null;
+  };
 };
 
 export async function presentationDetail(
@@ -134,6 +142,25 @@ export async function presentationDetail(
       ) as never,
   });
 
+  const { rows: signOffs } = await tx.query<NonNullable<PresentationDetail["srr"]["sign_off"]>>(
+    `SELECT fv.version_number, so.signed_at, u.display_name AS technician, c.station
+       FROM pmp.sign_offs so
+       JOIN pmp.file_versions fv ON fv.id = so.file_version_id
+       JOIN pmp.files f ON f.id = fv.file_id
+       JOIN pmp.srr_checkins c ON c.id = so.checkin_id
+       LEFT JOIN pmp.users u ON u.id = c.technician_id
+      WHERE f.slot_id = $1
+      ORDER BY so.signed_at DESC LIMIT 1`,
+    [slotId],
+  );
+  const { rows: openCheckins } = row.speaker_id
+    ? await tx.query<{ id: string }>(
+        `SELECT id FROM pmp.srr_checkins WHERE speaker_id = $1 AND departed_at IS NULL
+          ORDER BY checked_in_at DESC LIMIT 1`,
+        [row.speaker_id],
+      )
+    : { rows: [] as { id: string }[] };
+
   return {
     event: { id: row.event_id, timezone: row.timezone },
     talk: {
@@ -152,6 +179,7 @@ export async function presentationDetail(
       : null,
     versions,
     retained_versions: versions.length,
+    srr: { checkin_id: openCheckins[0]?.id ?? null, sign_off: signOffs[0] ?? null },
   };
 }
 

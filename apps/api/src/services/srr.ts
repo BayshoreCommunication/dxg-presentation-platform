@@ -20,12 +20,33 @@ export type ExpectedArrival = {
   status_label: string;
   checkin_id: string | null;
   signed_off: boolean;
+  /*
+   * For the approval → sign-off → room strip on each row (D-113): the approved version and
+   * its room copies' states, the last version signed off, and whether the speaker has
+   * already checked in and out (R32).
+   */
+  approved_version: number | null;
+  approved_room_states: string[];
+  signed_off_version: number | null;
+  checked_out: boolean;
+};
+
+/** An open warning, with where and when the talk is (R31, D-113). */
+export type SrrWarning = {
+  slot_id: string;
+  speaker: string | null;
+  check_code: string;
+  severity: string;
+  title: string;
+  room: string | null;
+  starts_at: string;
+  file_version_id: string;
 };
 
 export async function srrDashboard(
   tx: pg.PoolClient,
   eventId: string,
-): Promise<{ expected: ExpectedArrival[]; warnings: { slot_id: string; speaker: string | null; check_code: string; severity: string }[]; stations: SrrStation[] }> {
+): Promise<{ expected: ExpectedArrival[]; warnings: SrrWarning[]; stations: SrrStation[] }> {
   const { rows } = await tx.query<{
     speaker_id: string;
     speaker: string;
@@ -38,6 +59,10 @@ export async function srrDashboard(
     room_copies: { state: string; requiresAck: boolean; acknowledged: boolean }[] | null;
     checkin_id: string | null;
     signed_off: boolean;
+    approved_version: number | null;
+    approved_room_states: string[] | null;
+    signed_off_version: number | null;
+    checked_out: boolean;
   }>(
     `SELECT sp.id AS speaker_id, sp.full_name AS speaker, s.id AS slot_id, s.title,
             r.name AS room, se.starts_at, se.session_state,
@@ -56,7 +81,19 @@ export async function srrDashboard(
             (SELECT c.id FROM pmp.srr_checkins c
               WHERE c.speaker_id = sp.id AND c.departed_at IS NULL
               ORDER BY c.checked_in_at DESC LIMIT 1) AS checkin_id,
-            EXISTS (SELECT 1 FROM pmp.sign_offs so WHERE so.speaker_id = sp.id) AS signed_off
+            EXISTS (SELECT 1 FROM pmp.sign_offs so WHERE so.speaker_id = sp.id) AS signed_off,
+            (SELECT max(fv3.version_number) FROM pmp.file_versions fv3 JOIN pmp.files f3 ON f3.id = fv3.file_id
+              WHERE f3.slot_id = s.id AND fv3.review_state = 'approved') AS approved_version,
+            (SELECT array_agg(DISTINCT rf4.sync_state) FROM pmp.room_files rf4
+               JOIN pmp.file_versions fv4 ON fv4.id = rf4.file_version_id
+               JOIN pmp.files f4 ON f4.id = fv4.file_id
+              WHERE f4.slot_id = s.id AND fv4.review_state = 'approved') AS approved_room_states,
+            (SELECT fv5.version_number FROM pmp.sign_offs so5
+               JOIN pmp.file_versions fv5 ON fv5.id = so5.file_version_id
+              WHERE so5.speaker_id = sp.id ORDER BY so5.signed_at DESC LIMIT 1) AS signed_off_version,
+            (EXISTS (SELECT 1 FROM pmp.srr_checkins c6 WHERE c6.speaker_id = sp.id AND c6.departed_at IS NOT NULL)
+             AND NOT EXISTS (SELECT 1 FROM pmp.srr_checkins c7 WHERE c7.speaker_id = sp.id AND c7.departed_at IS NULL))
+              AS checked_out
        FROM pmp.speakers sp
        JOIN pmp.speaker_assignments sa ON sa.speaker_id = sp.id
        JOIN pmp.slots s ON s.id = sa.slot_id
@@ -85,26 +122,28 @@ export async function srrDashboard(
       status_label: TALK_STATUS_LABEL[status],
       checkin_id: row.checkin_id,
       signed_off: row.signed_off,
+      approved_version: row.approved_version,
+      approved_room_states: row.approved_room_states ?? [],
+      signed_off_version: row.signed_off_version,
+      checked_out: row.checked_out,
     };
   });
 
-  const { rows: warnings } = await tx.query<{
-    slot_id: string;
-    speaker: string | null;
-    check_code: string;
-    severity: string;
-  }>(
-    `SELECT s.id AS slot_id, inf.check_code, inf.severity,
+  const { rows: warnings } = await tx.query<SrrWarning>(
+    `SELECT s.id AS slot_id, inf.check_code, inf.severity, s.title, r.name AS room, se.starts_at,
+            fv.id AS file_version_id,
             (SELECT sp.full_name FROM pmp.speaker_assignments sa
                JOIN pmp.speakers sp ON sp.id = sa.speaker_id WHERE sa.slot_id = s.id LIMIT 1) AS speaker
        FROM pmp.inspection_findings inf
        JOIN pmp.file_versions fv ON fv.id = inf.file_version_id
        JOIN pmp.files f ON f.id = fv.file_id
        JOIN pmp.slots s ON s.id = f.slot_id
+       JOIN pmp.sessions se ON se.id = s.session_id
+       LEFT JOIN pmp.rooms r ON r.id = se.room_id
       WHERE inf.event_id = $1 AND inf.waived_at IS NULL
         AND inf.severity IN ('warning', 'blocking')
         AND fv.review_state IN ('awaiting_review', 'in_review')
-      ORDER BY inf.severity DESC`,
+      ORDER BY inf.severity DESC, se.starts_at`,
     [eventId],
   );
 
@@ -336,7 +375,8 @@ export type CheckinDetail = {
   checkin: { id: string; station: string | null; checked_in_at: string; technician: string; departed_at: string | null };
   speaker: { id: string; name: string };
   talk: { slot_id: string; title: string; room: string | null; starts_at: string; final_locked: boolean; status: string; status_label: string };
-  approved: VersionFacts | null;
+  /** Who approved it and where its room copies are, for the confirmation strip (D-113). */
+  approved: (VersionFacts & { approved_by?: string | null; approved_at?: string | null; room_states?: string[] }) | null;
   latest: (VersionFacts & { file_version_id: string; review_state: string; processing_state: string }) | null;
   usb: { id: string; scan_result: string; file_version_id: string | null; created_at: string } | null;
   receipt: {
@@ -405,8 +445,16 @@ export async function checkinDetail(tx: pg.PoolClient, checkinId: string): Promi
     roomCopies: (row.room_copies ?? []) as never,
   });
 
-  const { rows: approvedRows } = await tx.query<{ id: string }>(
-    `SELECT fv.id FROM pmp.file_versions fv JOIN pmp.files f ON f.id = fv.file_id
+  const { rows: approvedRows } = await tx.query<{
+    id: string;
+    approved_at: string | null;
+    approved_by: string | null;
+    room_states: string[] | null;
+  }>(
+    `SELECT fv.id, fv.approved_at, u.display_name AS approved_by,
+            (SELECT array_agg(DISTINCT rf.sync_state) FROM pmp.room_files rf WHERE rf.file_version_id = fv.id) AS room_states
+       FROM pmp.file_versions fv JOIN pmp.files f ON f.id = fv.file_id
+       LEFT JOIN pmp.users u ON u.id = fv.approved_by
       WHERE f.slot_id = $1 AND fv.review_state = 'approved'
       ORDER BY fv.version_number DESC LIMIT 1`,
     [row.slot_id],
@@ -418,7 +466,15 @@ export async function checkinDetail(tx: pg.PoolClient, checkinId: string): Promi
     [row.slot_id],
   );
 
-  const approved = approvedRows[0] ? await versionFacts(tx, approvedRows[0].id) : null;
+  const approvedFacts = approvedRows[0] ? await versionFacts(tx, approvedRows[0].id) : null;
+  const approved = approvedFacts
+    ? {
+        ...approvedFacts,
+        approved_by: approvedRows[0]!.approved_by,
+        approved_at: approvedRows[0]!.approved_at,
+        room_states: approvedRows[0]!.room_states ?? [],
+      }
+    : null;
   const latestFacts = latestRows[0] ? await versionFacts(tx, latestRows[0].id) : null;
 
   const { rows: usbRows } = await tx.query<{

@@ -4,8 +4,9 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { CommentRow, PresentationDetail } from "@/lib/api";
-import { rollBackTalk, convertArchivePdfs, previewUrl, requestPreview, ApiError } from "@/lib/api";
+import { rollBackTalk, previewUrl, requestPreview, ApiError } from "@/lib/api";
 import { Chip, StatusMeaning } from "@/components/Chip";
+import { ConfirmationStrip } from "@/components/ConfirmationStrip";
 import { SlideViewer } from "@/components/SlideViewer";
 import { WhyNot } from "@/components/WhyNot";
 import { staleNoteFor } from "@/lib/roomWords";
@@ -109,6 +110,29 @@ export function PresentationDetailView({
     }
   }
 
+  /*
+   * R18 (D-113): "Retry PDF" re-queued the whole event's PDFs and always said "queued
+   * again". It now retries this version only and says what actually happened.
+   */
+  async function retryPdf(versionId: string, versionNumber: number) {
+    setBusy(true);
+    setError(null);
+    try {
+      const { queued } = await requestPreview(versionId);
+      setToast(
+        queued > 0
+          ? `Making the PDF of v${versionNumber} again — refresh in a minute to see if it worked.`
+          : `v${versionNumber}'s PDF is already being made or is ready — refresh the page.`,
+      );
+      router.refresh();
+    } catch (caught) {
+      setError(caught instanceof ApiError ? caught.message : "Could not try the PDF again. Nothing was changed.");
+    } finally {
+      setBusy(false);
+      setTimeout(() => setToast(null), 4500);
+    }
+  }
+
   // An inline form, not window.prompt pre-filled with "wrong version approved" (D-108).
   const [rollTarget, setRollTarget] = useState<{ id: string; n: number; reason: string } | null>(null);
 
@@ -158,6 +182,29 @@ export function PresentationDetailView({
             {initial.talk.track ? ` · ${initial.talk.track}` : ""}
           </div>
 
+          {/* Approval → sign-off → room, connected (D-113, root cause 5). */}
+          <ConfirmationStrip
+            facts={{
+              status: initial.talk.status,
+              room: initial.talk.room,
+              hasSpeaker: initial.speaker !== null,
+              latestVersion: latest?.version_number ?? null,
+              approved: approved
+                ? { version: approved.version_number, by: approved.approved_by, at: approved.approved_at }
+                : null,
+              roomStates: approved?.room_states,
+              signOff: initial.srr?.sign_off
+                ? {
+                    version: initial.srr.sign_off.version_number,
+                    by: initial.srr.sign_off.technician,
+                    at: initial.srr.sign_off.signed_at,
+                  }
+                : null,
+              stale: staleNote,
+              timezone: initial.event.timezone,
+            }}
+          />
+
           {latest && (
             <div className="note" style={{ marginBottom: 6 }}>
               {/* No file fingerprint here: staff never need it (R15, D-112). */}
@@ -167,12 +214,7 @@ export function PresentationDetailView({
           )}
 
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
-            {approved?.approved_by && (
-              <span className="chip c-ok">
-                Approved by {approved.approved_by}
-                {approved.approved_at ? ` · ${when(approved.approved_at, initial.event.timezone)}` : ""} · logged
-              </span>
-            )}
+            {/* Who approved it and when is step 1 of the strip above (D-113). */}
             {initial.talk.final_locked && <span className="chip c-sync">Final onsite version</span>}
             {initial.talk.restricted && <span className="chip c-bad">Restricted from distribution</span>}
           </div>
@@ -198,11 +240,27 @@ export function PresentationDetailView({
             <Link className="btn" href={`/events/${eventId}/review`}>
               Review workspace
             </Link>
-            <Link className="btn" href={`/events/${eventId}/srr`}>
-              Replace file / USB intake
-            </Link>
+            {/* R19 (D-113): USB intake lives on the speaker's check-in — go straight there
+                when they are checked in; otherwise say what to do first. */}
+            {initial.srr?.checkin_id ? (
+              <Link className="btn" href={`/events/${eventId}/srr/${initial.srr.checkin_id}`}>
+                Replace file (USB intake)
+              </Link>
+            ) : (
+              initial.speaker && (
+                <Link className="btn" href={`/events/${eventId}/srr`}>
+                  Speaker Ready Room
+                </Link>
+              )
+            )}
           </div>
           <WhyNot reason={previewBlocked} />
+          {!initial.srr?.checkin_id && initial.speaker && (
+            <p className="note" style={{ margin: "6px 0 0" }}>
+              To take a new file on a USB drive, check {initial.speaker.name} in at the Speaker Ready Room first —
+              USB intake is on their check-in.
+            </p>
+          )}
           {previewOpen && latest?.pdf_state === "done" && (
             <div style={{ marginTop: 12 }}>
               <SlideViewer
@@ -280,7 +338,6 @@ export function PresentationDetailView({
                           className={`chip ${
                             row.pdf_state === "done" ? "c-ok" : row.pdf_state === "failed" ? "c-bad" : "c-info"
                           }`}
-                          title={row.pdf_state === "failed" ? (row.pdf_error ?? "Conversion failed") : undefined}
                         >
                           {row.pdf_state === "done"
                             ? "PDF ready"
@@ -290,23 +347,19 @@ export function PresentationDetailView({
                         </span>
                         {row.pdf_state === "failed" && (
                           <>
+                            {/* R18 (D-113): a plain lead, then the reason the converter gave. */}
                             <div className="note" style={{ color: "var(--block)", marginTop: 3 }}>
-                              {row.pdf_error}
+                              The PDF copy couldn&rsquo;t be made.
+                              {row.pdf_error ? ` ${row.pdf_error}` : " Try again; if it keeps failing, contact DXG support."}
                             </div>
                             <button
                               type="button"
                               className="btn"
                               style={{ padding: "3px 9px", fontSize: 12, marginTop: 3 }}
                               disabled={busy}
-                              onClick={() =>
-                                void (async () => {
-                                  await convertArchivePdfs(eventId, true);
-                                  setToast("PDF conversion queued again");
-                                  router.refresh();
-                                })()
-                              }
+                              onClick={() => void retryPdf(row.file_version_id, row.version_number)}
                             >
-                              Retry PDF
+                              Try the PDF again
                             </button>
                           </>
                         )}

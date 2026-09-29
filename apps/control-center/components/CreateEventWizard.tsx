@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { EventDraft } from "@/lib/api";
 import { createEvent, configureEvent, activateEvent, getDraft, ApiError } from "@/lib/api";
@@ -25,7 +25,8 @@ const tomorrow = () => {
  * what they set up, and this one was named for a mechanism. The standalone screen
  * keeps its own name, since there the import *is* what you came to do.
  */
-const STEPS = ["Basics", "Agenda", "Deadlines & workflow", "Branding & template"] as const;
+// S17 (D-113): step 3 sets deadlines and reminders; there is no "workflow" in it.
+const STEPS = ["Basics", "Agenda", "Deadlines & reminders", "Branding & template"] as const;
 
 /**
  * Screen 2 — the four-step wizard. Step 1 commits a draft; a draft sends nothing.
@@ -75,6 +76,22 @@ export function CreateEventWizard({
   const [deadline, setDeadline] = useState(text(resume?.settings.upload_deadline, ""));
   const [reminderDays, setReminderDays] = useState<number[]>(reminderDaysFrom(resume?.settings));
   const [accent, setAccent] = useState(text(resume?.branding.accent, "#44C7F4"));
+
+  /*
+   * S16 (D-113): the accent is saved when picked, like the header and template beside it,
+   * not only on Activate — leaving the wizard at step 4 used to lose it. Debounced, since
+   * dragging across the colour wheel reports every colour it passes.
+   */
+  useEffect(() => {
+    if (step !== 4 || !draft || draft.status !== "draft") return;
+    if (accent.toUpperCase() === text(draft.branding.accent, "#44C7F4").toUpperCase()) return;
+    const timer = setTimeout(() => {
+      configureEvent(draft.id, { branding: { accent } })
+        .then(setDraft)
+        .catch(() => undefined); // Activate saves it again, and shows any error there.
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [accent, step, draft]);
 
   /*
    * Steps 3 and 4 are unreachable until an agenda is in (Travis's call, D-026 amended).
@@ -243,7 +260,7 @@ export function CreateEventWizard({
               </div>
               <div className="field">
                 <label>Automatic reminders</label>
-                <ReminderDaysField value={reminderDays} onChange={setReminderDays} />
+                <ReminderDaysField value={reminderDays} onChange={setReminderDays} deadline={deadline} />
               </div>
             </div>
           )}
@@ -253,6 +270,9 @@ export function CreateEventWizard({
               <div className="field">
                 <label htmlFor="wizard-accent">Accent colour</label>
                 <ColorPicker id="wizard-accent" value={accent} onChange={setAccent} />
+                <div className="note" style={{ marginTop: 6 }}>
+                  Used on the speaker and client pages. Saved as soon as picked.
+                </div>
               </div>
               <div>
                 {/* Uploaded as soon as chosen (D-093); the draft exists by step 4. */}
@@ -361,6 +381,16 @@ export function CreateEventWizard({
                     : null
                 }
               />
+            )}
+
+            {step === 4 && (
+              // S16 (D-113): what activating does, before it is pressed.
+              <div className="note" style={{ flexBasis: "100%", order: -1, marginBottom: 4 }}>
+                Activating makes the event live: it opens on the command center and its dates and time
+                zone can no longer be changed. Nothing is emailed when you press it, but from then on the
+                automatic reminders go to speakers still missing a file. Invite speakers from
+                Communications when you&rsquo;re ready.
+              </div>
             )}
 
             {step === 4 && (

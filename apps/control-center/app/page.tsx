@@ -77,17 +77,27 @@ export default async function PortfolioPage({
                 <Chip status={chip.status} label={chip.label} />
               </div>
               <div className="note">{formatDateRange(event.starts_on, event.ends_on)}</div>
-              <div className="bar" style={{ margin: "10px 0 4px" }}>
+              {/* S10 (D-113): the bar says what it counts. */}
+              <div className="bar" style={{ margin: "10px 0 4px" }} aria-hidden="true">
                 <i style={{ width: `${collected}%` }} />
               </div>
+              <div className="note" style={{ marginBottom: 6 }}>
+                {summary.total === 0
+                  ? "No presentations on the agenda yet"
+                  : `${summary.collected} of ${plural(summary.total, "presentation")} received (${collected}%)`}
+              </div>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span className={summary.warnings_open > 0 ? "chip c-warn" : "note"}>
-                  {summary.warnings_open > 0
-                    ? `${plural(summary.warnings_open, "unresolved warning")}`
-                    : "No unresolved warnings"}
-                </span>
+                {/* S11 (D-113): open warnings lead to where they are resolved. */}
+                {summary.warnings_open > 0 && event.status !== "draft" ? (
+                  <Link href={`/events/${event.id}/review`} className="chip c-warn">
+                    {plural(summary.warnings_open, "file warning")} to review →
+                  </Link>
+                ) : summary.warnings_open > 0 ? (
+                  <span className="chip c-warn">{plural(summary.warnings_open, "file warning")}</span>
+                ) : (
+                  <span className="note">No file warnings</span>
+                )}
                 <span style={{ display: "inline-flex", alignItems: "flex-start", gap: 8 }}>
-                  <span className="mono num" style={{ alignSelf: "center" }}>{collected}%</span>
                   {canArchive && (
                     <ArchiveEventButton
                       eventId={event.id}

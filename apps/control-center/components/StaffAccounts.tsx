@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { AccountType, StaffRow } from "@/lib/api";
@@ -16,6 +16,7 @@ import {
 } from "@/lib/api";
 import { Chip } from "@/components/Chip";
 import { WhyNot } from "@/components/WhyNot";
+import { ConfirmInline } from "@/components/ConfirmInline";
 import { plural, SECURITY } from "@pmp/format";
 
 const when = (iso: string | null) =>
@@ -54,6 +55,9 @@ function TypeBadge({ type }: { type: AccountType }) {
 
 const small = { padding: "3px 9px", fontSize: 12 } as const;
 
+/** Row actions that take access away or change someone's level — each asks first, under its row (D-113). */
+type RowAction = "password" | "mfa" | "type" | "deactivate" | "delete";
+
 /**
  * Why a row's buttons are greyed out, on the page (A12, D-111). Mirrors the API's own
  * refusals in services/admin.ts: no self-lockout, never lose the last active DXG
@@ -82,6 +86,26 @@ export function StaffAccounts({ initial, me }: { initial: StaffRow[]; me: string
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [accountType, setAccountType] = useState<AccountType>("staff");
+  /** A14: the account just created, for the "assign them to an event" next step. */
+  const [created, setCreated] = useState<{ id: string; name: string } | null>(null);
+  /** The row whose "are you sure?" is open, and which action it is asking about. */
+  const [asking, setAsking] = useState<{ id: string; action: RowAction } | null>(null);
+  /** A11: what happens next for that person, shown under their row after a reset. */
+  const [rowNotice, setRowNotice] = useState<{ id: string; text: string } | null>(null);
+  /** Reset sign-in app needs a reason for the record (it used to be a window.prompt). */
+  const [mfaReason, setMfaReason] = useState("");
+
+  const ask = (id: string, action: RowAction) => {
+    setAsking({ id, action });
+    setRowNotice(null);
+    setMfaReason("");
+  };
+
+  /** The confirmed action: call the API, then refresh the list. Errors show in the confirm box. */
+  const confirmed = (work: () => Promise<void>) => async () => {
+    await work();
+    router.refresh();
+  };
 
   const rootAdmins = initial.filter((user) => user.account_type === "root_admin" && user.is_active).length;
 
@@ -89,6 +113,7 @@ export function StaffAccounts({ initial, me }: { initial: StaffRow[]; me: string
     setBusy(true);
     setError(null);
     setNotice(null);
+    setCreated(null);
     try {
       await work();
       router.refresh();
@@ -114,10 +139,25 @@ export function StaffAccounts({ initial, me }: { initial: StaffRow[]; me: string
         <div className="card">
           <div className="chd">
             <h3>{notice}</h3>
-            <button className="btn" style={small} onClick={() => setNotice(null)}>
+            <button
+              className="btn"
+              style={small}
+              onClick={() => {
+                setNotice(null);
+                setCreated(null);
+              }}
+            >
               dismiss
             </button>
           </div>
+          {/* A14 (D-113): a new account can reach nothing until it is on an event. */}
+          {created && (
+            <div className="cbd">
+              <Link href={`/admin/assignments?assign=${encodeURIComponent(created.id)}`} className="btn pri">
+                Next: assign {created.name} to an event →
+              </Link>
+            </div>
+          )}
         </div>
       )}
 
@@ -176,10 +216,12 @@ export function StaffAccounts({ initial, me }: { initial: StaffRow[]; me: string
             disabled={busy || !email}
             onClick={() =>
               void run(async () => {
-                const created = await createStaff(email, name, accountType);
+                const made = await createStaff(email, name, accountType);
                 setNotice(
-                  `${accountType === "root_admin" ? "DXG administrator" : "Staff"} account created — temporary password emailed to ${created.emailed_to ?? email}.`,
+                  `${accountType === "root_admin" ? "DXG administrator" : "Staff"} account created — temporary password emailed to ${made.emailed_to ?? email}.`,
                 );
+                // DXG administrators already reach every event, so only staff need the next step.
+                if (accountType === "staff") setCreated({ id: made.user_id, name: name.trim() || email });
                 setEmail("");
                 setName("");
                 setAccountType("staff");
@@ -227,146 +269,229 @@ export function StaffAccounts({ initial, me }: { initial: StaffRow[]; me: string
                 const isMe = user.id === me;
                 const lastRoot = user.account_type === "root_admin" && user.is_active && rootAdmins <= 1;
                 const locked = user.locked_until && new Date(user.locked_until) > new Date();
+                const askingHere = asking?.id === user.id ? asking.action : null;
                 return (
-                  <tr key={user.id}>
-                    <td>
-                      <b>{user.display_name}</b>
-                      {isMe && <span className="note"> (you)</span>}
-                      <br />
-                      <span className="note mono">{user.email}</span>
-                    </td>
-                    <td>
-                      <TypeBadge type={user.account_type} />
-                    </td>
-                    <td style={{ whiteSpace: "nowrap" }}>
-                      {!user.is_active && <Chip status="attention" label="deactivated" />}
-                      {/* A15: status in plain words, one security vocabulary. */}
-                      {user.is_active && user.mfa_enrolled && <Chip status="synchronized_onsite" label="Sign-in app set up" />}
-                      {user.is_active && !user.mfa_enrolled && <Chip status="needs_revision" label="Sign-in app not set up" />}
-                      {user.must_change_password && (
-                        <>
-                          <br />
-                          <span className="note">Must choose a password</span>
-                        </>
-                      )}
-                      {locked && (
-                        <>
-                          <br />
-                          <span className="chip c-bad">locked</span>
-                        </>
-                      )}
-                      {user.mfa_enrolled && (
-                        <>
-                          <br />
-                          <span className="note">
-                            {plural(user.recovery_codes_left, "backup code")} left
-                          </span>
-                        </>
-                      )}
-                    </td>
-                    <td className="note">{when(user.last_sign_in)}</td>
-                    <td style={{ textAlign: "right" }}>
-                      <div style={{ display: "inline-flex", flexWrap: "wrap", gap: 4, justifyContent: "flex-end" }}>
-                        <button
-                          className="btn"
-                          style={small}
-                          disabled={busy}
-                          title="Emails them a new temporary password and ends their open sessions"
-                          onClick={() =>
-                            void run(async () => {
-                              if (!window.confirm(`Email ${user.display_name} a new temporary password? Their open sessions will end.`)) return;
-                              const result = await resetStaffPassword(user.id);
-                              setNotice(`New temporary password emailed to ${result.emailed_to}.`);
-                            })
-                          }
-                        >
-                          reset password
-                        </button>
-                        <button
-                          className="btn warnb"
-                          style={small}
-                          disabled={busy || !user.mfa_enrolled}
-                          title="Only after verifying who is asking — this turns a lost phone back into an open door"
-                          onClick={() =>
-                            void run(async () => {
-                              const reason = window.prompt(
-                                `Reset ${user.display_name}'s sign-in app — who asked, and how did you check it was them?`,
-                                "",
-                              );
-                              if (reason === null) return;
-                              await resetStaffMfa(user.id, reason);
-                              // It used to succeed silently (D-108).
-                              setNotice(`${user.display_name}'s sign-in app was removed. They'll set up a new one the next time they sign in.`);
-                            })
-                          }
-                        >
-                          reset sign-in app
-                        </button>
+                  <Fragment key={user.id}>
+                    <tr>
+                      <td>
+                        <b>{user.display_name}</b>
+                        {isMe && <span className="note"> (you)</span>}
+                        <br />
+                        <span className="note mono">{user.email}</span>
+                      </td>
+                      <td>
+                        <TypeBadge type={user.account_type} />
+                      </td>
+                      <td style={{ whiteSpace: "nowrap" }}>
+                        {!user.is_active && <Chip status="attention" label="deactivated" />}
+                        {/* A15: status in plain words, one security vocabulary. */}
+                        {user.is_active && user.mfa_enrolled && <Chip status="synchronized_onsite" label="Sign-in app set up" />}
+                        {user.is_active && !user.mfa_enrolled && <Chip status="needs_revision" label="Sign-in app not set up" />}
+                        {user.must_change_password && (
+                          <>
+                            <br />
+                            <span className="note">Must choose a password</span>
+                          </>
+                        )}
                         {locked && (
+                          <>
+                            <br />
+                            <span className="chip c-bad">locked</span>
+                          </>
+                        )}
+                        {user.mfa_enrolled && (
+                          <>
+                            <br />
+                            <span className="note">
+                              {plural(user.recovery_codes_left, "backup code")} left
+                            </span>
+                          </>
+                        )}
+                      </td>
+                      <td className="note">{when(user.last_sign_in)}</td>
+                      <td style={{ textAlign: "right" }}>
+                        <div style={{ display: "inline-flex", flexWrap: "wrap", gap: 4, justifyContent: "flex-end" }}>
                           <button
                             className="btn"
                             style={small}
                             disabled={busy}
-                            onClick={() => void run(async () => void (await unlockStaff(user.id)))}
+                            title="Emails them a new temporary password and ends their open sessions"
+                            onClick={() => ask(user.id, "password")}
                           >
-                            unlock
+                            reset password
                           </button>
-                        )}
-                        <button
-                          className="btn"
-                          style={small}
-                          disabled={busy || (user.account_type === "root_admin" && (isMe || lastRoot))}
-                          title={
-                            user.account_type === "root_admin"
-                              ? "Limit them to the events they are assigned to"
-                              : "Give them every event and account administration"
-                          }
-                          onClick={() =>
-                            void run(async () => {
-                              const next: AccountType = user.account_type === "root_admin" ? "staff" : "root_admin";
-                              const question =
-                                next === "root_admin"
-                                  ? `Make ${user.display_name} a ${SECURITY.admin}? They will see every event and every account.`
-                                  : `Make ${user.display_name} staff? They will only see the events they are assigned to.`;
-                              if (!window.confirm(question)) return;
-                              await setStaffAccountType(user.id, next);
-                            })
-                          }
-                        >
-                          {user.account_type === "root_admin" ? "make staff" : "make DXG administrator"}
-                        </button>
-                        <button
-                          className={user.is_active ? "btn danger" : "btn"}
-                          style={small}
-                          disabled={busy || isMe || (user.is_active && lastRoot)}
-                          onClick={() => void run(async () => void (await setStaffActive(user.id, !user.is_active)))}
-                        >
-                          {user.is_active ? "deactivate" : "reactivate"}
-                        </button>
-                        <button
-                          className="btn danger"
-                          style={small}
-                          disabled={busy || isMe || lastRoot}
-                          title="Removes the account and its event access; the record of what they did is kept"
-                          onClick={() =>
-                            void run(async () => {
-                              if (
-                                !window.confirm(
-                                  `Delete ${user.display_name} (${user.email})?\n\nThey will be signed out and lose access to every event. This cannot be undone, but the email address can be invited again later.`,
-                                )
-                              )
-                                return;
-                              await deleteStaff(user.id);
-                              setNotice(`${user.display_name}'s account was deleted.`);
-                            })
-                          }
-                        >
-                          delete
-                        </button>
-                      </div>
-                      <WhyNot reason={rowReason(user, isMe, lastRoot)} />
-                    </td>
-                  </tr>
+                          <button
+                            className="btn warnb"
+                            style={small}
+                            disabled={busy || !user.mfa_enrolled}
+                            title="Only after verifying who is asking — this turns a lost phone back into an open door"
+                            onClick={() => ask(user.id, "mfa")}
+                          >
+                            reset sign-in app
+                          </button>
+                          {locked && (
+                            <button
+                              className="btn"
+                              style={small}
+                              disabled={busy}
+                              onClick={() => void run(async () => void (await unlockStaff(user.id)))}
+                            >
+                              unlock
+                            </button>
+                          )}
+                          <button
+                            className="btn"
+                            style={small}
+                            disabled={busy || (user.account_type === "root_admin" && (isMe || lastRoot))}
+                            title={
+                              user.account_type === "root_admin"
+                                ? "Limit them to the events they are assigned to"
+                                : "Give them every event and account administration"
+                            }
+                            onClick={() => ask(user.id, "type")}
+                          >
+                            {user.account_type === "root_admin" ? "make staff" : "make DXG administrator"}
+                          </button>
+                          <button
+                            className={user.is_active ? "btn danger" : "btn"}
+                            style={small}
+                            disabled={busy || isMe || (user.is_active && lastRoot)}
+                            onClick={() =>
+                              // A13 (D-113): deactivating asks first; reactivating gives access back, so it acts at once.
+                              user.is_active
+                                ? ask(user.id, "deactivate")
+                                : void run(async () => void (await setStaffActive(user.id, true)))
+                            }
+                          >
+                            {user.is_active ? "deactivate" : "reactivate"}
+                          </button>
+                          <button
+                            className="btn danger"
+                            style={small}
+                            disabled={busy || isMe || lastRoot}
+                            title="Removes the account and its event access; the record of what they did is kept"
+                            onClick={() => ask(user.id, "delete")}
+                          >
+                            delete
+                          </button>
+                        </div>
+                        <WhyNot reason={rowReason(user, isMe, lastRoot)} />
+                      </td>
+                    </tr>
+                    {/* D-113: the "are you sure?" and what happens next sit under the row they belong to. */}
+                    {(askingHere || rowNotice?.id === user.id) && (
+                      <tr>
+                        <td colSpan={5} style={{ borderTop: "none", paddingTop: 0 }}>
+                          {rowNotice?.id === user.id && !askingHere && (
+                            <div className="confirm-inline">
+                              <b>{rowNotice.text}</b>
+                              <div className="confirm-inline-actions">
+                                <button type="button" className="btn" style={small} onClick={() => setRowNotice(null)}>
+                                  dismiss
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                          {askingHere === "password" && (
+                            <ConfirmInline
+                              question={`Email ${user.display_name} a new temporary password?`}
+                              detail="Their open sessions end at once, and they must choose a new password when they next sign in. Their sign-in app stays as it is."
+                              confirmLabel="Send new password"
+                              busyLabel="Sending…"
+                              onConfirm={confirmed(async () => {
+                                const result = await resetStaffPassword(user.id);
+                                // A11: say what happens next for them.
+                                setRowNotice({
+                                  id: user.id,
+                                  text: `New temporary password emailed to ${result.emailed_to}. ${user.display_name} has been signed out; next time they sign in with it, they'll choose their own password, then enter their sign-in app code as usual.`,
+                                });
+                              })}
+                              onClose={() => setAsking(null)}
+                            />
+                          )}
+                          {askingHere === "mfa" && (
+                            <>
+                              <div className="field" style={{ margin: "8px 0 0" }}>
+                                <label htmlFor={`mfa-reason-${user.id}`}>
+                                  Who asked, and how did you check it was them?
+                                </label>
+                                <input
+                                  id={`mfa-reason-${user.id}`}
+                                  style={{ width: "100%", maxWidth: 520 }}
+                                  value={mfaReason}
+                                  onChange={(event) => setMfaReason(event.target.value)}
+                                  placeholder="e.g. They phoned from their usual number and I recognised their voice"
+                                />
+                              </div>
+                              <ConfirmInline
+                                question={`Reset ${user.display_name}'s sign-in app?`}
+                                detail="Only do this after checking it really is them — until they set up a new one, their password alone gets them in. Their open sessions end and their backup codes stop working."
+                                confirmLabel="Reset sign-in app"
+                                busyLabel="Resetting…"
+                                danger
+                                onConfirm={confirmed(async () => {
+                                  if (!mfaReason.trim()) throw new Error("Say who asked and how you checked it was them.");
+                                  await resetStaffMfa(user.id, mfaReason.trim());
+                                  // A11 / D-108: it used to succeed silently.
+                                  setRowNotice({
+                                    id: user.id,
+                                    text: `${user.display_name}'s sign-in app was removed and they have been signed out. Next time they sign in, they'll scan a new code with their phone and get new backup codes.`,
+                                  });
+                                })}
+                                onClose={() => setAsking(null)}
+                              />
+                            </>
+                          )}
+                          {askingHere === "type" && (
+                            <ConfirmInline
+                              question={
+                                user.account_type === "root_admin"
+                                  ? `Make ${user.display_name} staff?`
+                                  : `Make ${user.display_name} a ${SECURITY.admin}?`
+                              }
+                              detail={
+                                user.account_type === "root_admin"
+                                  ? "They will only see the events they are assigned to, and can no longer manage accounts or assignments."
+                                  : "They will see every event and every account, and can create, reset and delete accounts."
+                              }
+                              confirmLabel={user.account_type === "root_admin" ? "Make staff" : `Make ${SECURITY.admin}`}
+                              busyLabel="Saving…"
+                              danger={user.account_type === "root_admin"}
+                              onConfirm={confirmed(async () => {
+                                await setStaffAccountType(user.id, user.account_type === "root_admin" ? "staff" : "root_admin");
+                              })}
+                              onClose={() => setAsking(null)}
+                            />
+                          )}
+                          {askingHere === "deactivate" && (
+                            <ConfirmInline
+                              question={`Deactivate ${user.display_name}?`}
+                              detail="They are signed out and can't sign in until reactivated; their history and event assignments are kept."
+                              confirmLabel="Deactivate"
+                              busyLabel="Deactivating…"
+                              danger
+                              onConfirm={confirmed(async () => void (await setStaffActive(user.id, false)))}
+                              onClose={() => setAsking(null)}
+                            />
+                          )}
+                          {askingHere === "delete" && (
+                            <ConfirmInline
+                              question={`Delete ${user.display_name} (${user.email})?`}
+                              detail="They are signed out and lose access to every event. This can't be undone, but the record of what they did is kept and the email address can be invited again later."
+                              confirmLabel="Delete account"
+                              busyLabel="Deleting…"
+                              danger
+                              onConfirm={confirmed(async () => {
+                                await deleteStaff(user.id);
+                                setNotice(`${user.display_name}'s account was deleted.`);
+                              })}
+                              onClose={() => setAsking(null)}
+                            />
+                          )}
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
                 );
               })}
             </tbody>

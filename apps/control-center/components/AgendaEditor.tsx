@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { agendaApi, ApiError } from "@/lib/api";
 import type { PresentationInput, PresenterInput, SessionInput } from "@/lib/api";
 import { DateField, TimeField } from "@/components/DateTimeField";
+import { ConfirmInline } from "@/components/ConfirmInline";
 
 /**
  * The forms behind the Agenda tab's edit controls (D-064). Each one saves a single
@@ -392,7 +393,9 @@ export function ConfirmDelete({
   const { busy, error, run } = useSave();
   return (
     <div style={{ ...formBox, borderColor: "var(--block)" }}>
-      Delete {what}? This cannot be undone. If files have been uploaded it is refused — cancel instead.
+      {/* S27 (D-113): say which action to use instead, and that it keeps the files. */}
+      Delete {what}? This cannot be undone. If files have been uploaded it is refused — use Cancel session
+      instead, which keeps them.
       {error && (
         <div className="err" style={{ marginTop: 10, marginBottom: 0 }}>
           {error}
@@ -501,29 +504,22 @@ export function ActionMenu({ label, items }: { label: string; items: MenuItem[] 
   );
 }
 
-export function RemovePresenter({
-  eventId,
-  slotId,
-  speakerId,
-  name,
-}: {
-  eventId: string;
-  slotId: string;
-  speakerId: string;
-  name: string;
-}) {
-  const { busy, error, run } = useSave();
+/**
+ * The "×" beside a presenter's name only asks (S26, D-113): removing used to happen on
+ * the click, with any failure hidden in a tooltip. The question and its error are shown
+ * by `RemovePresenterConfirm`, in the row below.
+ */
+export function RemovePresenter({ name, onAsk }: { name: string; onAsk: () => void }) {
   return (
     <button
       type="button"
       aria-label={`Remove ${name} from this presentation`}
-      title={error ?? `Remove ${name} from this presentation`}
-      disabled={busy}
-      onClick={() => void run(() => agendaApi.removePresenter(eventId, slotId, speakerId))}
+      title={`Remove ${name} from this presentation`}
+      onClick={onAsk}
       style={{
         border: "none",
         background: "none",
-        color: error ? "var(--block)" : "var(--dim)",
+        color: "var(--dim)",
         cursor: "pointer",
         padding: "0 2px",
         fontSize: 13,
@@ -531,5 +527,44 @@ export function RemovePresenter({
     >
       ×
     </button>
+  );
+}
+
+/** S26 (D-113): names the person and the presentation, and what removing them does. */
+export function RemovePresenterConfirm({
+  eventId,
+  slotId,
+  speakerId,
+  name,
+  title,
+  onClose,
+}: {
+  eventId: string;
+  slotId: string;
+  speakerId: string;
+  name: string;
+  title: string;
+  onClose: () => void;
+}) {
+  const router = useRouter();
+  return (
+    <ConfirmInline
+      question={`Remove ${name} from "${title}"?`}
+      detail="They can no longer upload files for this presentation. Files already uploaded are kept, and they stay on the Speakers list."
+      confirmLabel="Remove presenter"
+      busyLabel="Removing…"
+      danger
+      onConfirm={async () => {
+        try {
+          await agendaApi.removePresenter(eventId, slotId, speakerId);
+        } catch (failure) {
+          throw new Error(
+            failure instanceof ApiError ? failure.message : "Could not connect. Check the internet connection and try again.",
+          );
+        }
+        router.refresh();
+      }}
+      onClose={onClose}
+    />
   );
 }

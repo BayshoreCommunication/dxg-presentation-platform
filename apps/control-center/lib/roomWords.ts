@@ -43,3 +43,21 @@ export function staleNoteFor(
   const match = room ? rooms.find((entry) => entry.room === room) : undefined;
   return talkRoomNote(status, match ? match.heartbeat_age : undefined);
 }
+
+/**
+ * R42 (D-113): what to do about a room that isn't ready, in one line — "Room PC not
+ * reporting" used to sit there with no action. Null when the room is ready.
+ */
+export function roomNextStep(room: {
+  readiness: "ready" | "attention" | "agent_offline";
+  heartbeat_age: number | null;
+  key_issued_at?: string | null;
+}): string | null {
+  if (room.readiness === "ready") return null;
+  if (room.readiness === "agent_offline") {
+    if (!room.key_issued_at) return "Issue a connection code and enter it on the room PC.";
+    if (room.heartbeat_age === null) return "Enter the connection code on the room PC so it can report in.";
+    return "Check the room PC is switched on and online. It keeps playing the files it already has.";
+  }
+  return "Some of this room's talks aren't ready on the room PC — not approved yet, still copying, or waiting to be switched in. Open the room view to see which.";
+}

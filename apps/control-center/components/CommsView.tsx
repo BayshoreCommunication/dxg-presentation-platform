@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import Link from "next/link";
 import { Kpi } from "@/components/Kpi";
 
 import { useRouter } from "next/navigation";
@@ -13,6 +14,7 @@ import { EMAIL_STATUS, formatDeadline, formatSessionTime, wordsFor } from "@pmp/
 /** Kravio puts a glyph on every tile; these say what each delivery counter is. */
 const COUNTER_ICON = {
   queued: "clock",
+  sent: "send",
   delivered: "mail",
   opened: "checkCircle",
   clicked: "cursor",
@@ -180,7 +182,8 @@ export function CommsView({ eventId, data, event }: { eventId: string; data: Com
       {error && <div className="err">{error}</div>}
 
       <div className="krow">
-        {(["queued", "delivered", "opened", "clicked", "bounced"] as const).map((key) => (
+        {/* S32 (D-113): "Sent" too — the log listed sent emails that no counter showed. */}
+        {(["queued", "sent", "delivered", "opened", "clicked", "bounced"] as const).map((key) => (
           <Kpi
             key={key}
             label={wordsFor(EMAIL_STATUS, key).label}
@@ -411,7 +414,16 @@ export function CommsView({ eventId, data, event }: { eventId: string; data: Com
                 : "All reminders for this deadline have gone."}
             </div>
           ) : (
-            <div className="note">{data.reminders.off_reason}</div>
+            <div className="note">
+              {data.reminders.off_reason}
+              {/* S34 (D-113): the way out, where the problem is named. */}
+              {!data.reminders.deadline && data.reminders.days.length > 0 && (
+                <>
+                  {" "}
+                  <Link href={`/events/${eventId}#event-deadline`}>Set the deadline →</Link>
+                </>
+              )}
+            </div>
           )}
           {data.reminders.runs.length > 0 && (
             <ul className="note" style={{ margin: "8px 0 0", paddingLeft: 18 }}>
@@ -428,7 +440,8 @@ export function CommsView({ eventId, data, event }: { eventId: string; data: Com
             </ul>
           )}
           <div className="note" style={{ marginTop: 8 }}>
-            Change the days in the event&rsquo;s settings. &ldquo;Remind speakers missing files&rdquo; on Speakers sends one now.
+            <Link href={`/events/${eventId}#event-deadline`}>Change the deadline or the days</Link> in the
+            event&rsquo;s settings. &ldquo;Remind speakers missing files&rdquo; on Speakers sends one now.
           </div>
         </div>
       </div>

@@ -56,7 +56,7 @@ R35, R40, R45, A12, A20, A21, A30).
 agent / device key wording (S3, R39, R41, R43, R46), merge-field syntax (S33), decision and milestone codes (S22,
 R14, R40), "server-side", "fleet", "manifest" (R20, R23, S41).
 
-**Batch 5 — confirmations and guidance.** Confirm before sending, merging, removing, deactivating (S26, R27, A13,
+**Batch 5 — confirmations and guidance.** ✔ Done 2026-09-29 (D-113); R48 needs a decision (below). Confirm before sending, merging, removing, deactivating (S26, R27, A13,
 A18); next-step links (S11, S34, S43, A14); the approval → sign-off → room-acceptance strip on Detail, Check-in and
 SRR; polish (all Low rows).
 
@@ -223,3 +223,8 @@ agendaEdit.ts:692, presentation.ts:195, admin.ts:185, archive.ts:610, srr.ts:640
 index.ts:1573 (LibreOffice text via pdf.ts:108), index.ts:1994/2038 "Unknown field X". Medium, vague — index.ts:526
 "No such record.", 920 "Unexpected failure.", 3090 "Malformed request.", 1355/1466 "Empty part.", 208, 1239, 1245.
 Jargon — archive.ts:337/377 "checksum", files.ts:362 "quarantined", srr.ts:576, auth.ts:634/695.
+
+**Open decision (R48, 2026-09-29):** nothing puts a file into "Technician review" today (ingest writes passed /
+passed with warnings / failed; `refer_to_technician` is never called), yet the state blocks approval if reached. Either
+(a) add a technician pass/fail action with a reason on the inspection report (the transitions exist in
+packages/domain), or (b) drop the state. Until then Review explains it plainly if it ever appears.

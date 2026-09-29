@@ -243,7 +243,7 @@ export function EventDetails({
 
       <div className="card">
         <div className="chd">
-          <h3>Deadlines &amp; workflow</h3>
+          <h3>Deadlines &amp; reminders</h3>
           <span className="m">when the speaker portal closes</span>
         </div>
         <div className="cbd">
@@ -267,7 +267,13 @@ export function EventDetails({
             </div>
             <div className="field">
               <label>Automatic reminders</label>
-              <ReminderDaysField value={reminderDays} onChange={setReminderDays} disabled={readOnly} />
+              <ReminderDaysField
+                value={reminderDays}
+                onChange={setReminderDays}
+                disabled={readOnly}
+                deadline={deadline}
+                active={setup.status === "active"}
+              />
             </div>
           </div>
         </div>
@@ -276,7 +282,8 @@ export function EventDetails({
       <div className="card">
         <div className="chd">
           <h3>Branding</h3>
-          <span className="m">what the speaker and client surfaces wear</span>
+          {/* S29 (D-113): plain words. */}
+          <span className="m">how the speaker and client pages look</span>
         </div>
         <div className="cbd">
           <div className="field">

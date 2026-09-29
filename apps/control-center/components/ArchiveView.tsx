@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import type { ArchiveScope, PdfProgress } from "@/lib/api";
 import { buildArchive, deliverArchive, archiveDownloadUrl, convertArchivePdfs, ApiError } from "@/lib/api";
 import { DownloadLog } from "@/components/DownloadLog";
@@ -18,6 +19,17 @@ const STATE_TONE: Record<string, string> = {
   delivered: "synchronized_onsite",
   expired: "needs_revision",
   deleted: "attention",
+};
+
+/**
+ * S43 (D-113): where each exclusion reason is fixed. The reasons are the API's fixed
+ * sentences (services/archive.ts). Every row also opens its presentation; for
+ * "restricted from distribution" that page is the only place to look.
+ */
+const EXCLUSION_FIX: Record<string, { path: string; label: string }> = {
+  "no approved version": { path: "review", label: "Review presentations" },
+  "speaker withheld permission": { path: "speakers", label: "Release permission on Speakers" },
+  "release permission not set": { path: "speakers", label: "Set release permission on Speakers" },
 };
 
 /** Screen 10 — scope, options, and the package itself. */
@@ -147,11 +159,18 @@ export function ArchiveView({ eventId, initial }: { eventId: string; initial: Ar
                 {initial.excluded.map((row, index) => (
                   <tr key={`${row.title}-${index}`}>
                     <td>
-                      {row.title}
+                      <Link href={`/events/${eventId}/talks/${row.slot_id}`}>{row.title}</Link>
                       {row.speaker ? ` — ${row.speaker}` : ""}
                     </td>
                     <td style={{ textAlign: "right" }}>
                       <span className="chip c-mut">{row.reason}</span>
+                      {EXCLUSION_FIX[row.reason] && (
+                        <div className="note" style={{ marginTop: 4 }}>
+                          <Link href={`/events/${eventId}/${EXCLUSION_FIX[row.reason]!.path}`}>
+                            {EXCLUSION_FIX[row.reason]!.label} →
+                          </Link>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -237,6 +256,12 @@ export function ArchiveView({ eventId, initial }: { eventId: string; initial: Ar
           </div>
           {/* One line under the row (D-111): Build's reason first — it blocks Deliver too. */}
           <WhyNot reason={buildBlocked ?? (pkg ? deliverBlocked : null)} />
+          {/* S42 (D-113): a rebuild does not replace what the client already has. */}
+          {pkg && (pkg.archive_state === "delivered" || pkg.archive_state === "expired") && !buildBlocked && (
+            <div className="note" style={{ marginTop: 6 }}>
+              Rebuilding creates a new package; deliver it again to update the client&rsquo;s download.
+            </div>
+          )}
 
           {/* The checksum check, in plain words (S41, D-112). */}
           <div className="note" style={{ marginTop: 10 }}>

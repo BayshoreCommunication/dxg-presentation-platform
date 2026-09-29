@@ -1,9 +1,10 @@
+import Link from "next/link";
 import { getFleet, getSummary } from "@/lib/api";
 import { Chip } from "@/components/Chip";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { DeviceKeyButton } from "@/components/DeviceKeyButton";
 import { guard } from "@/lib/guard";
-import { ROOM_LABEL as LABEL, roomFilesLine, roomPcState } from "@/lib/roomWords";
+import { ROOM_LABEL as LABEL, roomFilesLine, roomNextStep, roomPcState } from "@/lib/roomWords";
 
 export const dynamic = "force-dynamic";
 
@@ -37,9 +38,14 @@ export default async function RoomSyncPage({ params }: { params: Promise<{ id: s
                     <span className="note">
                       {roomFilesLine(room)} · {roomPcState(room)}
                     </span>
+                    {/* R42 (D-113): the next step for a room that isn't ready. */}
+                    {roomNextStep(room) && <div className="note">{roomNextStep(room)}</div>}
                   </td>
                   <td style={{ textAlign: "right" }}>
                     <Chip status={room.readiness} label={LABEL[room.readiness]} />{" "}
+                    <Link className="btn" style={{ padding: "4px 10px" }} href={`/events/${id}/agent/${room.room_id}`}>
+                      Room view
+                    </Link>{" "}
                     <DeviceKeyButton
                       roomId={room.room_id}
                       room={room.room}
@@ -55,8 +61,9 @@ export default async function RoomSyncPage({ params }: { params: Promise<{ id: s
       </div>
 
       <div className="note" style={{ marginTop: 6 }}>
-        Each room PC keeps its own copy of every file it needs, so losing the internet stops new updates
-        from arriving — it never stops what&rsquo;s already there from playing.
+        {/* R42 (D-113): said so it agrees with "Room PC not reporting" above, not against it. */}
+        A room PC that is not reporting still plays the files it already has. It can&rsquo;t get new or
+        updated files — or tell this page what it has — until it is back online.
       </div>
     </>
   );

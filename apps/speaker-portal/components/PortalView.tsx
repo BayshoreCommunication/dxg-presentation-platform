@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { portalAssetUrl, presenterLogout } from "@/lib/api";
 import type { CompleteResult, PortalSession, PortalTalk } from "@/lib/api";
 import { UploadPanel } from "./UploadPanel";
+import { remember, REMEMBERED } from "./PresenterLogin";
 import { formatBytes, formatDeadline, SPEAKER_TALK_STATUS } from "@pmp/format";
 
 
@@ -19,6 +20,8 @@ export function PortalView({
   const reload = useCallback(async () => {
     router.refresh();
   }, [router]);
+  // A32 (D-113): lets the sign-in form name the event if this tab's sign-in ends.
+  useEffect(() => remember(REMEMBERED.event, session.event.name), [session.event.name]);
 
   return (
     <>
@@ -70,6 +73,8 @@ export function PortalView({
             void presenterLogout()
               .catch(() => undefined)
               .then(() => {
+                // Signing out forgets what this tab remembered for the sign-in form (A32, D-113).
+                for (const key of Object.values(REMEMBERED)) remember(key, null);
                 router.replace("/login?reason=signed_out");
                 router.refresh();
               });
@@ -198,26 +203,27 @@ function TalkCard({
         )}
 
         <div className="grid2" style={{ marginBottom: 12 }}>
-          <div>
-            <div className="kl">Upload deadline</div>
-            {approved ? (
-              <span className="note">Done — your presentation is approved.</span>
-            ) : deadline ? (
-              (() => {
-                const { label, passed } = deadlineText(deadline, timezone);
-                return (
-                  <>
-                    <b>{label}</b>
-                    {passed && (
-                      <div className="note">The deadline has passed — you can still upload; the team will review it.</div>
-                    )}
-                  </>
-                );
-              })()
-            ) : (
-              <span className="note">No deadline set — upload as soon as you can.</span>
-            )}
-          </div>
+          {/* A35 (D-113): once the talk is approved the deadline no longer applies, so it goes. */}
+          {!approved && (
+            <div>
+              <div className="kl">Upload deadline</div>
+              {deadline ? (
+                (() => {
+                  const { label, passed } = deadlineText(deadline, timezone);
+                  return (
+                    <>
+                      <b>{label}</b>
+                      {passed && (
+                        <div className="note">The deadline has passed — you can still upload; the team will review it.</div>
+                      )}
+                    </>
+                  );
+                })()
+              ) : (
+                <span className="note">No deadline set — upload as soon as you can.</span>
+              )}
+            </div>
+          )}
           <div>
             <div className="kl">Requirements</div>
             <div className="note">
@@ -333,8 +339,9 @@ function TalkCard({
               </div>
             ) : (
               <div className="lane cli">
-                <b>Thanks — we&rsquo;ve received your presentation.</b> The DXG team will review it and
-                let you know if anything needs to change.
+                {/* A34 (D-113): a clean upload ends on a clear thank-you and what happens next. */}
+                <b>Thanks — we&rsquo;ve received your presentation.</b> The DXG team will review it.
+                We&rsquo;ll email you if anything needs to change.
               </div>
             )}
             {result.findings

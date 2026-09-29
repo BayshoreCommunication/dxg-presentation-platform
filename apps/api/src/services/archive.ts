@@ -63,7 +63,7 @@ export type PdfProgress = {
 
 export type ScopePreview = {
   included: Candidate[];
-  excluded: { title: string; speaker: string | null; reason: string }[];
+  excluded: { slot_id: string; title: string; speaker: string | null; reason: string }[];
   total_bytes: number;
   rooms: number;
   days: number;
@@ -116,13 +116,13 @@ export async function scopePreview(tx: pg.PoolClient, eventId: string): Promise<
 
   for (const row of rows) {
     if (!row.file_version_id) {
-      excluded.push({ title: row.title, speaker: row.speaker, reason: "no approved version" });
+      excluded.push({ slot_id: row.slot_id, title: row.title, speaker: row.speaker, reason: "no approved version" });
     } else if (row.restricted) {
-      excluded.push({ title: row.title, speaker: row.speaker, reason: "restricted from distribution" });
+      excluded.push({ slot_id: row.slot_id, title: row.title, speaker: row.speaker, reason: "restricted from distribution" });
     } else if (row.release_permission === "none") {
-      excluded.push({ title: row.title, speaker: row.speaker, reason: "speaker withheld permission" });
+      excluded.push({ slot_id: row.slot_id, title: row.title, speaker: row.speaker, reason: "speaker withheld permission" });
     } else if (row.release_permission === "undecided") {
-      excluded.push({ title: row.title, speaker: row.speaker, reason: "release permission not set" });
+      excluded.push({ slot_id: row.slot_id, title: row.title, speaker: row.speaker, reason: "release permission not set" });
     } else if (row.release_permission === "pdf_only") {
       included.push({ ...row, formats: ["pdf"] });
     } else {

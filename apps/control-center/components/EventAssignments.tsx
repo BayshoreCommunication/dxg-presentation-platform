@@ -7,6 +7,7 @@ import type { EventRow, StaffRow } from "@/lib/api";
 import { setStaffRole, EVENT_ROLE_NAMES, ApiError } from "@/lib/api";
 import { Chip } from "@/components/Chip";
 import { WhyNot } from "@/components/WhyNot";
+import { ConfirmInline } from "@/components/ConfirmInline";
 import { formatDateRange, ROLE, wordsFor } from "@pmp/format";
 
 /**
@@ -45,10 +46,25 @@ function byEvent(staff: StaffRow[], events: EventRow[]) {
  * all. Holding both on one screen meant every account row carried controls for a
  * question nobody was asking at that moment.
  */
-export function EventAssignments({ initial, events }: { initial: StaffRow[]; events: EventRow[] }) {
+export function EventAssignments({
+  initial,
+  events,
+  assign,
+}: {
+  initial: StaffRow[];
+  events: EventRow[];
+  /** A14: arrived from "Next: assign them to an event" on Staff accounts (`?assign=<user id>`). */
+  assign?: string;
+}) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  /** A19 (D-113): an error belongs to the event row it happened on, not the top of the page. */
+  const [error, setError] = useState<{ eventId: string; message: string } | null>(null);
+  /** A18 (D-113): the role removal waiting for "are you sure?". */
+  const [removing, setRemoving] = useState<{ eventId: string; person: StaffRow; role: string } | null>(null);
+  const newcomer = assign
+    ? initial.find((person) => person.id === assign && person.is_active && person.account_type === "staff")
+    : undefined;
   /** Who is being assigned to which event, and with which roles, before pressing assign. */
   const [draft, setDraft] = useState<Record<string, { who: string; roles: string[] }>>({});
 
@@ -64,14 +80,14 @@ export function EventAssignments({ initial, events }: { initial: StaffRow[]; eve
       return { ...current, [eventId]: { ...entry, roles } };
     });
 
-  async function run(work: () => Promise<void>) {
+  async function run(eventId: string, work: () => Promise<void>) {
     setBusy(true);
     setError(null);
     try {
       await work();
       router.refresh();
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : "Something went wrong.");
+      setError({ eventId, message: caught instanceof ApiError ? caught.message : "Something went wrong." });
     } finally {
       setBusy(false);
     }
@@ -85,7 +101,16 @@ export function EventAssignments({ initial, events }: { initial: StaffRow[]; eve
         and reach nothing. DXG administrators reach every event already and are not listed here.
       </div>
 
-      {error && <div className="err">{error}</div>}
+      {newcomer && (
+        <div className="card">
+          <div className="cbd">
+            <b>Assigning {newcomer.display_name}.</b>{" "}
+            <span className="note">
+              Press &ldquo;assign {newcomer.display_name} here&rdquo; on the event they will work, then tick their roles.
+            </span>
+          </div>
+        </div>
+      )}
 
         <div className="card">
           <div className="chd">
@@ -158,11 +183,10 @@ export function EventAssignments({ initial, events }: { initial: StaffRow[]; eve
                                   title={`Remove ${wordsFor(ROLE, role).label}`}
                                   style={{ padding: "0 5px", fontSize: 11, lineHeight: 1.5 }}
                                   disabled={busy}
-                                  onClick={() =>
-                                    void run(async () => {
-                                      await setStaffRole(person.id, event.id, role, false);
-                                    })
-                                  }
+                                  onClick={() => {
+                                    setError(null);
+                                    setRemoving({ eventId: event.id, person, role });
+                                  }}
                                 >
                                   ×
                                 </button>
@@ -170,6 +194,25 @@ export function EventAssignments({ initial, events }: { initial: StaffRow[]; eve
                             ))}
                           </div>
                         ))
+                      )}
+
+                      {removing?.eventId === event.id && (
+                        <ConfirmInline
+                          question={`Remove ${removing.person.display_name} as ${wordsFor(ROLE, removing.role).label} on ${event.name}?`}
+                          detail={
+                            people.find((p) => p.person.id === removing.person.id)?.roles.length === 1
+                              ? "This is their only role here, so they will no longer see this event. You can assign them again at any time."
+                              : "Their other roles on this event stay. You can assign this one again at any time."
+                          }
+                          confirmLabel="Remove role"
+                          busyLabel="Removing…"
+                          danger
+                          onConfirm={async () => {
+                            await setStaffRole(removing.person.id, event.id, removing.role, false);
+                            router.refresh();
+                          }}
+                          onClose={() => setRemoving(null)}
+                        />
                       )}
 
                       {/*
@@ -185,6 +228,15 @@ export function EventAssignments({ initial, events }: { initial: StaffRow[]; eve
                         implied otherwise and cost a round trip per hat.
                       */}
                       <div style={{ marginTop: 8 }}>
+                        {newcomer && draft[event.id]?.who !== newcomer.id && (
+                          <button
+                            className="btn pri"
+                            style={{ padding: "2px 8px", fontSize: 12, marginRight: 6 }}
+                            onClick={() => setWho(event.id, newcomer.id)}
+                          >
+                            assign {newcomer.display_name} here
+                          </button>
+                        )}
                         <select
                           value={draft[event.id]?.who ?? ""}
                           onChange={(e) => setWho(event.id, e.target.value)}
@@ -243,7 +295,7 @@ export function EventAssignments({ initial, events }: { initial: StaffRow[]; eve
                               style={{ padding: "2px 8px", fontSize: 12 }}
                               disabled={busy}
                               onClick={() =>
-                                void run(async () => {
+                                void run(event.id, async () => {
                                   const chosen = draft[event.id];
                                   if (!chosen?.who) throw new ApiError("request", "Pick who to assign.", 400);
                                   if (!chosen.roles.length) {
@@ -272,6 +324,12 @@ export function EventAssignments({ initial, events }: { initial: StaffRow[]; eve
                                   : null
                               }
                             />
+                          </div>
+                        )}
+                        {/* A19: the error shows under the event it happened on. */}
+                        {error?.eventId === event.id && (
+                          <div className="err" style={{ margin: "6px 0 0" }}>
+                            {error.message}
                           </div>
                         )}
                       </div>

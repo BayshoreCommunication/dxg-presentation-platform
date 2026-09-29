@@ -7,6 +7,7 @@ import { addStation, renameStation, retireStation, startCheckin, ApiError } from
 import { FloatingMenu, useFloatingMenu } from "@/components/FloatingMenu";
 import { CHECK, wordsFor } from "@pmp/format";
 import { Chip, SeverityChip, StatusMeaning } from "@/components/Chip";
+import { ConfirmationStrip } from "@/components/ConfirmationStrip";
 import { staleNoteFor } from "@/lib/roomWords";
 import { WhyNot } from "@/components/WhyNot";
 
@@ -111,9 +112,31 @@ export function SrrDashboardView({
                       {row.room} · {when(row.starts_at, timezone)} · {row.title}
                     </span>
                     <StatusMeaning status={row.status} stale={stale} />
+                    {/* Approval → sign-off → room at a glance, with "Signed off vN" (R32, D-113). */}
+                    <ConfirmationStrip
+                      compact
+                      facts={{
+                        status: row.status,
+                        room: row.room,
+                        hasSpeaker: true,
+                        approved: row.approved_version ? { version: row.approved_version } : null,
+                        roomStates: row.approved_room_states,
+                        signOff: row.signed_off_version ? { version: row.signed_off_version } : null,
+                        stale,
+                        timezone,
+                      }}
+                    />
                   </td>
                   <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
                     <Chip status={row.status} label={row.status_label} stale={stale} />{" "}
+                    {/* R32 (D-113): a speaker who has been and gone says so. */}
+                    {row.checked_out && (
+                      <>
+                        <span className="chip c-mut" title="Checked in earlier and checked out. Check in again if they bring a new file.">
+                          Checked out
+                        </span>{" "}
+                      </>
+                    )}
                     {row.checkin_id ? (
                       <a className="btn" href={`/events/${eventId}/srr/${row.checkin_id}`}>
                         Open check-in →
@@ -145,13 +168,25 @@ export function SrrDashboardView({
           ) : (
             <table>
               <tbody>
+                {/* R31 (D-113): which talk, where and when, the problem in words, and the report. */}
                 {data.warnings.map((warning, index) => (
                   <tr key={`${warning.slot_id}-${index}`}>
                     <td>
-                      {warning.speaker} · {wordsFor(CHECK, warning.check_code).label}
+                      <b>{warning.speaker ?? "No speaker"}</b> · {warning.title}
+                      <br />
+                      <span className="note">
+                        {warning.room ?? "No room"} · {when(warning.starts_at, timezone)} ·{" "}
+                        {wordsFor(CHECK, warning.check_code).label}
+                      </span>
                     </td>
-                    <td style={{ textAlign: "right" }}>
-                      <SeverityChip severity={warning.severity} />
+                    <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                      <SeverityChip severity={warning.severity} />{" "}
+                      <a
+                        className="btn"
+                        href={`/events/${eventId}/talks/${warning.slot_id}/inspection?v=${warning.file_version_id}`}
+                      >
+                        Open report
+                      </a>
                     </td>
                   </tr>
                 ))}

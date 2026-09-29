@@ -1,11 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { QueueItem } from "@/lib/api";
 import { transitionVersion, ApiError } from "@/lib/api";
 import { Chip, SeverityChip } from "@/components/Chip";
 import { CommentsPanel } from "@/components/CommentsPanel";
+import { ConfirmInline } from "@/components/ConfirmInline";
 import { SlidePreview } from "@/components/SlidePreview";
 import { WhyNot } from "@/components/WhyNot";
 import { CHECK, formatBytes, INSPECTION_STATE, SEVERITY, VERSION_STATE, wordsFor } from "@pmp/format";
@@ -22,10 +24,23 @@ const FINDING_COPY: Record<string, (detail: Record<string, unknown>) => string> 
 /** Inspection states in which the automated checks have not finished (D-108). */
 const CHECKING = ["pending", "inspecting", "technician_review"];
 
-export function ReviewWorkspace({ initialQueue }: { initialQueue: QueueItem[] }) {
+export function ReviewWorkspace({
+  eventId,
+  initialQueue,
+  initialSelectedId,
+}: {
+  eventId: string;
+  initialQueue: QueueItem[];
+  /** R22 (D-113): "Open in review workspace" from an inspection report opens that file. */
+  initialSelectedId?: string | null;
+}) {
   const router = useRouter();
   const [queue, setQueue] = useState(initialQueue);
-  const [selectedId, setSelectedId] = useState(initialQueue[0]?.file_version_id ?? null);
+  const [selectedId, setSelectedId] = useState(
+    initialSelectedId && initialQueue.some((item) => item.file_version_id === initialSelectedId)
+      ? initialSelectedId
+      : (initialQueue[0]?.file_version_id ?? null),
+  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -36,6 +51,8 @@ export function ReviewWorkspace({ initialQueue }: { initialQueue: QueueItem[] })
    */
   const [pending, setPending] = useState<"request_changes" | "reject" | null>(null);
   const [message, setMessage] = useState("");
+  // R27 (D-113): the A key asks first — a stray keypress must not approve a file.
+  const [confirmApprove, setConfirmApprove] = useState(false);
 
   useEffect(() => {
     setQueue(initialQueue);
@@ -52,7 +69,10 @@ export function ReviewWorkspace({ initialQueue }: { initialQueue: QueueItem[] })
   const openBlocking = selected ? selected.findings.filter((finding) => finding.severity === "blocking").length : 0;
   const approveBlocked = !selected
     ? null
-    : CHECKING.includes(selected.inspection_state)
+    : selected.inspection_state === "technician_review"
+      ? // R48 (D-113): nothing on screen resolves this state yet — say so, not "wait".
+        "A check needs a technician to look at this file by hand before it can be approved, and that can't be recorded on screen yet. Contact DXG support, or ask the speaker for a new version."
+      : CHECKING.includes(selected.inspection_state)
       ? "Approve is available once the automated checks finish."
       : openBlocking > 0
         ? `This file has ${openBlocking} blocking problem${openBlocking === 1 ? "" : "s"}. Waive ${openBlocking === 1 ? "it" : "them"} with a reason in the inspection report, or ask the speaker for a new version.`
@@ -62,6 +82,7 @@ export function ReviewWorkspace({ initialQueue }: { initialQueue: QueueItem[] })
   useEffect(() => {
     setPending(null);
     setMessage("");
+    setConfirmApprove(false);
   }, [selectedId]);
 
   const decide = useCallback(
@@ -97,9 +118,13 @@ export function ReviewWorkspace({ initialQueue }: { initialQueue: QueueItem[] })
           }
           return parts.length > 0 ? ` · ${parts.join(" · ")}` : " · no speaker on this talk to tell";
         };
+        // R28 (D-113): "queued for 0 rooms" said nothing. Say where it goes and what the
+        // room still has to do — or that no room will get it until the session has one.
         setToast(
           result.review_state === "approved"
-            ? `Approved — queued for ${result.rooms_queued} room${result.rooms_queued === 1 ? "" : "s"}`
+            ? result.rooms_queued === 0
+              ? "Approved — but its session has no room yet, so no room PC will get it. Give the session a room in the agenda."
+              : `Approved — being copied to ${selected.room ?? "the room"}'s PC. If the room already has an older version, the room technician switches to this one in Room Agent.`
             : result.review_state === "changes_requested"
               ? `Sent back for revision${told(result.notice)}`
               : result.review_state === "rejected"
@@ -150,13 +175,13 @@ export function ReviewWorkspace({ initialQueue }: { initialQueue: QueueItem[] })
         return;
       }
       if (event.metaKey || event.ctrlKey || event.altKey) return;
-      if ((event.key === "a" || event.key === "A") && !approveBlocked) void decide("approve");
+      if ((event.key === "a" || event.key === "A") && !approveBlocked && !busy) setConfirmApprove(true);
       // R opens the message form rather than acting: a revision needs a reason.
       if (event.key === "r" || event.key === "R") setPending("request_changes");
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [decide, approveBlocked]);
+  }, [approveBlocked, busy]);
 
   return (
     <>
@@ -168,7 +193,7 @@ export function ReviewWorkspace({ initialQueue }: { initialQueue: QueueItem[] })
         <div className="chd">
           <h3>Waiting for review · {queue.length}</h3>
           <span className="m">
-            oldest first · <span className="kbd">A</span> approve ·{" "}
+            oldest first · <span className="kbd">A</span> approve (asks first) ·{" "}
             <span className="kbd">R</span> request revision
           </span>
         </div>
@@ -244,7 +269,13 @@ export function ReviewWorkspace({ initialQueue }: { initialQueue: QueueItem[] })
                 </div>
               ))}
 
-            {CHECKING.includes(selected.inspection_state) ? (
+            {selected.inspection_state === "technician_review" ? (
+              <div className="lane cli">
+                <b>{wordsFor(INSPECTION_STATE, selected.inspection_state).label}</b>
+                <br />
+                {approveBlocked}
+              </div>
+            ) : CHECKING.includes(selected.inspection_state) ? (
               <div className="lane int">
                 <b>Checks still running</b>
                 <br />
@@ -259,6 +290,12 @@ export function ReviewWorkspace({ initialQueue }: { initialQueue: QueueItem[] })
                 {selected.findings.length === 1 ? "" : "s"} in the inspection report.
               </div>
             )}
+            {/* R26 (D-113): the report the findings point to, one click away. */}
+            <div className="note" style={{ margin: "4px 0 10px" }}>
+              <Link href={`/events/${eventId}/talks/${selected.slot_id}/inspection?v=${selected.file_version_id}`}>
+                Open the inspection report for v{selected.version_number} →
+              </Link>
+            </div>
 
             {/* Real comments (D-070). Two invented ones used to sit here on every file. */}
             <CommentsPanel versionId={selected.file_version_id} versionNumber={selected.version_number} />
@@ -268,7 +305,10 @@ export function ReviewWorkspace({ initialQueue }: { initialQueue: QueueItem[] })
                 className="btn good"
                 disabled={busy || approveBlocked !== null}
                 title={approveBlocked ?? undefined}
-                onClick={() => void decide("approve")}
+                onClick={() => {
+                  setConfirmApprove(false);
+                  void decide("approve");
+                }}
               >
                 Approve (A)
               </button>
@@ -281,6 +321,26 @@ export function ReviewWorkspace({ initialQueue }: { initialQueue: QueueItem[] })
             </div>
             {/* The shared reason line (D-111). */}
             <WhyNot reason={approveBlocked} />
+            {/* R29 (D-113): what each "no" does, in one line each. */}
+            <div className="note" style={{ marginTop: 8, lineHeight: 1.5 }}>
+              <b>Request revision</b> — the speaker fixes something and uploads a new version.{" "}
+              <b>Reject</b> — this file won&rsquo;t be used at all (the wrong deck, say); the speaker must send a
+              different one. Both email the speaker your message.
+            </div>
+            {confirmApprove && !approveBlocked && (
+              <ConfirmInline
+                question={`Approve v${selected.version_number} of “${selected.title}”?`}
+                detail={
+                  selected.room
+                    ? `It is copied to ${selected.room}'s PC. If the room already has an older version, the room technician switches to this one there.`
+                    : "Its session has no room yet, so no room PC will get it until it has one."
+                }
+                confirmLabel="Approve"
+                busyLabel="Approving…"
+                onConfirm={() => decide("approve")}
+                onClose={() => setConfirmApprove(false)}
+              />
+            )}
 
             {pending && (
               <form

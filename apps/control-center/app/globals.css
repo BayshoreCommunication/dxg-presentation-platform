@@ -1118,3 +1118,9 @@ input,select,textarea{border-width:1px}
 /* Why a control is greyed out (D-111): visible, quiet, right under the control. */
 .why-not{margin:6px 0 0;font-size:12.5px;line-height:1.4;color:var(--secondary-foreground)}
 .why-not::before{content:"ⓘ ";opacity:.7}
+
+/* "Are you sure?" on the page, not window.confirm (D-113). */
+.confirm-inline{margin:8px 0;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--card, #fff);font-size:13px;text-align:left}
+.confirm-inline.danger{border-color:var(--destructive)}
+.confirm-inline .note{margin-top:4px}
+.confirm-inline-actions{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}

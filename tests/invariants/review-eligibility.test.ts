@@ -24,6 +24,7 @@ let eventId = "";
 let checkinId = "";
 let infected = "";
 let clean = "";
+let slotId = "";
 
 const call = (method: string, path: string, body?: unknown) =>
   fetch(`${API}${path}`, {
@@ -92,6 +93,7 @@ before(async () => {
     items: { presentations: { slot_id: string; title: string }[] }[];
   };
   const slot = agenda.items.flatMap((item) => item.presentations).find((talk) => talk.title === title)!;
+  slotId = slot.slot_id;
   const speaker = (await (
     await call("POST", `/events/${eventId}/speakers`, {
       name: `Eligibility Speaker ${RUN}`,
@@ -207,5 +209,43 @@ describe("the presentation receipt (D-106)", () => {
       return rows[0]!.n;
     });
     assert.equal(logged, 1, "the receipt email is in the event's mail log");
+  });
+});
+
+/**
+ * The approval → sign-off → room strip (D-113) reads each step from the screen's own
+ * data: who approved and the room copies at check-in, the sign-off on presentation
+ * detail, and all three per expected speaker on the Speaker Ready Room dashboard.
+ */
+describe("the three confirmations are on every screen that shows them (D-113)", () => {
+  test("detail, check-in and the SRR dashboard carry approval, sign-off and room facts", async (t: TestContext) => {
+    if (!up || !clean) return t.skip("API not running");
+    const detail = (await (await call("GET", `/slots/${slotId}`)).json()) as {
+      srr: { checkin_id: string | null; sign_off: { version_number: number; technician: string | null } | null };
+      versions: { file_version_id: string; version_number: number }[];
+    };
+    const cleanNumber = detail.versions.find((row) => row.file_version_id === clean)!.version_number;
+    assert.equal(detail.srr.sign_off?.version_number, cleanNumber, "the sign-off shows on presentation detail");
+    assert.ok(detail.srr.sign_off?.technician, "with the technician who took it");
+    assert.equal(detail.srr.checkin_id, checkinId, "and a link to the speaker's open check-in");
+
+    const checkin = (await (await call("GET", `/srr/checkins/${checkinId}`)).json()) as {
+      approved: { version_number: number; approved_by?: string | null; room_states?: string[] } | null;
+    };
+    assert.equal(checkin.approved?.version_number, cleanNumber);
+    assert.ok(checkin.approved?.approved_by, "check-in says who approved it");
+    assert.ok(Array.isArray(checkin.approved?.room_states));
+
+    const srr = (await (await call("GET", `/events/${eventId}/srr`)).json()) as {
+      expected: { slot_id: string; approved_version: number | null; signed_off_version: number | null; checked_out: boolean }[];
+      warnings: { room: string | null; starts_at: string; title: string; file_version_id: string }[];
+    };
+    const row = srr.expected.find((item) => item.slot_id === slotId)!;
+    assert.equal(row.approved_version, cleanNumber);
+    assert.equal(row.signed_off_version, cleanNumber);
+    assert.equal(row.checked_out, false, "still checked in");
+    for (const warning of srr.warnings) {
+      assert.ok(warning.title && warning.starts_at && warning.file_version_id, "warnings say which talk, when (R31)");
+    }
   });
 });

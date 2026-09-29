@@ -1057,7 +1057,7 @@ export function ImportView({
               label="Warnings"
               icon="warning"
               value={preview.warnings}
-              caption={preview.warnings ? "won't block the import" : "none"}
+              caption={preview.warnings ? "won't block the import · listed under each row" : "none"}
               tone={preview.warnings ? "warn" : undefined}
             />
             <Kpi label="New speakers" icon="users" value={preview.new_speakers} />
@@ -1151,7 +1151,22 @@ export function ImportView({
                         }}
                       >
                         <td className="mono">{rowLabel(row)}</td>
-                        <td>{row.title || <span className="chip c-bad">missing</span>}</td>
+                        <td>
+                          {row.title || <span className="chip c-bad">missing</span>}
+                          {/* S18 (D-113): the row's warnings in the row, not only on hover over Edit. */}
+                          {problems.map((problem, index) => (
+                            <div
+                              key={index}
+                              className="note"
+                              style={{
+                                fontSize: 11,
+                                color: problem.severity === "blocking" ? "var(--block)" : "var(--amber-text)",
+                              }}
+                            >
+                              {problem.message}
+                            </div>
+                          ))}
+                        </td>
                         <td>{row.room || <span className="chip c-bad">missing</span>}</td>
                         <td className="note">{day(row.starts_at, preview.timezone)}</td>
                         <td className="note">

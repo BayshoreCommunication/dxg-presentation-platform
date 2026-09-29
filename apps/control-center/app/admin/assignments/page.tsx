@@ -9,10 +9,16 @@ export const dynamic = "force-dynamic";
  * `listStaff` the accounts page uses — each assignment already arrives with its
  * event, so the grouping is done here rather than asked of the API twice.
  */
-export default async function EventAssignmentsPage() {
+export default async function EventAssignmentsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ assign?: string }>;
+}) {
+  // A14 (D-113): `?assign=<user id>` comes from "Next: assign them to an event" on Staff accounts.
+  const { assign } = await searchParams;
   try {
     const [staff, events] = await Promise.all([listStaff(), listEvents()]);
-    return <EventAssignments initial={staff.items} events={events.items} />;
+    return <EventAssignments initial={staff.items} events={events.items} assign={assign} />;
   } catch (caught) {
     if (caught instanceof ApiError && caught.status === 401) {
       redirect("/login?next=%2Fadmin%2Fassignments&reason=required");

@@ -38,7 +38,7 @@ export function ForgotPassword() {
               expires in 30 minutes.
             </div>
             <div className="note" style={{ color: "var(--dim)", marginBottom: 14 }}>
-              Nothing arriving? Check the address, or ask a platform admin — they can reset it for
+              Nothing arriving? Check the address, or ask a DXG administrator — they can reset it for
               you directly.
             </div>
             <Link className="btn" style={{ width: "100%", display: "block", textAlign: "center" }} href="/login">

@@ -3168,3 +3168,7 @@ made real; "Manual sync" → real "Check for updates". Not committed yet. Next: 
 Fingerprints, heartbeat/agent/device-key words, decision codes and merge syntax gone from screens, API messages and
 emails; email editor has Insert buttons and a live preview; client zip named after the event. Not committed yet.
 Next: batch 5 (confirmations and guidance), then the Help page and practice event.
+
+## 2026-09-29 — UX batch 5: ask first, next steps, the three confirmations (D-113)
+All five UX_REVIEW batches done. Open decision R48 (Technician review). Not committed yet. Next: in-app Help page
+(task guides + glossary) and a practice event for training.

@@ -311,11 +311,28 @@ export type ExpectedArrival = {
   status_label: string;
   checkin_id: string | null;
   signed_off: boolean;
+  /* The approval → sign-off → room strip per row (D-113), and R32's "Checked out". */
+  approved_version: number | null;
+  approved_room_states: string[];
+  signed_off_version: number | null;
+  checked_out: boolean;
+};
+
+/** An open warning, with the talk's room and time (R31, D-113). */
+export type SrrWarning = {
+  slot_id: string;
+  speaker: string | null;
+  check_code: string;
+  severity: string;
+  title: string;
+  room: string | null;
+  starts_at: string;
+  file_version_id: string;
 };
 
 export type SrrDashboard = {
   expected: ExpectedArrival[];
-  warnings: { slot_id: string; speaker: string | null; check_code: string; severity: string }[];
+  warnings: SrrWarning[];
   stations: SrrStation[];
 };
 
@@ -363,7 +380,8 @@ export type CheckinDetail = {
     status: string;
     status_label: string;
   };
-  approved: VersionFacts | null;
+  /** Who approved it and its room copies' states, for the confirmation strip (D-113). */
+  approved: (VersionFacts & { approved_by?: string | null; approved_at?: string | null; room_states?: string[] }) | null;
   latest: (VersionFacts & { file_version_id: string; review_state: string; processing_state: string }) | null;
   usb: { id: string; scan_result: string; file_version_id: string | null; created_at: string } | null;
   receipt: {
@@ -467,6 +485,11 @@ export type PresentationDetail = {
   speaker: { id: string; name: string; organization: string | null } | null;
   versions: VersionRow[];
   retained_versions: number;
+  /** The Speaker Ready Room side (D-113): the latest sign-off and the speaker's open check-in. */
+  srr?: {
+    checkin_id: string | null;
+    sign_off: { version_number: number; signed_at: string; technician: string | null; station: string | null } | null;
+  };
 };
 
 export type FindingRow = {
@@ -925,7 +948,7 @@ export type PdfProgress = {
 
 export type ArchiveScope = {
   included: ArchiveCandidate[];
-  excluded: { title: string; speaker: string | null; reason: string }[];
+  excluded: { slot_id: string; title: string; speaker: string | null; reason: string }[];
   total_bytes: number;
   rooms: number;
   days: number;

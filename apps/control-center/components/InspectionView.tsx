@@ -322,9 +322,13 @@ export function InspectionView({
           </div>
 
           <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
-            <Link className="btn pri" href={`/events/${eventId}/review`}>
-              Open in review workspace →
-            </Link>
+            {/* R22 (D-113): opens this file in the workspace, and only while it waits for a
+                decision — it used to open the queue's first file whatever this one's state. */}
+            {version.processing_state === "stored" && ["awaiting_review", "in_review"].includes(version.review_state) && (
+              <Link className="btn pri" href={`/events/${eventId}/review?v=${version.file_version_id}`}>
+                Review v{version.version_number} →
+              </Link>
+            )}
             <Link className="btn" href={`/events/${eventId}/talks/${detail.talk.slot_id}`}>
               Version history
             </Link>

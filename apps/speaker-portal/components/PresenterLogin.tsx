@@ -1,8 +1,33 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { presenterLogin, PortalError } from "@/lib/api";
+
+/**
+ * A32 (D-113): what this tab already knows — the email and the event's name — so a sign-in
+ * that ended reads familiar. Never the access code: it is the speaker's password, and page
+ * storage is readable by any script on the page. sessionStorage only — gone when the tab
+ * closes, and Sign out clears it (PortalView).
+ */
+export const REMEMBERED = { email: "pmp.presenter.email", event: "pmp.presenter.event" };
+
+export function readRemembered(key: string): string {
+  try {
+    return window.sessionStorage.getItem(key) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+export function remember(key: string, value: string | null) {
+  try {
+    if (value === null) window.sessionStorage.removeItem(key);
+    else window.sessionStorage.setItem(key, value);
+  } catch {
+    // Private windows can refuse storage; nothing is lost but the convenience.
+  }
+}
 
 const REASONS: Record<string, string> = {
   required: "Please sign in to see your presentation.",
@@ -26,6 +51,14 @@ export function PresenterLogin({
   const [code, setCode] = useState(prefilledCode);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** Known only when this tab signed in before (A32) — the link itself carries just the code. */
+  const [eventName, setEventName] = useState("");
+
+  useEffect(() => {
+    if (reason === "signed_out") return;
+    setEventName(readRemembered(REMEMBERED.event));
+    setEmail((typed) => typed || readRemembered(REMEMBERED.email));
+  }, [prefilledCode, reason]);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -33,9 +66,11 @@ export function PresenterLogin({
     setError(null);
     try {
       await presenterLogin(email, code);
+      remember(REMEMBERED.email, email);
       router.replace("/portal");
       router.refresh();
     } catch (caught) {
+      // The typed code and email stay in the form (A32), so a retry is one click.
       setError(
         caught instanceof PortalError ? caught.message : "Could not sign in. Please try again.",
       );
@@ -49,6 +84,9 @@ export function PresenterLogin({
         <h1 className="htitle" style={{ marginBottom: 2 }}>
           Speaker upload
         </h1>
+        {eventName && (
+          <div style={{ fontWeight: 600, marginBottom: 2 }}>{eventName}</div>
+        )}
         <div className="note" style={{ marginBottom: 16 }}>
           Sign in with the email address the organisers hold for you and the access code they sent.
         </div>
@@ -107,8 +145,8 @@ export function PresenterLogin({
         </form>
 
         <div className="note" style={{ textAlign: "center", marginTop: 14 }}>
-          No account needed — the organisers issue your access code. If it has expired, ask them for a
-          new one.
+          No account needed — the organisers issue your access code. Code expired or not working? Ask
+          the DXG team who invited you for a new code.
         </div>
       </div>
     </div>

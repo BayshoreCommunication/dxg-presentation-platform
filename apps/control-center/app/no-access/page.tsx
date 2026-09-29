@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { SignOutButton } from "@/components/SignOutButton";
 
 export const dynamic = "force-dynamic";
@@ -23,13 +22,11 @@ export default async function NoAccessPage({ searchParams }: { searchParams: Pro
           </h1>
           <p className="note" style={{ marginTop: 14, lineHeight: 1.6 }}>
             Your sign-in worked. Your DXG contact will share your event with you — once they have,
-            open this page again.
+            sign in again and it will be there.
           </p>
+          {/* A27 (D-113): one real way out; "Check again" only came straight back here. */}
           <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
-            <Link href="/client" className="btn pri">
-              Check again
-            </Link>
-            <SignOutButton />
+            <SignOutButton className="btn pri" />
           </div>
         </div>
       </div>
@@ -49,14 +46,12 @@ export default async function NoAccessPage({ searchParams }: { searchParams: Pro
 
         <p className="note" style={{ marginTop: 10, lineHeight: 1.6 }}>
           Ask a DXG administrator to add you on <strong>Event assignments</strong>. Once they
-          have, open the platform again and your events will be there.
+          have, sign in again and your events will be there.
         </p>
 
+        {/* A27 (D-113): one real way out; "Check again" only came straight back here. */}
         <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
-          <Link href="/" className="btn pri">
-            Check again
-          </Link>
-          <SignOutButton />
+          <SignOutButton className="btn pri" />
         </div>
       </div>
     </div>

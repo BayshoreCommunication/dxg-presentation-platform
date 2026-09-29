@@ -148,7 +148,8 @@ export function PasswordField({
             ))}
           </div>
           <div className="note" style={{ marginTop: 6 }} aria-live="polite">
-            {strength.label || hint}
+            {/* A38 (D-113): the rule is visible before typing, not only after a miss. */}
+            {strength.label || hint || `At least ${MINIMUM} characters.`}
           </div>
         </div>
       )}

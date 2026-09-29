@@ -21,10 +21,16 @@ export function ReminderDaysField({
   value,
   onChange,
   disabled = false,
+  deadline,
+  active = false,
 }: {
   value: number[];
   onChange: (days: number[]) => void;
   disabled?: boolean;
+  /** The upload deadline being edited beside this field; "" when none is set (S15, D-113). */
+  deadline?: string;
+  /** The event is already active, so "starts once activated" no longer applies (S29, D-113). */
+  active?: boolean;
 }) {
   const toggle = (day: number) =>
     onChange(value.includes(day) ? value.filter((kept) => kept !== day) : [...value, day].sort((a, b) => b - a));
@@ -56,7 +62,11 @@ export function ReminderDaysField({
       <div className="note" style={{ marginTop: 6 }}>
         {value.length === 0
           ? "Off — no reminder is sent automatically. “Remind speakers missing files” on Speakers still works."
-          : "Before the upload deadline, at 09:00 event time, to every speaker still missing a file. Starts once the event is activated."}
+          : deadline === ""
+            ? "Reminders won’t send until you set an upload deadline."
+            : `Before the upload deadline, at 09:00 event time, to every speaker still missing a file.${
+                active ? "" : " Starts once the event is activated."
+              }`}
       </div>
     </div>
   );

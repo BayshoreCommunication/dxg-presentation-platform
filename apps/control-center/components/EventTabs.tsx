@@ -16,6 +16,7 @@ import {
   PresenterForm,
   ReasonForm,
   RemovePresenter,
+  RemovePresenterConfirm,
   SessionForm,
   localClock,
   localDate,
@@ -438,6 +439,20 @@ function PresentationRow({
       />
     ) : open === `presenter:${item.slot_id}` ? (
       <PresenterForm eventId={eventId} slotId={item.slot_id} onClose={close} />
+    ) : open?.startsWith(`remove-presenter:${item.slot_id}:`) ? (
+      (() => {
+        const person = item.speakers.find((speaker) => open === `remove-presenter:${item.slot_id}:${speaker.id}`);
+        return person ? (
+          <RemovePresenterConfirm
+            eventId={eventId}
+            slotId={item.slot_id}
+            speakerId={person.id}
+            name={person.name}
+            title={item.title}
+            onClose={close}
+          />
+        ) : null;
+      })()
     ) : open === `delete-talk:${item.slot_id}` ? (
       <ConfirmDelete
         what={`the presentation "${item.title}"`}
@@ -468,10 +483,8 @@ function PresentationRow({
                     {person.role !== "speaker" ? ` · ${humanize(person.role).toLowerCase()}` : ""}
                     {canEdit && (
                       <RemovePresenter
-                        eventId={eventId}
-                        slotId={item.slot_id}
-                        speakerId={person.id}
                         name={person.name}
+                        onAsk={() => toggle(`remove-presenter:${item.slot_id}:${person.id}`)}
                       />
                     )}
                   </span>

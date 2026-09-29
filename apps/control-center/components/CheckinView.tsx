@@ -14,6 +14,7 @@ import {
   emailCheckinReceipt,
 } from "@/lib/api";
 import { Chip, StatusMeaning } from "@/components/Chip";
+import { ConfirmationStrip } from "@/components/ConfirmationStrip";
 import { staleNoteFor } from "@/lib/roomWords";
 import { WhyNot } from "@/components/WhyNot";
 
@@ -228,6 +229,25 @@ export function CheckinView({
           <div style={{ marginBottom: 6 }}>
             <StatusMeaning status={detail.talk.status} stale={staleNote} />
           </div>
+          {/* Approval → sign-off → room, connected (D-113, root cause 5). The sign-off is
+              this check-in's receipt. */}
+          <ConfirmationStrip
+            facts={{
+              status: detail.talk.status,
+              room: detail.talk.room,
+              hasSpeaker: true,
+              latestVersion: latestNumber ?? null,
+              approved: detail.approved
+                ? { version: detail.approved.version_number, by: detail.approved.approved_by, at: detail.approved.approved_at }
+                : null,
+              roomStates: detail.approved?.room_states,
+              signOff: detail.receipt
+                ? { version: detail.receipt.version_number, by: detail.receipt.technician, at: detail.receipt.signed_at }
+                : null,
+              stale: staleNote,
+              timezone,
+            }}
+          />
           <div className="note" style={{ marginBottom: 6 }}>
             {detail.talk.room} · {when(detail.talk.starts_at, timezone)} · current approved:{" "}
             <b className="mono">

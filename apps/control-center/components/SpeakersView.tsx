@@ -16,6 +16,7 @@ import {
   ApiError,
 } from "@/lib/api";
 import { Chip } from "@/components/Chip";
+import { ConfirmInline } from "@/components/ConfirmInline";
 import { Icon } from "@/components/Icon";
 import { InfoTip } from "@/components/InfoTip";
 import { HoverTip } from "@/components/HoverTip";
@@ -47,6 +48,9 @@ export function SpeakersView({
   const [adding, setAdding] = useState(false);
   const [removing, setRemoving] = useState<SpeakerRow | null>(null);
   const [mergeAsk, setMergeAsk] = useState<string | null>(null);
+  // D-113: emailing asks first — the reminder batch, and a speaker's once-only link.
+  const [askRemind, setAskRemind] = useState(false);
+  const [askLink, setAskLink] = useState<string | null>(null);
   const [editingEmail, setEditingEmail] = useState<{ row: SpeakerRow; value: string } | null>(null);
 
   // The server component re-renders on refresh; the list here is client state, so a
@@ -177,35 +181,11 @@ export function SpeakersView({
             */}
             <button
               className="btn"
-              disabled={busy || missing.length === 0}
+              disabled={busy || missing.length === 0 || askRemind}
               onClick={() => {
-                setBusy(true);
                 setError(null);
                 setToast(null);
-                void (async () => {
-                  try {
-                    const result = await remindSpeakersWithoutFiles(eventId);
-                    const skipped = result.skipped
-                      .map((entry) => `${entry.count} ${entry.reason}`)
-                      .join(" · ");
-                    setToast(
-                      result.queued === 0 && skipped
-                        ? `Nobody was emailed — ${skipped}`
-                        : `Reminder sent to ${result.queued} speaker${result.queued === 1 ? "" : "s"}` +
-                            (skipped ? ` · skipped: ${skipped}` : ""),
-                    );
-                    // The log and the delivery counters live on Communications.
-                    router.refresh();
-                  } catch (caught) {
-                    setError(
-                      caught instanceof ApiError
-                        ? caught.message
-                        : "The reminder could not be sent.",
-                    );
-                  } finally {
-                    setBusy(false);
-                  }
-                })();
+                setAskRemind(true);
               }}
             >
               Remind speakers missing files ({missing.length})
@@ -225,6 +205,32 @@ export function SpeakersView({
           />
         </span>
       </div>
+
+      {askRemind && (
+        <ConfirmInline
+          question={`Email a reminder to ${missing.length} speaker${missing.length === 1 ? "" : "s"} missing files now?`}
+          detail="Each one gets the reminder email with their personal upload link. Anyone emailed about this event in the last day, or without a working address, is skipped."
+          confirmLabel="Send reminders"
+          busyLabel="Sending…"
+          onConfirm={async () => {
+            try {
+              const result = await remindSpeakersWithoutFiles(eventId);
+              const skipped = result.skipped.map((entry) => `${entry.count} ${entry.reason}`).join(" · ");
+              setToast(
+                result.queued === 0 && skipped
+                  ? `Nobody was emailed — ${skipped}`
+                  : `Reminder sent to ${result.queued} speaker${result.queued === 1 ? "" : "s"}` +
+                      (skipped ? ` · skipped: ${skipped}` : ""),
+              );
+              // The log and the delivery counters live on Communications.
+              router.refresh();
+            } catch (caught) {
+              throw new Error(caught instanceof ApiError ? caught.message : "The reminder could not be sent.");
+            }
+          }}
+          onClose={() => setAskRemind(false)}
+        />
+      )}
 
       {error && <div className="err">{error}</div>}
 
@@ -414,7 +420,7 @@ export function SpeakersView({
                                       row.talks === 0
                                     }
                                     aria-label={label}
-                                    onClick={() => void emailLink(row)}
+                                    onClick={() => setAskLink(row.id)}
                                   >
                                     <Icon name="send" /> Email link
                                   </button>
@@ -473,6 +479,16 @@ export function SpeakersView({
                             </button>
                           </HoverTip>
                         </span>
+                        {askLink === row.id && (
+                          <ConfirmInline
+                            question={`Email ${row.full_name} their upload link?`}
+                            detail={`It goes to ${row.email ?? "their address"}. The link is emailed once — after that, use Copy link to share it again.`}
+                            confirmLabel="Email link"
+                            busyLabel="Sending…"
+                            onConfirm={() => emailLink(row)}
+                            onClose={() => setAskLink(null)}
+                          />
+                        )}
                         {/* D-111: why "Email link" is greyed, on the page and with the way round it. */}
                         {!emailedAlready(row) && (
                           <WhyNot

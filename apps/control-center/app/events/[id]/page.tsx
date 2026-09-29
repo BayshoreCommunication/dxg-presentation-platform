@@ -21,6 +21,21 @@ const time = (iso: string, timeZone: string) =>
     timeZone,
   });
 
+/**
+ * S25 (D-113): why a talk is on the risk list, in a few words, beside its session time —
+ * a bare "Submitted" chip did not say what is left to do.
+ */
+const RISK_REASON: Record<string, string> = {
+  missing: "Nothing uploaded yet",
+  processing: "File checks running",
+  submitted: "Waiting for review",
+  needs_revision: "Waiting for the speaker's new version",
+  approved: "Approved, but the session has no room",
+  approved_delivering: "Being copied to the room PC",
+  update_pending_ack: "Room still plays the older version",
+  attention: "File held back – ask the speaker for a clean copy",
+};
+
 /** Who may change an event's setup. A hint for the UI; `services/events.ts` decides. */
 const CONFIGURERS = ["presentation_manager", "project_manager", "platform_admin"];
 
@@ -77,6 +92,8 @@ export default async function CommandCenterPage({
       Math.round(new Date(`${todayThere}T00:00:00Z`).getTime() - from.getTime()) / 86_400_000 + 1;
     return current >= 1 && current <= total ? `Day ${current} of ${total}` : null;
   })();
+  // S28 (D-113): no green "live" dot once the event's last day has passed at the venue.
+  const over = new Date().toLocaleDateString("en-CA", { timeZone: summary.event.timezone }) > summary.event.ends_on;
 
   const dateRange = `${new Date(`${summary.event.starts_on}T00:00:00Z`).toLocaleDateString("en-US", {
     month: "short",
@@ -127,7 +144,7 @@ export default async function CommandCenterPage({
       help: "Presentations whose latest file a reviewer has approved. Uploaded files wait in Review presentations until then.",
     },
     {
-      label: "Warnings open",
+      label: "Warnings", // S28 (D-113): "Warnings open" was cut off in the tile
       icon: "warning",
       value: summary.warnings_open,
       caption: summary.warnings_open > 0 ? "not fixed or waived" : "none open",
@@ -164,7 +181,7 @@ export default async function CommandCenterPage({
           <span className="note">
             {header.join(" · ")}
             {header.length > 0 && <>&nbsp;</>}
-            {!archived && (
+            {!archived && !over && (
               <span className="live">
                 <i /> live
               </span>
@@ -262,7 +279,15 @@ export default async function CommandCenterPage({
                         {item.room} · {time(item.starts_at, summary.event.timezone)} · {item.speaker} —{" "}
                         {item.title}
                         </Link>
-                        {stale && <StatusMeaning status={item.status} stale={stale} />}
+                        {stale ? (
+                          <StatusMeaning status={item.status} stale={stale} />
+                        ) : (
+                          RISK_REASON[item.status] && (
+                            <div className="note">
+                              {RISK_REASON[item.status]} – session at {time(item.starts_at, summary.event.timezone)}
+                            </div>
+                          )
+                        )}
                       </td>
                       <td style={{ textAlign: "right" }}>
                         <Chip status={item.status} label={item.status_label} stale={stale} />
