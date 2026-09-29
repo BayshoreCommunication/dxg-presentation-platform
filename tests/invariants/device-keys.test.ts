@@ -129,3 +129,28 @@ describe("room computers authenticate their check-ins", () => {
     assert.equal((await fetch(`${API}/rooms/${roomId}/device-key`, { method: "POST" })).status, 401);
   });
 });
+
+describe("files reach a room only through a connected room PC (D-118)", () => {
+  const sync = (room: string) => fetch(`${API}/rooms/${room}/sync`, { method: "POST", headers: { cookie: staff } });
+
+  test("a room with no room PC can't be marked up to date, and doesn't start reporting", async (t: TestContext) => {
+    if (!up || !otherRoomId) return t.skip("API not running");
+    const response = await sync(otherRoomId);
+    assert.equal(response.status, 409);
+    assert.equal(((await response.json()) as { code: string }).code, "room_sync.no_room_pc");
+    assert.equal(
+      (await fleet()).find((room) => room.room_id === otherRoomId)!.heartbeat_age,
+      null,
+      "pressing the button no longer pretends the room PC reported",
+    );
+  });
+
+  test("a room whose PC has just reported can check for updates", async (t: TestContext) => {
+    if (!up || !roomId) return t.skip("API not running");
+    const { device_key } = (await (
+      await fetch(`${API}/rooms/${roomId}/device-key`, { method: "POST", headers: { cookie: staff } })
+    ).json()) as { device_key: string };
+    assert.equal((await heartbeat(device_key)).status, 200);
+    assert.equal((await sync(roomId)).status, 200);
+  });
+});

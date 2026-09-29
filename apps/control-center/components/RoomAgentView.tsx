@@ -305,7 +305,7 @@ export function RoomAgentView({ initial }: { initial: AgentView }) {
             <button
               className="btn pri"
               style={{ padding: "5px 12px" }}
-              disabled={busy}
+              disabled={busy || offline}
               onClick={() =>
                 void run(async () => {
                   const result = await syncRoom(view.room.id);
@@ -315,9 +315,16 @@ export function RoomAgentView({ initial }: { initial: AgentView }) {
                 })
               }
             >
-              {/* R40/R46 (D-111): "Manual sync" — it does run a real check, so it stays, in plain words. */}
+              {/* D-118: only with a room PC connected — it copies files as that PC would. */}
               Check for updates
             </button>
+            <WhyNot
+              reason={
+                offline
+                  ? "No room PC is connected, so there is nothing to update. Files are copied when the room PC checks in."
+                  : null
+              }
+            />
           </div>
 
           <div

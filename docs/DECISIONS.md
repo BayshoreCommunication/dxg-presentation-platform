@@ -2287,3 +2287,13 @@ content is still being fetched, then falls back to a plain write and to `execCom
 refused, `CopyFallback` keeps the link on screen under the speaker's row, selected, with Copy and Open. Backup codes
 and room PC connection codes use the same helper. Checked in the desktop app's browser: "Link copied" and the system
 clipboard holds the speaker's link.
+
+## D-118 (2026-09-29): Files reach a room only through a connected room PC — Status: ACCEPTED (bug fix, Travis's call)
+Found on the production practice event: Room Agent showed "Ready to play" and "1 file on this PC" for a room whose PC
+had never connected. "Check for updates" (formerly "Manual sync", kept in D-111 as if it were a real action) ran a
+stand-in from before room PCs existed: it stamped a fresh "room PC reported" time and marked the room's files
+downloaded, verified and active with no PC involved — so a room with no computer could show talks "Synchronized
+onsite". Now `POST /rooms/:id/sync` refuses (409 `room_sync.no_room_pc`) unless that room's PC has reported in the last
+5 minutes, and no longer fakes a report; Room Agent greys the button with the reason. Until the room software connects
+(G0-1 → M5), no file is shown as on a room PC. The one affected copy in production (the practice event's Ballroom A)
+was put back to "waiting to copy". Tests: two in device-keys.test.ts.

@@ -1159,13 +1159,25 @@ app.post("/api/v1/rooms/:roomId/sync", async (req, res) => {
   const actor = actorFrom(req);
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   const roomId = String(req.params.roomId);
+  // D-118: this copies files as a connected room PC would, so it needs one. It used to
+  // stamp a fresh heartbeat and mark files "on the room PC" for a room with no PC at all —
+  // a false "Ready to play" / "Synchronized onsite".
   const result = await withScope(scopeFor(req), async (tx) => {
-    await tx.query(
-      `UPDATE pmp.room_agents SET last_heartbeat_at = now() WHERE room_id = $1 AND revoked_at IS NULL`,
+    const { rows } = await tx.query<{ connected: boolean }>(
+      `SELECT EXISTS (SELECT 1 FROM pmp.room_agents
+                       WHERE room_id = $1 AND revoked_at IS NULL
+                         AND last_heartbeat_at > now() - interval '300 seconds') AS connected`,
       [roomId],
     );
+    if (!rows[0]?.connected) return null;
     return syncRoom(tx, actor, roomId);
   });
+  if (!result) {
+    return res.status(409).json({
+      code: "room_sync.no_room_pc",
+      message: "No room PC is connected to this room, so there is nothing to update. Files are copied when the room PC checks in.",
+    });
+  }
   return res.json(result);
 });
 
