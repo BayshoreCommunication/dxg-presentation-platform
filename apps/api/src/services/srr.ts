@@ -339,7 +339,16 @@ export type CheckinDetail = {
   approved: VersionFacts | null;
   latest: (VersionFacts & { file_version_id: string; review_state: string; processing_state: string }) | null;
   usb: { id: string; scan_result: string; file_version_id: string | null; created_at: string } | null;
-  receipt: { version_number: number; sha256: string; signed_at: string; station: string | null; technician: string } | null;
+  receipt: {
+    version_number: number;
+    sha256: string;
+    signed_at: string;
+    station: string | null;
+    technician: string;
+    /** Read with the receipt, so staff see "v2 · deck.pptx · 24 slides", not a fingerprint (R34, D-112). */
+    file_name?: string | null;
+    slides?: number | null;
+  } | null;
 };
 
 export async function checkinDetail(tx: pg.PoolClient, checkinId: string): Promise<CheckinDetail | null> {
@@ -423,12 +432,25 @@ export async function checkinDetail(tx: pg.PoolClient, checkinId: string): Promi
     [checkinId],
   );
 
-  const { rows: receiptRows } = await tx.query<{ content: Record<string, unknown> }>(
-    `SELECT rc.content FROM pmp.receipts rc
+  const { rows: receiptRows } = await tx.query<{
+    content: Record<string, unknown>;
+    file_version_id: string;
+    file_name: string | null;
+  }>(
+    `SELECT rc.content, so.file_version_id, fv.original_filename AS file_name FROM pmp.receipts rc
        JOIN pmp.sign_offs so ON so.id = rc.sign_off_id
+       JOIN pmp.file_versions fv ON fv.id = so.file_version_id
       WHERE so.checkin_id = $1 ORDER BY rc.created_at DESC LIMIT 1`,
     [checkinId],
   );
+  const receiptRow = receiptRows[0];
+  const receipt: CheckinDetail["receipt"] = receiptRow
+    ? {
+        ...(receiptRow.content as NonNullable<CheckinDetail["receipt"]>),
+        file_name: receiptRow.file_name,
+        slides: (await versionFacts(tx, receiptRow.file_version_id))?.slides ?? null,
+      }
+    : null;
 
   return {
     checkin: {
@@ -459,7 +481,7 @@ export async function checkinDetail(tx: pg.PoolClient, checkinId: string): Promi
           }
         : null,
     usb: usbRows[0] ?? null,
-    receipt: (receiptRows[0]?.content as CheckinDetail["receipt"]) ?? null,
+    receipt,
   };
 }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Kpi } from "@/components/Kpi";
 
 import { useRouter } from "next/navigation";
@@ -8,7 +8,7 @@ import type { CommsView as CommsData } from "@/lib/api";
 import { sendBatch, updateTemplate, ApiError } from "@/lib/api";
 import { Chip } from "@/components/Chip";
 import { WhyNot } from "@/components/WhyNot";
-import { EMAIL_STATUS, wordsFor } from "@pmp/format";
+import { EMAIL_STATUS, formatDeadline, formatSessionTime, wordsFor } from "@pmp/format";
 
 /** Kravio puts a glyph on every tile; these say what each delivery counter is. */
 const COUNTER_ICON = {
@@ -31,9 +31,81 @@ const STATUS_TONE: Record<string, string> = {
   suppressed: "attention",
 };
 
+/**
+ * Each merge field by the name staff know it by (S33, D-112). The template still stores
+ * `{{event_name}}` and friends; the buttons insert them and the preview fills them in,
+ * so nobody has to read or type the braces. A field missing here falls back to its code
+ * with the underscores taken out.
+ */
+const FIELD_LABEL: Record<string, string> = {
+  speaker_first: "Speaker's first name",
+  speaker_name: "Speaker's full name",
+  event_name: "Event name",
+  talk_title: "Presentation title",
+  room: "Room",
+  session_time: "Session time",
+  deadline: "Deadline",
+  upload_link: "Upload link",
+  presentations: "List of their presentations",
+};
+
+const fieldLabel = (field: string) => FIELD_LABEL[field] ?? field.replace(/_/g, " ");
+
+/** Titles skipped when greeting by first name — the same rule the API's `firstName` uses. */
+const HONORIFICS = new Set(["dr", "prof", "mr", "mrs", "ms", "mx", "sir", "dame"]);
+
+const firstName = (fullName: string) =>
+  fullName
+    .trim()
+    .split(/\s+/)
+    .find((word) => !HONORIFICS.has(word.toLowerCase().replace(/\.$/, ""))) ?? fullName.trim();
+
+const listed = (items: string[]) =>
+  items.length <= 1 ? (items[0] ?? "") : `${items.slice(0, -1).join(", ")} and ${items.at(-1)}`;
+
+type PreviewEvent = { name: string; timezone: string; starts_on: string };
+
+/**
+ * The template as one speaker would read it (S33, D-112) — filled in the way the API's
+ * `renderTemplate` + `talkFields` fill it at send time. The first speaker on the list is
+ * the sample; with none yet, an invented one. The personal link is described, not made up.
+ */
+function previewValues(
+  sample: CommsData["recipients"][number] | undefined,
+  event: PreviewEvent,
+  deadline: string | null,
+): { who: string; values: Record<string, string> } {
+  const name = sample?.name ?? "Alex Morgan";
+  const talks = sample?.talks.length
+    ? sample.talks
+    : [{ title: "Sample presentation", room: "Main Hall", starts_at: `${event.starts_on}T14:00:00Z` }];
+  const when = (talk: { starts_at: string }) => formatSessionTime(talk.starts_at, event.timezone);
+  return {
+    who: sample ? name : "a sample speaker",
+    values: {
+      speaker_first: firstName(name),
+      speaker_name: name,
+      event_name: event.name,
+      talk_title: listed(talks.map((talk) => talk.title)),
+      room: listed([...new Set(talks.map((talk) => talk.room ?? "TBC"))]),
+      session_time: listed(talks.map(when)),
+      presentations: talks.map((talk) => `• ${talk.title} — ${talk.room ?? "Room TBC"}, ${when(talk)}`).join("\n"),
+      deadline: deadline ? formatDeadline(deadline, event.timezone) : "the published deadline",
+      upload_link: `[${firstName(name)}'s personal upload link]`,
+    },
+  };
+}
+
+const fill = (text: string, values: Record<string, string>) =>
+  text.replace(/\{\{\s*([a-z_]+)\s*\}\}/gi, (match, key: string) => values[key.toLowerCase()] ?? match);
+
 /** Screen 9 — templates, batches, and who each batch would actually reach. */
-export function CommsView({ eventId, data }: { eventId: string; data: CommsData }) {
+export function CommsView({ eventId, data, event }: { eventId: string; data: CommsData; event: PreviewEvent }) {
   const router = useRouter();
+  const subjectRef = useRef<HTMLInputElement>(null);
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
+  // Which box an inserted field goes into: the last one typed in, the message by default.
+  const lastBox = useRef<"subject" | "body">("body");
   const [selected, setSelected] = useState(data.templates[0]?.id ?? "");
   const [confirmingSend, setConfirmingSend] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -49,7 +121,7 @@ export function CommsView({ eventId, data }: { eventId: string; data: CommsData 
     try {
       await updateTemplate(eventId, template.id, editing.subject, editing.body);
       setEditing(null);
-      setToast(`Saved “${template.name}” — the next batch uses it`);
+      setToast(`Saved “${template.name}” — the next email sent uses it`);
       setTimeout(() => setToast(null), 5000);
       router.refresh();
     } catch (caught) {
@@ -63,6 +135,23 @@ export function CommsView({ eventId, data }: { eventId: string; data: CommsData 
   const isReminder = (template?.name ?? "").toLowerCase().includes("reminder");
   const audience = isReminder ? data.missing : data.recipients;
   const sendable = audience.filter((row) => row.email && !row.bounced && !row.already_sent);
+  const preview = previewValues(audience[0] ?? data.recipients[0], event, data.reminders.deadline);
+
+  /** Puts `{{field}}` where the cursor was in the subject or message (S33, D-112). */
+  function insertField(field: string) {
+    if (!editing) return;
+    const key = lastBox.current;
+    const box = key === "subject" ? subjectRef.current : bodyRef.current;
+    const text = editing[key];
+    const token = `{{${field}}}`;
+    const start = box?.selectionStart ?? text.length;
+    const end = box?.selectionEnd ?? text.length;
+    setEditing({ ...editing, [key]: text.slice(0, start) + token + text.slice(end) });
+    requestAnimationFrame(() => {
+      box?.focus();
+      box?.setSelectionRange(start + token.length, start + token.length);
+    });
+  }
 
   async function send() {
     if (!template) return;
@@ -73,8 +162,8 @@ export function CommsView({ eventId, data }: { eventId: string; data: CommsData 
       const skipped = result.skipped.map((entry) => `${entry.count} ${entry.reason}`).join(" · ");
       setToast(
         result.queued > 0
-          ? `Queued ${result.queued}${skipped ? ` · skipped ${skipped}` : ""}`
-          : `Nothing queued — ${skipped || "no eligible recipients"}`,
+          ? `Sending to ${result.queued} speaker${result.queued === 1 ? "" : "s"}${skipped ? ` · skipped ${skipped}` : ""}`
+          : `Nothing sent — ${skipped || "nobody on the list can be emailed"}`,
       );
       router.refresh();
     } catch (caught) {
@@ -131,6 +220,8 @@ export function CommsView({ eventId, data }: { eventId: string; data: CommsData 
                 <label htmlFor="tpl-subject">Subject</label>
                 <input
                   id="tpl-subject"
+                  ref={subjectRef}
+                  onFocus={() => (lastBox.current = "subject")}
                   value={editing.subject}
                   maxLength={200}
                   onChange={(event) => setEditing({ ...editing, subject: event.target.value })}
@@ -141,19 +232,31 @@ export function CommsView({ eventId, data }: { eventId: string; data: CommsData 
                 <label htmlFor="tpl-body">Message</label>
                 <textarea
                   id="tpl-body"
+                  ref={bodyRef}
+                  onFocus={() => (lastBox.current = "body")}
                   rows={14}
                   value={editing.body}
                   onChange={(event) => setEditing({ ...editing, body: event.target.value })}
                   style={{ width: "100%", fontFamily: "inherit" }}
                 />
               </div>
-              <div className="note" style={{ marginBottom: 12 }}>
-                Merge fields, filled in for each speaker when the batch is sent:{" "}
-                {data.merge_fields.map((field) => (
-                  <code key={field} className="kbd" style={{ marginRight: 4 }}>{`{{${field}}}`}</code>
-                ))}
-                . Keep <code className="kbd">{"{{upload_link}}"}</code> — it is each speaker&apos;s personal link.
+              {/* S33 (D-112): plain-named buttons insert the fields; the braces are never typed. */}
+              <div className="note" style={{ marginBottom: 6 }}>
+                Insert a detail — each speaker&rsquo;s own is filled in when the email is sent. Keep the
+                Upload link: it is each speaker&rsquo;s personal way to upload.
               </div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+                {data.merge_fields.map((field) => (
+                  <button key={field} type="button" className="btn" onClick={() => insertField(field)}>
+                    + {fieldLabel(field)}
+                  </button>
+                ))}
+              </div>
+              <EmailPreview
+                who={preview.who}
+                subject={fill(editing.subject, preview.values)}
+                body={fill(editing.body, preview.values)}
+              />
               <div style={{ display: "flex", gap: 8 }}>
                 <button className="btn pri" disabled={saving || !editing.subject.trim() || !editing.body.trim()}>
                   {saving ? "Saving…" : "Save template"}
@@ -183,25 +286,14 @@ export function CommsView({ eventId, data }: { eventId: string; data: CommsData 
                   Edit template
                 </button>
               </div>
-              <div className="darkpane" style={{ padding: "14px 18px", marginBottom: 12 }}>
-                <b style={{ color: "var(--white)", fontWeight: 500, fontSize: 15 }}>
-                  {template.subject}
-                </b>
-                <pre
-                  style={{
-                    whiteSpace: "pre-wrap",
-                    font: "inherit",
-                    fontSize: 13,
-                    margin: "8px 0 0",
-                    color: "var(--paneink)",
-                  }}
-                >
-                  {template.body}
-                </pre>
-              </div>
+              {/* Shown filled in for a sample speaker, not as raw `{{field}}` text (S33, D-112). */}
+              <EmailPreview
+                who={preview.who}
+                subject={fill(template.subject, preview.values)}
+                body={fill(template.body, preview.values)}
+              />
               <div className="note">
-                Merge fields are resolved per recipient at send time. Each recipient gets their own
-                secure link — a batch never contains a shared URL.
+                Each speaker gets their own copy, with their own details and personal upload link.
               </div>
             </>
           )}
@@ -214,7 +306,7 @@ export function CommsView({ eventId, data }: { eventId: string; data: CommsData 
             Audience · {audience.length}
             {isReminder ? " (missing files only)" : ""}
           </h3>
-          <span className="m">resolved now, not when the batch was scheduled</span>
+          <span className="m">who this email would reach right now</span>
         </div>
         <div className="cbd" style={{ padding: "0 0 4px" }}>
           {audience.length === 0 ? (
@@ -230,7 +322,7 @@ export function CommsView({ eventId, data }: { eventId: string; data: CommsData 
                     : row.bounced
                       ? "previous email bounced"
                       : row.already_sent
-                        ? "already received this batch"
+                        ? "already received this email"
                         : null;
                   return (
                     <tr key={row.speaker_id}>
@@ -344,7 +436,7 @@ export function CommsView({ eventId, data }: { eventId: string; data: CommsData 
       <div className="card">
         <div className="chd">
           <h3>Delivery log</h3>
-          <span className="m">per speaker · bounces flag the speaker record</span>
+          <span className="m">per speaker · a bounced email is flagged on the speaker</span>
         </div>
         <div className="cbd" style={{ padding: "0 0 4px" }}>
           {data.log.length === 0 ? (
@@ -380,6 +472,31 @@ export function CommsView({ eventId, data }: { eventId: string; data: CommsData 
       </div>
 
       <div className={`toast ${toast ? "show" : ""}`}>{toast}</div>
+    </>
+  );
+}
+
+/** The email as a speaker reads it: subject over message, in the dark preview pane. */
+function EmailPreview({ who, subject, body }: { who: string; subject: string; body: string }) {
+  return (
+    <>
+      <div className="note" style={{ marginBottom: 4 }}>
+        Preview — as {who} would receive it
+      </div>
+      <div className="darkpane" style={{ padding: "14px 18px", marginBottom: 12 }}>
+        <b style={{ color: "var(--white)", fontWeight: 500, fontSize: 15 }}>{subject}</b>
+        <pre
+          style={{
+            whiteSpace: "pre-wrap",
+            font: "inherit",
+            fontSize: 13,
+            margin: "8px 0 0",
+            color: "var(--paneink)",
+          }}
+        >
+          {body}
+        </pre>
+      </div>
     </>
   );
 }

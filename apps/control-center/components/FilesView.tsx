@@ -643,7 +643,8 @@ function FileDrawer({
     ["Room", row.room ?? "No room yet"],
     ["Session", sessionTime(row.starts_at, timeZone)],
     ["Uploaded", `${fullDate(row.uploaded_at, timeZone)} · ${row.uploaded_by ?? SOURCE_LABEL[row.source] ?? row.source}`],
-    ["Rooms synced", row.rooms_synced > 0 ? `${row.rooms_synced} room${row.rooms_synced === 1 ? "" : "s"}` : "Not on a room computer yet"],
+    // "room PC", the one name staff are given for it (D-112).
+    ["On room PCs", row.rooms_synced > 0 ? `${row.rooms_synced} room${row.rooms_synced === 1 ? "" : "s"}` : "Not on a room PC yet"],
   ];
   if (row.restricted) facts.push(["Distribution", "Restricted — left out of client figures and the archive"]);
 
@@ -712,10 +713,8 @@ function FileDrawer({
                   <small>
                     {formatBytes(version.size_bytes)} · {fullDate(version.uploaded_at, timeZone)}
                   </small>
-                  <small>
-                    {version.uploaded_by ?? SOURCE_LABEL[version.source] ?? version.source}
-                    {version.sha256 ? ` · sha256 ${version.sha256.slice(0, 12)}…` : ""}
-                  </small>
+                  {/* The file's checksum is no longer shown: staff never need it (S36, D-112). */}
+                  <small>{version.uploaded_by ?? SOURCE_LABEL[version.source] ?? version.source}</small>
                   <span className={state.className} title={wordsFor(VERSION_STATE, versionCode(version)).meaning}>
                     {state.label}
                   </span>

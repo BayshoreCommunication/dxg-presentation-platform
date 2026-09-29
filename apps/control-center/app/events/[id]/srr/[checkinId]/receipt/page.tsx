@@ -56,7 +56,15 @@ export default async function ReceiptPage({ params }: { params: Promise<{ id: st
               <tr><th>Speaker</th><td>{detail.speaker.name}</td></tr>
               <tr><th>Talk</th><td>{detail.talk.title}</td></tr>
               <tr><th>Room</th><td>{detail.talk.room ?? "—"} · {when(detail.talk.starts_at, tz)}</td></tr>
-              <tr><th>Version</th><td>v{receipt.version_number}</td></tr>
+              {/* The file and its slides, as on the check-in page (R34, D-112). */}
+              <tr>
+                <th>Version</th>
+                <td>
+                  v{receipt.version_number}
+                  {receipt.file_name ? ` · ${receipt.file_name}` : ""}
+                  {typeof receipt.slides === "number" ? ` · ${receipt.slides} slide${receipt.slides === 1 ? "" : "s"}` : ""}
+                </td>
+              </tr>
               <tr><th>Signed off</th><td>{when(receipt.signed_at, tz)}{receipt.station ? ` · ${receipt.station}` : ""}</td></tr>
               <tr><th>Technician</th><td>{receipt.technician}</td></tr>
             </tbody>

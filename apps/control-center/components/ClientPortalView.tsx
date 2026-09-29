@@ -143,10 +143,12 @@ export function ClientPortalView({ data }: { data: ClientView }) {
         </div>
         <div className="cbd">
           <div className="frow" style={{ borderTop: "none" }}>
-            <span className="mono">
-              {data.event.name.replace(/\s+/g, "_")}_final_presentations
+            {/* A36 (D-112): a plain summary and a readable date, not a code-font file name. */}
+            <span>
+              <b>Final presentations</b>
               {pkg?.manifest?.file_count ? ` · ${plural(pkg.manifest.file_count, "PowerPoint file")}` : ""}
               {pkg?.has_pdf && pkg.manifest?.pdf ? ` · ${plural(pkg.manifest.pdf.file_count, "PDF")}` : ""}
+              {pkg ? <span className="note"> · prepared {formatDate(pkg.created_at)}</span> : null}
             </span>
             {/* A29: the package state in words, never the raw code. */}
             <span
@@ -159,8 +161,11 @@ export function ClientPortalView({ data }: { data: ClientView }) {
           <div className="note">
             DXG publishes the event archive here within 4 hours of event close: every approved
             presentation with its earlier versions, and the event&rsquo;s emails. Talks marked private
-            are left out. The link expires 30 days after the event ends and every download is logged.
-            {pkg?.link_expires_at && delivered ? ` This link expires ${formatDate(pkg.link_expires_at)}.` : ""}
+            are left out. Every download is logged.
+            {/* A36 (D-112): the expiry once, as a date when there is one. */}
+            {pkg?.link_expires_at && delivered
+              ? ` The download link expires ${formatDate(pkg.link_expires_at)}.`
+              : " The download link expires 30 days after the event ends."}
           </div>
           {/* Two packages (D-067): the original decks, and PDFs — which also carry the talks
               whose speakers allowed a PDF only. */}

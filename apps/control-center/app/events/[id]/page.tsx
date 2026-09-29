@@ -149,7 +149,7 @@ export default async function CommandCenterPage({
       caption: summary.rooms_ready === summary.rooms_total ? "all rooms ready" : "not all ready",
       tone: summary.rooms_ready === summary.rooms_total ? "ok" : "warn",
       progress: share(summary.rooms_ready, summary.rooms_total),
-      help: "A room is ready when its presentation computer has checked in within the last 5 minutes and every talk scheduled there is on that computer and ready to play (or cancelled). Rooms with no talks still count in the total.",
+      help: "A room is ready when its room PC has reported in within the last 5 minutes and every talk scheduled there is on that PC and ready to play (or cancelled). Rooms with no talks still count in the total.",
     },
   ];
 
@@ -279,7 +279,8 @@ export default async function CommandCenterPage({
       <div className="card">
         <div className="chd">
           <h3>Room readiness</h3>
-          <span className="m">reported automatically by each room&rsquo;s presentation computer</span>
+          {/* S3 (D-112): plain words for where these statuses come from. */}
+          <span className="m">Updated automatically from each room&rsquo;s PC</span>
         </div>
         <div className="cbd" style={{ padding: "0 0 4px" }}>
           <table>

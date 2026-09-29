@@ -114,14 +114,15 @@ export async function updateTemplate(
   if (unknown.length > 0) {
     return err({
       code: "comms.template_invalid",
-      message: `Unknown merge field${unknown.length === 1 ? "" : "s"}: ${unknown.map((field) => `{{${field}}}`).join(", ")}. Use only the fields listed.`,
+      // Plain words (D-112): staff add details with the Insert buttons, not by typing braces.
+      message: `${unknown.map((field) => `{{${field}}}`).join(", ")} ${unknown.length === 1 ? "isn't a detail" : "aren't details"} we can fill in. Remove ${unknown.length === 1 ? "it" : "them"} and use the Insert buttons instead.`,
     });
   }
   // The link is the point of every one of these emails: without it the speaker can do nothing.
   if (!used.includes("upload_link")) {
     return err({
       code: "comms.template_invalid",
-      message: "Keep {{upload_link}} in the message — it is each speaker's personal way to upload.",
+      message: "Keep the Upload link in the message — it is each speaker's personal way to upload. Add it back with the Insert buttons.",
     });
   }
   const { rows } = await tx.query<TemplateRow & { client_id: string; old_subject: string }>(

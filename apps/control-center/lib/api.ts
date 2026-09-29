@@ -366,7 +366,16 @@ export type CheckinDetail = {
   approved: VersionFacts | null;
   latest: (VersionFacts & { file_version_id: string; review_state: string; processing_state: string }) | null;
   usb: { id: string; scan_result: string; file_version_id: string | null; created_at: string } | null;
-  receipt: { version_number: number; sha256: string; signed_at: string; station: string | null; technician: string } | null;
+  receipt: {
+    version_number: number;
+    sha256: string;
+    signed_at: string;
+    station: string | null;
+    technician: string;
+    /** For "v2 · deck.pptx · 24 slides" instead of a fingerprint (R34, D-112). */
+    file_name?: string | null;
+    slides?: number | null;
+  } | null;
 };
 
 export type UsbResult = {

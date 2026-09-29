@@ -55,7 +55,7 @@ export function CommentsPanel({ versionId, versionNumber }: { versionId: string;
       setBody("");
       await load();
     } catch (failure) {
-      setError(failure instanceof ApiError ? failure.message : "Could not reach the server.");
+      setError(failure instanceof ApiError ? failure.message : "Could not connect. Check the internet connection and try again.");
     } finally {
       setBusy(false);
     }

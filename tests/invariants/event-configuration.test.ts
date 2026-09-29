@@ -236,9 +236,9 @@ describe("what the event's settings will and will not accept", () => {
 
   test("text that is not a date is refused", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
-    await refused({ upload_deadline: "tomorrow" }, /YYYY-MM-DD/);
-    await refused({ upload_deadline: "06/01/2027" }, /YYYY-MM-DD/);
-    await refused({ upload_deadline: 20270601 }, /YYYY-MM-DD/);
+    await refused({ upload_deadline: "tomorrow" }, /isn't a date/);
+    await refused({ upload_deadline: "06/01/2027" }, /isn't a date/);
+    await refused({ upload_deadline: 20270601 }, /isn't a date/);
   });
 
   test("a date that does not exist is refused", async (t: TestContext) => {

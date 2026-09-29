@@ -41,7 +41,7 @@ export function DeviceKeyButton({
       setConfirming(false);
       router.refresh();
     } catch (failure) {
-      setError(failure instanceof ApiError ? failure.message : "Could not reach the server.");
+      setError(failure instanceof ApiError ? failure.message : "Could not connect. Check the internet connection and try again.");
     } finally {
       setBusy(false);
     }
@@ -52,7 +52,9 @@ export function DeviceKeyButton({
       <div style={{ border: "1px solid var(--warn)", borderRadius: 6, padding: 10, marginTop: 8, textAlign: "left" }}>
         <b>Room PC connection code for {room}</b>
         <div className="note" style={{ margin: "2px 0 6px" }}>
-          Enter this on the room&rsquo;s presentation computer now. It will not be shown again.
+          {/* Where it goes, in one line (R41, D-112). */}
+          Enter it once on this room&rsquo;s PC, when it asks for its connection code during setup (or give it to
+          whoever sets that PC up). Copy it now — it won&rsquo;t be shown again.
         </div>
         <code className="mono" style={{ display: "block", wordBreak: "break-all", background: "var(--mist)", padding: 8, borderRadius: 4 }}>
           {key}
@@ -82,7 +84,7 @@ export function DeviceKeyButton({
           {issuedAt ? "The room PC disconnects until the new code is entered on it." : "Issue the first code?"}
         </span>
         <button type="button" className="btn pri" style={{ padding: "4px 10px" }} disabled={busy} onClick={() => void issue()}>
-          {busy ? "Issuing…" : "Issue key"}
+          {busy ? "Issuing…" : "Issue code"}
         </button>
         <button type="button" className="btn" style={{ padding: "4px 10px" }} disabled={busy} onClick={() => setConfirming(false)}>
           Cancel
@@ -101,7 +103,11 @@ export function DeviceKeyButton({
       type="button"
       className="btn"
       style={{ padding: "4px 10px" }}
-      title={issuedAt ? `Key issued ${formatSessionTime(issuedAt, timezone)}` : "This room's computer has no key and cannot check in"}
+      title={
+        issuedAt
+          ? `Code issued ${formatSessionTime(issuedAt, timezone)}`
+          : "This room PC isn't connected yet. Issue a code and enter it on the room PC."
+      }
       onClick={() => setConfirming(true)}
     >
       {issuedAt ? "New connection code" : "Issue connection code"}

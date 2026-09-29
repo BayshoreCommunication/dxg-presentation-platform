@@ -12,7 +12,7 @@ export default async function PickRoomPage({ params }: { params: Promise<{ id: s
     <>
       <h1 className="htitle">Room Agent</h1>
       <div className="note" style={{ margin: "-8px 0 14px" }}>
-        The view a room technician sees on the room machine. Pick a room.
+        The view a room technician sees on the room PC. Pick a room.
       </div>
       <div className="card">
         <div className="cbd" style={{ padding: "0 0 4px" }}>

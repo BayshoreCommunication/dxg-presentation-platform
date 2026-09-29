@@ -63,8 +63,9 @@ function explain(finding: FindingRow): { title: string; body: string; fix?: stri
       };
     case "malware":
       return {
-        title: "Security scan failed",
-        body: `The scanner flagged this file${detail.signature ? ` (${String(detail.signature)})` : ""}. It was quarantined and never entered the library; the approved version is untouched.`,
+        // Plain words, same as USB intake's "Virus check" (D-112).
+        title: "Virus check failed",
+        body: `The virus check flagged this file${detail.signature ? ` (${String(detail.signature)})` : ""}. It is held back and can't reach any room; any approved version is untouched.`,
       };
     case "corruption":
       return {

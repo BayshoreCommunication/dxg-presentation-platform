@@ -11,7 +11,6 @@ import { WhyNot } from "@/components/WhyNot";
 import { staleNoteFor } from "@/lib/roomWords";
 import { COMMENT_LANE, formatBytes, SEVERITY, VERSION_STATE, wordsFor } from "@pmp/format";
 
-const short = (sha: string | null) => (sha ? `${sha.slice(0, 4)}…${sha.slice(-4)}` : "—");
 /** On the event's clock (D-080) — it was pinned to New York for every event. */
 const when = (iso: string, timeZone: string) =>
   new Date(iso).toLocaleString("en-US", {
@@ -26,7 +25,7 @@ const when = (iso: string, timeZone: string) =>
 const SOURCE_LABEL: Record<string, string> = {
   portal: "Speaker portal",
   srr_usb: "USB intake",
-  srr_manual: "SRR",
+  srr_manual: "Speaker Ready Room",
   system: "System",
 };
 
@@ -125,7 +124,7 @@ export function PresentationDetailView({
       setRollTarget(null);
       setToast(
         result.rooms_notified > 0
-          ? `v${result.restored_version} is back in use. The room technician must accept the change on the room PC before it plays.`
+          ? `v${result.restored_version} is back in use. The room technician must switch to it on the room PC before it plays.`
           : `v${result.restored_version} is back in use.`,
       );
       router.refresh();
@@ -160,8 +159,9 @@ export function PresentationDetailView({
           </div>
 
           {latest && (
-            <div className="mono note" style={{ marginBottom: 6 }}>
-              v{latest.version_number} · {formatBytes(latest.size_bytes)} · sha256 {short(latest.sha256)} ·{" "}
+            <div className="note" style={{ marginBottom: 6 }}>
+              {/* No file fingerprint here: staff never need it (R15, D-112). */}
+              v{latest.version_number} · {formatBytes(latest.size_bytes)} ·{" "}
               {SOURCE_LABEL[latest.source] ?? latest.source}
             </div>
           )}
@@ -219,7 +219,8 @@ export function PresentationDetailView({
         <div className="chd">
           <h3>Version history</h3>
           <span className="m">
-            every version ever received is kept · {initial.retained_versions} retained
+            {/* R20 (D-112): plain words. */}
+            all {initial.retained_versions} kept · older versions are never deleted
           </span>
         </div>
         <div className="cbd" style={{ padding: "0 0 4px" }}>
@@ -229,7 +230,6 @@ export function PresentationDetailView({
                 <th>Version</th>
                 <th>Received</th>
                 <th>Size</th>
-                <th>Checksum</th>
                 <th>Source</th>
                 <th>Findings</th>
                 <th>State</th>
@@ -242,7 +242,6 @@ export function PresentationDetailView({
                   <td className="mono">v{row.version_number}</td>
                   <td className="note">{when(row.created_at, initial.event.timezone)}</td>
                   <td className="num">{formatBytes(row.size_bytes)}</td>
-                  <td className="mono">{short(row.sha256)}</td>
                   <td className="note">{SOURCE_LABEL[row.source] ?? row.source}</td>
                   <td>
                     {row.finding_counts.blocking > 0 && (
@@ -352,8 +351,8 @@ export function PresentationDetailView({
                 autoFocus
               />
               <div className="note" style={{ margin: "6px 0 8px" }}>
-                v{rollTarget.n} becomes the approved version again. Its room&rsquo;s technician must accept the
-                change on the room PC before it plays.
+                v{rollTarget.n} becomes the approved version again. Its room&rsquo;s technician must switch to it
+                on the room PC before it plays.
               </div>
               <div style={{ display: "flex", gap: 8 }}>
                 <button className="btn warnb" disabled={busy || !rollTarget.reason.trim()}>
@@ -373,7 +372,7 @@ export function PresentationDetailView({
         <div className="card">
           <div className="chd">
             <h3>Comments · all versions</h3>
-            <span className="m">audiences are enforced server-side</span>
+            <span className="m">each comment is seen only by the people its label names</span>
           </div>
           <div className="cbd">
             {comments.map((comment) => (

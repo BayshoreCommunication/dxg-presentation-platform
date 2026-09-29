@@ -35,7 +35,7 @@ function useSave() {
       onDone?.();
       router.refresh();
     } catch (failure) {
-      setError(failure instanceof ApiError ? failure.message : "Could not reach the server.");
+      setError(failure instanceof ApiError ? failure.message : "Could not connect. Check the internet connection and try again."); // D-112
     } finally {
       setBusy(false);
     }

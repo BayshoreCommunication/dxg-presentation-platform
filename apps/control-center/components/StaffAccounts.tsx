@@ -347,7 +347,7 @@ export function StaffAccounts({ initial, me }: { initial: StaffRow[]; me: string
                           className="btn danger"
                           style={small}
                           disabled={busy || isMe || lastRoot}
-                          title="Removes the account and its event access; its history stays in the audit trail"
+                          title="Removes the account and its event access; the record of what they did is kept"
                           onClick={() =>
                             void run(async () => {
                               if (

@@ -178,7 +178,8 @@ export function ArchiveView({ eventId, initial }: { eventId: string; initial: Ar
             were not. They are the package's rules, stated for this event (D-080).
           */}
           <ul className="note" style={{ margin: "0 0 12px", paddingLeft: 18, lineHeight: 1.7 }}>
-            <li>Every package carries a manifest: file, version, checksum and approval record.</li>
+            {/* Was "manifest: file, version, checksum…" (S41, D-112). */}
+            <li>Every package includes a contents list: each file, its version and who approved it.</li>
             <li>{expiry} Every download is logged.</li>
           </ul>
 
@@ -237,9 +238,10 @@ export function ArchiveView({ eventId, initial }: { eventId: string; initial: Ar
           {/* One line under the row (D-111): Build's reason first — it blocks Deliver too. */}
           <WhyNot reason={buildBlocked ?? (pkg ? deliverBlocked : null)} />
 
+          {/* The checksum check, in plain words (S41, D-112). */}
           <div className="note" style={{ marginTop: 10 }}>
-            Every file is checksum-verified as it is packaged; if stored bytes no longer match their
-            recorded checksum the build stops and nothing is shipped.
+            Every file is checked as it is packaged. If a file in storage has changed or is damaged, the
+            build stops and nothing is sent to the client — contact DXG support.
           </div>
         </div>
       </div>
@@ -316,7 +318,8 @@ function PdfStatus({
               onClick={() =>
                 void run(async () => {
                   const { queued } = await convertArchivePdfs(eventId);
-                  return `${queued} file${queued === 1 ? "" : "s"} queued for PDF conversion`;
+                  // "queued" read as system talk (D-112).
+                  return `${queued} file${queued === 1 ? "" : "s"} will be converted to PDF shortly`;
                 })
               }
             >
@@ -331,7 +334,7 @@ function PdfStatus({
               onClick={() =>
                 void run(async () => {
                   const { queued } = await convertArchivePdfs(eventId, true);
-                  return `${queued} failed file${queued === 1 ? "" : "s"} queued again`;
+                  return `Trying ${queued} failed file${queued === 1 ? "" : "s"} again`;
                 })
               }
             >

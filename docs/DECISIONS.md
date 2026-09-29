@@ -2186,3 +2186,23 @@ the only active DXG administrator; no sign-in app to reset); the sidebar says "C
 events, "Create your first event" (DXG administrator) or "Ask a DXG administrator to add you to an event"; the
 client portal says why downloads are closed and hides the PDF button when there are no PDFs. The speaker portal had
 no greyed-out controls. No API changes.
+
+## D-112 (2026-09-29): Staff-usability batch 4 — no technical detail on screen — Status: ACCEPTED
+Fourth batch of `docs/UX_REVIEW.md`. Nothing a person reads — screens, tooltips, toasts, API messages, emails — shows
+file fingerprints or checksums, "heartbeat", "agent", "device key", "manifest", "fleet", "server-side",
+"byte-identical", decision or milestone codes, or raw merge syntax (code comments keep their decision codes; data
+fields are unchanged). **Setup:** Files drops the sha256 line; event details drop "(D-064)"; Archive says "contents
+list" and "if a file in storage has changed or is damaged … contact DXG support"; the command centre says "Updated
+automatically from each room's PC"; **the email template editor has plain Insert buttons** ("Speaker's first name",
+"Event name", "Upload link", …) and a **live preview as a real speaker would receive it**; the stored template format
+is unchanged and the API's template messages point to the Insert buttons. **Review & onsite:** Presentation detail
+drops the checksum column and fingerprint; a roll-back says "the room technician must switch to it on the room PC";
+the check-in receipt reads "v2 · deck.pptx · 24 slides" (the API adds file name and slides to the receipt it
+returns; the stored receipt is unchanged); USB intake says "Virus check" / "Check & import file" / "Change" and, after
+a refresh, the last USB import's result; "Device key" → "connection code" with where to enter it; the Room Agent
+header says when the room PC last reported. **Accounts, portals, API:** the client portal shows "Final presentations
+· N PowerPoint files · prepared Sep 3, 2026" and one expiry sentence; the client's zip is named "<Event> - final
+presentations.zip" instead of a UUID; the speaker portal's resume line is plain; remaining API messages ("Unknown
+asset.", device-key refusals, raw converter errors, "YYYY-MM-DD") are plain sentences. The DXG-approved screen name
+"Room Agent" and the talk-status labels stay. Tests: one invariant asserts the receipt's file name; three deadline
+assertions updated; 298/298 invariants.

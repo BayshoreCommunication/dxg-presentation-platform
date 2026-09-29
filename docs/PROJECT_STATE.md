@@ -3163,3 +3163,8 @@ R7 (silent room PC turns "Synchronized onsite" amber) done; API messages plain. 
 ## 2026-09-28 — UX batch 3: every greyed-out control says why (D-111)
 Shared `WhyNot` line under greyed controls across setup, review/onsite, accounts and client portal; "Preview slides"
 made real; "Manual sync" → real "Check for updates". Not committed yet. Next: batch 4 (remove technical detail).
+
+## 2026-09-29 — UX batch 4: no technical detail on screen (D-112)
+Fingerprints, heartbeat/agent/device-key words, decision codes and merge syntax gone from screens, API messages and
+emails; email editor has Insert buttons and a live preview; client zip named after the event. Not committed yet.
+Next: batch 5 (confirmations and guidance), then the Help page and practice event.

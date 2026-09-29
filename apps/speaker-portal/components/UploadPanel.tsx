@@ -167,7 +167,7 @@ export function UploadPanel({
     try {
       // Ask the server what it already has, rather than assuming.
       const state = await getUploadState(upload.upload_id);
-      setMessage(`Resumed from ${formatBytes(state.bytes)} — not from zero.`);
+      setMessage(`Carrying on where it stopped — ${formatBytes(state.bytes)} already uploaded.`);
       setSent(state.received.length);
       const finished = await sendParts(file, upload, [...state.received]);
       if (!finished) return;

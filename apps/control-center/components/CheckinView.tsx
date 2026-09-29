@@ -37,6 +37,16 @@ const when = (iso: string, timeZone: string) =>
  * ordered by the rules, not by the layout: nothing is compared or accepted
  * before the scan, and acceptance needs a reason (FR-SRR-002/003/004).
  */
+/** "v2 · deck.pptx · 24 slides" (R34, D-112). */
+const receiptVersion = (receipt: NonNullable<CheckinDetail["receipt"]>) =>
+  [
+    `v${receipt.version_number}`,
+    receipt.file_name,
+    typeof receipt.slides === "number" ? `${receipt.slides} slide${receipt.slides === 1 ? "" : "s"}` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
 export function CheckinView({
   eventId,
   timezone,
@@ -126,6 +136,19 @@ export function CheckinView({
       : detail.latest.processing_state !== "stored"
         ? `v${latestNumber} is still being checked. This takes a moment — refresh the page shortly.`
         : null;
+
+  // The last USB import, from the check-in itself, so a refresh doesn't lose it (R37, D-112).
+  const lastImportNumber =
+    detail.usb?.file_version_id && detail.usb.file_version_id === detail.latest?.file_version_id
+      ? latestNumber
+      : undefined;
+  const lastImport = detail.usb
+    ? detail.usb.scan_result === "clean"
+      ? `Last USB import (${when(detail.usb.created_at, timezone)}) passed the virus check${
+          lastImportNumber !== undefined ? ` and was saved as v${lastImportNumber}` : ""
+        }.`
+      : `Last USB import (${when(detail.usb.created_at, timezone)}) failed the virus check and was not stored.`
+    : null;
 
   const checkoutBlocked = detail.checkin.departed_at !== null ? "This speaker is already checked out." : null;
 
@@ -230,10 +253,8 @@ export function CheckinView({
                   <tbody>
                     <tr>
                       <td className="note">Version</td>
-                      <td className="mono">
-                        v{detail.receipt.version_number} · {detail.receipt.sha256.slice(0, 8)}…
-                        {detail.receipt.sha256.slice(-4)}
-                      </td>
+                      {/* The file, not its fingerprint (R34, D-112) — as on the printed receipt. */}
+                      <td>{receiptVersion(detail.receipt)}</td>
                     </tr>
                     <tr>
                       <td className="note">Signed</td>
@@ -324,7 +345,7 @@ export function CheckinView({
         </button>
         <span className="note">
           {intakeOpen
-            ? "Scan the drive, compare with the approved version, then accept."
+            ? "Check the file for viruses, compare it with the approved version, then accept."
             : "The speaker brought a new version on a USB drive? Bring it in here."}
         </span>
       </div>
@@ -334,21 +355,24 @@ export function CheckinView({
 
       <div className="card">
         <div className="chd">
-          <h3>1 · Malware scan</h3>
+          {/* Plain intake words (R36, D-112). */}
+          <h3>1 · Virus check</h3>
           {usb ? (
             <Chip
               status={usb.scan_result === "clean" ? "synchronized_onsite" : "attention"}
-              label={usb.scan_result === "clean" ? "Clean" : "Quarantined"}
+              label={usb.scan_result === "clean" ? "Clean" : "Held back"}
             />
           ) : (
-            <Chip status="canceled" label="Required" />
+            <Chip status="canceled" label="Choose the file from the USB drive" />
           )}
         </div>
         <div className="cbd">
           <p className="note" style={{ marginTop: 0 }}>
-            Files cannot enter any library until scanning completes. Failures are quarantined and the
-            approved version stays active in the room.
+            Nothing is stored until the file passes the virus check. A file that fails is held back, and
+            the room keeps what it already has.
           </p>
+          {/* R37 (D-112): after a refresh the full result is gone; say what the last import did. */}
+          {!usb && lastImport && <div className="note" style={{ marginBottom: 8 }}>{lastImport}</div>}
           <div className="field">
             <label>Reason (required)</label>
             <input
@@ -370,7 +394,7 @@ export function CheckinView({
               title={intakeBlocked ?? undefined}
               onClick={() => void scanAndImport()}
             >
-              {busy ? "Scanning…" : "Scan drive & import"}
+              {busy ? "Checking…" : "Check & import file"}
             </button>
             <WhyNot reason={intakeBlocked} />
           </div>
@@ -389,7 +413,7 @@ export function CheckinView({
               label={`v${usb.version_number} vs v${usb.compared_with?.version_number ?? "—"}`}
             />
           ) : (
-            <Chip status="canceled" label="Awaiting scan" />
+            <Chip status="canceled" label="After the virus check" />
           )}
         </div>
         <div className="cbd" style={{ padding: usb?.comparison.length ? "0 0 4px" : undefined }}>
@@ -400,7 +424,7 @@ export function CheckinView({
                   <th />
                   <th>v{usb.compared_with?.version_number ?? "—"}</th>
                   <th>v{usb.version_number}</th>
-                  <th>Δ</th>
+                  <th>Change</th>
                 </tr>
               </thead>
               <tbody>
@@ -420,7 +444,7 @@ export function CheckinView({
               </tbody>
             </table>
           ) : (
-            <div className="note">Runs automatically after a clean scan.</div>
+            <div className="note">Shown once the file passes the virus check.</div>
           )}
         </div>
       </div>
@@ -432,7 +456,7 @@ export function CheckinView({
         <div className="cbd">
           <p className="note" style={{ marginTop: 0 }}>
             An accepted version goes to re-approval. The room keeps playing the approved copy until
-            the new one is approved and re-synced — approved room copies are never replaced silently.
+            the new one is approved and copied to the room PC — it is never replaced without warning.
           </p>
           {usb?.scan_result === "clean" ? (
             <div className="lane spk">

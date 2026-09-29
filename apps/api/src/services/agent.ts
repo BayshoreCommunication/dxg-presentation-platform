@@ -307,7 +307,7 @@ export async function acknowledge(
     [roomFileId],
   );
   const row = rows[0];
-  if (!row) return err({ code: "room_sync.not_found", message: "No such room copy." });
+  if (!row) return err({ code: "room_sync.not_found", message: "This file is no longer on the room's list — refresh the page." });
 
   // Authority first: "you may not do this" is more useful than "someone else
   // changed it", and a forbidden action should say so regardless of staleness.
@@ -412,7 +412,7 @@ export async function launch(
     [input.roomId, input.slotId],
   );
   const row = rows[0];
-  if (!row) return err({ code: "agent.room_not_found", message: "No such room." });
+  if (!row) return err({ code: "agent.room_not_found", message: "This room no longer exists — it may have been removed. Refresh the page." });
 
   // A copy only *awaits* acknowledgment while it is `synced`; reaching `active`
   // means that gate was already passed (or never applied). Treating "not

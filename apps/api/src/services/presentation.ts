@@ -247,7 +247,7 @@ export async function addComment(
   input: { versionId: string; lane: Lane; body: string },
 ): Promise<Result<{ id: string }, DomainError>> {
   if (!input.body.trim()) {
-    return err({ code: "comments.empty", message: "A comment needs a body." });
+    return err({ code: "comments.empty", message: "Write the comment first." });
   }
   if (input.body.length > 5000) {
     return err({ code: "comments.too_long", message: "Keep a comment under 5,000 characters." });

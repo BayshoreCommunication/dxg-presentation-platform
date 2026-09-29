@@ -934,7 +934,7 @@ const splitAction = (segment: string): { id: string; action: string } => {
 app.post("/api/v1/file-versions/:versionAndAction", async (req, res) => {
   const { id: versionId, action: customMethod } = splitAction(String(req.params.versionAndAction));
   if (customMethod !== "transition") {
-    return res.status(404).json({ code: "request.unknown_method", message: "Unknown method." });
+    return res.status(404).json({ code: "request.unknown_method", message: "That request isn't recognised. Refresh the page and try again." });
   }
   const actor = actorFrom(req);
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
@@ -1124,7 +1124,8 @@ app.post("/api/v1/agent/heartbeat", async (req, res) => {
     // One answer for no key, a malformed key, an unknown agent and a wrong secret.
     return res.status(401).json({
       code: "agent.unauthenticated",
-      message: "This computer needs a valid device key. Issue one from Room sync and enter it on the computer.",
+      // D-112: no "device key" wording — the person at the room computer just needs to reconnect it.
+      message: "This room computer isn't connected to the event. Connect it again from Room sync.",
     });
   }
   return res.json({ acknowledged: true, room_id: result.room_id, at: new Date().toISOString() });
@@ -1363,7 +1364,7 @@ app.get("/api/v1/portal/session", (req, res) =>
 app.get("/api/v1/portal/assets/:kind", (req, res) =>
   withPortalSession(req, res, async (session, tx) => {
     const kind = assetKind(String(req.params.kind));
-    if (!kind) return res.status(404).json({ code: "request.unknown_asset", message: "Unknown asset." });
+    if (!kind) return res.status(404).json({ code: "request.unknown_asset", message: "That file isn't available." });
     const asset = await assetOf(tx, session.event_id, kind);
     if (!asset) return res.status(404).json({ code: "events.asset_not_found", message: "Nothing has been uploaded." });
     return sendAsset(res, kind, asset);
@@ -1621,7 +1622,8 @@ app.get("/api/v1/file-versions/:versionId/preview", async (req, res) => {
   if (!state || state.state !== "done" || !state.s3_key) {
     return res.status(409).json({
       code: "preview.not_ready",
-      message: state?.state === "failed" ? `The slide preview couldn't be made. ${state.error ?? ""}`.trim() : "The slide preview is still being prepared. Check back in a minute.",
+      // D-112: the converter's own error text is for the logs, not the screen.
+      message: state?.state === "failed" ? "The slide preview couldn't be made. Contact DXG support if you need it." : "The slide preview is still being prepared. Check back in a minute.",
       state: state?.state ?? null,
     });
   }
@@ -1864,7 +1866,7 @@ app.put("/api/v1/events/:eventId/assets/:kind", async (req, res) => {
   const actor = actorFrom(req);
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   const kind = assetKind(String(req.params.kind));
-  if (!kind) return res.status(404).json({ code: "request.unknown_asset", message: "Unknown asset." });
+  if (!kind) return res.status(404).json({ code: "request.unknown_asset", message: "That file isn't available." });
   let fileName = String(req.header("x-file-name") ?? "");
   try {
     fileName = decodeURIComponent(fileName);
@@ -1885,7 +1887,7 @@ app.delete("/api/v1/events/:eventId/assets/:kind", async (req, res) => {
   const actor = actorFrom(req);
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   const kind = assetKind(String(req.params.kind));
-  if (!kind) return res.status(404).json({ code: "request.unknown_asset", message: "Unknown asset." });
+  if (!kind) return res.status(404).json({ code: "request.unknown_asset", message: "That file isn't available." });
   const eventId = String(req.params.eventId);
   const result = await withScope(scopeFor(req, eventId), (tx) => removeAsset(tx, actor, eventId, kind));
   if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
@@ -1896,7 +1898,7 @@ app.get("/api/v1/events/:eventId/assets/:kind", async (req, res) => {
   const actor = actorFrom(req);
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   const kind = assetKind(String(req.params.kind));
-  if (!kind) return res.status(404).json({ code: "request.unknown_asset", message: "Unknown asset." });
+  if (!kind) return res.status(404).json({ code: "request.unknown_asset", message: "That file isn't available." });
   const eventId = String(req.params.eventId);
   const asset = await withScope(scopeFor(req, eventId), (tx) => assetOf(tx, eventId, kind));
   if (!asset) return res.status(404).json({ code: "events.asset_not_found", message: "Nothing has been uploaded." });
@@ -1909,7 +1911,7 @@ app.post("/api/v1/events/:eventId/imports", async (req, res) => {
   const fileName = String(req.header("x-file-name") ?? "agenda.csv");
   const body = req.body as Buffer;
   if (!Buffer.isBuffer(body) || body.length === 0) {
-    return res.status(400).json({ code: "request.invalid", message: "Empty file." });
+    return res.status(400).json({ code: "request.invalid", message: "That file is empty. Choose the schedule file again." });
   }
 
   const eventId = String(req.params.eventId);
@@ -2079,7 +2081,7 @@ app.post("/api/v1/imports/:uploadId/rows", async (req, res) => {
   const cached = importCache.get(uploadId);
   if (!cached) return res.status(404).json({ code: "import.expired", message: "Upload the file again." });
   if (!cached.manual) {
-    return res.status(400).json({ code: "import.not_manual", message: "This agenda came from a file." });
+    return res.status(400).json({ code: "import.not_manual", message: "This agenda came from a file — change the file and upload it again." });
   }
 
   const body = (req.body ?? {}) as { cells?: Partial<Record<ImportField, string>> };
@@ -2375,7 +2377,11 @@ app.get("/api/v1/archive-packages/:packageId/download", async (req, res) => {
   );
   if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
   res.setHeader("content-type", "application/zip");
-  res.setHeader("content-disposition", `attachment; filename="${result.value.filename}"`);
+  // The name carries the event's name now (D-112), so it is encoded like a single file's download.
+  res.setHeader(
+    "content-disposition",
+    `attachment; filename="${result.value.filename.replace(/[^\x20-\x7e]|["\\]/g, "_")}"; filename*=UTF-8''${encodeURIComponent(result.value.filename)}`,
+  );
   return res.send(result.value.body);
 });
 
@@ -3109,7 +3115,7 @@ app.post("/api/v1/auth/password-reset/request", async (req, res) => {
 app.post("/api/v1/auth/password-reset/confirm", async (req, res) => {
   const body = req.body as { token?: string; new_password?: string };
   if (!body.token || !body.new_password) {
-    return res.status(400).json({ code: "request.invalid", message: "A token and a new password are required." });
+    return res.status(400).json({ code: "request.invalid", message: "This reset link is incomplete, or the new password is missing. Request a new link if it keeps happening." });
   }
   const result = await withSystemScope((tx) =>
     completeReset(tx, {

@@ -4,7 +4,7 @@ import { Fragment, useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { AgentView } from "@/lib/api";
 import { getAgentView, syncRoom, acknowledgeRoomFile, launchInRoom, ApiError } from "@/lib/api";
-import { formatBytes, ROOM_COPY, wordsFor } from "@pmp/format";
+import { agoWords, formatBytes, ROOM_COPY, wordsFor } from "@pmp/format";
 import { WhyNot } from "@/components/WhyNot";
 
 const size = (bytes: string): string => {
@@ -122,7 +122,10 @@ export function RoomAgentView({ initial }: { initial: AgentView }) {
             {!view.agent.fingerprint
               ? "Room PC not connected yet"
               : offline
-                ? "Room PC not reporting"
+                ? // When it last reported, in words (R43, D-112).
+                  view.agent.heartbeat_age !== null
+                  ? `Room PC not reporting — last report ${agoWords(view.agent.heartbeat_age)} ago`
+                  : "Room PC hasn't reported in yet"
                 : "Room PC connected"}
             {" · "}
             {notHere > 0
@@ -155,8 +158,8 @@ export function RoomAgentView({ initial }: { initial: AgentView }) {
           }}
         >
           ⚠ <b>Change alert:</b> {pending.speaker} v{pending.version_number} approved — replaces the
-          copy in this room for the {time(pending.starts_at, view.event.timezone)} slot. The previous version is kept for
-          rollback and stays in use until you switch.
+          copy in this room for the {time(pending.starts_at, view.event.timezone)} slot. The previous version is kept, and
+          stays in use until you switch.
           <button
             className="btn"
             style={{ marginLeft: 8 }}
@@ -281,7 +284,7 @@ export function RoomAgentView({ initial }: { initial: AgentView }) {
             </div>
             <div style={{ fontSize: 13, color: "var(--white)" }}>
               {view.library.files} file{view.library.files === 1 ? "" : "s"} ·{" "}
-              {size(view.library.bytes)} local
+              {size(view.library.bytes)} on this PC
             </div>
             <div
               className="mono"

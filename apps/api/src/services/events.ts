@@ -2,6 +2,7 @@ import type pg from "pg";
 import { appendAudit } from "@pmp/db";
 import type { Actor, DomainError, Result } from "@pmp/domain";
 import { atLeast, err, hasAnyRole, ok } from "@pmp/domain";
+import { formatDate } from "@pmp/format";
 
 /**
  * Who may set an event up. SCREEN_SPECS §2 says PjM, PM and Admin, and until now
@@ -135,15 +136,16 @@ function checkSettings(settings: unknown, startsOn: string): DomainError | null 
   const { upload_deadline: deadline, reminder_days: reminderDays } = settings as Record<string, unknown>;
   if (deadline !== undefined && deadline !== null && deadline !== "") {
     if (typeof deadline !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(deadline)) {
-      return bad("The upload deadline must be a date (YYYY-MM-DD).");
+      // D-112: a plain request, not the date format.
+      return bad("The upload deadline isn't a date. Choose it from the calendar.");
     }
     const parsed = new Date(`${deadline}T00:00:00Z`);
     // Round-tripping catches dates that do not exist, such as 2026-02-30.
     if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== deadline) {
-      return bad(`${deadline} is not a real date.`);
+      return bad("That upload deadline is not a real date. Choose it from the calendar.");
     }
     if (deadline > startsOn) {
-      return bad(`The upload deadline (${deadline}) is after the event starts (${startsOn}).`);
+      return bad(`The upload deadline (${formatDate(deadline)}) is after the event starts (${formatDate(startsOn)}).`);
     }
   }
   if (reminderDays !== undefined) {

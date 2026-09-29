@@ -27,7 +27,7 @@ export async function queueTemporaryPasswordEmail(
           "Sign in with this email address and the temporary password below:",
         ]
       : [
-          "An administrator has reset the password on your DXG·PM account, and any open sessions have been ended.",
+          "An administrator has reset the password on your DXG·PM account, and you have been signed out everywhere.",
           "Sign in with this temporary password:",
         ];
 

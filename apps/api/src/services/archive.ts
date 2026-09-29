@@ -590,9 +590,10 @@ export async function downloadPackage(
     link_expires_at: string | null;
     event_id: string;
     client_id: string;
+    event_name: string;
   }>(
-    `SELECT archive_state, s3_key, pdf_s3_key, link_expires_at, event_id, client_id
-       FROM pmp.archive_packages WHERE id = $1`,
+    `SELECT p.archive_state, p.s3_key, p.pdf_s3_key, p.link_expires_at, p.event_id, p.client_id, e.name AS event_name
+       FROM pmp.archive_packages p JOIN pmp.events e ON e.id = p.event_id WHERE p.id = $1`,
     [packageId],
   );
   const row = rows[0];
@@ -637,7 +638,9 @@ export async function downloadPackage(
     detail: { format, bytes: body.length, sha256: createHash("sha256").update(body).digest("hex") },
   });
 
-  return ok({ body, filename: format === "pdf" ? `${packageId}-pdf.zip` : `${packageId}.zip` });
+  // D-112: the client saves a file named after their event, not the package's id.
+  const base = `${safeName(row.event_name)} - final presentations`;
+  return ok({ body, filename: format === "pdf" ? `${base} (PDF).zip` : `${base}.zip` });
 }
 
 export async function latestPackage(tx: pg.PoolClient, eventId: string) {

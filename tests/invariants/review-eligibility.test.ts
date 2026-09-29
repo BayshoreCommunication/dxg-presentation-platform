@@ -189,6 +189,12 @@ describe("the presentation receipt (D-106)", () => {
     const signed = await call("POST", `/srr/checkins/${checkinId}/sign-off`, { file_version_id: clean });
     assert.equal(signed.status, 200);
 
+    // Staff see the file's name, not its fingerprint (R34, D-112).
+    const detail = (await (await call("GET", `/srr/checkins/${checkinId}`)).json()) as {
+      receipt: { file_name?: string | null } | null;
+    };
+    assert.equal(detail.receipt?.file_name, "clean.pptx");
+
     const sent = await call("POST", `/srr/checkins/${checkinId}/receipt/email`);
     assert.equal(sent.status, 200);
     assert.equal(((await sent.json()) as { emailed_to: string }).emailed_to, `eligibility.${RUN}@example.invalid`);

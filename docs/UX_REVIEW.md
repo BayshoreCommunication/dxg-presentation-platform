@@ -52,7 +52,7 @@ API errors worded by code (A-API list).
 **Batch 3 — every disabled control explains itself.** ✔ Done 2026-09-28 (D-111). Visible reason + alternative (S12, S13, S21, S30, R14, R33,
 R35, R40, R45, A12, A20, A21, A30).
 
-**Batch 4 — remove technical detail staff never need.** Hashes/checksums/fingerprints (R15, R34, S36, S41), heartbeat /
+**Batch 4 — remove technical detail staff never need.** ✔ Done 2026-09-29 (D-112); the "Room Agent" screen name stays (DXG-approved). Hashes/checksums/fingerprints (R15, R34, S36, S41), heartbeat /
 agent / device key wording (S3, R39, R41, R43, R46), merge-field syntax (S33), decision and milestone codes (S22,
 R14, R40), "server-side", "fleet", "manifest" (R20, R23, S41).
 

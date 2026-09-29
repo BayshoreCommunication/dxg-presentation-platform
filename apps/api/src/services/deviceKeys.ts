@@ -22,7 +22,7 @@ export async function issueDeviceKey(
   roomId: string,
 ): Promise<Result<{ agent_id: string; device_key: string; issued_at: string }, DomainError>> {
   if (!hasAnyRole(actor, ISSUERS)) {
-    return err({ code: "agent.forbidden", message: "Issuing a device key needs a presentation manager or above." });
+    return err({ code: "agent.forbidden", message: "Connecting a room computer needs a presentation manager or above." });
   }
   const { rows: rooms } = await tx.query<{ id: string; name: string; event_id: string; client_id: string }>(
     `SELECT id, name, event_id, client_id FROM pmp.rooms WHERE id = $1`,

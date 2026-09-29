@@ -1080,8 +1080,9 @@ export function ImportView({
                     <span className="mono" style={{ minWidth: 130 }}>
                       {FIELD_LABELS[field] ?? field}
                     </span>
+                    {/* Read out by the label, not the code "session.title" (D-112). */}
                     <select
-                      aria-label={`column for ${field}`}
+                      aria-label={`Column for ${FIELD_LABELS[field] ?? field}`}
                       value=""
                       onChange={(event) =>
                         void run(async () => {
