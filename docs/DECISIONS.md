@@ -2392,3 +2392,10 @@ events only, and open/click tracking is deliberately off — it would add a trac
 including each speaker's personal upload link, through Amazon's tracking domain. The other four repeated the delivery
 log. All six are removed; each email's status stays in the delivery log (and bounces on the speaker's row). The API
 still returns the counts.
+
+## D-127 (2026-09-30): The holding screen shows the next talk — Status: ACCEPTED (Travis's call)
+The holding-screen preview on Room Agent showed the event name only. It now also shows, under a small "NEXT", the
+room's next talk the audience is waiting for — its day (when not today), time, title and speaker: the first talk not
+yet presented whose start is no more than 15 minutes past. With nothing upcoming it shows the event name alone. This is
+the platform's preview; the room software's own holding screen (apps/room-agent) shows event and room only until it
+receives the room's schedule (after G0-1).

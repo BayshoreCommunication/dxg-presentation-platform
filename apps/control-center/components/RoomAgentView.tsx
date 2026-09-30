@@ -85,6 +85,16 @@ export function RoomAgentView({ initial }: { initial: AgentView }) {
   const notLoaded = talks.filter((talk) => talk.waiting && !talk.loaded).length;
   const loadedCount = talks.filter((talk) => talk.loaded && !talk.waiting).length;
   const nextUp = talks.find((talk) => talk.loaded?.launchable && !talk.loaded.presented_at)?.loaded;
+  // The next talk the audience is waiting for, for the holding screen (D-127): the first
+  // not yet presented whose start is no more than 15 minutes past — a talk long gone is
+  // not "next". Nothing upcoming, and the screen shows the event name alone.
+  const nextForAudience = [...view.schedule]
+    .sort((a, b) => a.starts_at.localeCompare(b.starts_at))
+    .find((row) => !row.presented_at && new Date(row.starts_at).getTime() > Date.now() - 15 * 60_000);
+  const nextDay =
+    nextForAudience && dayKey(nextForAudience.starts_at, zone) !== dayKey(new Date(), zone)
+      ? `${new Date(nextForAudience.starts_at).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: zone })} · `
+      : "";
   const launchNote = "Launch records the talk as presented; opening PowerPoint on the room PC is connected in a later release.";
   const launch = (row: Row, primary: boolean) => (
     <button
@@ -270,12 +280,26 @@ export function RoomAgentView({ initial }: { initial: AgentView }) {
                 textAlign: "center",
               }}
             >
-              <span style={{ fontWeight: 700, color: "var(--white)", letterSpacing: ".06em", textTransform: "uppercase" }}>
-                {view.event.name}
-              </span>
+              <div>
+                <div style={{ fontWeight: 700, color: "var(--white)", letterSpacing: ".06em", textTransform: "uppercase" }}>
+                  {view.event.name}
+                </div>
+                {/* D-127: what's on next in this room, as the audience would want to know. */}
+                {nextForAudience && (
+                  <div suppressHydrationWarning style={{ marginTop: 10, color: "var(--paneink)", fontSize: 11.5, lineHeight: 1.4 }}>
+                    <div style={{ letterSpacing: ".1em", fontSize: 9.5, color: "var(--dim)" }}>NEXT</div>
+                    <div>
+                      {nextDay}
+                      {time(nextForAudience.starts_at, zone)} · {nextForAudience.title}
+                    </div>
+                    {nextForAudience.speaker && <div style={{ color: "var(--dim)" }}>{nextForAudience.speaker}</div>}
+                  </div>
+                )}
+              </div>
             </div>
             <div className="note" style={{ color: "var(--dim)", marginTop: 8, fontSize: 11.5 }}>
-              On the projector between talks, and whenever something can&rsquo;t play.
+              On the projector between talks, and whenever something can&rsquo;t play — with the next talk in this
+              room when there is one.
             </div>
           </div>
         </div>
