@@ -13,7 +13,7 @@ import {
   ApiError,
   emailCheckinReceipt,
 } from "@/lib/api";
-import { Chip, StatusMeaning } from "@/components/Chip";
+import { Chip } from "@/components/Chip";
 import { ConfirmationStrip } from "@/components/ConfirmationStrip";
 import { staleNoteFor } from "@/lib/roomWords";
 import { WhyNot } from "@/components/WhyNot";
@@ -192,7 +192,7 @@ export function CheckinView({
 
   const signOffButton = (label: string) => (
     <button
-      className="btn good"
+      className="btn pri"
       disabled={busy || !signable}
       onClick={() =>
         void run(async () => {
@@ -213,143 +213,188 @@ export function CheckinView({
         : `v${latestNumber} hasn't been approved by a reviewer yet. You can still confirm it as the speaker's final version; nothing plays in the room until it is approved.`
       : null;
 
+  const departed = detail.checkin.departed_at !== null;
+  const newerAfterReceipt = Boolean(
+    detail.receipt && signable && latestNumber !== undefined && latestNumber > detail.receipt.version_number,
+  );
+  const earlier = !detail.receipt ? detail.standing_sign_off : null;
+  const stripFacts = {
+    status: detail.talk.status,
+    room: detail.talk.room,
+    hasSpeaker: true,
+    latestVersion: latestNumber ?? null,
+    approved: detail.approved
+      ? { version: detail.approved.version_number, by: detail.approved.approved_by, at: detail.approved.approved_at }
+      : null,
+    roomStates: detail.approved?.room_states,
+    // This visit's receipt, else the sign-off from an earlier visit, which still stands (D-119).
+    signOff: detail.receipt
+      ? { version: detail.receipt.version_number, by: detail.receipt.technician, at: detail.receipt.signed_at }
+      : earlier
+        ? { version: earlier.version_number, by: earlier.technician, at: earlier.signed_at }
+        : null,
+    stale: staleNote,
+    timezone,
+  };
+  const printReceipt = (
+    <a className="btn" href={`/events/${eventId}/srr/${detail.checkin.id}/receipt`} target="_blank" rel="noopener">
+      Print receipt
+    </a>
+  );
+  const emailReceipt = (
+    <button
+      className="btn"
+      disabled={busy}
+      onClick={() =>
+        void run(async () => {
+          const { emailed_to } = await emailCheckinReceipt(detail.checkin.id);
+          return `Receipt emailed to ${emailed_to}`;
+        })
+      }
+    >
+      Email receipt
+    </button>
+  );
+  const openUsb = (
+    <button type="button" className="btn pri" onClick={() => setIntakeOpen(true)}>
+      Take the file by USB
+    </button>
+  );
+  const preview = (
+    <a className="btn" href={`/events/${eventId}/talks/${detail.talk.slot_id}`} target="_blank" rel="noopener">
+      Preview slides
+    </a>
+  );
+  const who = detail.speaker.name;
+
+  /** The one thing to do now, in the order a technician meets the cases (D-120). */
+  const next: { title: string; body?: string; actions: React.ReactNode; showApprovalNote?: boolean } = departed
+    ? {
+        title: `${who} has checked out.`,
+        body: "If they come back, check them in again from the Speaker Ready Room.",
+        actions: detail.receipt ? (
+          <>
+            {printReceipt}
+            {emailReceipt}
+          </>
+        ) : null,
+      }
+    : blockedReason
+      ? { title: blockedReason, actions: <>{!detail.latest || detail.latest.processing_state === "quarantined" ? openUsb : null}{checkOut}</> }
+      : newerAfterReceipt
+        ? {
+            title: `A newer version (v${latestNumber}) came in after ${who} signed off.`,
+            body: "Go through it with them. If it's right, confirm it as their final version.",
+            actions: (
+              <>
+                {signOffButton(`Confirm v${latestNumber}`)}
+                {preview}
+                {checkOut}
+              </>
+            ),
+            showApprovalNote: true,
+          }
+        : detail.receipt
+          ? {
+              title: `Done — ${who} confirmed v${detail.receipt.version_number} as their final version.`,
+              // Signed off but not approved: say it can't play yet, so "Done" isn't read as all done (D-120).
+              body:
+                approvedNumber === detail.receipt.version_number
+                  ? `Give them the receipt, then check them out to free ${detail.checkin.station ?? "the station"}.`
+                  : `Give them the receipt, then check them out to free ${detail.checkin.station ?? "the station"}. A reviewer still needs to approve v${detail.receipt.version_number} in Review presentations before it plays in ${detail.talk.room ?? "the room"}.`,
+              actions: (
+                <>
+                  {printReceipt}
+                  {emailReceipt}
+                  {checkOut}
+                </>
+              ),
+            }
+          : earlier && earlier.version_number === latestNumber
+            ? {
+                title: `${who} already confirmed v${earlier.version_number} on an earlier visit.`,
+                body: "If nothing has changed, they're all set — check them out. To give them a new receipt, confirm it again.",
+                actions: (
+                  <>
+                    {checkOut}
+                    {signOffButton(`Confirm v${earlier.version_number} again`)}
+                    {preview}
+                  </>
+                ),
+              }
+            : {
+                title: `Go through the slides with ${who}.`,
+                body: `If they're right, confirm v${latestNumber} as their final version. After that the speaker can't replace it from the portal — any change comes through this desk. You'll get a receipt to print or email.`,
+                actions: (
+                  <>
+                    {signOffButton(`Confirm v${latestNumber} as final`)}
+                    {preview}
+                    {checkOut}
+                  </>
+                ),
+                showApprovalNote: true,
+              };
+
   return (
     <>
-      <h1 className="htitle">Check-in · {detail.speaker.name}</h1>
+      <h1 className="htitle" style={{ marginBottom: 4 }}>
+        {detail.speaker.name}
+      </h1>
+      {/* One line of context; the rest is under "Details" (D-120). */}
+      <p className="note" style={{ marginTop: 0 }}>
+        {detail.talk.title} · {detail.talk.room ?? "No room"} · {when(detail.talk.starts_at, timezone)}
+        {!departed && detail.checkin.station ? ` · at ${detail.checkin.station}` : ""}
+      </p>
 
       {error && <div className="err">{error}</div>}
 
-      <div className="card">
-        <div className="chd">
-          <h3>{detail.talk.title}</h3>
-          <Chip status={detail.talk.status} label={detail.talk.status_label} stale={staleNote} />
-        </div>
+      {/* ── What to do now (D-120): one sentence, one main button. A beginner used to face a
+          status chip, the same room-PC warning twice, three boxes and a paragraph of rules
+          before finding the action. ─────────────────────────────────────────── */}
+      <div className="card next-step">
         <div className="cbd">
-          {/* R47: what the status means, visibly; R7: amber when the room PC is quiet (D-110). */}
-          <div style={{ marginBottom: 6 }}>
-            <StatusMeaning status={detail.talk.status} stale={staleNote} />
-          </div>
-          {/* Approval → sign-off → room, connected (D-113, root cause 5). The sign-off is
-              this check-in's receipt. */}
-          <ConfirmationStrip
-            facts={{
-              status: detail.talk.status,
-              room: detail.talk.room,
-              hasSpeaker: true,
-              latestVersion: latestNumber ?? null,
-              approved: detail.approved
-                ? { version: detail.approved.version_number, by: detail.approved.approved_by, at: detail.approved.approved_at }
-                : null,
-              roomStates: detail.approved?.room_states,
-              signOff: detail.receipt
-                ? { version: detail.receipt.version_number, by: detail.receipt.technician, at: detail.receipt.signed_at }
-                : null,
-              stale: staleNote,
-              timezone,
-            }}
-          />
-          <div className="note" style={{ marginBottom: 6 }}>
-            {detail.talk.room} · {when(detail.talk.starts_at, timezone)} · current approved:{" "}
-            <b className="mono">
-              {detail.approved ? `v${detail.approved.version_number}` : "none"}
-            </b>
-          </div>
-          <div className="note">
-            Checked in {when(detail.checkin.checked_in_at, timezone)} · {detail.checkin.station} · Technician{" "}
-            {detail.checkin.technician}
-            {detail.talk.final_locked && (
-              <>
-                {" · "}
-                <span className="chip c-ok">Final onsite version locked</span>
-              </>
-            )}
-          </div>
-
-          {detail.receipt ? (
-            <div className="card" style={{ marginTop: 14, marginBottom: 0 }}>
-              <div className="cbd">
-                <h3 style={{ fontSize: 14, marginBottom: 8 }}>Presentation receipt</h3>
-                <table>
-                  <tbody>
-                    <tr>
-                      <td className="note">Version</td>
-                      {/* The file, not its fingerprint (R34, D-112) — as on the printed receipt. */}
-                      <td>{receiptVersion(detail.receipt)}</td>
-                    </tr>
-                    <tr>
-                      <td className="note">Signed</td>
-                      <td>
-                        {when(detail.receipt.signed_at, timezone)} · {detail.receipt.station}
-                      </td>
-                    </tr>
-                    <tr>
-                      <td className="note">Technician</td>
-                      <td>{detail.receipt.technician}</td>
-                    </tr>
-                  </tbody>
-                </table>
-                <div style={{ marginTop: 10, display: "flex", gap: 8 }}>
-                  {/* Both used to show a success message and do nothing (D-106). Print opens a
-                      receipt page made for paper, which prints on the station's own printer. */}
-                  <a
-                    className="btn"
-                    href={`/events/${eventId}/srr/${detail.checkin.id}/receipt`}
-                    target="_blank"
-                    rel="noopener"
-                  >
-                    Print receipt
-                  </a>
-                  <button
-                    className="btn"
-                    disabled={busy}
-                    onClick={() =>
-                      void run(async () => {
-                        const { emailed_to } = await emailCheckinReceipt(detail.checkin.id);
-                        return `Receipt emailed to ${emailed_to}`;
-                      })
-                    }
-                  >
-                    Email receipt
-                  </button>
-                  {checkOut}
-                </div>
-                <WhyNot reason={checkoutBlocked} />
-                {/* A newer file came in after sign-off (USB intake): offer to confirm it (D-108). */}
-                {signable && latestNumber !== undefined && latestNumber > detail.receipt.version_number && (
-                  <div style={{ marginTop: 14, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                    <span className="note">
-                      v{latestNumber} came in after this receipt. Confirm it to make it the final version.
-                    </span>
-                    {signOffButton(`Confirm v${latestNumber} as the final onsite version`)}
-                  </div>
-                )}
-              </div>
-            </div>
-          ) : (
-            <div style={{ marginTop: 14 }}>
-              {blockedReason && (
-                <div className="err" style={{ marginBottom: 10 }}>
-                  {blockedReason}
-                </div>
-              )}
-              {approvalNote && (
-                <div className="note" style={{ marginBottom: 10, lineHeight: 1.5 }}>
-                  {approvalNote}
-                </div>
-              )}
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                {detail.latest && signOffButton(`Confirm v${latestNumber} as the final onsite version`)}
-                {checkOut}
-              </div>
-              <WhyNot reason={checkoutBlocked} />
-              {signable && (
-                <div className="note" style={{ marginTop: 8 }}>
-                  Confirming locks the talk: the speaker can no longer replace the file from the portal, and
-                  any later change must come through this desk. You&rsquo;ll get a receipt to print or email.
-                </div>
-              )}
-            </div>
+          <div className="next-step-label">What to do now</div>
+          <h2 className="next-step-title">{next.title}</h2>
+          {next.body && <p className="next-step-body">{next.body}</p>}
+          {approvalNote && next.showApprovalNote && <p className="note" style={{ marginTop: 0 }}>{approvalNote}</p>}
+          {detail.receipt && !newerAfterReceipt && (
+            <p className="note" style={{ marginTop: 0 }}>
+              Receipt: {receiptVersion(detail.receipt)} · {when(detail.receipt.signed_at, timezone)} ·{" "}
+              {detail.receipt.station}
+            </p>
           )}
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>{next.actions}</div>
+          <WhyNot reason={checkoutBlocked && !departed ? checkoutBlocked : null} />
+        </div>
+      </div>
+
+      {/* The three confirmations as one line, and the room-PC warning once (D-120). */}
+      <div className="card">
+        <div className="cbd" style={{ padding: "10px 14px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            <div>
+              <div className="next-step-label">Progress</div>
+              <ConfirmationStrip compact facts={stripFacts} />
+            </div>
+            <Chip status={detail.talk.status} label={detail.talk.status_label} stale={staleNote} />
+          </div>
+          {staleNote && (
+            <p className="note" style={{ color: "var(--amber-text)", margin: "8px 0 0" }}>
+              {detail.talk.room ?? "The room"}&rsquo;s PC isn&rsquo;t reporting, so we can&rsquo;t confirm the file is
+              still there. Tell the room technician — nothing to do at this desk.
+            </p>
+          )}
+          <details style={{ marginTop: 8 }}>
+            <summary className="note" style={{ cursor: "pointer" }}>
+              Details
+            </summary>
+            <ConfirmationStrip facts={stripFacts} />
+            <div className="note">
+              Checked in {when(detail.checkin.checked_in_at, timezone)} · {detail.checkin.station ?? "no station"} ·
+              technician {detail.checkin.technician}
+              {detail.talk.final_locked ? " · final version locked (changes come through this desk)" : ""}
+            </div>
+          </details>
         </div>
       </div>
 

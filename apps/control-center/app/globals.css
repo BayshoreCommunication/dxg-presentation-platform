@@ -1133,3 +1133,18 @@ input,select,textarea{border-width:1px}
 /* Practice event (D-116): a thin, always-visible line on every screen of one. */
 .practice-banner{margin:0 0 12px;padding:6px 12px;border:1px solid var(--amber);border-radius:8px;background:var(--warn-soft);color:var(--amber-text);font-size:12.5px;line-height:1.4}
 [data-theme="dark"] .practice-banner{color:#f59e0b;border-color:rgba(245,158,11,.45)}
+
+/* Check-in's "What to do now" (D-120): the one action, first. */
+.next-step{box-shadow:inset 0 0 0 1.5px var(--foreground)}
+.next-step-label{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted-foreground);margin-bottom:4px}
+.next-step-title{font-size:18px;line-height:1.35;margin:0 0 6px;font-weight:600}
+.next-step-body{margin:0 0 10px;font-size:14px;line-height:1.5;color:var(--secondary-foreground)}
+
+/* Speaker Ready Room desks (D-121). */
+.desk-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px}
+.desk{border:1px solid var(--border);border-radius:10px;padding:10px 12px;background:var(--card)}
+.desk.busy{border-color:var(--foreground)}
+.desk-name{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted-foreground)}
+.desk-who{font-weight:600;margin:2px 0}
+.manage-desks{margin-top:4px}
+.manage-desks>summary{cursor:pointer;font-size:13px;color:var(--secondary-foreground);margin-bottom:10px}

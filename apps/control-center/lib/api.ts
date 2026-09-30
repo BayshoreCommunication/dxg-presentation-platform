@@ -400,6 +400,8 @@ export type CheckinDetail = {
     file_name?: string | null;
     slides?: number | null;
   } | null;
+  /** The talk's latest sign-off from any visit — it stands on a later check-in (D-119). */
+  standing_sign_off?: { version_number: number; signed_at: string; technician: string | null; station: string | null } | null;
 };
 
 export type UsbResult = {

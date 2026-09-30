@@ -2297,3 +2297,53 @@ onsite". Now `POST /rooms/:id/sync` refuses (409 `room_sync.no_room_pc`) unless 
 5 minutes, and no longer fakes a report; Room Agent greys the button with the reason. Until the room software connects
 (G0-1 → M5), no file is shown as on a room PC. The one affected copy in production (the practice event's Ballroom A)
 was put back to "waiting to copy". Tests: two in device-keys.test.ts.
+
+## D-119 (2026-09-30): A sign-off stands when the speaker checks in again — Status: ACCEPTED (bug fix)
+A speaker who checked out and came back showed "2 Signed off — Waiting / Not yet" on the new check-in, beside "Final
+onsite version locked" and the dashboard's "✓ Signed off v2": the strip only read the current visit's receipt. The
+check-in detail now also returns `standing_sign_off` (the talk's latest sign-off from any visit, as presentation
+detail already did), and the strip shows it until this visit's own sign-off replaces it; a newer approval still
+re-opens the step. Test: review-eligibility.test.ts.
+
+## D-120 (2026-09-30): The check-in screen leads with "What to do now" — Status: ACCEPTED (Travis: "looking very complicated")
+The check-in screen showed a status chip, the room-PC warning twice, three confirmation boxes, a paragraph of rules,
+a metadata line, a lock chip, a receipt table and the buttons — all at equal weight, so a first-time technician
+couldn't tell what to do. Now, top to bottom: the speaker's name and one line of context (talk · room · time ·
+station); a **What to do now** card with one sentence and the main button for the situation — go through the slides
+and confirm vN; already confirmed on an earlier visit (check out, or confirm again for a new receipt); a newer
+version came in after sign-off; done (receipt line, Print / Email, Check out); nothing to confirm yet (why, and "Take
+the file by USB"); checked out; then **Progress** as one line (✓ Approved · ✓ Signed off v2 · ✓ In the room) with the
+status chip and the room-PC warning said once ("tell the room technician — nothing to do at this desk"); the full
+three-step strip, check-in time, technician and the lock rule under **Details**; USB intake below as before.
+Behaviour unchanged.
+
+## D-121 (2026-09-30): The Speaker Ready Room is grouped by what is happening — Status: ACCEPTED (Travis: "improve this also")
+One long "Expected" list mixed speakers at a desk, speakers still to come and speakers who had left, each row carrying
+a status chip, a meaning line, the room-PC warning and the three-step line; an empty warnings card and three
+repeated "check the speaker out to remove this station" lines followed. Now: a summary line ("3 of 3 desks in use ·
+2 to check in · 1 signed off"); **At the desks now** — a card per desk with the speaker and one line of what they are
+doing ("Signed off v2 — ready to check out", "File held back — needs a clean copy") and Open; **Still to check in**
+in session order, each with one line of what to do when they arrive and Check in (the why-not once above the list);
+**Checked out** (only if any) with "Check in again"; **Files with warnings** only when there are some; **Manage
+desks** folded away with the removal rule said once. Behaviour unchanged.
+
+## D-122 (2026-09-30): Room sync is grouped by what each room needs — Status: ACCEPTED (Travis: "what about this one?")
+Each room repeated itself two or three times ("room PC not connected yet — issue a connection code on Room sync", on
+Room sync, then "Issue a connection code and enter it on the room PC"), a never-connected room was tagged "Room PC not
+reporting", and a room PC that had merely gone quiet was told to get a new code. Now the summary counts rooms by
+group ("0 of 5 rooms ready · 3 not reporting · 2 not set up") and rooms are listed under **Ready**, **Connected —
+still getting ready**, **Room PC not reporting** ("check each is switched on and online… only use New code if the PC
+was replaced") and **Not set up yet** ("press Connect, then type the code on that PC"), each group's advice said once
+and each room in one line ("Last heard from 45 hours ago, when it had 1 of 1 file"; "Code issued — enter it on the
+room PC"). The code button is **Connect** for a room never connected and **New code** otherwise; a room never set up
+is tagged "Not set up". Behaviour unchanged.
+
+## D-123 (2026-09-30): The review workspace leads with the decision — Status: ACCEPTED (Travis: "improve it")
+The Approve / Request revision / Reject buttons sat at the very bottom, below the comment thread (which opened with
+notes about v1 on a v4) and an always-open note box, all three buttons at equal weight. Now, straight under the
+slides, a **Your decision** box: one sentence ("Checks passed — nothing to fix. If the slides look right, approve v3."
+/ "Checks passed with 1 warning — read it, then decide." / "1 problem must be fixed or waived…" / "checks still
+running"), any warnings or problems, then **Approve vN** (the main button), **Ask for changes** (was "Request
+revision") and Reject; the what-each-does line appears when one is chosen; the report link and the keyboard shortcuts
+on one small line. Comments sit below: this version's first, earlier versions folded, the note box closed until **Add
+a note** (also on Presentation detail, which shares the panel). Behaviour unchanged.

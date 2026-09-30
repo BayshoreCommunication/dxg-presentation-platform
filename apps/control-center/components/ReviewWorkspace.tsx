@@ -67,6 +67,17 @@ export function ReviewWorkspace({
   // Approval needs finished checks and no open blocking problem — the server refuses
   // otherwise (D-105); here the reason is visible before anyone clicks (D-108).
   const openBlocking = selected ? selected.findings.filter((finding) => finding.severity === "blocking").length : 0;
+  const openWarnings = selected ? selected.findings.filter((finding) => finding.severity === "warning").length : 0;
+  // The decision box's one sentence (D-123).
+  const decisionTitle = !selected
+    ? ""
+    : CHECKING.includes(selected.inspection_state)
+      ? "The file checks are still running — you can approve when they finish."
+      : openBlocking > 0
+        ? `${openBlocking} problem${openBlocking === 1 ? "" : "s"} must be fixed or waived before this can be approved.`
+        : openWarnings > 0
+          ? `Checks passed with ${openWarnings} warning${openWarnings === 1 ? "" : "s"} — read ${openWarnings === 1 ? "it" : "them"}, then decide.`
+          : `Checks passed — nothing to fix. If the slides look right, approve v${selected.version_number}.`;
   const approveBlocked = !selected
     ? null
     : CHECKING.includes(selected.inspection_state)
@@ -191,7 +202,7 @@ export function ReviewWorkspace({
           <h3>Waiting for review · {queue.length}</h3>
           <span className="m">
             oldest first · <span className="kbd">A</span> approve (asks first) ·{" "}
-            <span className="kbd">R</span> request revision
+            <span className="kbd">R</span> ask for changes
           </span>
         </div>
         <div className="cbd" style={{ padding: "0 0 4px" }}>
@@ -250,74 +261,56 @@ export function ReviewWorkspace({
             {/* The real slides (D-074); eight numbered placeholders used to sit here. */}
             <SlidePreview item={selected} />
 
-            {/* Only findings that need a decision are shown here; the informational
-                ones are counted, with the full report a click away. */}
-            {selected.findings
-              .filter((finding) => finding.severity !== "info")
-              .map((finding, index) => (
-                <div className="lane cli" key={`${finding.check_code}-${index}`}>
-                  <b>
-                    {finding.severity === "blocking" ? "⛔" : "⚠"} {wordsFor(SEVERITY, finding.severity).label} ·{" "}
-                    {wordsFor(CHECK, finding.check_code).label}
-                  </b>
-                  <br />
-                  {FINDING_COPY[finding.check_code]?.(finding.detail) ??
-                    (wordsFor(CHECK, finding.check_code).meaning || "See the inspection report for the detail.")}
+            {/* ── Your decision, straight under the slides (D-123). The buttons used to sit
+                at the bottom, below comments and the note box, all looking equally important. */}
+            <div className="card next-step" style={{ marginTop: 12 }}>
+              <div className="cbd">
+                <div className="next-step-label">Your decision</div>
+                <h2 className="next-step-title">{decisionTitle}</h2>
+                {/* Only findings that need a decision; informational ones stay in the report. */}
+                {selected.findings
+                  .filter((finding) => finding.severity !== "info")
+                  .map((finding, index) => (
+                    <div className="lane cli" key={`${finding.check_code}-${index}`}>
+                      <b>
+                        {finding.severity === "blocking" ? "⛔" : "⚠"} {wordsFor(SEVERITY, finding.severity).label} ·{" "}
+                        {wordsFor(CHECK, finding.check_code).label}
+                      </b>
+                      <br />
+                      {FINDING_COPY[finding.check_code]?.(finding.detail) ??
+                        (wordsFor(CHECK, finding.check_code).meaning || "See the inspection report for the detail.")}
+                    </div>
+                  ))}
+                <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap", alignItems: "center" }}>
+                  <button
+                    className="btn pri"
+                    disabled={busy || approveBlocked !== null}
+                    title={approveBlocked ?? undefined}
+                    onClick={() => {
+                      setConfirmApprove(false);
+                      void decide("approve");
+                    }}
+                  >
+                    Approve v{selected.version_number}
+                  </button>
+                  <button className="btn" disabled={busy} onClick={() => setPending("request_changes")}>
+                    Ask for changes
+                  </button>
+                  <button className="btn danger" disabled={busy} onClick={() => setPending("reject")}>
+                    Reject…
+                  </button>
                 </div>
-              ))}
-
-            {CHECKING.includes(selected.inspection_state) ? (
-              <div className="lane int">
-                <b>Checks still running</b>
-                <br />
-                The automated file checks usually finish within a minute. Approve becomes available
-                when they are done.
+                {/* The shared reason line (D-111). */}
+                <WhyNot reason={approveBlocked} />
+                <div className="note" style={{ marginTop: 8 }}>
+                  <Link href={`/events/${eventId}/talks/${selected.slot_id}/inspection?v=${selected.file_version_id}`}>
+                    Full check report for v{selected.version_number} →
+                  </Link>
+                  {" · "}Shortcuts: <span className="kbd">A</span> approve · <span className="kbd">R</span> ask for changes
+                </div>
               </div>
-            ) : selected.findings.some((finding) => finding.severity !== "info") ? null : (
-              <div className="lane int">
-                <b>Checks passed</b>
-                <br />
-                Nothing needs a decision — {selected.findings.length} informational result
-                {selected.findings.length === 1 ? "" : "s"} in the inspection report.
-              </div>
-            )}
-            {/* R26 (D-113): the report the findings point to, one click away. */}
-            <div className="note" style={{ margin: "4px 0 10px" }}>
-              <Link href={`/events/${eventId}/talks/${selected.slot_id}/inspection?v=${selected.file_version_id}`}>
-                Open the inspection report for v{selected.version_number} →
-              </Link>
             </div>
 
-            {/* Real comments (D-070). Two invented ones used to sit here on every file. */}
-            <CommentsPanel versionId={selected.file_version_id} versionNumber={selected.version_number} />
-
-            <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
-              <button
-                className="btn good"
-                disabled={busy || approveBlocked !== null}
-                title={approveBlocked ?? undefined}
-                onClick={() => {
-                  setConfirmApprove(false);
-                  void decide("approve");
-                }}
-              >
-                Approve (A)
-              </button>
-              <button className="btn warnb" disabled={busy} onClick={() => setPending("request_changes")}>
-                Request revision (R)
-              </button>
-              <button className="btn danger" disabled={busy} onClick={() => setPending("reject")}>
-                Reject…
-              </button>
-            </div>
-            {/* The shared reason line (D-111). */}
-            <WhyNot reason={approveBlocked} />
-            {/* R29 (D-113): what each "no" does, in one line each. */}
-            <div className="note" style={{ marginTop: 8, lineHeight: 1.5 }}>
-              <b>Request revision</b> — the speaker fixes something and uploads a new version.{" "}
-              <b>Reject</b> — this file won&rsquo;t be used at all (the wrong deck, say); the speaker must send a
-              different one. Both email the speaker your message.
-            </div>
             {confirmApprove && !approveBlocked && (
               <ConfirmInline
                 question={`Approve v${selected.version_number} of “${selected.title}”?`}
@@ -349,8 +342,12 @@ export function ReviewWorkspace({
                 <label htmlFor="speaker-message" style={{ display: "block", fontWeight: 600, marginBottom: 4 }}>
                   {pending === "reject" ? "Why is it rejected?" : "What should the speaker change?"}
                 </label>
+                {/* R29: what this choice does, said when it's chosen rather than always (D-123). */}
                 <div className="note" style={{ marginBottom: 6 }}>
-                  Emailed to the speaker with a link to upload again, and shown in their portal. Required.
+                  {pending === "reject"
+                    ? "This file won't be used at all (the wrong deck, say); the speaker must send a different one."
+                    : "The speaker fixes what you describe and uploads a new version."}{" "}
+                  Your message is emailed to them with a link to upload again, and shown in their portal.
                 </div>
                 <textarea
                   id="speaker-message"
@@ -373,7 +370,7 @@ export function ReviewWorkspace({
                     className={pending === "reject" ? "btn danger" : "btn warnb"}
                     disabled={busy || !message.trim()}
                   >
-                    {busy ? "Sending…" : pending === "reject" ? "Reject and tell the speaker" : "Send back to the speaker"}
+                    {busy ? "Sending…" : pending === "reject" ? "Reject and tell the speaker" : "Ask the speaker for changes"}
                   </button>
                   <button
                     type="button"
@@ -390,6 +387,9 @@ export function ReviewWorkspace({
                 <WhyNot reason={!message.trim() ? "Write the message to the speaker to continue." : null} />
               </form>
             )}
+
+            {/* Real comments (D-070), below the decision and quieter (D-123). */}
+            <CommentsPanel versionId={selected.file_version_id} versionNumber={selected.version_number} />
           </div>
         </div>
       )}

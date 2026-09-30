@@ -20,11 +20,14 @@ export function DeviceKeyButton({
   room,
   issuedAt,
   timezone,
+  label,
 }: {
   roomId: string;
   room: string;
   issuedAt: string | null;
   timezone: string;
+  /** Room sync names the button for its group, e.g. "New code" for a PC that has gone quiet (D-122). */
+  label?: string;
 }) {
   const router = useRouter();
   const [confirming, setConfirming] = useState(false);
@@ -111,7 +114,8 @@ export function DeviceKeyButton({
       }
       onClick={() => setConfirming(true)}
     >
-      {issuedAt ? "New connection code" : "Issue connection code"}
+      {/* Short labels; each Room sync group says what they are for (D-122). */}
+      {label ?? (issuedAt ? "New code" : "Connect")}
     </button>
   );
 }

@@ -249,3 +249,28 @@ describe("the three confirmations are on every screen that shows them (D-113)", 
     }
   });
 });
+
+describe("a sign-off stands when the speaker checks in again (D-119)", () => {
+  test("a new visit shows the earlier sign-off until something changes", async (t: TestContext) => {
+    if (!up || !checkinId) return t.skip("API not running");
+    const first = (await (await call("GET", `/srr/checkins/${checkinId}`)).json()) as {
+      speaker: { id: string };
+      receipt: { version_number: number } | null;
+    };
+    assert.ok(first.receipt, "signed off on the first visit");
+    assert.equal((await call("POST", `/srr/checkins/${checkinId}/depart`)).status, 200);
+
+    const station = (await (await call("POST", `/events/${eventId}/srr/stations`, { name: `Desk again ${RUN}` })).json()) as { id: string };
+    const again = await call("POST", `/events/${eventId}/srr/checkins`, { speaker_id: first.speaker.id, station_id: station.id });
+    assert.equal(again.status, 201);
+    const secondId = ((await again.json()) as { checkin_id: string }).checkin_id;
+
+    const second = (await (await call("GET", `/srr/checkins/${secondId}`)).json()) as {
+      receipt: unknown;
+      standing_sign_off: { version_number: number; station: string | null } | null;
+    };
+    assert.equal(second.receipt, null, "nothing signed on this visit yet");
+    assert.equal(second.standing_sign_off?.version_number, first.receipt!.version_number, "but the earlier sign-off stands");
+    assert.ok(second.standing_sign_off?.station, "with where it was taken");
+  });
+});

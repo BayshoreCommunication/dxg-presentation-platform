@@ -30,6 +30,8 @@ export function CommentsPanel({ versionId, versionNumber }: { versionId: string;
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The note box stays closed until someone wants to write (D-123).
+  const [writing, setWriting] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -53,6 +55,7 @@ export function CommentsPanel({ versionId, versionNumber }: { versionId: string;
     try {
       await addComment(versionId, lane, body);
       setBody("");
+      setWriting(false);
       await load();
     } catch (failure) {
       setError(failure instanceof ApiError ? failure.message : "Could not connect. Check the internet connection and try again.");
@@ -61,44 +64,67 @@ export function CommentsPanel({ versionId, versionNumber }: { versionId: string;
     }
   };
 
+  // This version's comments first; earlier versions' fold away (D-123) — on a v4 the
+  // thread used to open with notes about v1.
+  const current = comments?.filter((comment) => comment.version_number === versionNumber) ?? [];
+  const earlier = comments?.filter((comment) => comment.version_number !== versionNumber) ?? [];
+  const renderComment = (comment: CommentRow) => {
+    const lane = LANE[comment.lane] ?? LANE.internal!;
+    return (
+      <div className={`lane ${lane.tone}`} key={comment.id} style={{ whiteSpace: "pre-wrap" }}>
+        <b>{comment.author ?? "Unknown"}</b>
+        {comment.from_speaker ? " (speaker)" : ""}
+        <span className="aud">{lane.label}</span>
+        <span className="note">
+          {" "}
+          · v{comment.version_number} ·{" "}
+          {new Date(comment.created_at).toLocaleString("en-US", {
+            month: "short",
+            day: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+          })}
+        </span>
+        <br />
+        {comment.body}
+      </div>
+    );
+  };
+
   return (
-    <div style={{ marginTop: 12 }}>
-      <div className="note" style={{ marginBottom: 4 }}>
-        Comments on this presentation{comments && comments.length > 0 ? ` · ${comments.length}` : ""}
+    <div style={{ marginTop: 16 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+        <b style={{ fontSize: 13 }}>
+          Comments on v{versionNumber}
+          {current.length > 0 ? ` · ${current.length}` : ""}
+        </b>
+        {!writing && (
+          <button type="button" className="btn" style={{ padding: "3px 10px" }} onClick={() => setWriting(true)}>
+            Add a note
+          </button>
+        )}
       </div>
 
       {comments === null ? (
         <div className="note">Loading…</div>
-      ) : comments.length === 0 ? (
+      ) : current.length === 0 ? (
         <div className="note" style={{ marginBottom: 6 }}>
-          No comments yet.
+          No comments on this version.
         </div>
       ) : (
-        comments.map((comment) => {
-          const lane = LANE[comment.lane] ?? LANE.internal!;
-          return (
-            <div className={`lane ${lane.tone}`} key={comment.id} style={{ whiteSpace: "pre-wrap" }}>
-              <b>{comment.author ?? "Unknown"}</b>
-              {comment.from_speaker ? " (speaker)" : ""}
-              <span className="aud">{lane.label}</span>
-              <span className="note">
-                {" "}
-                · v{comment.version_number}
-                {comment.version_number !== versionNumber ? " (earlier version)" : ""} ·{" "}
-                {new Date(comment.created_at).toLocaleString("en-US", {
-                  month: "short",
-                  day: "numeric",
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}
-              </span>
-              <br />
-              {comment.body}
-            </div>
-          );
-        })
+        current.map(renderComment)
       )}
 
+      {earlier.length > 0 && (
+        <details style={{ marginTop: 6 }}>
+          <summary className="note" style={{ cursor: "pointer" }}>
+            Earlier versions · {earlier.length}
+          </summary>
+          {earlier.map(renderComment)}
+        </details>
+      )}
+
+      {writing && (
       <div style={{ border: "1px solid var(--line)", borderRadius: 6, padding: 10, marginTop: 8 }}>
         <div role="radiogroup" aria-label="Who sees this comment" style={{ display: "flex", gap: 14, marginBottom: 6 }}>
           {(["internal", "speaker_visible"] as const).map((option) => (
@@ -116,6 +142,7 @@ export function CommentsPanel({ versionId, versionNumber }: { versionId: string;
         </div>
         <textarea
           aria-label="Comment"
+          autoFocus
           value={body}
           onChange={(event) => setBody(event.target.value)}
           placeholder={lane === "internal" ? "A note for the DXG team…" : "A note the speaker will see in their portal…"}
@@ -134,12 +161,25 @@ export function CommentsPanel({ versionId, versionNumber }: { versionId: string;
           </div>
         )}
         <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 6 }}>
-          <button type="button" className="btn" disabled={busy || !body.trim()} onClick={() => void submit()}>
+          <button type="button" className="btn pri" disabled={busy || !body.trim()} onClick={() => void submit()}>
             {busy ? "Adding…" : lane === "internal" ? "Add internal note" : "Send to speaker"}
+          </button>
+          <button
+            type="button"
+            className="btn"
+            disabled={busy}
+            onClick={() => {
+              setWriting(false);
+              setBody("");
+            }}
+          >
+            Cancel
           </button>
           <span className="note">⌘/Ctrl + Enter</span>
         </div>
       </div>
+      )}
+      {!writing && error && <div className="err" style={{ margin: "6px 0 0" }}>{error}</div>}
     </div>
   );
 }

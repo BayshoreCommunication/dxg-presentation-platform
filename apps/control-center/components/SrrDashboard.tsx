@@ -2,12 +2,11 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import type { SrrDashboard, SrrStation } from "@/lib/api";
+import type { ExpectedArrival, SrrDashboard, SrrStation } from "@/lib/api";
 import { addStation, renameStation, retireStation, startCheckin, ApiError } from "@/lib/api";
 import { FloatingMenu, useFloatingMenu } from "@/components/FloatingMenu";
 import { CHECK, wordsFor } from "@pmp/format";
-import { Chip, SeverityChip, StatusMeaning } from "@/components/Chip";
-import { ConfirmationStrip } from "@/components/ConfirmationStrip";
+import { Chip, SeverityChip } from "@/components/Chip";
 import { staleNoteFor } from "@/lib/roomWords";
 import { WhyNot } from "@/components/WhyNot";
 
@@ -65,107 +64,158 @@ export function SrrDashboardView({
     }
   }
 
+  // Grouped by what is happening now (D-121): at a desk, still to check in, been and gone.
+  const atDesk = new Map(data.expected.filter((row) => row.checkin_id).map((row) => [row.speaker, row]));
+  const toCome = data.expected.filter((row) => !row.checkin_id && !row.checked_out);
+  const left = data.expected.filter((row) => !row.checkin_id && row.checked_out);
+  const busyDesks = data.stations.filter((station) => station.busy).length;
+  const signedOff = data.expected.filter((row) => row.signed_off_version).length;
+
   return (
     <>
-      {/*
-        This heading said "Speaker Ready Room · Room 118" and "Stations 1–3" on every
-        event. It now names the event, the actual date at the venue, and the stations
-        this room really has.
-      */}
       <h1 className="htitle">Speaker Ready Room · {eventName}</h1>
       <div className="note" style={{ margin: "-8px 0 14px" }}>
-        {new Date().toLocaleDateString("en-US", {
-          weekday: "long",
-          month: "long",
-          day: "numeric",
-          year: "numeric",
-          timeZone: timezone,
-        })}
-        {data.stations.length > 0 && ` · ${data.stations.map((station) => station.station).join(", ")}`}
-        {" · walk-ins and scheduled check-ins"}
+        {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: timezone })}
+        {" · "}
+        {data.stations.length === 0
+          ? "no desks set up yet"
+          : `${busyDesks} of ${data.stations.length} desk${data.stations.length === 1 ? "" : "s"} in use`}
+        {" · "}
+        {toCome.length} to check in · {signedOff} signed off
       </div>
 
       {error && <div className="err">{error}</div>}
 
+      {/* ── At the desks now: one card per desk (D-121) ─────────────────────────── */}
       <div className="card">
         <div className="chd">
-          <h3>Expected · {data.expected.length}</h3>
-          <span className="m">ordered by session time</span>
+          <h3>At the desks now</h3>
+          <span className="m">open a speaker to go through their slides</span>
         </div>
-        <div className="cbd" style={{ padding: "0 0 4px" }}>
-          {checkInBlocked && data.expected.some((row) => !row.checkin_id) && (
-            <div style={{ padding: "4px 18px 8px" }}>
-              <WhyNot reason={checkInBlocked} />
-            </div>
-          )}
-          <table>
-            <tbody>
-              {data.expected.map((row) => {
-                // R7: amber when the room PC has gone quiet; R47: the meaning, visibly (D-110).
-                const stale = staleNoteFor(row.status, row.room, rooms);
+        <div className="cbd">
+          {data.stations.length === 0 ? (
+            <div className="empty">No desks yet. Add them under &ldquo;Manage desks&rdquo; below.</div>
+          ) : (
+            <div className="desk-grid">
+              {data.stations.map((station) => {
+                const row = station.speaker ? atDesk.get(station.speaker) : undefined;
                 return (
-                <tr key={row.speaker_id}>
-                  <td>
-                    <b>{row.speaker}</b>
-                    <br />
-                    <span className="note">
-                      {row.room} · {when(row.starts_at, timezone)} · {row.title}
-                    </span>
-                    <StatusMeaning status={row.status} stale={stale} />
-                    {/* Approval → sign-off → room at a glance, with "Signed off vN" (R32, D-113). */}
-                    <ConfirmationStrip
-                      compact
-                      facts={{
-                        status: row.status,
-                        room: row.room,
-                        hasSpeaker: true,
-                        approved: row.approved_version ? { version: row.approved_version } : null,
-                        roomStates: row.approved_room_states,
-                        signOff: row.signed_off_version ? { version: row.signed_off_version } : null,
-                        stale,
-                        timezone,
-                      }}
-                    />
-                  </td>
-                  <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-                    <Chip status={row.status} label={row.status_label} stale={stale} />{" "}
-                    {/* R32 (D-113): a speaker who has been and gone says so. */}
-                    {row.checked_out && (
+                  <div key={station.id} className={`desk${station.busy ? " busy" : ""}`}>
+                    <div className="desk-name">{station.name}</div>
+                    {station.busy ? (
                       <>
-                        <span className="chip c-mut" title="Checked in earlier and checked out. Check in again if they bring a new file.">
-                          Checked out
-                        </span>{" "}
+                        <div className="desk-who">{station.speaker ?? "A speaker"}</div>
+                        <div className="note">{row ? deskLine(row) : "In session"}</div>
+                        {row?.checkin_id && (
+                          <a className="btn pri" style={{ marginTop: 8 }} href={`/events/${eventId}/srr/${row.checkin_id}`}>
+                            Open →
+                          </a>
+                        )}
                       </>
-                    )}
-                    {row.checkin_id ? (
-                      <a className="btn" href={`/events/${eventId}/srr/${row.checkin_id}`}>
-                        Open check-in →
-                      </a>
                     ) : (
-                      <CheckInButton
-                        stations={data.stations}
-                        disabled={busy}
-                        onPick={(stationId) => void check(row.speaker_id, stationId)}
-                      />
+                      <div className="note">Free</div>
                     )}
-                  </td>
-                </tr>
+                  </div>
                 );
               })}
-            </tbody>
-          </table>
+            </div>
+          )}
         </div>
       </div>
 
+      {/* ── Still to check in, by session time ─────────────────────────────────── */}
       <div className="card">
         <div className="chd">
-          <h3>Unresolved warnings · {data.warnings.length}</h3>
-          <span className="m">on versions still awaiting review</span>
+          <h3>Still to check in · {toCome.length}</h3>
+          <span className="m">in session order</span>
         </div>
         <div className="cbd" style={{ padding: "0 0 4px" }}>
-          {data.warnings.length === 0 ? (
-            <div className="empty">No unresolved warnings.</div>
+          {toCome.length === 0 ? (
+            <div className="empty">Everyone expected has been checked in.</div>
           ) : (
+            <>
+              {checkInBlocked && (
+                <div style={{ padding: "4px 18px 8px" }}>
+                  <WhyNot reason={checkInBlocked} />
+                </div>
+              )}
+              <table>
+                <tbody>
+                  {toCome.map((row) => {
+                    const stale = staleNoteFor(row.status, row.room, rooms);
+                    return (
+                      <tr key={row.speaker_id}>
+                        <td>
+                          <b>{row.speaker}</b>
+                          <span className="note">
+                            {" "}
+                            · {row.room ?? "No room"} · {when(row.starts_at, timezone)}
+                          </span>
+                          <div className="note" style={{ marginTop: 2 }}>
+                            {arrivalLine(row)}
+                          </div>
+                        </td>
+                        <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                          <Chip status={row.status} label={row.status_label} stale={stale} />{" "}
+                          <CheckInButton
+                            stations={data.stations}
+                            disabled={busy}
+                            onPick={(stationId) => void check(row.speaker_id, stationId)}
+                          />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* ── Been and gone ──────────────────────────────────────────────────────── */}
+      {left.length > 0 && (
+        <div className="card">
+          <div className="chd">
+            <h3>Checked out · {left.length}</h3>
+            <span className="m">check them in again if they come back</span>
+          </div>
+          <div className="cbd" style={{ padding: "0 0 4px" }}>
+            <table>
+              <tbody>
+                {left.map((row) => (
+                  <tr key={row.speaker_id}>
+                    <td>
+                      <b>{row.speaker}</b>
+                      <span className="note">
+                        {" "}
+                        · {row.signed_off_version ? `signed off v${row.signed_off_version}` : "left without signing off"}
+                      </span>
+                    </td>
+                    <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                      <CheckInButton
+                        stations={data.stations}
+                        label="Check in again"
+                        disabled={busy}
+                        onPick={(stationId) => void check(row.speaker_id, stationId)}
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Only when there is something to look at (D-121): an empty card was noise. */}
+      {data.warnings.length > 0 && (
+        <div className="card">
+          <div className="chd">
+            <h3>Files with warnings · {data.warnings.length}</h3>
+            <span className="m">not yet reviewed</span>
+          </div>
+          <div className="cbd" style={{ padding: "0 0 4px" }}>
             <table>
               <tbody>
                 {/* R31 (D-113): which talk, where and when, the problem in words, and the report. */}
@@ -192,13 +242,45 @@ export function SrrDashboardView({
                 ))}
               </tbody>
             </table>
-          )}
+          </div>
         </div>
-      </div>
+      )}
 
-      <StationsCard eventId={eventId} stations={data.stations} onChanged={() => router.refresh()} />
+      {/* Setting up desks is a once-per-event job, so it sits folded away (D-121). */}
+      <details className="manage-desks">
+        <summary>Manage desks ({data.stations.length})</summary>
+        <StationsCard eventId={eventId} stations={data.stations} onChanged={() => router.refresh()} />
+      </details>
     </>
   );
+}
+
+/** What a speaker at a desk is up to, in one line (D-121). */
+function deskLine(row: ExpectedArrival): string {
+  if (row.signed_off_version) return `Signed off v${row.signed_off_version} — ready to check out`;
+  if (row.status === "attention") return "File held back — needs a clean copy";
+  if (row.status === "missing") return "No file yet — take it by USB";
+  if (row.status === "processing") return "File being checked";
+  return "Going through the slides";
+}
+
+/** What to do when this speaker walks in, in one line (D-121). */
+function arrivalLine(row: ExpectedArrival): string {
+  switch (row.status) {
+    case "missing":
+      return "No file yet — take it by USB when they arrive.";
+    case "attention":
+      return "Their file failed the virus check — ask for a clean copy on USB.";
+    case "needs_revision":
+      return "Changes were asked for — they may bring a new version.";
+    case "processing":
+    case "submitted":
+      return "File not approved yet — go through the slides and confirm their final version.";
+    case "canceled":
+      return "Session cancelled.";
+    default:
+      return "File approved — go through it with them and confirm.";
+  }
 }
 
 /** Closes on Escape and on a click anywhere else. */
@@ -212,10 +294,12 @@ function CheckInButton({
   stations,
   disabled,
   onPick,
+  label = "Check in →",
 }: {
   stations: SrrStation[];
   disabled: boolean;
   onPick: (stationId: string) => void;
+  label?: string;
 }) {
   const { open, setOpen, trigger, menu } = useFloatingMenu();
   const free = stations.filter((station) => !station.busy);
@@ -237,7 +321,7 @@ function CheckInButton({
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
       >
-        Check in →
+        {label}
       </button>
       <FloatingMenu open={open} trigger={trigger} menu={menu} width={220}>
           <div className="label">At which station?</div>
@@ -305,6 +389,12 @@ function StationsCard({
         {error && (
           <div className="err" role="alert" style={{ margin: "12px 14px" }}>
             {error}
+          </div>
+        )}
+        {/* R33's pair, said once (D-121): a desk with a speaker can't be removed. */}
+        {stations.some((station) => station.busy) && (
+          <div style={{ padding: "8px 14px 0" }}>
+            <WhyNot reason="A desk with a speaker at it can't be removed until they check out." />
           </div>
         )}
         {stations.length === 0 ? (
@@ -383,8 +473,6 @@ function StationsCard({
                           >
                             Remove
                           </button>
-                          {/* R33's pair: a busy desk can't be removed; say so, not only on hover (D-111). */}
-                          <WhyNot reason={station.busy ? "Check the speaker out to remove this station." : null} />
                         </>
                       ))}
                   </td>

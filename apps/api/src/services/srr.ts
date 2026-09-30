@@ -389,6 +389,12 @@ export type CheckinDetail = {
     file_name?: string | null;
     slides?: number | null;
   } | null;
+  /**
+   * The talk's latest sign-off from any visit (D-119). A speaker checked in again has no
+   * receipt on this visit yet, but their earlier sign-off still stands — the strip showed
+   * "Not yet" beside "Final onsite version locked".
+   */
+  standing_sign_off: { version_number: number; signed_at: string; technician: string | null; station: string | null } | null;
 };
 
 export async function checkinDetail(tx: pg.PoolClient, checkinId: string): Promise<CheckinDetail | null> {
@@ -508,6 +514,18 @@ export async function checkinDetail(tx: pg.PoolClient, checkinId: string): Promi
       }
     : null;
 
+  const { rows: standing } = await tx.query<NonNullable<CheckinDetail["standing_sign_off"]>>(
+    `SELECT fv.version_number, so.signed_at, u.display_name AS technician, c.station
+       FROM pmp.sign_offs so
+       JOIN pmp.file_versions fv ON fv.id = so.file_version_id
+       JOIN pmp.files f ON f.id = fv.file_id
+       JOIN pmp.srr_checkins c ON c.id = so.checkin_id
+       LEFT JOIN pmp.users u ON u.id = c.technician_id
+      WHERE f.slot_id = $1
+      ORDER BY so.signed_at DESC LIMIT 1`,
+    [row.slot_id],
+  );
+
   return {
     checkin: {
       id: row.id,
@@ -538,6 +556,7 @@ export async function checkinDetail(tx: pg.PoolClient, checkinId: string): Promi
         : null,
     usb: usbRows[0] ?? null,
     receipt,
+    standing_sign_off: standing[0] ?? null,
   };
 }
 
