@@ -1,0 +1,83 @@
+{
+  "item": 16,
+  "title": "Concurrent launches: the second is refused cleanly; never two instances",
+  "status": "PASS",
+  "metrics": {
+    "rounds": 10
+  },
+  "checks": [
+    {
+      "outcomes": [
+        "busy",
+        "showing"
+      ],
+      "powerPoint": 1
+    },
+    {
+      "outcomes": [
+        "busy",
+        "showing"
+      ],
+      "powerPoint": 1
+    },
+    {
+      "outcomes": [
+        "busy",
+        "showing"
+      ],
+      "powerPoint": 1
+    },
+    {
+      "outcomes": [
+        "busy",
+        "showing"
+      ],
+      "powerPoint": 1
+    },
+    {
+      "outcomes": [
+        "busy",
+        "showing"
+      ],
+      "powerPoint": 1
+    },
+    {
+      "outcomes": [
+        "busy",
+        "showing"
+      ],
+      "powerPoint": 1
+    },
+    {
+      "outcomes": [
+        "busy",
+        "showing"
+      ],
+      "powerPoint": 1
+    },
+    {
+      "outcomes": [
+        "busy",
+        "showing"
+      ],
+      "powerPoint": 1
+    },
+    {
+      "outcomes": [
+        "busy",
+        "showing"
+      ],
+      "powerPoint": 1
+    },
+    {
+      "outcomes": [
+        "busy",
+        "showing"
+      ],
+      "powerPoint": 1
+    }
+  ],
+  "notes": [],
+  "os": "win11",
+  "finished_at": "2026-09-29T12:11:28.438Z"
+}

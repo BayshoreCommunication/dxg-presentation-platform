@@ -17,10 +17,26 @@ export interface ProcessTable {
 
 export const windowsProcesses: ProcessTable = {
   async powerPoint() {
-    const { stdout } = await run("tasklist", ["/FI", "IMAGENAME eq POWERPNT.EXE", "/FO", "CSV", "/NH"], {
-      windowsHide: true,
-    });
-    return parseTasklist(stdout);
+    try {
+      const { stdout } = await run("tasklist", ["/FI", "IMAGENAME eq POWERPNT.EXE", "/FO", "CSV", "/NH"], {
+        windowsHide: true,
+      });
+      return parseTasklist(stdout);
+    } catch {
+      // A remote (SSH) session is refused `tasklist` — the harness runs from one on the G0-1 PC.
+      // Get-Process is allowed and sees the desktop session's PowerPoint too.
+      const { stdout } = await run(
+        "powershell",
+        [
+          "-NoProfile",
+          "-Command",
+          // `exit 0`: with no PowerPoint running Get-Process ends in an error status — that is "none".
+          "Get-Process POWERPNT -ErrorAction SilentlyContinue | ForEach-Object { \"$($_.Id),$([int]($_.WorkingSet64 / 1KB))\" }; exit 0",
+        ],
+        { windowsHide: true },
+      );
+      return parsePidMemory(stdout);
+    }
   },
   async kill(pid) {
     await run("taskkill", ["/PID", String(pid), "/T", "/F"], { windowsHide: true }).catch(() => undefined);
@@ -43,4 +59,13 @@ export function parseTasklist(csv: string): ProcessInfo[] {
     .map((line) => line.match(/^"([^"]+)","(\d+)","[^"]*","[^"]*","([\d.,\s]+)\s*K"/i))
     .filter((match): match is RegExpMatchArray => Boolean(match) && /POWERPNT/i.test(match![1]!))
     .map((match) => ({ pid: Number(match[2]), memoryKb: Number(match[3]!.replace(/[^\d]/g, "")) }));
+}
+
+/** `1234,183456` per line (pid, memory in KB) — the Get-Process fallback's output. */
+export function parsePidMemory(text: string): ProcessInfo[] {
+  return text
+    .split(/\r?\n/)
+    .map((line) => line.trim().match(/^(\d+),(\d+)$/))
+    .filter((match): match is RegExpMatchArray => Boolean(match))
+    .map((match) => ({ pid: Number(match[1]), memoryKb: Number(match[2]) }));
 }

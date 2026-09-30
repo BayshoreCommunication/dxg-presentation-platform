@@ -35,7 +35,10 @@ function loadConfig(): Config {
   const dataDir = app.getPath("userData");
   let file: Partial<Config> = {};
   try {
-    file = JSON.parse(readFileSync(path.join(dataDir, "agent.config.json"), "utf8")) as Partial<Config>;
+    // Windows PowerShell 5 writes UTF-8 with a byte-order mark, which JSON.parse rejects —
+    // and a silently ignored config sends the agent to the wrong library.
+    const text = readFileSync(path.join(dataDir, "agent.config.json"), "utf8").replace(/^\uFEFF/, "");
+    file = JSON.parse(text) as Partial<Config>;
   } catch {
     // No file: environment and defaults.
   }
@@ -141,6 +144,13 @@ function controlServer(supervisor: Supervisor, config: Config) {
         if (req.method === "POST" && req.url === "/reset") {
           await supervisor.reset();
           return send(res, 200, { state: supervisor.state });
+        }
+        // Restart the agent (the watchdog starts it again with fresh settings). Loopback only,
+        // like every route here: a remote session can't end a desktop program on Windows.
+        if (req.method === "POST" && req.url === "/restart") {
+          send(res, 200, { restarting: true });
+          setTimeout(() => app.exit(0), 200);
+          return;
         }
         if (req.method === "POST" && req.url === "/stop") {
           await supervisor.stop();

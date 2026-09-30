@@ -1,0 +1,16 @@
+{
+  "item": 1,
+  "title": "Launch reliability: 100 cycles, ≥99% success, first slide ≤10 s P95",
+  "status": "PASS",
+  "metrics": {
+    "cycles": 100,
+    "success_rate": 1,
+    "first_slide_p95_ms": 1422,
+    "first_slide_max_ms": 1792,
+    "max_powerpoint_processes": 0
+  },
+  "checks": [],
+  "notes": [],
+  "os": "win11",
+  "finished_at": "2026-09-29T12:25:29.019Z"
+}

@@ -535,6 +535,10 @@ try {
   else if (command === "report") await report();
   else if (/^\d+$/.test(command) && ITEMS[Number(command)]) {
     if (!(await agent.up(10_000))) throw new Error(`No Room Agent answering on port ${port}. Start it first.`);
+    // Every item starts from the holding screen with no PowerPoint left over — a show left
+    // running by an earlier, interrupted item would make this one's first launch "busy".
+    // Not after a reboot: item 13 is checking that the agent resumed the show by itself.
+    if (!args.includes("--after-reboot")) await agent.reset();
     await save(await ITEMS[Number(command)]!.run(await loadCorpus()));
   } else {
     console.log("Usage: node harness/run.ts <1-16 | versions | report> --os <label> [--port 47800] [--corpus dir]");

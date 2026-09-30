@@ -1,0 +1,14 @@
+{
+  "item": 15,
+  "title": "Process cleanup: zero orphaned PowerPoint processes after 100 cycles",
+  "status": "PASS",
+  "metrics": {
+    "cycles": 100,
+    "max_powerpoint_during": 0,
+    "powerpoint_left_after_reset": 0
+  },
+  "checks": [],
+  "notes": [],
+  "os": "win11",
+  "finished_at": "2026-09-29T12:40:15.435Z"
+}

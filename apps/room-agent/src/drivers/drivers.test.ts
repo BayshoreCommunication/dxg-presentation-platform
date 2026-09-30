@@ -2,7 +2,7 @@ import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 import { HelperDriver } from "./helperDriver.ts";
-import { parseTasklist } from "../core/processes.ts";
+import { parsePidMemory, parseTasklist } from "../core/processes.ts";
 
 const fakeHelper = fileURLToPath(new URL("./fakeHelper.mjs", import.meta.url));
 const request = { file: "C:\\library\\deck.pptx", monitor: 2, presenterView: false, launchId: "t1" };
@@ -68,4 +68,11 @@ describe("process table", () => {
       { pid: 6200, memoryKb: 1024 },
     ]);
   });
+});
+
+test("the Get-Process fallback reads pid and memory, ignoring noise", () => {
+  assert.deepEqual(parsePidMemory("1234,183456\r\n\r\nwarning text\n77,9\n"), [
+    { pid: 1234, memoryKb: 183456 },
+    { pid: 77, memoryKb: 9 },
+  ]);
 });

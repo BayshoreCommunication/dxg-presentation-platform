@@ -3184,3 +3184,11 @@ real services. Its emails end as "Practice — not sent" in the dispatcher and n
 counts only inside it; 3 open per person; Archive removes it. Migration 025. **Deploy note:** the dispatcher must be
 restarted with this code (it is not under --watch locally); until then the reserved domain alone keeps mail on disk.
 Not committed yet.
+
+## 2026-09-29 — G0-1 Phase B started on Windows 11
+Windows 11 test PC reached from the Mac over SSH (account `dxgtest`, no admin rights; prep steps in
+`docs/poc/G0-1_WINDOWS_PC_PREP.md`). Helper driver: items 1, 15, 16 PASS; file types (.ppt, PDF, MP4, PNG) and macro
+deck show; damaged/missing files refused. Open: a deck with linked OLE + linked picture times out under automation
+(fails safely to the holding screen); Office on the test PC is not activated (grace ends 2026-10-04). Windows fixes:
+BOM-tolerant config, local `/restart`, Get-Process fallback for remote sessions, harness resets per item, autostart
+fails loudly. Evidence: `docs/poc/evidence/win11/`.
