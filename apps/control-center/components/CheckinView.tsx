@@ -15,7 +15,6 @@ import {
 } from "@/lib/api";
 import { Chip } from "@/components/Chip";
 import { ConfirmationStrip } from "@/components/ConfirmationStrip";
-import { staleNoteFor } from "@/lib/roomWords";
 import { WhyNot } from "@/components/WhyNot";
 
 /**
@@ -52,13 +51,10 @@ export function CheckinView({
   eventId,
   timezone,
   initial,
-  rooms = [],
 }: {
   eventId: string;
   timezone: string;
   initial: CheckinDetail;
-  /** Room sync's room list, for R7's room-PC freshness (D-110). */
-  rooms?: { room: string; heartbeat_age: number | null }[];
 }) {
   const router = useRouter();
   const [detail, setDetail] = useState(initial);
@@ -125,7 +121,6 @@ export function CheckinView({
   }
 
   const signable = detail.latest && detail.latest.processing_state === "stored";
-  const staleNote = staleNoteFor(detail.talk.status, detail.talk.room, rooms);
   const [confirmCheckout, setConfirmCheckout] = useState(false);
   const latestNumber = detail.latest?.version_number;
   const approvedNumber = detail.approved?.version_number;
@@ -233,7 +228,6 @@ export function CheckinView({
       : earlier
         ? { version: earlier.version_number, by: earlier.technician, at: earlier.signed_at }
         : null,
-    stale: staleNote,
     timezone,
   };
   const printReceipt = (
@@ -368,7 +362,7 @@ export function CheckinView({
         </div>
       </div>
 
-      {/* The three confirmations as one line, and the room-PC warning once (D-120). */}
+      {/* The three confirmations as one line (D-120). */}
       <div className="card">
         <div className="cbd" style={{ padding: "10px 14px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
@@ -376,14 +370,8 @@ export function CheckinView({
               <div className="next-step-label">Progress</div>
               <ConfirmationStrip compact facts={stripFacts} />
             </div>
-            <Chip status={detail.talk.status} label={detail.talk.status_label} stale={staleNote} />
+            <Chip status={detail.talk.status} label={detail.talk.status_label} />
           </div>
-          {staleNote && (
-            <p className="note" style={{ color: "var(--amber-text)", margin: "8px 0 0" }}>
-              {detail.talk.room ?? "The room"}&rsquo;s PC isn&rsquo;t reporting, so we can&rsquo;t confirm the file is
-              still there. Tell the room technician — nothing to do at this desk.
-            </p>
-          )}
           <details style={{ marginTop: 8 }}>
             <summary className="note" style={{ cursor: "pointer" }}>
               Details
@@ -521,7 +509,7 @@ export function CheckinView({
         <div className="cbd">
           <p className="note" style={{ marginTop: 0 }}>
             An accepted version goes to re-approval. The room keeps playing the approved copy until
-            the new one is approved and copied to the room PC — it is never replaced without warning.
+            the new one is approved and loaded onto the room PC by hand — it is never replaced without warning.
           </p>
           {usb?.scan_result === "clean" ? (
             <div className="lane spk">

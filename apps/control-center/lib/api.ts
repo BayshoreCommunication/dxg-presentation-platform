@@ -206,29 +206,42 @@ const API_BASE_URL = BROWSER_BASE;
 /** The version's slide preview as a PDF, for an <iframe> (D-074). */
 export const previewUrl = (versionId: string) => `${API_BASE_URL}/file-versions/${versionId}/preview`;
 
-/**
- * Issue a new device key for a room's presentation computer (D-077). The key is shown
- * once; issuing another cancels the previous one.
- */
-export const issueDeviceKey = (roomId: string) =>
-  request<{ agent_id: string; device_key: string; issued_at: string }>(`/rooms/${roomId}/device-key`, {
-    method: "POST",
-  });
-
 /** Queue (or retry) a version's slide preview. */
 export const requestPreview = (versionId: string) =>
   request<{ queued: number }>(`/file-versions/${versionId}/preview`, { method: "POST" });
 
+/** One talk on Room sync's loading checklist (D-125). */
+export type FleetTalk = {
+  slot_id: string;
+  title: string;
+  speaker: string | null;
+  starts_at: string;
+  session_state: string;
+  status: string;
+  status_label: string;
+  /** The approved version and this room's copy of it; null when nothing is approved yet. */
+  approved: {
+    file_version_id: string;
+    version_number: number;
+    original_filename: string | null;
+    download_url: string;
+    room_file_id: string | null;
+    lock_version: number | null;
+    sync_state: string | null;
+    loaded: boolean;
+  } | null;
+  /** The older version the room PC still has, while the approved one isn't loaded yet. */
+  loaded_other_version: number | null;
+};
+
 export type FleetRoom = {
   room_id: string;
   room: string;
-  readiness: "ready" | "attention" | "agent_offline";
+  /** D-125: "ready" when every talk's approved version is ticked loaded (or cancelled). */
+  readiness: "ready" | "attention";
   files_current: number;
   files_total: number;
-  heartbeat_age: number | null;
-  /** When this room's computer was last given a device key; null if it never was (D-077). */
-  key_issued_at: string | null;
-  agent_version: string | null;
+  talks: FleetTalk[];
 };
 
 export const listEvents = () => request<{ items: EventRow[] }>("/events");
@@ -277,25 +290,30 @@ export type AgentScheduleRow = {
 export type AgentView = {
   room: { id: string; name: string };
   event: { id: string; name: string; accent: string | null; timezone: string };
-  agent: { id: string | null; fingerprint: string | null; version: string | null; heartbeat_age: number | null };
-  library: { files: number; bytes: string; previous_versions: number; updates_waiting: number };
+  // The API also returns the room computer's registration and library (`agent`, `library`)
+  // for later room software; the screens don't use them (D-125).
   schedule: AgentScheduleRow[];
 };
 
 export const getAgentView = (roomId: string) =>
   request<AgentView>(`/rooms/${roomId}/agent-view`);
 
-export const syncRoom = (roomId: string) =>
-  request<{ downloaded: number; awaiting_ack: number; activated: number; failed: number }>(
-    `/rooms/${roomId}/sync`,
-    { method: "POST" },
-  );
+/**
+ * D-125: staff copy the approved file onto the room PC by hand, then tick it here. The
+ * ticked copy is the one the room plays; an older one it replaces steps aside.
+ */
+export const markLoaded = (roomFileId: string, lockVersion: number) =>
+  request<{ sync_state: string; lock_version: number }>(`/room-files/${roomFileId}/loaded`, {
+    method: "POST",
+    body: JSON.stringify({ lock_version: lockVersion }),
+  });
 
-export const acknowledgeRoomFile = (roomFileId: string, lockVersion: number) =>
-  request<{ sync_state: string }>(
-    `/room-files/${roomFileId}/acknowledge`,
-    { method: "POST", body: JSON.stringify({ lock_version: lockVersion }) },
-  );
+/** D-125: take back a "loaded" tick made by mistake. */
+export const unmarkLoaded = (roomFileId: string, lockVersion: number) =>
+  request<{ sync_state: string; lock_version: number }>(`/room-files/${roomFileId}/unloaded`, {
+    method: "POST",
+    body: JSON.stringify({ lock_version: lockVersion }),
+  });
 
 export const launchInRoom = (roomId: string, slotId: string) =>
   request<{ launched: boolean; at?: string; reason?: string }>(

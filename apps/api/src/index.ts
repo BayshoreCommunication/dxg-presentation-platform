@@ -48,7 +48,7 @@ import {
 
 /** Carries the half-finished sign-in between the password and the code. */
 const MFA_COOKIE = "pmp_mfa";
-import { agentView, syncRoom, acknowledge, launch } from "./services/agent.ts";
+import { agentView, syncRoom, acknowledge, launch, markLoaded, unmarkLoaded } from "./services/agent.ts";
 import { srrDashboard, checkIn, checkinDetail, usbIngest, signOff, depart, emailReceipt, addStation, renameStation, retireStation } from "./services/srr.ts";
 import {
   presentationDetail,
@@ -1194,6 +1194,31 @@ app.post("/api/v1/room-files/:roomFileId/acknowledge", async (req, res) => {
   if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
   return res.json(result.value);
 });
+
+/*
+ * D-125: room PCs are loaded and checked by hand. Staff copy the approved file onto the
+ * room's PC, then tick it here ("loaded") — or take a mistaken tick back ("unloaded").
+ */
+for (const [path, apply] of [
+  ["loaded", markLoaded],
+  ["unloaded", unmarkLoaded],
+] as const) {
+  app.post(`/api/v1/room-files/:roomFileId/${path}`, async (req, res) => {
+    const actor = actorFrom(req);
+    if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+    const body = (req.body ?? {}) as { lock_version?: number };
+    if (typeof body.lock_version !== "number") {
+      return res.status(400).json({ code: "request.invalid", message: "That request was incomplete. Refresh the page and try again." });
+    }
+    const result = await withScope(scopeFor(req), (tx) =>
+      apply(tx, actor, String(req.params.roomFileId), body.lock_version as number),
+    );
+    if (!result.ok) {
+      return res.status(result.error.code === "room_sync.not_approved" ? 409 : statusFor(result.error)).json(result.error);
+    }
+    return res.json(result.value);
+  });
+}
 
 app.post("/api/v1/rooms/:roomId/launch", async (req, res) => {
   const actor = actorFrom(req);

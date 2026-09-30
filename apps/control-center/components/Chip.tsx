@@ -12,7 +12,6 @@ const TONE: Record<string, string> = {
   update_pending_ack: "c-warn",
   needs_revision: "c-warn",
   attention: "c-bad",
-  agent_offline: "c-bad",
   missing: "c-bad",
   submitted: "c-info",
   processing: "c-info",
@@ -21,19 +20,16 @@ const TONE: Record<string, string> = {
 };
 
 /**
- * `stale` (R7, D-110): the room PC behind this status has gone quiet — the pill turns
- * amber and says so on hover, instead of a green all-clear. Where there is room, show
- * the same line visibly with <StatusMeaning stale=…>.
+ * A status pill. (R7's amber "the room PC is not reporting" variant is gone: since D-125
+ * the platform doesn't watch room PCs — staff load them by hand and tick each file.)
  */
 export function Chip({
   status,
   label,
-  stale,
   hint,
 }: {
   status: string;
   label: string;
-  stale?: string | null;
   /** Hover text for pills outside the talk vocabulary (a version's state, say). */
   hint?: string;
 }) {
@@ -42,8 +38,8 @@ export function Chip({
   const meaning = statusMeaning(status);
   return (
     <span
-      className={`chip ${stale ? "c-warn" : (TONE[status] ?? "c-mut")}`}
-      title={stale ?? hint ?? (meaning && label === labelOf(status) ? meaning : undefined)}
+      className={`chip ${TONE[status] ?? "c-mut"}`}
+      title={hint ?? (meaning && label === labelOf(status) ? meaning : undefined)}
     >
       {label}
     </span>
@@ -52,17 +48,10 @@ export function Chip({
 
 /**
  * R47 (D-110): a talk status's meaning and next step as a visible line beside the chip —
- * hover alone is lost on touch screens and in print. With `stale`, the amber room-PC
- * note replaces it (R7). Renders nothing for codes outside the talk vocabulary.
+ * hover alone is lost on touch screens and in print. Renders nothing for codes outside
+ * the talk vocabulary.
  */
-export function StatusMeaning({ status, stale }: { status: string; stale?: string | null }) {
-  if (stale) {
-    return (
-      <div className="note" style={{ color: "var(--amber-text)" }}>
-        {stale}
-      </div>
-    );
-  }
+export function StatusMeaning({ status }: { status: string }) {
   const words = TALK_STATUS[status];
   if (!words) return null;
   return (

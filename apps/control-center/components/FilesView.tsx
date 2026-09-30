@@ -644,7 +644,7 @@ function FileDrawer({
     ["Session", sessionTime(row.starts_at, timeZone)],
     ["Uploaded", `${fullDate(row.uploaded_at, timeZone)} · ${row.uploaded_by ?? SOURCE_LABEL[row.source] ?? row.source}`],
     // "room PC", the one name staff are given for it (D-112).
-    ["On room PCs", row.rooms_synced > 0 ? `${row.rooms_synced} room${row.rooms_synced === 1 ? "" : "s"}` : "Not on a room PC yet"],
+    ["Loaded on room PCs", row.rooms_synced > 0 ? `${row.rooms_synced} room${row.rooms_synced === 1 ? "" : "s"}` : "Not loaded on a room PC yet"],
   ];
   if (row.restricted) facts.push(["Distribution", "Restricted — left out of client figures and the archive"]);
 

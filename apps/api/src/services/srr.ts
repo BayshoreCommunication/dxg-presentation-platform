@@ -6,6 +6,7 @@ import { atLeast, err, hasAnyRole, ok } from "@pmp/domain";
 import { formatBytes, formatBytesDelta, formatSessionTime, VERSION_STATE, wordsFor } from "@pmp/format";
 import { ingestVersion, versionFacts } from "./ingest.ts";
 import type { VersionFacts } from "./ingest.ts";
+import { approvedRoomCopiesSql } from "./queries.ts";
 
 /* ── screen 11: Speaker Ready Room dashboard ─────────────────────────────── */
 
@@ -71,13 +72,7 @@ export async function srrDashboard(
                                                'review', fv.review_state) ORDER BY fv.version_number)
                FROM pmp.file_versions fv JOIN pmp.files f ON f.id = fv.file_id
               WHERE f.slot_id = s.id) AS versions,
-            (SELECT json_agg(json_build_object('state', rf.sync_state,
-                     'requiresAck', (rf.acknowledged_at IS NULL AND rf.sync_state = 'synced'),
-                     'acknowledged', (rf.acknowledged_at IS NOT NULL)))
-               FROM pmp.room_files rf
-               JOIN pmp.file_versions fv2 ON fv2.id = rf.file_version_id
-               JOIN pmp.files f2 ON f2.id = fv2.file_id
-              WHERE f2.slot_id = s.id AND fv2.review_state = 'approved') AS room_copies,
+            ${approvedRoomCopiesSql("s.id")} AS room_copies,
             (SELECT c.id FROM pmp.srr_checkins c
               WHERE c.speaker_id = sp.id AND c.departed_at IS NULL
               ORDER BY c.checked_in_at DESC LIMIT 1) AS checkin_id,
@@ -423,13 +418,7 @@ export async function checkinDetail(tx: pg.PoolClient, checkinId: string): Promi
                                                'review', fv.review_state) ORDER BY fv.version_number)
                FROM pmp.file_versions fv JOIN pmp.files f ON f.id = fv.file_id
               WHERE f.slot_id = s.id) AS versions,
-            (SELECT json_agg(json_build_object('state', rf.sync_state,
-                     'requiresAck', (rf.acknowledged_at IS NULL AND rf.sync_state = 'synced'),
-                     'acknowledged', (rf.acknowledged_at IS NOT NULL)))
-               FROM pmp.room_files rf
-               JOIN pmp.file_versions fv2 ON fv2.id = rf.file_version_id
-               JOIN pmp.files f2 ON f2.id = fv2.file_id
-              WHERE f2.slot_id = s.id AND fv2.review_state = 'approved') AS room_copies
+            ${approvedRoomCopiesSql("s.id")} AS room_copies
        FROM pmp.srr_checkins c
        JOIN pmp.users u ON u.id = c.technician_id
        JOIN pmp.speakers sp ON sp.id = c.speaker_id
@@ -672,7 +661,7 @@ export async function usbIngest(
     inspection_state: ingested.value.inspection_state,
     compared_with: comparedWith,
     comparison,
-    message: `Virus check passed. Saved as version ${ingested.value.version_number} and sent for review. The room keeps the approved version until this one is approved and copied to the room.`,
+    message: `Virus check passed. Saved as version ${ingested.value.version_number} and sent for review. The room keeps the approved version until this one is approved and loaded onto the room PC.`,
   });
 }
 

@@ -3,13 +3,8 @@
 import { Fragment, useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { AgentView } from "@/lib/api";
-import { getAgentView, syncRoom, acknowledgeRoomFile, launchInRoom, ApiError } from "@/lib/api";
-import { agoWords, formatBytes, ROOM_COPY, wordsFor } from "@pmp/format";
-import { WhyNot } from "@/components/WhyNot";
-
-const size = (bytes: string): string => {
-  return formatBytes(bytes);
-};
+import { getAgentView, markLoaded, launchInRoom, ApiError } from "@/lib/api";
+import { ROOM_COPY, wordsFor } from "@pmp/format";
 
 /*
  * Every time on this screen is on the event's clock (D-080). It was pinned to New York,
@@ -31,17 +26,6 @@ const dayLabel = (iso: string, timeZone: string) =>
   new Date(iso)
     .toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone })
     .toUpperCase();
-
-/**
- * Why a row can't be launched, in the room technician's words (R45, D-111) — the same
- * rule the server applies, so the button is never offered only to be refused.
- */
-function launchBlocked(row: AgentView["schedule"][number]): string | null {
-  if (row.launchable) return null;
-  if (row.version_number === null || row.sync_state === null) return "No approved file on this room PC yet.";
-  if (row.sync_state === "synced" && !row.acknowledged) return `Switch to v${row.version_number} above to play it.`;
-  return `Not ready to play yet (${wordsFor(ROOM_COPY, row.sync_state).label.toLowerCase()}).`;
-}
 
 /**
  * Screen 15 — what the room technician sees on the room machine. The Windows
@@ -90,255 +74,185 @@ export function RoomAgentView({ initial }: { initial: AgentView }) {
     [refresh],
   );
 
-  const pending = view.schedule.find((row) => row.sync_state === "synced" && !row.acknowledged);
-  // Talks whose file isn't on this room PC yet: "all files present" must not show beside them (D-111).
-  const notHere = view.schedule.filter(
-    (row) => !["synced", "acknowledged", "active"].includes(row.sync_state ?? ""),
-  ).length;
-  const offline = (view.agent.heartbeat_age ?? Number.MAX_SAFE_INTEGER) > 300;
+  const zone = view.event.timezone;
+
+  /*
+   * D-125: room PCs are loaded by hand. One talk per slot — its loaded copy (the one Launch
+   * plays) and any newer approved copy still to load — instead of one row per copy.
+   */
+  const talks = groupBySlot(view.schedule);
+  const newer = talks.find((talk) => talk.loaded && talk.waiting);
+  const notLoaded = talks.filter((talk) => talk.waiting && !talk.loaded).length;
+  const loadedCount = talks.filter((talk) => talk.loaded && !talk.waiting).length;
+  const nextUp = talks.find((talk) => talk.loaded?.launchable && !talk.loaded.presented_at)?.loaded;
+  const launchNote = "Launch records the talk as presented; opening PowerPoint on the room PC is connected in a later release.";
+  const launch = (row: Row, primary: boolean) => (
+    <button
+      className={primary ? "btn pri" : "btn"}
+      style={{ padding: "5px 14px" }}
+      disabled={busy}
+      onClick={() =>
+        void run(async () => {
+          const result = await launchInRoom(view.room.id, row.slot_id);
+          // Honest until the room agent opens PowerPoint itself (G0-1): recorded, not opened (D-108).
+          return result.launched
+            ? `Recorded as presented at ${new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: zone })} — opening it on the room PC isn't connected yet`
+            : `Not recorded — ${result.reason}`;
+        })
+      }
+    >
+      ▶ Launch
+    </button>
+  );
+  // D-125: was "Switch to vN" (acknowledge); now the same tick as Room sync's Mark loaded.
+  const markLoadedButton = (row: Row, primary: boolean) => (
+    <button
+      className={primary ? "btn pri" : "btn"}
+      style={{ padding: "5px 14px" }}
+      disabled={busy}
+      onClick={() =>
+        void run(async () => {
+          await markLoaded(row.room_file_id!, row.lock_version!);
+          return `v${row.version_number} ticked loaded — it is now the copy this room plays`;
+        })
+      }
+    >
+      Mark v{row.version_number} loaded
+    </button>
+  );
+
+  /** The one thing that matters in this room now (D-124, D-125). */
+  const now: { text: string; action?: React.ReactNode } = newer?.waiting
+    ? {
+        text: `A newer version of “${newer.waiting.title}”${newer.waiting.speaker ? ` (${newer.waiting.speaker})` : ""} must be loaded: v${newer.waiting.version_number} is approved, the room PC has v${newer.loaded!.version_number}. Copy it over and tick it before its ${time(newer.waiting.starts_at, zone)} session.`,
+        action: markLoadedButton(newer.waiting, true),
+      }
+    : nextUp
+      ? {
+          text: `Next up: ${time(nextUp.starts_at, zone)} “${nextUp.title}”${nextUp.speaker ? ` — ${nextUp.speaker}` : ""}. It's loaded and ready to play.`,
+          action: launch(nextUp, true),
+        }
+      : notLoaded > 0
+        ? {
+            text: `${notLoaded} ${notLoaded === 1 ? "talk isn't" : "talks aren't"} loaded yet — load ${notLoaded === 1 ? "it" : "them"} on Room sync.`,
+            action: (
+              <a className="btn pri" style={{ padding: "5px 14px" }} href={`/events/${view.event.id}/sync`}>
+                Open Room sync
+              </a>
+            ),
+          }
+        : { text: "Nothing left to play in this room." };
 
   return (
     <div
       className="darkpane"
-      // A room computer's screen, framed as one dark panel inside the page rather than
-      // bleeding to the edges of the old padded <main> (D-078).
+      // A room computer's screen, framed as one dark panel inside the page (D-078).
       style={{ minHeight: "calc(100vh - 100px)", padding: "18px 22px" }}
     >
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "flex-start",
-          gap: 10,
-          flexWrap: "wrap",
-          marginBottom: 14,
-        }}
-      >
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
         <div>
-          <h1 style={{ fontSize: 20, color: "var(--white)" }}>
-            Room Agent · <span style={{ color: "var(--white)", fontWeight: 600 }}>{view.room.name}</span>
-          </h1>
-          <div style={{ fontSize: 12, color: "var(--dim)" }}>
-            {!view.agent.fingerprint
-              ? "Room PC not connected yet"
-              : offline
-                ? // When it last reported, in words (R43, D-112).
-                  view.agent.heartbeat_age !== null
-                  ? `Room PC not reporting — last report ${agoWords(view.agent.heartbeat_age)} ago`
-                  : "Room PC hasn't reported in yet"
-                : "Room PC connected"}
-            {" · "}
-            {notHere > 0
-              ? `${notHere} of ${view.schedule.length} presentation${view.schedule.length === 1 ? "" : "s"} not on the room PC yet`
-              : view.library.updates_waiting === 0
-                ? "all files present"
-                : `${view.library.updates_waiting} new version${view.library.updates_waiting === 1 ? "" : "s"} waiting to be switched in`}
-          </div>
+          <h1 style={{ fontSize: 22, color: "var(--white)", margin: 0 }}>{view.room.name}</h1>
+          <div style={{ fontSize: 12, color: "var(--dim)" }}>Room Agent · what the room technician sees at the lectern</div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          {/* No connection tag: the platform doesn't watch room PCs (D-125). */}
           <span className="mono" style={{ fontSize: 16, color: "var(--white)" }}>
             {clock}
           </span>
-          {/* Was a green "OFFLINE-SAFE ✓" on every room, reporting or not (D-108). */}
-          <span className={`chip ${offline ? "c-warn" : "c-ok"}`}>{offline ? "Not reporting" : "Connected"}</span>
         </div>
       </div>
 
       {error && <div className="err">{error}</div>}
 
-      {pending && (
-        <div
-          style={{
-            background: "#3A2C10",
-            border: "1px solid var(--warn)",
-            borderRadius: 6,
-            padding: "10px 14px",
-            marginBottom: 14,
-            color: "#F5C97B",
-          }}
-        >
-          ⚠ <b>Change alert:</b> {pending.speaker} v{pending.version_number} approved — replaces the
-          copy in this room for the {time(pending.starts_at, view.event.timezone)} slot. The previous version is kept, and
-          stays in use until you switch.
-          <button
-            className="btn"
-            style={{ marginLeft: 8 }}
-            disabled={busy}
-            onClick={() =>
-              void run(async () => {
-                await acknowledgeRoomFile(pending.room_file_id!, pending.lock_version!);
-                return `Switched — v${pending.version_number} is now the copy this room plays`;
-              })
-            }
-          >
-            {/* R44 (D-110): was "Acknowledge & sync v3". */}
-            Switch to v{pending.version_number}
-          </button>
-        </div>
-      )}
+      {/* ── Now (D-124): one sentence, one button — the old screen spread this across a
+          header line, a change-alert banner and a column of greyed Launch buttons. ── */}
+      <div className="room-now">
+        <div className="room-now-label">NOW</div>
+        <div className="room-now-text">{now.text}</div>
+        {now.action && <div style={{ marginTop: 10 }}>{now.action}</div>}
+        {now.action && nextUp && !newer && <div className="room-now-note">{launchNote}</div>}
+      </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 250px", gap: 16, alignItems: "start" }}>
         <div style={{ background: "var(--ink2)", border: "1px solid #2A3B46", borderRadius: 8 }}>
-          {view.schedule.length === 0 && (
-            <div className="empty">Nothing is scheduled in this room.</div>
-          )}
-          {view.schedule.map((row, index) => {
-            const zone = view.event.timezone;
-            // A heading per day at the venue — it said "TODAY · WED MAR 11" whatever the date.
-            const newDay = index === 0 || dayKey(view.schedule[index - 1]!.starts_at, zone) !== dayKey(row.starts_at, zone);
-            const today = dayKey(row.starts_at, zone) === dayKey(new Date(), zone);
+          {talks.length === 0 && <div className="empty">Nothing is scheduled in this room.</div>}
+          {talks.map((talk, index) => {
+            const first = talk.loaded ?? talk.waiting ?? talk.bare!;
+            // A heading per day at the venue.
+            const newDay = index === 0 || dayKey(talks[index - 1]!.startsAt, zone) !== dayKey(talk.startsAt, zone);
+            const today = dayKey(talk.startsAt, zone) === dayKey(new Date(), zone);
+            const playable = Boolean(talk.loaded?.launchable) && !talk.waiting;
             return (
-            <Fragment key={`${row.slot_id}-${row.file_version_id ?? "none"}`}>
-            {newDay && (
-              <div
-                className="mono"
-                suppressHydrationWarning
-                style={{
-                  fontSize: 11,
-                  letterSpacing: ".1em",
-                  color: "var(--dim)",
-                  padding: "10px 14px",
-                  borderBottom: "1px solid #2A3B46",
-                }}
-              >
-                {today ? "TODAY · " : ""}
-                {dayLabel(row.starts_at, zone)}
-              </div>
-            )}
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 14,
-                padding: "11px 14px",
-                borderBottom: "1px solid #2A3B46",
-                ...(row.launchable ? { background: "#0F2A36" } : {}),
-              }}
-            >
-              <span
-                className="mono"
-                style={{ color: row.launchable ? "var(--white)" : "var(--paneink)", width: 44 }}
-              >
-                {time(row.starts_at, view.event.timezone)}
-              </span>
-              <span style={{ flex: 1, minWidth: 0 }}>
-                <b style={{ color: "var(--white)" }}>
-                  {row.title}
-                  {row.speaker ? ` — ${row.speaker}` : ""}
-                </b>
-                <br />
-                <span style={{ fontSize: 12, color: "var(--dim)" }}>
-                  {row.version_number === null
-                    ? "no file"
-                    : `v${row.version_number} · ${describeState(row.sync_state, row.acknowledged)}`}
-                  {row.presented_at ? " · presented" : ""}
-                </span>
-              </span>
-              {row.presented_at && (
-                <span className="mono" style={{ color: "var(--ok)", fontSize: 12 }}>
-                  ✓ logged
-                </span>
-              )}
-              <div style={{ textAlign: "right", maxWidth: 220 }}>
-              <button
-                className="btn pri"
-                style={{ padding: "5px 14px" }}
-                disabled={busy || !row.launchable}
-                title={launchBlocked(row) ?? undefined}
-                onClick={() =>
-                  void run(async () => {
-                    const result = await launchInRoom(view.room.id, row.slot_id);
-                    // Honest until the room agent opens PowerPoint itself (G0-1): the click is
-                    // recorded as presented; nothing is opened on the room PC yet (D-108).
-                    return result.launched
-                      ? `Recorded as presented at ${new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: view.event.timezone })} — opening it on the room PC isn't connected yet`
-                      : `Not recorded — ${result.reason}`;
-                  })
-                }
-              >
-                ▶ Launch
-              </button>
-              <WhyNot reason={launchBlocked(row)} />
-              </div>
-            </div>
-            </Fragment>
+              <Fragment key={talk.slotId}>
+                {newDay && (
+                  <div
+                    className="mono"
+                    suppressHydrationWarning
+                    style={{ fontSize: 11, letterSpacing: ".1em", color: "var(--dim)", padding: "10px 14px", borderBottom: "1px solid #2A3B46" }}
+                  >
+                    {today ? "TODAY · " : ""}
+                    {dayLabel(talk.startsAt, zone)}
+                  </div>
+                )}
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 14,
+                    padding: "11px 14px",
+                    borderBottom: "1px solid #2A3B46",
+                    ...(playable ? { background: "#0F2A36" } : {}),
+                  }}
+                >
+                  <span className="mono" style={{ color: playable ? "var(--white)" : "var(--paneink)", width: 44 }}>
+                    {time(talk.startsAt, zone)}
+                  </span>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <b style={{ color: "var(--white)" }}>
+                      {first.title}
+                      {first.speaker ? ` — ${first.speaker}` : ""}
+                    </b>
+                    <br />
+                    {/* One plain state per talk (D-124), in loading words (D-125). */}
+                    <span style={{ fontSize: 12.5, color: playable ? "var(--ok)" : talk.loaded && talk.waiting ? "#F5C97B" : "var(--dim)" }}>
+                      {talkState(talk)}
+                    </span>
+                  </span>
+                  {talk.loaded?.presented_at && !talk.waiting ? (
+                    <span className="mono" style={{ color: "var(--ok)", fontSize: 12 }}>
+                      ✓ presented
+                    </span>
+                  ) : talk.waiting ? (
+                    markLoadedButton(talk.waiting, false)
+                  ) : talk.loaded?.launchable ? (
+                    launch(talk.loaded, false)
+                  ) : null}
+                </div>
+              </Fragment>
             );
           })}
         </div>
 
         <div>
-          <div
-            style={{
-              background: "var(--ink2)",
-              border: "1px solid #2A3B46",
-              borderRadius: 8,
-              padding: "12px 14px",
-              marginBottom: 14,
-            }}
-          >
-            <div
-              className="mono"
-              style={{ fontSize: 11, letterSpacing: ".1em", color: "var(--dim)", marginBottom: 8 }}
-            >
-              LIBRARY
+          <div style={{ background: "var(--ink2)", border: "1px solid #2A3B46", borderRadius: 8, padding: "12px 14px", marginBottom: 14 }}>
+            <div className="mono" style={{ fontSize: 11, letterSpacing: ".1em", color: "var(--dim)", marginBottom: 8 }}>
+              THIS ROOM PC
             </div>
             <div style={{ fontSize: 13, color: "var(--white)" }}>
-              {view.library.files} file{view.library.files === 1 ? "" : "s"} ·{" "}
-              {size(view.library.bytes)} on this PC
+              {loadedCount} of {talks.length} talk{talks.length === 1 ? "" : "s"} loaded
             </div>
-            <div
-              className="mono"
-              style={{
-                fontSize: 12,
-                color: view.library.updates_waiting > 0 || notHere > 0 ? "var(--warn)" : "var(--ok)",
-              }}
-            >
-              {notHere > 0
-                ? `${notHere} not here yet`
-                : view.library.updates_waiting > 0
-                  ? `${view.library.updates_waiting} update waiting`
-                  : "all current ✓"}
+            {/* D-125: loaded by hand — no bytes, no Check for updates. */}
+            <div style={{ fontSize: 12, color: "var(--dim)" }}>
+              Copy approved files onto this PC and tick them on{" "}
+              <a href={`/events/${view.event.id}/sync`} style={{ color: "var(--paneink)" }}>
+                Room sync
+              </a>
+              .
             </div>
-            <div style={{ fontSize: 12, color: "var(--dim)", marginBottom: 10 }}>
-              previous versions kept: {view.library.previous_versions}
-            </div>
-            <button
-              className="btn pri"
-              style={{ padding: "5px 12px" }}
-              disabled={busy || offline}
-              onClick={() =>
-                void run(async () => {
-                  const result = await syncRoom(view.room.id);
-                  return result.downloaded === 0 && result.failed === 0
-                    ? "Already current — nothing to download"
-                    : `${result.downloaded} downloaded, ${result.awaiting_ack} waiting to be switched in${result.failed > 0 ? `, ${result.failed} failed — it retries by itself` : ""}`;
-                })
-              }
-            >
-              {/* D-118: only with a room PC connected — it copies files as that PC would. */}
-              Check for updates
-            </button>
-            <WhyNot
-              reason={
-                offline
-                  ? "No room PC is connected, so there is nothing to update. Files are copied when the room PC checks in."
-                  : null
-              }
-            />
           </div>
 
-          <div
-            style={{
-              background: "var(--ink2)",
-              border: "1px solid #2A3B46",
-              borderRadius: 8,
-              padding: "12px 14px",
-            }}
-          >
-            <div
-              className="mono"
-              style={{ fontSize: 11, letterSpacing: ".1em", color: "var(--dim)", marginBottom: 8 }}
-            >
+          <div style={{ background: "var(--ink2)", border: "1px solid #2A3B46", borderRadius: 8, padding: "12px 14px" }}>
+            <div className="mono" style={{ fontSize: 11, letterSpacing: ".1em", color: "var(--dim)", marginBottom: 8 }}>
               HOLDING SCREEN
             </div>
             <div
@@ -350,27 +264,18 @@ export function RoomAgentView({ initial }: { initial: AgentView }) {
                 alignItems: "center",
                 justifyContent: "center",
                 background: "var(--ink)",
-                // The event's accent (set in the wizard) edges the slide, as it brands the
-                // speaker and client surfaces; no accent, no edge.
+                // The event's accent edges the slide, as it brands the speaker and client pages.
                 ...(view.event.accent ? { boxShadow: `inset 0 -4px 0 ${view.event.accent}` } : {}),
                 padding: "0 12px",
                 textAlign: "center",
               }}
             >
-              <span
-                style={{
-                  fontWeight: 700,
-                  color: "var(--white)",
-                  letterSpacing: ".06em",
-                  textTransform: "uppercase",
-                }}
-              >
+              <span style={{ fontWeight: 700, color: "var(--white)", letterSpacing: ".06em", textTransform: "uppercase" }}>
                 {view.event.name}
               </span>
             </div>
             <div className="note" style={{ color: "var(--dim)", marginTop: 8, fontSize: 11.5 }}>
-              Shown whenever there is nothing safe to play. Opening PowerPoint on the room PC isn&rsquo;t
-              connected yet.
+              On the projector between talks, and whenever something can&rsquo;t play.
             </div>
           </div>
         </div>
@@ -381,11 +286,31 @@ export function RoomAgentView({ initial }: { initial: AgentView }) {
   );
 }
 
+type Row = AgentView["schedule"][number];
+type Talk = { slotId: string; startsAt: string; loaded?: Row; waiting?: Row; bare?: Row };
+
 /**
- * A room copy's state in the shared words (R44, D-110): "update pending ack" became
- * "New version ready — switch needed".
+ * One entry per talk (D-125): the copy the room plays (`active`), a newer approved copy
+ * still to load, or — with neither — the talk's latest version, which has no approved copy.
  */
-function describeState(state: string | null, acknowledged: boolean): string {
-  if (state === "synced" && !acknowledged) return wordsFor(ROOM_COPY, "switch_needed").label;
-  return wordsFor(ROOM_COPY, state ?? "not_sent").label;
+function groupBySlot(schedule: readonly Row[]): Talk[] {
+  const talks = new Map<string, Talk>();
+  for (const row of schedule) {
+    const talk = talks.get(row.slot_id) ?? { slotId: row.slot_id, startsAt: row.starts_at };
+    if (row.sync_state === "active") talk.loaded = row;
+    else if (row.sync_state !== null) talk.waiting = row;
+    else talk.bare = row;
+    talks.set(row.slot_id, talk);
+  }
+  return [...talks.values()];
+}
+
+/** A talk's state in this room, in one line (D-124, loading words since D-125). */
+function talkState(talk: Talk): string {
+  if (talk.loaded && talk.waiting) {
+    return `v${talk.loaded.version_number} loaded · v${talk.waiting.version_number} approved — load it (the room has v${talk.loaded.version_number})`;
+  }
+  if (talk.loaded) return talk.loaded.presented_at ? `v${talk.loaded.version_number}` : `v${talk.loaded.version_number} · loaded — ready to play`;
+  if (talk.waiting) return `v${talk.waiting.version_number} · ${wordsFor(ROOM_COPY, talk.waiting.sync_state).label.toLowerCase()}`;
+  return wordsFor(ROOM_COPY, "not_sent").label;
 }

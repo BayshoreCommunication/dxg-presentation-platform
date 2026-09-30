@@ -103,21 +103,20 @@ export function deriveTalkStatus(talk: TalkSnapshot): TalkStatus {
   return "missing";
 }
 
-export type RoomReadiness = "ready" | "attention" | "agent_offline";
+export type RoomReadiness = "ready" | "attention";
 
 /**
- * Room readiness (OBJ-6): every upcoming talk delivered and current, a fresh
- * agent heartbeat, and nothing waiting on acknowledgment. Computed, never asserted.
+ * Room readiness (OBJ-6): every upcoming talk's approved version is loaded on the room PC
+ * (or the talk is cancelled). Computed, never asserted.
+ *
+ * D-125: DXG staff load room PCs by hand and tick each file, so readiness no longer asks
+ * whether a room PC has reported in — a room is ready when every tick is in. (It used to
+ * return "agent_offline" for a quiet room PC, whatever the files said.)
  */
-export function deriveRoomReadiness(input: {
-  readonly heartbeatAgeSeconds: number;
-  readonly upcomingTalks: readonly TalkSnapshot[];
-  readonly heartbeatStaleAfterSeconds?: number;
-}): RoomReadiness {
-  const staleAfter = input.heartbeatStaleAfterSeconds ?? 300;
-  if (input.heartbeatAgeSeconds > staleAfter) return "agent_offline";
-  const everyTalkReady = input.upcomingTalks.every(
-    (talk) => deriveTalkStatus(talk) === "synchronized_onsite" || deriveTalkStatus(talk) === "canceled",
-  );
+export function deriveRoomReadiness(input: { readonly upcomingTalks: readonly TalkSnapshot[] }): RoomReadiness {
+  const everyTalkReady = input.upcomingTalks.every((talk) => {
+    const status = deriveTalkStatus(talk);
+    return status === "synchronized_onsite" || status === "canceled";
+  });
   return everyTalkReady ? "ready" : "attention";
 }

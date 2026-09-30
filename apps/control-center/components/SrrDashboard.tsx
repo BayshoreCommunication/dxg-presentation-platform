@@ -7,7 +7,6 @@ import { addStation, renameStation, retireStation, startCheckin, ApiError } from
 import { FloatingMenu, useFloatingMenu } from "@/components/FloatingMenu";
 import { CHECK, wordsFor } from "@pmp/format";
 import { Chip, SeverityChip } from "@/components/Chip";
-import { staleNoteFor } from "@/lib/roomWords";
 import { WhyNot } from "@/components/WhyNot";
 
 /**
@@ -32,14 +31,11 @@ export function SrrDashboardView({
   eventName,
   timezone,
   data,
-  rooms = [],
 }: {
   eventId: string;
   eventName: string;
   timezone: string;
   data: SrrDashboard;
-  /** Room sync's room list, for R7's room-PC freshness (D-110). */
-  rooms?: { room: string; heartbeat_age: number | null }[];
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -142,7 +138,6 @@ export function SrrDashboardView({
               <table>
                 <tbody>
                   {toCome.map((row) => {
-                    const stale = staleNoteFor(row.status, row.room, rooms);
                     return (
                       <tr key={row.speaker_id}>
                         <td>
@@ -156,7 +151,7 @@ export function SrrDashboardView({
                           </div>
                         </td>
                         <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-                          <Chip status={row.status} label={row.status_label} stale={stale} />{" "}
+                          <Chip status={row.status} label={row.status_label} />{" "}
                           <CheckInButton
                             stations={data.stations}
                             disabled={busy}

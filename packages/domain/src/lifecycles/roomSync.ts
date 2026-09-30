@@ -21,9 +21,22 @@ export type RoomSyncAction =
   | "acknowledge"
   | "activate"
   | "obsolete"
-  | "restore";
+  | "restore"
+  | "mark_loaded"
+  | "unmark_loaded";
 
 const MANAGERS = atLeast("presentation_manager");
+
+/**
+ * D-125: who may tick a talk "Loaded on the room PC". DXG staff copy each approved file
+ * onto the room's PC by hand, so this is the onsite crew — the room technician (off the
+ * ladder, named explicitly) and the Speaker Ready Room technician and above. A content
+ * reviewer never touches a room PC.
+ */
+const LOADERS = ["room_technician", ...atLeast("srr_technician")] as const;
+
+/** D-125: every not-yet-played state a copy can be ticked loaded from. */
+const LOADABLE: readonly RoomSyncState[] = ["assigned", "syncing", "synced", "sync_failed", "acknowledged"];
 
 export const roomSyncLifecycle: Lifecycle<RoomSyncState, RoomSyncAction> = {
   name: "room_sync",
@@ -51,7 +64,20 @@ export const roomSyncLifecycle: Lifecycle<RoomSyncState, RoomSyncAction> = {
     { from: "synced", action: "activate", to: "active", authority: "machine" },
     { from: "active", action: "obsolete", to: "obsolete", authority: "machine" },
     // Rollback flips the previously active copy back (audited, rooms notified).
-    { from: "obsolete", action: "restore", to: "active", authority: MANAGERS, requiresReason: true },
+    // A roll-back brings the earlier copy back as "not loaded" (D-125): nobody has checked
+    // it is still on the room PC, so a person loads it and ticks it — never a silent "loaded".
+    { from: "obsolete", action: "restore", to: "assigned", authority: MANAGERS, requiresReason: true },
+    // D-125: room PCs are loaded and checked by hand. A person copies the approved file
+    // onto the room's PC and ticks it; the copy is then the one the room plays. The
+    // machine rules above stay for later room software, which may tick "loaded" itself.
+    ...LOADABLE.map((from) => ({
+      from,
+      action: "mark_loaded" as const,
+      to: "active" as const,
+      authority: LOADERS,
+    })),
+    // A tick made by mistake is taken back; the copy is simply "not loaded yet" again.
+    { from: "active", action: "unmark_loaded", to: "assigned", authority: LOADERS },
   ],
   overrideRoles: MANAGERS,
 };

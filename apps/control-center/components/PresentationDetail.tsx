@@ -9,7 +9,6 @@ import { Chip, StatusMeaning } from "@/components/Chip";
 import { ConfirmationStrip } from "@/components/ConfirmationStrip";
 import { SlideViewer } from "@/components/SlideViewer";
 import { WhyNot } from "@/components/WhyNot";
-import { staleNoteFor } from "@/lib/roomWords";
 import { COMMENT_LANE, formatBytes, SEVERITY, VERSION_STATE, wordsFor } from "@pmp/format";
 
 /** On the event's clock (D-080) — it was pinned to New York for every event. */
@@ -59,13 +58,10 @@ export function PresentationDetailView({
   eventId,
   initial,
   comments,
-  rooms = [],
 }: {
   eventId: string;
   initial: PresentationDetail;
   comments: CommentRow[];
-  /** Room sync's room list, for R7's room-PC freshness (D-110). */
-  rooms?: { room: string; heartbeat_age: number | null }[];
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -74,7 +70,6 @@ export function PresentationDetailView({
 
   const latest = initial.versions[0];
   const approved = initial.versions.find((row) => row.review_state === "approved");
-  const staleNote = staleNoteFor(initial.talk.status, initial.talk.room, rooms);
 
   // "Preview slides" was always greyed ("M2-7"); it now shows the newest version's slides
   // inline, from the same PDF the review screen uses (R14, D-111).
@@ -148,7 +143,7 @@ export function PresentationDetailView({
       setRollTarget(null);
       setToast(
         result.rooms_notified > 0
-          ? `v${result.restored_version} is back in use. The room technician must switch to it on the room PC before it plays.`
+          ? `v${result.restored_version} is back in use. Load it onto the room PC (or check it's still there) and tick it on Room sync.`
           : `v${result.restored_version} is back in use.`,
       );
       router.refresh();
@@ -168,12 +163,12 @@ export function PresentationDetailView({
       <div className="card">
         <div className="chd">
           <h3>{initial.talk.title}</h3>
-          <Chip status={initial.talk.status} label={initial.talk.status_label} stale={staleNote} />
+          <Chip status={initial.talk.status} label={initial.talk.status_label} />
         </div>
         <div className="cbd">
-          {/* R47: what the status means, visibly; R7: amber when the room PC is quiet (D-110). */}
+          {/* R47: what the status means, visibly (D-110). */}
           <div style={{ marginBottom: 6 }}>
-            <StatusMeaning status={initial.talk.status} stale={staleNote} />
+            <StatusMeaning status={initial.talk.status} />
           </div>
           <div className="note" style={{ marginBottom: 6 }}>
             {initial.speaker?.name ?? "No speaker assigned"}
@@ -200,7 +195,6 @@ export function PresentationDetailView({
                     at: initial.srr.sign_off.signed_at,
                   }
                 : null,
-              stale: staleNote,
               timezone: initial.event.timezone,
             }}
           />
@@ -327,7 +321,7 @@ export function PresentationDetailView({
                     {row.room_states.includes("active") && (
                       <>
                         {" "}
-                        <span className="chip c-sync">in room</span>
+                        <span className="chip c-sync">loaded in room</span>
                       </>
                     )}
                     {/* Whether its PDF copy for the archive exists (D-072). */}
@@ -404,8 +398,8 @@ export function PresentationDetailView({
                 autoFocus
               />
               <div className="note" style={{ margin: "6px 0 8px" }}>
-                v{rollTarget.n} becomes the approved version again. Its room&rsquo;s technician must switch to it
-                on the room PC before it plays.
+                v{rollTarget.n} becomes the approved version again. Check its room&rsquo;s PC plays v{rollTarget.n} —
+                if it isn&rsquo;t there, load it and tick it on Room sync.
               </div>
               <div style={{ display: "flex", gap: 8 }}>
                 <button className="btn warnb" disabled={busy || !rollTarget.reason.trim()}>

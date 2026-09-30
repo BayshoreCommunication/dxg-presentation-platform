@@ -89,7 +89,7 @@ describe("derived talk status — approval to room readiness (the causal chain)"
     assert.equal(deriveTalkStatus(t), "approved_delivering");
   });
 
-  test("delivered but unacknowledged is Update pending ack", () => {
+  test("a newer approved version waiting while the room plays the old one is Update pending ack", () => {
     const t = talk({
       versions: [approved],
       roomCopies: [{ state: "synced", requiresAck: true, acknowledged: false }],
@@ -128,24 +128,30 @@ describe("room readiness (OBJ-6)", () => {
     roomCopies: [{ state: "active", requiresAck: false, acknowledged: false }],
   };
 
-  test("a stale heartbeat means the agent is offline, whatever the files say", () => {
-    assert.equal(
-      deriveRoomReadiness({ heartbeatAgeSeconds: 301, upcomingTalks: [ready] }),
-      "agent_offline",
-    );
+  test("every talk loaded is Ready — no room PC report is needed (D-125)", () => {
+    assert.equal(deriveRoomReadiness({ upcomingTalks: [ready] }), "ready");
   });
 
-  test("fresh heartbeat and every talk synchronized is Ready", () => {
-    assert.equal(deriveRoomReadiness({ heartbeatAgeSeconds: 12, upcomingTalks: [ready] }), "ready");
+  test("a talk not loaded yet keeps the room out of Ready", () => {
+    const notLoaded: TalkSnapshot = {
+      ...ready,
+      roomCopies: [{ state: "assigned", requiresAck: false, acknowledged: false }],
+    };
+    assert.equal(deriveRoomReadiness({ upcomingTalks: [ready, notLoaded] }), "attention");
   });
 
-  test("an unacknowledged update keeps the room out of Ready", () => {
+  test("a cancelled talk does not hold the room back", () => {
+    const cancelled: TalkSnapshot = { ...ready, sessionState: "canceled", roomCopies: [] };
+    assert.equal(deriveRoomReadiness({ upcomingTalks: [ready, cancelled] }), "ready");
+  });
+
+  test("a newer version still to load keeps the room out of Ready", () => {
     const pending: TalkSnapshot = {
       ...ready,
       roomCopies: [{ state: "synced", requiresAck: true, acknowledged: false }],
     };
     assert.equal(
-      deriveRoomReadiness({ heartbeatAgeSeconds: 12, upcomingTalks: [ready, pending] }),
+      deriveRoomReadiness({ upcomingTalks: [ready, pending] }),
       "attention",
     );
   });

@@ -196,3 +196,43 @@ describe("room sync authority", () => {
     assert.equal(byReviewer.ok, false);
   });
 });
+
+describe("D-125 — room PCs are loaded and ticked by hand", () => {
+  const srrTech: Actor = { id: "u-srr", roles: ["srr_technician"] };
+
+  test("any not-yet-played copy can be ticked loaded, becoming the copy the room plays", () => {
+    for (const from of ["assigned", "syncing", "synced", "sync_failed", "acknowledged"] as const) {
+      for (const actor of [roomTech, srrTech, manager]) {
+        const result = transition(roomSyncLifecycle, { from, action: "mark_loaded", actor });
+        assert.equal(result.ok, true, `${from} by ${actor.roles.join()}`);
+        if (result.ok) assert.equal(result.value.to, "active");
+      }
+    }
+  });
+
+  test("no reason is needed to tick or untick", () => {
+    const loaded = transition(roomSyncLifecycle, { from: "assigned", action: "mark_loaded", actor: roomTech });
+    assert.equal(loaded.ok, true);
+    const undone = transition(roomSyncLifecycle, { from: "active", action: "unmark_loaded", actor: roomTech });
+    assert.equal(undone.ok, true);
+    if (undone.ok) assert.equal(undone.value.to, "assigned");
+  });
+
+  test("a content reviewer can neither tick nor untick", () => {
+    const tick = transition(roomSyncLifecycle, { from: "assigned", action: "mark_loaded", actor: reviewer });
+    assert.equal(tick.ok, false);
+    if (!tick.ok) assert.equal(tick.error.code, "room_sync.forbidden");
+    const untick = transition(roomSyncLifecycle, { from: "active", action: "unmark_loaded", actor: reviewer });
+    assert.equal(untick.ok, false);
+  });
+
+  test("a replaced copy cannot be ticked, and a loaded one cannot be ticked twice", () => {
+    for (const from of ["obsolete", "active"] as const) {
+      const result = transition(roomSyncLifecycle, { from, action: "mark_loaded", actor: manager });
+      assert.equal(result.ok, false, from);
+      if (!result.ok) assert.equal(result.error.code, "room_sync.illegal_transition");
+    }
+    const notLoaded = transition(roomSyncLifecycle, { from: "assigned", action: "unmark_loaded", actor: manager });
+    assert.equal(notLoaded.ok, false);
+  });
+});

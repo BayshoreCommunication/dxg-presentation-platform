@@ -28,40 +28,14 @@ export const TALK_STATUS: Readonly<Record<string, Words>> = {
   submitted: { label: "Submitted", meaning: "Passed the checks and waiting for a reviewer.", next: "Review it in Review & approval." },
   needs_revision: { label: "Needs revision", meaning: "A reviewer asked for changes, or the file failed a check.", next: "Waiting on the speaker to upload a new version." },
   approved: { label: "Approved", meaning: "Approved, but no room is assigned to receive it yet.", next: "Check the session has a room." },
-  approved_delivering: { label: "Approved — delivering", meaning: "Approved and being copied to the room's presentation PC.", next: "Nothing to do unless the room PC is not reporting." },
-  update_pending_ack: { label: "Update pending ack", meaning: "A newer approved version is on the room PC, but the room still plays the old one.", next: "The room technician switches to the new version in Room Agent." },
-  synchronized_onsite: { label: "Synchronized onsite", meaning: "On the room's PC and ready to play.", next: "Nothing left to do." },
+  // D-125: room PCs are loaded by hand — these three now mean "ticked loaded" or not.
+  approved_delivering: { label: "Approved — delivering", meaning: "Approved — waiting to be loaded onto the room PC.", next: "Copy it to the room PC and tick Loaded on Room sync." },
+  update_pending_ack: { label: "Update pending ack", meaning: "A newer approved version must be loaded onto the room PC; the room still has the older one.", next: "Load the new version and tick it on Room sync." },
+  synchronized_onsite: { label: "Synchronized onsite", meaning: "Loaded on the room PC and ready to play.", next: "Nothing left to do." },
   attention: { label: "Attention", meaning: "Failed the virus check or arrived damaged, so it is held back.", next: "Ask the speaker for a clean copy." },
   canceled: { label: "Canceled", meaning: "The session was cancelled. Its files are kept.", next: "" },
   archived: { label: "Archived", meaning: "The event is archived and read-only.", next: "" },
 };
-
-/**
- * R7: a talk the rooms confirmed is only as current as the room PC's last report. When the
- * room PC has gone quiet, "Synchronized onsite" is shown with this line instead of the
- * all-clear.
- */
-export function staleRoomNote(lastSeenSecondsAgo: number): string {
-  return `Last confirmed ${agoWords(lastSeenSecondsAgo)} ago — the room PC is not reporting, so this may be out of date.`;
-}
-
-/** A room PC is "not reporting" after this long — the same 300 s deriveRoomReadiness uses. */
-export const ROOM_PC_SILENT_AFTER_SECONDS = 300;
-
-/** Talk statuses that are only as true as the room PC's last report (R7). */
-const ROOM_CONFIRMED = ["synchronized_onsite", "approved_delivering", "update_pending_ack"];
-
-/**
- * R7 (D-110): the amber line to show instead of the all-clear, or null when the status
- * stands. `roomHeartbeatAge` is seconds since the room PC last reported; null when it
- * never has; undefined when the talk's room isn't known (nothing to say then). The DXG
- * label and deriveTalkStatus are untouched — this only adds freshness beside them.
- */
-export function talkRoomNote(status: string, roomHeartbeatAge: number | null | undefined): string | null {
-  if (!ROOM_CONFIRMED.includes(status) || roomHeartbeatAge === undefined) return null;
-  if (roomHeartbeatAge === null) return "Not confirmed — the room PC hasn't reported yet, so this may be out of date.";
-  return roomHeartbeatAge > ROOM_PC_SILENT_AFTER_SECONDS ? staleRoomNote(roomHeartbeatAge) : null;
-}
 
 /** What a speaker is told about their own talk: no pipeline words, no room words. */
 export const SPEAKER_TALK_STATUS: Readonly<Record<string, Words>> = {
@@ -124,18 +98,22 @@ export const SEVERITY: Readonly<Record<string, Words>> = {
 };
 
 // ── rooms ────────────────────────────────────────────────────────────────────────────
-/** A version's copy on one room PC. */
+/**
+ * A version's copy for one room PC. D-125: DXG staff copy approved files onto room PCs by
+ * hand and tick them, so a copy is either loaded or not; the in-between codes belong to
+ * later room software and read as "not loaded yet" until then.
+ */
 export const ROOM_COPY: Readonly<Record<string, Words>> = {
-  assigned: { label: "Waiting to copy", meaning: "The room PC will fetch it next time it checks in." },
-  syncing: { label: "Copying", meaning: "Being copied to the room PC." },
-  synced: { label: "On the room PC", meaning: "Copied and checked on the room PC." },
-  acknowledged: { label: "Switched", meaning: "The room technician switched to this version." },
-  active: { label: "Ready to play", meaning: "This is what the room will play." },
-  obsolete: { label: "Replaced", meaning: "A newer version replaced this copy." },
-  sync_failed: { label: "Copy failed", meaning: "The room PC couldn't copy this file.", next: "Check the room PC is on and online; it retries by itself." },
-  // Not stored codes: a copied-but-not-switched version (R44), and a talk with no copy here.
-  switch_needed: { label: "New version ready — switch needed", meaning: "A newer approved version is on the room PC; the room still plays the old one.", next: "Switch to it in Room Agent." },
-  not_sent: { label: "Not sent to this room", meaning: "No approved version has been sent to this room yet." },
+  assigned: { label: "Not loaded yet", meaning: "Approved, but not ticked as loaded on the room PC yet.", next: "Copy it to the room PC and tick it on Room sync." },
+  syncing: { label: "Not loaded yet", meaning: "Not ticked as loaded on the room PC yet.", next: "Copy it to the room PC and tick it on Room sync." },
+  synced: { label: "Not loaded yet", meaning: "Not ticked as loaded on the room PC yet.", next: "Copy it to the room PC and tick it on Room sync." },
+  acknowledged: { label: "Not loaded yet", meaning: "Not ticked as loaded on the room PC yet.", next: "Copy it to the room PC and tick it on Room sync." },
+  active: { label: "Loaded on the room PC", meaning: "Ticked as loaded — this is what the room plays." },
+  obsolete: { label: "Replaced", meaning: "A newer version was loaded in its place." },
+  sync_failed: { label: "Not loaded yet", meaning: "Not ticked as loaded on the room PC yet.", next: "Copy it to the room PC and tick it on Room sync." },
+  // Not stored codes: a newer approved version still to load (R44), and a talk with no copy here.
+  newer_to_load: { label: "Newer version to load", meaning: "A newer approved version must be loaded; the room PC still has the older one.", next: "Load it and tick it on Room sync." },
+  not_sent: { label: "No approved file yet", meaning: "Nothing has been approved for this room yet." },
 };
 
 // ── comments ─────────────────────────────────────────────────────────────────────────

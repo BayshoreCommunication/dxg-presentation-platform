@@ -1,6 +1,7 @@
 import type pg from "pg";
 import { deriveTalkStatus, TALK_STATUS_LABEL } from "@pmp/domain";
 import type { TalkSnapshot, TalkStatus, VersionSnapshot, RoomCopySnapshot } from "@pmp/domain";
+import { approvedRoomCopiesSql } from "./queries.ts";
 
 export type TalkRow = {
   slot_id: string;
@@ -48,15 +49,7 @@ export async function listTalks(tx: pg.PoolClient, eventId: string): Promise<Tal
                FROM pmp.file_versions fv
                JOIN pmp.files f ON f.id = fv.file_id
               WHERE f.slot_id = s.id)   AS versions,
-            (SELECT json_agg(json_build_object(
-                      'state',        rf.sync_state,
-                      'requiresAck',  (rf.acknowledged_at IS NULL AND rf.sync_state = 'synced'),
-                      'acknowledged', (rf.acknowledged_at IS NOT NULL)))
-               FROM pmp.room_files rf
-               JOIN pmp.file_versions fv2 ON fv2.id = rf.file_version_id
-               JOIN pmp.files f2 ON f2.id = fv2.file_id
-              WHERE f2.slot_id = s.id
-                AND fv2.review_state = 'approved') AS room_copies
+            ${approvedRoomCopiesSql("s.id")} AS room_copies
        FROM pmp.slots s
        JOIN pmp.sessions se ON se.id = s.session_id
        JOIN pmp.events e    ON e.id = s.event_id

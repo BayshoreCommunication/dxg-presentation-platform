@@ -1,13 +1,13 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSummary, getRiskList, getFleet, getDraft, getSession, getAgenda, getSpeakers, getReviewQueue } from "@/lib/api";
-import { Chip, StatusMeaning } from "@/components/Chip";
+import { Chip } from "@/components/Chip";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { EventTabs } from "@/components/EventTabs";
 import { InfoTip } from "@/components/InfoTip";
 import { Kpi } from "@/components/Kpi";
 import type { KpiTone } from "@/components/Kpi";
-import { ROOM_LABEL, roomFilesLine, roomPcState, staleNoteFor } from "@/lib/roomWords";
+import { ROOM_LABEL, roomLoadedLine } from "@/lib/roomWords";
 import { guard } from "@/lib/guard";
 
 export const dynamic = "force-dynamic";
@@ -31,8 +31,8 @@ const RISK_REASON: Record<string, string> = {
   submitted: "Waiting for review",
   needs_revision: "Waiting for the speaker's new version",
   approved: "Approved, but the session has no room",
-  approved_delivering: "Being copied to the room PC",
-  update_pending_ack: "Room still plays the older version",
+  approved_delivering: "Not loaded on the room PC yet",
+  update_pending_ack: "Newer version to load – the room PC has the older one",
   attention: "File held back – ask the speaker for a clean copy",
 };
 
@@ -116,7 +116,7 @@ export default async function CommandCenterPage({
   /*
    * Each number carries its own explanation (D-065). They are computed, never typed,
    * and several mean something narrower than their label suggests — "Rooms ready" is
-   * a heartbeat *and* every talk on the room's computer — so the rule is stated where
+   * every talk ticked loaded on the room's computer (D-125) — so the rule is stated where
    * the number is read rather than left for someone to ask.
    */
   const share = (part: number, whole: number) => (whole === 0 ? 0 : part / whole);
@@ -169,7 +169,7 @@ export default async function CommandCenterPage({
       caption: summary.rooms_ready === summary.rooms_total ? "all rooms ready" : "not all ready",
       tone: summary.rooms_ready === summary.rooms_total ? "ok" : "warn",
       progress: share(summary.rooms_ready, summary.rooms_total),
-      help: "A room is ready when its room PC has reported in within the last 5 minutes and every talk scheduled there is on that PC and ready to play (or cancelled). Rooms with no talks still count in the total.",
+      help: "A room is ready when every talk scheduled there has its approved version loaded on the room's PC and ticked on Room sync (or is cancelled). Nothing is checked automatically. Rooms with no talks still count in the total.",
     },
   ];
 
@@ -232,7 +232,6 @@ export default async function CommandCenterPage({
         canEdit={canConfigure && !archived}
         agenda={agenda.items}
         speakers={speakers.items}
-        rooms={fleet.items}
         initialTab={tab}
       />
 
@@ -272,32 +271,24 @@ export default async function CommandCenterPage({
           ) : (
             <table>
               <tbody>
-                {risk.items.map((item) => {
-                  // R7 (D-110): a talk on a room PC that has gone quiet is amber, with why.
-                  const stale = staleNoteFor(item.status, item.room, fleet.items);
-                  return (
-                    <tr className="rb" key={item.slot_id}>
-                      <td>
-                        <Link href={`/events/${id}/talks/${item.slot_id}`} style={{ display: "block" }}>
+                {risk.items.map((item) => (
+                  <tr className="rb" key={item.slot_id}>
+                    <td>
+                      <Link href={`/events/${id}/talks/${item.slot_id}`} style={{ display: "block" }}>
                         {item.room} · {time(item.starts_at, summary.event.timezone)} · {item.speaker} —{" "}
                         {item.title}
-                        </Link>
-                        {stale ? (
-                          <StatusMeaning status={item.status} stale={stale} />
-                        ) : (
-                          RISK_REASON[item.status] && (
-                            <div className="note">
-                              {RISK_REASON[item.status]} – session at {time(item.starts_at, summary.event.timezone)}
-                            </div>
-                          )
-                        )}
-                      </td>
-                      <td style={{ textAlign: "right" }}>
-                        <Chip status={item.status} label={item.status_label} stale={stale} />
-                      </td>
-                    </tr>
-                  );
-                })}
+                      </Link>
+                      {RISK_REASON[item.status] && (
+                        <div className="note">
+                          {RISK_REASON[item.status]} – session at {time(item.starts_at, summary.event.timezone)}
+                        </div>
+                      )}
+                    </td>
+                    <td style={{ textAlign: "right" }}>
+                      <Chip status={item.status} label={item.status_label} />
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           )}
@@ -307,8 +298,10 @@ export default async function CommandCenterPage({
       <div className="card">
         <div className="chd">
           <h3>Room readiness</h3>
-          {/* S3 (D-112): plain words for where these statuses come from. */}
-          <span className="m">Updated automatically from each room&rsquo;s PC</span>
+          {/* S3 (D-112): plain words for where these statuses come from — since D-125, the ticks on Room sync. */}
+          <Link className="m" href={`/events/${id}/sync`}>
+            From the ticks on Room sync →
+          </Link>
         </div>
         <div className="cbd" style={{ padding: "0 0 4px" }}>
           <table>
@@ -318,9 +311,7 @@ export default async function CommandCenterPage({
                   <td>
                     <b>{room.room}</b>
                     <br />
-                    <span className="note">
-                      {roomFilesLine(room)} · {roomPcState(room)}
-                    </span>
+                    <span className="note">{roomLoadedLine(room)}</span>
                   </td>
                   <td style={{ textAlign: "right" }}>
                     <Chip

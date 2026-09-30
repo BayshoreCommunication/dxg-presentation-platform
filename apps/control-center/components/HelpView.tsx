@@ -110,7 +110,7 @@ export const GUIDES: Section[] = [
           "Pick one. Its slides, file checks and comments are on the right.",
           "Approve when it is right. Approve stays greyed while checks run or while a problem that must be fixed is open, and says why.",
           "Request revision sends the speaker your message and waits for a new version. Reject tells the speaker this file won't be used.",
-          "Once approved, the file is copied to its room's PC by itself.",
+          "Once approved, someone downloads it from Room sync, copies it onto its room's PC and ticks Mark loaded.",
         ],
         tip: "Keyboard: A asks to approve, R asks for a revision.",
       },
@@ -132,7 +132,7 @@ export const GUIDES: Section[] = [
         who: "Presentation manager or above",
         steps: [
           "Presentation detail → Version history → Go back to vN, with a reason.",
-          "The earlier approved version is used again. The room technician must switch to it on the room PC before it plays.",
+          "The earlier approved version is used again. Check the room PC plays it — if it isn't there, load it and tick it on Room sync.",
         ],
       },
     ],
@@ -151,7 +151,7 @@ export const GUIDES: Section[] = [
           "Sign off: confirm the version the speaker wants to present. Print or email them the receipt.",
           "Check out when they leave. The station is free again.",
         ],
-        tip: "Sign-off is the speaker's confirmation. It doesn't replace approval, and the room gets each approved version either way.",
+        tip: "Sign-off is the speaker's confirmation. It doesn't replace approval, and each approved version is loaded onto the room PC either way.",
       },
       {
         id: "usb",
@@ -167,12 +167,12 @@ export const GUIDES: Section[] = [
       {
         id: "rooms",
         title: "Room PCs",
-        who: "Presentation manager, room technician",
+        who: "Room technician, Speaker Ready Room technician or above",
         steps: [
-          "Room sync shows every room: Ready, Not ready, or Room PC not reporting — each with what to do.",
-          "To connect a room PC: Issue code on its row, then enter the code once on that PC. The code is shown only once.",
-          "\"Room PC not reporting\" means it hasn't been heard from for 5 minutes: check it is on and online. Statuses for that room then show when they were last confirmed.",
-          "When a newer version is approved, the room technician presses Switch to vN in Room Agent. The old copy plays until then — nothing is ever replaced silently.",
+          "Room PCs are loaded by hand: after a talk is approved, download it from Room sync, copy it onto that room's PC, and tick Mark loaded.",
+          "If a newer version is approved later, load it and tick it again — the old copy is replaced.",
+          "A room is Ready when every talk in it is ticked loaded. Nothing on Room sync is checked automatically.",
+          "Ticked one by mistake? Press Undo beside it; the talk shows as not loaded until it is ticked again.",
         ],
         tip: "Launch in Room Agent records that a talk was presented. Opening PowerPoint on the room PC isn't connected yet.",
       },
@@ -253,8 +253,8 @@ const GLOSSARY: Term[] = [
   ...fromWords("Client archive", ARCHIVE_STATE),
   ...fromWords("Role", ROLE),
   { term: "Speaker Ready Room", group: "Place", meaning: "The room onsite where speakers check in, review their slides and sign off." },
-  { term: "Room PC", group: "Place", meaning: "The presentation computer in each session room. It fetches approved files by itself." },
-  { term: "Connection code", group: "Room PC copy", meaning: "The one-time code that connects a room PC to the event. Issue it on Room sync." },
+  { term: "Room PC", group: "Place", meaning: "The presentation computer in each session room. DXG staff copy approved files onto it and tick them on Room sync." },
+  { term: "Mark loaded", group: "Room PC copy", meaning: "The tick on Room sync that says an approved file has been copied onto its room's PC." },
   { term: "Sign-off", group: "Onsite", meaning: "The speaker confirming, in the Speaker Ready Room, which version they will present." },
   { term: "Waive", group: "Check", meaning: "Accept a check's problem for this talk, with a written reason. Recorded for good." },
   { term: "Release permission", group: "Client archive", meaning: "What the client's archive may include from a speaker: full, PDF only, or nothing." },
@@ -307,19 +307,20 @@ export function HelpView() {
           A presentation is ready when three separate things have happened, and each screen shows them in this order:
           <ol style={{ margin: "6px 0 0", paddingLeft: 20 }}>
             <li>
-              <b>Approved by a reviewer</b> — in Review presentations. This is what sends the file to its room.
+              <b>Approved by a reviewer</b> — in Review presentations. This is what puts the file on its room&rsquo;s list.
             </li>
             <li>
               <b>Signed off by the speaker</b> — in the Speaker Ready Room, onsite. The speaker confirms the version they
               will present.
             </li>
             <li>
-              <b>On the room PC and switched in</b> — the room PC has the file; if it replaced an older version, the room
-              technician has switched to it.
+              <b>Loaded on the room PC</b> — someone copied the approved file onto the room&rsquo;s PC and ticked it on
+              Room sync.
             </li>
           </ol>
-          They don't depend on each other: the room gets every approved version whether or not the speaker has signed
-          off, and a newer approval means the speaker should sign off again.
+          They don't depend on each other: every approved version is loaded onto the room PC whether or not the speaker
+          has signed off, and a newer approval means the speaker should sign off again (and the new version must be
+          loaded).
         </div>
       </div>
 

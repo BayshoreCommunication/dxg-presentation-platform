@@ -121,6 +121,11 @@ export async function presentationDetail(
     [slotId],
   );
 
+  // D-125: a copy not loaded yet while the room still plays an older version's copy is the
+  // "Update pending ack" case — the room PC has the old version; the new one must be loaded.
+  const olderLoaded = versions.some(
+    (version) => version.review_state !== "approved" && version.room_states.includes("active"),
+  );
   const status = deriveTalkStatus({
     sessionState: row.session_state as never,
     eventArchived: false,
@@ -136,8 +141,8 @@ export async function presentationDetail(
       .flatMap((version) =>
         version.room_states.map((state) => ({
           state,
-          requiresAck: state === "synced",
-          acknowledged: state === "acknowledged" || state === "active",
+          requiresAck: olderLoaded && state !== "active" && state !== "obsolete",
+          acknowledged: false,
         })),
       ) as never,
   });
@@ -457,9 +462,8 @@ export async function rollBack(
     );
   }
 
-  // The restored version returns to those rooms. A copy that is still on the
-  // machine is reactivated byte-identically; one that is not is queued for the
-  // agent, which will verify the same checksum before it becomes visible.
+  // The restored version returns to those rooms as "not loaded" (D-125): staff load it
+  // onto the room PC (or check it is still there) and tick it on Room sync.
   const rooms = new Set(currentCopies.map((copy) => copy.room_id));
   const { rows: sessionRooms } = await tx.query<{ room_id: string }>(
     `SELECT DISTINCT se.room_id FROM pmp.sessions se

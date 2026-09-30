@@ -122,7 +122,8 @@ const FILES_SQL = `
              AND inf.severity IN ('warning', 'blocking')) AS open_findings,
          (SELECT count(*)::int FROM pmp.room_files rf
            WHERE rf.file_version_id = v.id
-             AND rf.sync_state IN ('synced', 'acknowledged', 'active')) AS rooms_synced
+             -- D-125: only a copy ticked loaded is on a room PC.
+             AND rf.sync_state = 'active') AS rooms_synced
     FROM v
     JOIN pmp.files f ON f.id = v.file_id
     JOIN pmp.slots s ON s.id = f.slot_id

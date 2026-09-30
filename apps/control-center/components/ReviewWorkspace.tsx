@@ -132,7 +132,7 @@ export function ReviewWorkspace({
           result.review_state === "approved"
             ? result.rooms_queued === 0
               ? "Approved — but its session has no room yet, so no room PC will get it. Give the session a room in the agenda."
-              : `Approved — being copied to ${selected.room ?? "the room"}'s PC. If the room already has an older version, the room technician switches to this one in Room Agent.`
+              : `Approved — next, load it onto ${selected.room ?? "the room"}'s PC and tick it on Room sync.`
             : result.review_state === "changes_requested"
               ? `Sent back for revision${told(result.notice)}`
               : result.review_state === "rejected"
@@ -316,7 +316,7 @@ export function ReviewWorkspace({
                 question={`Approve v${selected.version_number} of “${selected.title}”?`}
                 detail={
                   selected.room
-                    ? `It is copied to ${selected.room}'s PC. If the room already has an older version, the room technician switches to this one there.`
+                    ? `Then it waits on Room sync to be copied onto ${selected.room}'s PC and ticked loaded. An older version there stays in use until then.`
                     : "Its session has no room yet, so no room PC will get it until it has one."
                 }
                 confirmLabel="Approve"

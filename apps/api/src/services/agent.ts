@@ -85,6 +85,9 @@ export async function agentView(tx: pg.PoolClient, roomId: string): Promise<Agen
        LEFT JOIN pmp.file_versions fv ON fv.file_id = f.id
        LEFT JOIN pmp.room_files rf ON rf.file_version_id = fv.id AND rf.room_id = $1
                                    AND rf.sync_state <> 'obsolete'
+                                   -- D-125: a copy is only worth loading while its version is the
+                                   -- approved one; an older copy stays listed only while it is loaded.
+                                   AND (fv.review_state = 'approved' OR rf.sync_state = 'active')
       WHERE se.room_id = $1 AND (rf.id IS NOT NULL OR fv.id IS NULL
             OR fv.version_number = (SELECT max(v2.version_number) FROM pmp.file_versions v2 WHERE v2.file_id = f.id))
       ORDER BY se.starts_at`,
@@ -363,6 +366,104 @@ export async function acknowledge(
   return ok({ sync_state: activated.value });
 }
 
+/**
+ * D-125: DXG staff copy an approved file onto the room's presentation PC by hand and tick
+ * it here. The ticked copy becomes the one the room plays (`active`), and any other copy
+ * of the same talk the room was playing steps aside (`obsolete`) — the same hand-over
+ * `acknowledge` makes, without waiting for room software that isn't there.
+ */
+export async function markLoaded(
+  tx: pg.PoolClient,
+  actor: Actor,
+  roomFileId: string,
+  lockVersion: number,
+): Promise<Result<{ sync_state: RoomSyncState; lock_version: number }, DomainError>> {
+  const { rows } = await tx.query<{
+    sync_state: RoomSyncState;
+    lock_version: number;
+    room_id: string;
+    file_id: string;
+    review_state: string;
+  }>(
+    `SELECT rf.sync_state, rf.lock_version, rf.room_id, fv.file_id, fv.review_state
+       FROM pmp.room_files rf JOIN pmp.file_versions fv ON fv.id = rf.file_version_id
+      WHERE rf.id = $1 FOR UPDATE OF rf`,
+    [roomFileId],
+  );
+  const row = rows[0];
+  if (!row) return err({ code: "room_sync.not_found", message: "This file is no longer on the room's list — refresh the page." });
+
+  // Authority first, as in acknowledge: "you may not" beats "someone else changed it".
+  const permitted = transition(roomSyncLifecycle, { from: row.sync_state, action: "mark_loaded", actor });
+  if (!permitted.ok) return err(permitted.error);
+
+  if (row.lock_version !== lockVersion) {
+    return err({
+      code: "room_sync.conflict",
+      message: "This room copy changed while you were looking at it.",
+      current_state: row.sync_state,
+    });
+  }
+  // Only the approved version goes into a room: a copy of a version that has since been
+  // replaced by a newer approval must not become the one the room plays.
+  if (row.review_state !== "approved") {
+    return err({
+      code: "room_sync.not_approved",
+      message: "A newer version was approved since this page loaded. Refresh the page and load that one instead.",
+      current_state: row.sync_state,
+    });
+  }
+
+  // The copy the room was playing steps aside — as a consequence of this tick, so it is
+  // the system's transition, attributed to the person who ticked.
+  const system: Actor = { id: actor.id, roles: actor.roles, isMachine: true };
+  const { rows: previous } = await tx.query<{ id: string; sync_state: RoomSyncState; lock_version: number }>(
+    `SELECT rf.id, rf.sync_state, rf.lock_version
+       FROM pmp.room_files rf JOIN pmp.file_versions fv ON fv.id = rf.file_version_id
+      WHERE rf.room_id = $1 AND fv.file_id = $2 AND rf.sync_state = 'active' AND rf.id <> $3
+      FOR UPDATE OF rf`,
+    [row.room_id, row.file_id, roomFileId],
+  );
+  for (const old of previous) {
+    const retired = await setSyncState(tx, system, old.id, "obsolete", old.sync_state, old.lock_version, row.room_id);
+    if (!retired.ok) return err(retired.error);
+  }
+
+  const loaded = await setSyncState(tx, actor, roomFileId, "mark_loaded", row.sync_state, row.lock_version, row.room_id);
+  if (!loaded.ok) return err(loaded.error);
+  return ok({ sync_state: loaded.value, lock_version: row.lock_version + 1 });
+}
+
+/** D-125: take back a "loaded" tick made by mistake — the copy is "not loaded yet" again. */
+export async function unmarkLoaded(
+  tx: pg.PoolClient,
+  actor: Actor,
+  roomFileId: string,
+  lockVersion: number,
+): Promise<Result<{ sync_state: RoomSyncState; lock_version: number }, DomainError>> {
+  const { rows } = await tx.query<{ sync_state: RoomSyncState; lock_version: number; room_id: string }>(
+    `SELECT sync_state, lock_version, room_id FROM pmp.room_files WHERE id = $1 FOR UPDATE`,
+    [roomFileId],
+  );
+  const row = rows[0];
+  if (!row) return err({ code: "room_sync.not_found", message: "This file is no longer on the room's list — refresh the page." });
+
+  const permitted = transition(roomSyncLifecycle, { from: row.sync_state, action: "unmark_loaded", actor });
+  if (!permitted.ok) return err(permitted.error);
+
+  if (row.lock_version !== lockVersion) {
+    return err({
+      code: "room_sync.conflict",
+      message: "This room copy changed while you were looking at it.",
+      current_state: row.sync_state,
+    });
+  }
+
+  const undone = await setSyncState(tx, actor, roomFileId, "unmark_loaded", row.sync_state, row.lock_version, row.room_id);
+  if (!undone.ok) return err(undone.error);
+  return ok({ sync_state: undone.value, lock_version: row.lock_version + 1 });
+}
+
 export type LaunchOutcome =
   | { launched: true; at: string; version_number: number | null }
   | { launched: false; reason: string };
@@ -453,7 +554,7 @@ export async function launch(
         row.sync_state === null
           ? "There is no approved copy of this presentation in this room yet. The holding screen stays up."
           : row.sync_state === "synced"
-            ? "A newer approved version is waiting. Switch to it first — the room never swaps files on its own."
+            ? "A newer approved version hasn't been loaded yet. Copy it to the room PC and tick it loaded on Room sync first."
             : `This room's copy isn't ready to play (${wordsFor(ROOM_COPY, row.sync_state).label.toLowerCase()}). The holding screen stays up.`,
     });
   }

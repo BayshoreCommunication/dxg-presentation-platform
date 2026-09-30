@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { getFleet } from "@/lib/api";
 import { guard } from "@/lib/guard";
-import { roomFilesLine, roomPcState } from "@/lib/roomWords";
+import { roomLoadedLine } from "@/lib/roomWords";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +12,7 @@ export default async function PickRoomPage({ params }: { params: Promise<{ id: s
     <>
       <h1 className="htitle">Room Agent</h1>
       <div className="note" style={{ margin: "-8px 0 14px" }}>
-        The view a room technician sees on the room PC. Pick a room.
+        The view a room technician sees at the lectern. Pick a room.
       </div>
       <div className="card">
         <div className="cbd" style={{ padding: "0 0 4px" }}>
@@ -24,8 +24,8 @@ export default async function PickRoomPage({ params }: { params: Promise<{ id: s
                     <b>{room.room}</b>
                     <br />
                     <span className="note">
-                      {/* Was "3/4 files current · agent 1.4.2" / "no agent" (R43, D-110). */}
-                      {roomFilesLine(room)} · {roomPcState(room)}
+                      {/* Was "3/4 files current · agent 1.4.2" (R43, D-110); since D-125 only the ticks. */}
+                      {roomLoadedLine(room)}
                     </span>
                   </td>
                   <td style={{ textAlign: "right" }}>

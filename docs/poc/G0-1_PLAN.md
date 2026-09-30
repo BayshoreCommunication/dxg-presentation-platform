@@ -48,6 +48,9 @@ Make the staff **Launch** button real: the agent picks up launch commands (on it
 same online and offline), launches through the chosen driver, and reports back; the room view shows what actually
 happened. Plus the manifest/download endpoints (G0-2) so files arrive on the room PC by themselves.
 
+**Deferred by D-125 (2026-09-30):** Launch/sync automation is not scheduled — DXG staff load room PCs by hand and tick
+each file on Room sync. When room software does come, it may tick "loaded" itself (`mark_loaded`) instead.
+
 ## What we need that only you can provide
 
 1. **Windows 11 PC** (physical, x64) with **Microsoft 365 PowerPoint**, and **3 monitors** available (item 3 needs a

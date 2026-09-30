@@ -2347,3 +2347,48 @@ running"), any warnings or problems, then **Approve vN** (the main button), **As
 revision") and Reject; the what-each-does line appears when one is chosen; the report link and the keyboard shortcuts
 on one small line. Comments sit below: this version's first, earlier versions folded, the note box closed until **Add
 a note** (also on Presentation detail, which shares the panel). Behaviour unchanged.
+
+## D-124 (2026-09-30): Room Agent leads with "Now" — Status: ACCEPTED (Travis: "improve the Room Agent screen too")
+The room view spread the room's situation across a header line, a change-alert banner and a column of greyed Launch
+buttons each with its own reason. Now: the room's name big, a status tag (Connected / Not reporting / Not set up) and
+the clock; a **Now** line with one sentence and one button — not set up ("Connect it on Room sync"), not reporting
+("last heard from 46 hours ago — check it's switched on and online"), a new version to switch to ("Switch to vN
+before its 10:30 session"), or "Next up: 10:30 … It's ready to play" with ▶ Launch and the honest note that Launch
+records the talk; then one row per talk with one plain state ("v2 · ready to play", "No approved file yet", "new
+version ready — switch to play it") and only the button that applies (Launch, Switch, or none); **This room PC** as
+"1 of 1 talk on this PC" with size and older versions small, and Check for updates only when the PC is connected;
+the holding-screen preview. Behaviour unchanged.
+
+## D-125 (2026-09-30): Room PCs are loaded and checked by hand — Status: ACCEPTED (Travis's call)
+The platform no longer checks whether room PCs are set up or reporting: DXG staff copy each approved file onto the
+room's presentation PC themselves and tick it off. **Domain** (`lifecycles/roomSync.ts`): staff action `mark_loaded`
+(assigned / syncing / synced / sync_failed / acknowledged → active; room technician, Speaker Ready Room technician or
+above; no reason) and `unmark_loaded` (active → assigned, for a mistaken tick); `deriveRoomReadiness` takes no
+heartbeat — a room is Ready when every talk's approved version is loaded (or the talk is cancelled). **API:**
+`POST /room-files/{id}/loaded` and `/unloaded` with `{ lock_version }` (409 `room_sync.conflict`; 409 new
+`room_sync.not_approved` when a newer version was approved since; audited, workflow transitions like
+acknowledge); ticking retires the room's other active copy of the talk (`obsolete`), as acknowledge did. Room sync's
+fleet adds per room its talks: approved version, room copy id, lock, state, whether loaded, the older version still
+loaded, and the Files screen's download link; command-centre counts, the risk list and Files' "loaded on room PCs"
+ignore heartbeats. **Talk status:** the DXG labels stay; "Synchronized onsite" = approved version ticked loaded,
+"Approved — delivering" = approved, not loaded yet, "Update pending ack" = a newer approved version not loaded while the
+room still has the older one ("load the new one"). **Screens:** Room sync is a loading checklist (per room: Ready /
+Not ready, each talk "Loaded ✓" or "Not loaded yet", Download vN, Mark loaded, Undo via ConfirmInline, "v3 approved —
+load it (the room has v2)"), replacing D-122's connection groups and the connection-code button; Room Agent's "Now" is
+a newer version to load / next up / "N talks aren't loaded yet" / nothing left, rows say "v2 · loaded — ready to play",
+Switch became Mark loaded, "1 of 2 talks loaded", no connection tag, sizes or Check for updates (Launch rules
+unchanged); the three confirmations' step 3 is "Loaded on the room PC"; R7's amber "not reporting" notes are gone from
+every screen (command centre, agenda, speakers, check-in, Speaker Ready Room, presentation detail); Help's Room PCs
+guide and glossary rewritten. **Kept for later room software:** heartbeat, device-key, agent-view `agent`/`library`
+fields, `/rooms/{id}/sync`, acknowledge and every machine transition, and their tables — none is shown or relied on.
+G0-1's Launch/sync automation (Phase C) is deferred; that software may tick "loaded" itself. Tests: domain transition
+tests; `tests/invariants/manual-room-loading.test.ts` (loaded → Ready without any room PC; newer approval → Update
+pending ack → loaded, old copy replaced; undo; reviewer refused; stale lock 409).
+
+## D-126 (2026-09-30): Communications has no counter tiles — Status: ACCEPTED (Travis's call)
+Of the six tiles (Sending, Sent, Delivered, Opened, Link clicked, Bounced), Opened and Link clicked could never move
+on production: the SES configuration set publishes send, delivery, bounce, complaint, delay, reject and rendering
+events only, and open/click tracking is deliberately off — it would add a tracking image and reroute every link,
+including each speaker's personal upload link, through Amazon's tracking domain. The other four repeated the delivery
+log. All six are removed; each email's status stays in the delivery log (and bounces on the speaker's row). The API
+still returns the counts.

@@ -2,7 +2,6 @@
 
 import { useRef, useState } from "react";
 import Link from "next/link";
-import { Kpi } from "@/components/Kpi";
 
 import { useRouter } from "next/navigation";
 import type { CommsView as CommsData } from "@/lib/api";
@@ -11,15 +10,6 @@ import { Chip } from "@/components/Chip";
 import { WhyNot } from "@/components/WhyNot";
 import { EMAIL_STATUS, formatDeadline, formatSessionTime, wordsFor } from "@pmp/format";
 
-/** Kravio puts a glyph on every tile; these say what each delivery counter is. */
-const COUNTER_ICON = {
-  queued: "clock",
-  sent: "send",
-  delivered: "mail",
-  opened: "checkCircle",
-  clicked: "cursor",
-  bounced: "warning",
-} as const;
 
 const STATUS_TONE: Record<string, string> = {
   queued: "submitted",
@@ -193,29 +183,9 @@ export function CommsView({
       <h1 className="htitle">Communications</h1>
       {error && <div className="err">{error}</div>}
 
-      <div className="krow">
-        {/* S32 (D-113): "Sent" too — the log listed sent emails that no counter showed. */}
-        {(["queued", "sent", "delivered", "opened", "clicked", "bounced"] as const).map((key) => (
-          <Kpi
-            key={key}
-            label={wordsFor(EMAIL_STATUS, key).label}
-            icon={COUNTER_ICON[key]}
-            value={data.stats[key]}
-            caption={key === "bounced" && data.stats.bounced > 0 ? "could not be delivered" : undefined}
-            tone={key === "bounced" && data.stats.bounced > 0 ? "bad" : undefined}
-          />
-        ))}
-        {/* D-116: a practice event's emails are counted here, never under Sent. */}
-        {(data.stats.practice ?? 0) > 0 && (
-          <Kpi
-            label={wordsFor(EMAIL_STATUS, "practice").label}
-            icon="mail"
-            value={data.stats.practice}
-            caption="nothing left the system"
-          />
-        )}
-      </div>
-
+      {/* No counter tiles (D-126): Opened and Link clicked could never move (open and click
+          tracking are off, on purpose — they would reroute each speaker's personal link), and
+          the rest repeated the delivery log below, where each email's status is shown. */}
       <div className="card">
         <div className="chd">
           <h3>Template</h3>

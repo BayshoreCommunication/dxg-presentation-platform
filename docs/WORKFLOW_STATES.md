@@ -89,6 +89,8 @@ FR-SYNC-001..003, FR-AGT-*. **Keyed by (file_version_id, room_id)** — one appr
 | `obsolete` | Replaced/moved/canceled; retained locally until event close | yes |
 | `sync_failed` | Download/verify failed; retry with alerting | no |
 
+**Manual loading (D-125, 2026-09-30 — how it works today).** The platform does not watch room PCs. DXG staff download each approved file from Room sync, copy it onto the room's presentation PC by hand and tick it: `mark_loaded` (`assigned`/`syncing`/`synced`/`sync_failed`/`acknowledged` → `active`; Room Technician, SRR Technician or above; no reason). Ticking retires the room's other `active` copy of the same talk (`active→obsolete`, system-attributed to the same person), and only the talk's currently approved version can be ticked. `unmark_loaded` (`active→assigned`, same roles) takes back a mistaken tick. In practice a copy is either `assigned` ("Not loaded yet") or `active` ("Loaded on the room PC"). The automatic path below — agent download, checksum, acknowledgment — is **future** room software (G0-1 → M5); its machine transitions, heartbeat and device keys stay in place, unused by the screens, and that software may later tick "loaded" itself.
+
 Legal: `assigned→syncing→synced`; `sync_failed→syncing` (retry); `synced→acknowledged→active` when the change requires acknowledgment, `synced→active` when it's the first delivery; `active→obsolete` (new version activated, session moved/canceled); rollback flips the prior version's row back from `obsolete→active` (audited, notified). Launch warns when the talk's room copy is not `active`+acknowledged. No partial file is ever visible: `synced` requires full checksum pass (SRS §18 scenario 1). Roles: agent/system transitions are machine-attributed (device credential); acknowledgment requires Room Technician; forced re-sync requires PM or Sync Dashboard operator.
 
 ## 5. Session/talk state (per Slot/Talk) — `session_state`
@@ -142,3 +144,5 @@ must not be reported as "Missing" merely because nobody uploaded to it. Implemen
 7. (moved to rule 0 above) Session `canceled` → **Canceled**; event closed + archived → **Archived**
 
 Room readiness (OBJ-6) = all talks in that room's upcoming sessions at "Ready", agent heartbeat fresh, no unacknowledged changes.
+
+**Amended 2026-09-30 (D-125):** room PCs are loaded by hand, so readiness no longer asks for a fresh agent heartbeat: a room is ready when every talk in it is "Synchronized onsite" (its approved version ticked loaded) or cancelled. "Update pending ack" now means a newer approved version is not loaded yet while the room still has an older one loaded.

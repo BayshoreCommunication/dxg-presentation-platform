@@ -3192,3 +3192,12 @@ deck show; damaged/missing files refused. Open: a deck with linked OLE + linked 
 (fails safely to the holding screen); Office on the test PC is not activated (grace ends 2026-10-04). Windows fixes:
 BOM-tolerant config, local `/restart`, Get-Process fallback for remote sessions, harness resets per item, autostart
 fails loudly. Evidence: `docs/poc/evidence/win11/`.
+
+## 2026-09-30 — Room PCs are loaded and checked by hand (D-125)
+Travis's call: the platform no longer checks whether room PCs are set up or reporting. Staff download each approved
+file from Room sync, copy it onto the room PC and tick **Mark loaded** (`POST /room-files/{id}/loaded`, undo via
+`/unloaded`); room readiness is the ticks alone. Room sync rebuilt as a loading checklist; Room Agent, the three
+confirmations, check-in, SRR, presentation detail, command centre and Help lose every connection / "not reporting" /
+connection-code word. Heartbeat, device keys and the sync endpoints stay server-side for later room software.
+Invariants: new `manual-room-loading.test.ts` (7 tests); whole suite 311/316 — the 5 failures are cross-event tests
+that need a version awaiting review in the local MedTech seed (known data issue). Not committed yet.

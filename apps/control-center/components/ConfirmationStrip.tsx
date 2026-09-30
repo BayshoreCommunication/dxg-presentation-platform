@@ -3,7 +3,7 @@ import { formatSessionTime } from "@pmp/format";
 /**
  * The three confirmations a talk needs, side by side (D-113, UX_REVIEW root cause 5):
  * a reviewer approves the file, the speaker signs it off in the Speaker Ready Room, and
- * the room PC has it switched in. They are separate steps, done by different people in
+ * staff load it onto the room PC and tick it (D-125). They are separate steps, done by different people in
  * any order, and nothing on screen used to connect them. Each step is done, waiting or
  * not needed, with who/when when the page knows it, and one line says what comes next.
  *
@@ -20,13 +20,11 @@ export type ConfirmationFacts = {
   /** Distinct room-copy states of the approved version; undefined when the page doesn't know them. */
   roomStates?: string[];
   signOff: { version: number; by?: string | null; at?: string | null } | null;
-  /** R7's amber room-PC note, when the room PC has gone quiet. */
-  stale?: string | null;
   timezone: string;
 };
 
 type StepState = "done" | "waiting" | "not_needed";
-type Step = { title: string; short: string; state: StepState; detail: string; next?: string; warn?: boolean };
+type Step = { title: string; short: string; state: StepState; detail: string; next?: string };
 
 const WAITING_FOR_FILE: Record<string, { detail: string; next: string }> = {
   missing: {
@@ -66,8 +64,8 @@ export function confirmationSteps(facts: ConfirmationFacts): Step[] {
           next: waitingFor.next,
         };
 
-  // 2 — the speaker, at the Speaker Ready Room desk. Not a gate: the room gets each
-  // approved version whether or not the speaker has signed off.
+  // 2 — the speaker, at the Speaker Ready Room desk. Not a gate: each approved version
+  // is loaded onto the room PC whether or not the speaker has signed off.
   const signoff: Step = canceled
     ? { title: "Signed off by the speaker in the Speaker Ready Room", short: "Signed off", state: "not_needed", detail: "Session cancelled" }
     : !facts.hasSpeaker
@@ -100,74 +98,56 @@ export function confirmationSteps(facts: ConfirmationFacts): Step[] {
               next: "When the speaker arrives, check them in at the Speaker Ready Room and confirm their final version.",
             };
 
-  // 3 — the room PC has the approved version and plays it.
+  // 3 — the approved version is loaded on the room PC. D-125: DXG staff copy it there by
+  // hand and tick it on Room sync; nothing is checked automatically.
   const states = facts.roomStates;
   const room = facts.room ?? "the room";
   const inRoom: Step = canceled
-    ? { title: "On the room PC and switched in", short: "In the room", state: "not_needed", detail: "Session cancelled" }
+    ? { title: "Loaded on the room PC", short: "Loaded", state: "not_needed", detail: "Session cancelled" }
     : !approved
       ? {
-          title: "On the room PC and switched in",
-          short: "In the room",
+          title: "Loaded on the room PC",
+          short: "Loaded",
           state: "waiting",
           detail: "After approval",
-          next: `Once approved, it is copied to ${room}'s PC by itself.`,
+          next: `Once approved, copy it to ${room}'s PC and tick it on Room sync.`,
         }
       : !facts.room
         ? {
-            title: "On the room PC and switched in",
-            short: "In the room",
+            title: "Loaded on the room PC",
+            short: "Loaded",
             state: "waiting",
             detail: "No room assigned",
-            next: "Give the session a room so the approved file can be sent there.",
+            next: "Give the session a room so the approved file has a room PC to go to.",
           }
-        : roomStep(states, facts.status, approved.version, facts.room, facts.stale ?? null);
+        : roomStep(states, facts.status, approved.version, facts.room);
 
   return [review, signoff, inRoom];
 }
 
 /** Step 3 from the approved version's room copies, or — when unknown — the talk status. */
-function roomStep(states: string[] | undefined, status: string, version: number, room: string, stale: string | null): Step {
-  const base = { title: "On the room PC and switched in", short: "In the room" };
+function roomStep(states: string[] | undefined, status: string, version: number, room: string): Step {
+  const base = { title: "Loaded on the room PC", short: "Loaded" };
   const done = states ? states.length > 0 && states.every((state) => state === "active") : status === "synchronized_onsite";
-  if (done) return { ...base, state: "done", detail: stale ?? `v${version} ready to play in ${room}`, warn: Boolean(stale) };
-  if (states ? states.includes("synced") : status === "update_pending_ack") {
+  if (done) return { ...base, state: "done", detail: `v${version} loaded in ${room}` };
+  if (status === "update_pending_ack") {
     return {
       ...base,
       state: "waiting",
-      detail: `v${version} is on the room PC, not switched in yet`,
-      next: `The room technician switches to v${version} in Room Agent.`,
+      detail: `v${version} not loaded yet — the room PC has an older version`,
+      next: `Load v${version} onto the room PC and tick it on Room sync.`,
     };
   }
-  if (states?.includes("sync_failed")) {
-    return {
-      ...base,
-      state: "waiting",
-      detail: "Copy to the room PC failed",
-      next: "Check the room PC is on and online on Room sync — it tries again by itself.",
-      warn: true,
-    };
-  }
-  if (states && states.length === 0) {
-    return { ...base, state: "waiting", detail: "Waiting to be sent", next: `It is sent to ${room}'s PC next time that PC checks in.` };
-  }
-  return {
-    ...base,
-    state: "waiting",
-    detail: stale ?? "Being copied to the room PC",
-    next: "Nothing to do unless the room PC is not reporting (see Room sync).",
-    warn: Boolean(stale),
-  };
+  return { ...base, state: "waiting", detail: "Not loaded yet", next: "Copy it to the room PC and tick it on Room sync." };
 }
 
 const MARK: Record<StepState, string> = { done: "✓", waiting: "○", not_needed: "–" };
 const WORD: Record<StepState, string> = { done: "Done", waiting: "Waiting", not_needed: "Not needed" };
-const COLOR = (step: Step) =>
-  step.warn ? "var(--amber-text)" : step.state === "done" ? "var(--success)" : "var(--muted-foreground)";
+const COLOR = (step: Step) => (step.state === "done" ? "var(--success)" : "var(--muted-foreground)");
 
 /**
  * The strip. `compact` is one line of marks per talk for lists (the Speaker Ready Room
- * dashboard): "✓ Approved · ○ Signed off · ○ In the room" — the row's status line already
+ * dashboard): "✓ Approved · ○ Signed off · ○ Loaded" — the row's status line already
  * says what to do next, and hovering a mark gives its detail.
  */
 export function ConfirmationStrip({ facts, compact = false }: { facts: ConfirmationFacts; compact?: boolean }) {
@@ -200,7 +180,7 @@ export function ConfirmationStrip({ facts, compact = false }: { facts: Confirmat
               flex: "1 1 180px",
               minWidth: 0,
               border: "1px solid var(--border)",
-              borderLeft: `3px solid ${step.state === "done" && !step.warn ? "var(--success)" : step.warn ? "var(--amber)" : "var(--border)"}`,
+              borderLeft: `3px solid ${step.state === "done" ? "var(--success)" : "var(--border)"}`,
               borderRadius: 8,
               padding: "8px 10px",
               fontSize: 13,
@@ -212,7 +192,7 @@ export function ConfirmationStrip({ facts, compact = false }: { facts: Confirmat
             <div style={{ color: COLOR(step), fontSize: 12.5, marginTop: 2 }}>
               {MARK[step.state]} {WORD[step.state]}
             </div>
-            <div className="note" style={{ fontSize: 12.5, marginTop: 2, color: step.warn ? "var(--amber-text)" : undefined }}>
+            <div className="note" style={{ fontSize: 12.5, marginTop: 2 }}>
               {step.detail}
             </div>
           </div>
@@ -221,14 +201,12 @@ export function ConfirmationStrip({ facts, compact = false }: { facts: Confirmat
       <div className="note" style={{ marginTop: 6 }}>
         {facts.status === "canceled"
           ? "The session was cancelled — nothing to do."
-          : allDone && steps.some((step) => step.warn)
-            ? "All three confirmations were in when the room PC last reported — check it is on and online."
-            : allDone
+          : allDone
               ? "All three confirmations are in — nothing left to do."
             : next
               ? `Next: ${next}`
               : null}{" "}
-        These are separate steps: the room PC gets each approved version whether or not the speaker has signed off.
+        These are separate steps: each approved version is loaded onto the room PC whether or not the speaker has signed off.
       </div>
     </div>
   );

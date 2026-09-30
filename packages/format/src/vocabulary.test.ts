@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { formatDate, formatDateRange, humanize, roleList, talkRoomNote, timeZoneLabel, timeZoneOptions, wordsFor, IMPORT_ROW, ROLE } from "./vocabulary.ts";
+import { formatDate, formatDateRange, humanize, roleList, timeZoneLabel, timeZoneOptions, wordsFor, IMPORT_ROW, ROLE, ROOM_COPY, TALK_STATUS } from "./vocabulary.ts";
 
 test("unknown codes read as words, never raw", () => {
   assert.equal(humanize("sync_failed"), "Sync failed");
@@ -30,15 +30,15 @@ test("dates are readable and never shift a day", () => {
   assert.equal(formatDateRange("2026-05-01", "2026-05-01"), "May 1, 2026");
 });
 
-test("a talk the room confirmed goes amber when the room PC is silent (R7)", () => {
-  assert.equal(talkRoomNote("synchronized_onsite", 60), null);
-  assert.equal(talkRoomNote("synchronized_onsite", 300), null);
-  assert.match(talkRoomNote("synchronized_onsite", 6 * 86_400) ?? "", /^Last confirmed 6 days ago/);
-  assert.match(talkRoomNote("update_pending_ack", 7_200) ?? "", /2 hours ago/);
-  assert.match(talkRoomNote("approved_delivering", null) ?? "", /hasn't reported yet/);
-  // Statuses that don't depend on the room PC, and talks with no known room, are left alone.
-  assert.equal(talkRoomNote("submitted", 6 * 86_400), null);
-  assert.equal(talkRoomNote("synchronized_onsite", undefined), null);
+test("room copies are loaded by hand — no connection words (D-125)", () => {
+  assert.equal(wordsFor(ROOM_COPY, "assigned").label, "Not loaded yet");
+  assert.equal(wordsFor(ROOM_COPY, "active").label, "Loaded on the room PC");
+  assert.equal(wordsFor(ROOM_COPY, "obsolete").label, "Replaced");
+  for (const words of Object.values(ROOM_COPY)) {
+    assert.doesNotMatch(`${words.label} ${words.meaning} ${words.next ?? ""}`, /check(s|ing)? in|switch|report|connect/i);
+  }
+  assert.match(TALK_STATUS.approved_delivering!.meaning, /waiting to be loaded/);
+  assert.match(TALK_STATUS.update_pending_ack!.next!, /Load the new version/);
 });
 
 test("every schedule-import row action reads as words (S19)", () => {
