@@ -186,7 +186,7 @@ export async function updateSession(
   eventId: string,
   sessionId: string,
   input: SessionInput,
-): Promise<Result<{ session_id: string; rooms_rerouted: number }, DomainError>> {
+): Promise<Result<{ session_id: string; rooms_rerouted: number; presentations_renamed: number }, DomainError>> {
   if (!hasAnyRole(actor, EDITORS)) return err(forbidden("Changing a session"));
   const event = await eventOf(tx, eventId);
   if (!event) return err(notFound("event"));
@@ -214,6 +214,24 @@ export async function updateSession(
       WHERE id = $1`,
     [sessionId, input.title.trim(), roomId, trackId, dayId, input.date, input.start, input.end, event.timezone],
   );
+
+  /*
+   * A presentation named after its session follows a rename (D-130). DXG's agendas have
+   * one presentation per session and the import gives it the session's title, so that
+   * title is the one staff see on Files, review, check-in and every email. Before this,
+   * correcting a session title here left the presentation — and every screen naming
+   * it — on the old one. Only presentations whose title *was* the session's move: one
+   * added with a title of its own keeps it.
+   */
+  let renamed = 0;
+  if (before.title !== input.title.trim()) {
+    const { rowCount } = await tx.query(
+      `UPDATE pmp.slots SET title = $3, updated_at = now()
+        WHERE session_id = $1 AND event_id = $2 AND title = $4`,
+      [sessionId, eventId, input.title.trim(), before.title],
+    );
+    renamed = rowCount ?? 0;
+  }
 
   /*
    * A session that changes room takes its approved files with it. The copies in the
@@ -263,9 +281,10 @@ export async function updateSession(
       before: { title: before.title, location: before.room },
       after: { title: input.title.trim(), location: input.room.trim(), date: input.date, start: input.start, end: input.end },
       files_rerouted: rerouted,
+      presentations_renamed: renamed,
     },
   });
-  return ok({ session_id: sessionId, rooms_rerouted: rerouted });
+  return ok({ session_id: sessionId, rooms_rerouted: rerouted, presentations_renamed: renamed });
 }
 
 /**
@@ -537,16 +556,18 @@ export async function addPresenter(
     presenters: [{ name, email }],
     organization: presenter.organization?.trim() ?? "",
   });
+  // D-137: a co-presenter lands on a presentation of their own in the same session.
+  const landed = [...touched.values()][0] ?? slotId;
   await appendAudit(tx, {
     partitionId: eventId,
     clientId: event.client_id,
     actorUserId: actor.id,
     action: "slot.presenter_added",
     subjectType: "slot",
-    subjectId: slotId,
-    detail: { speaker_ids: [...touched] },
+    subjectId: landed,
+    detail: { speaker_ids: [...touched.keys()], ...(landed === slotId ? {} : { session_of: slotId }) },
   });
-  return ok({ slot_id: slotId });
+  return ok({ slot_id: landed });
 }
 
 /**
@@ -591,12 +612,15 @@ export async function addSpeaker(
   const existing = found[0];
 
   if (existing) {
+    // Already on it, or on their own twin of it (D-137: same session, same title).
     const { rowCount } = await tx.query(
-      `SELECT 1 FROM pmp.speaker_assignments WHERE speaker_id = $1 AND slot_id = $2`,
+      `SELECT 1 FROM pmp.speaker_assignments sa JOIN pmp.slots s ON s.id = sa.slot_id, pmp.slots me
+        WHERE me.id = $2 AND sa.speaker_id = $1 AND sa.replaced_by IS NULL
+          AND s.session_id = me.session_id AND s.title = me.title`,
       [existing.id, slotId],
     );
     if (rowCount) {
-      return err({ code: "speakers.conflict", message: `${existing.full_name} already presents that presentation.` });
+      return err({ code: "speakers.conflict", message: `${existing.full_name} already presents in that session.` });
     }
   }
   const touched = await syncPresenters(tx, {
@@ -606,17 +630,17 @@ export async function addSpeaker(
     presenters: [{ name, email }],
     organization,
   });
-  const speakerId = [...touched][0]!;
+  const [speakerId, landed] = [...touched.entries()][0]!;
   await appendAudit(tx, {
     partitionId: eventId,
     clientId: event.client_id,
     actorUserId: actor.id,
     action: existing ? "slot.presenter_added" : "speakers.created",
     subjectType: existing ? "slot" : "speaker",
-    subjectId: existing ? slotId : speakerId,
-    detail: { speaker_ids: [speakerId], slot_id: slotId, via: "speakers_screen" },
+    subjectId: existing ? landed : speakerId,
+    detail: { speaker_ids: [speakerId], slot_id: landed, via: "speakers_screen" },
   });
-  return ok({ speaker_id: speakerId, created: !existing, slot_id: slotId });
+  return ok({ speaker_id: speakerId, created: !existing, slot_id: landed });
 }
 
 /**
@@ -783,6 +807,20 @@ export async function removePresenter(
     [slotId, speakerId, eventId],
   );
   if (!rowCount) return err(notFound("presenter on that presentation"));
+  /*
+   * D-137: a co-presenter's presentation is theirs. Taken off it, with nobody else on it,
+   * nothing uploaded and other presentations still in the session, it is an empty row
+   * nobody can use — so it goes. A session's last presentation always stays (Add speaker
+   * refills it), and one with files stays for the files' sake.
+   */
+  const { rowCount: tidied } = await tx.query(
+    `DELETE FROM pmp.slots s
+      WHERE s.id = $1
+        AND NOT EXISTS (SELECT 1 FROM pmp.speaker_assignments sa WHERE sa.slot_id = s.id)
+        AND NOT EXISTS (SELECT 1 FROM pmp.files f WHERE f.slot_id = s.id)
+        AND EXISTS (SELECT 1 FROM pmp.slots other WHERE other.session_id = s.session_id AND other.id <> s.id)`,
+    [slotId],
+  );
   await appendAudit(tx, {
     partitionId: eventId,
     clientId: event.client_id,
@@ -790,7 +828,7 @@ export async function removePresenter(
     action: "slot.presenter_removed",
     subjectType: "slot",
     subjectId: slotId,
-    detail: { speaker_id: speakerId },
+    detail: { speaker_id: speakerId, ...(tidied ? { presentation_removed: true } : {}) },
   });
   return ok({ removed: true });
 }

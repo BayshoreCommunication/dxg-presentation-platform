@@ -2,6 +2,7 @@
 
 import { InfoTip } from "@/components/InfoTip";
 import { useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import type { AgendaPresentation, AgendaSession, EventDraft, SpeakerRow } from "@/lib/api";
 import { agendaApi } from "@/lib/api";
@@ -11,7 +12,6 @@ import { EventDetails } from "@/components/EventDetails";
 import {
   ConfirmDelete,
   ActionMenu,
-  PresentationForm,
   PresenterForm,
   ReasonForm,
   RemovePresenter,
@@ -84,12 +84,19 @@ export function EventTabs({
   speakers: SpeakerRow[];
   initialTab: string | undefined;
 }) {
-  const [tab, setTab] = useState<Tab>(
-    TABS.some((candidate) => candidate.id === initialTab) ? (initialTab as Tab) : "overview",
-  );
+  /*
+   * The tab is read from the address, not held in state (D-134): the sidebar's "Agenda"
+   * link points here with `?tab=agenda`, and on this page that is a navigation to the
+   * same component — state set once at mount would ignore it. Next keeps
+   * `useSearchParams` in step with `history.replaceState`, so choosing a tab below
+   * updates it too. `initialTab` is the server's reading, for the first paint.
+   */
+  const params = useSearchParams();
+  // No `tab` in the address means Overview — not "whatever the page was opened with".
+  const wanted = params ? (params.get("tab") ?? undefined) : initialTab;
+  const tab: Tab = TABS.some((candidate) => candidate.id === wanted) ? (wanted as Tab) : "overview";
 
   const choose = (next: Tab) => {
-    setTab(next);
     const url = new URL(window.location.href);
     if (next === "overview") url.searchParams.delete("tab");
     else url.searchParams.set("tab", next);
@@ -265,47 +272,34 @@ function AgendaPanel({
             const state = SESSION_STATE[session.state];
             const canceled = session.state === "canceled";
             return (
-              <div
-                key={session.id}
-                style={{
-                  border: "1px solid var(--line)",
-                  borderRadius: 6,
-                  marginBottom: 8,
-                  // Not `overflow: hidden`: it clipped the row's action menu.
-                  opacity: canceled ? 0.75 : 1,
-                }}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    gap: 12,
-                    padding: "8px 12px",
-                    background: "var(--mist)",
-                    borderRadius: "6px 6px 0 0",
-                  }}
-                >
-                  <div>
-                    <span className="mono num" style={{ marginRight: 10 }}>
-                      {clock(session.starts_at, timezone)}–{clock(session.ends_at, timezone)}
-                    </span>
-                    <b style={canceled ? { textDecoration: "line-through" } : undefined}>{session.title}</b>
+              // Not `overflow: hidden` on the card: it clipped the row's action menu.
+              <div key={session.id} className={canceled ? "ag-sess canceled" : "ag-sess"}>
+                <div className="ag-head">
+                  {/* Start over end, so every session's title starts on the same line (D-131). */}
+                  <div className="ag-time mono num">
+                    <span>{clock(session.starts_at, timezone)}</span>
+                    <span>{clock(session.ends_at, timezone)}</span>
+                  </div>
+                  <div className="ag-what">
+                    <b className="ag-title">{session.title}</b>
                     <div className="note">
                       {[session.room ?? "No room", session.track, session.kind !== "session" ? session.kind : null]
                         .filter(Boolean)
                         .join(" · ")}
                     </div>
                   </div>
-                  <div style={{ display: "flex", gap: 6, alignItems: "flex-start", flexWrap: "wrap", justifyContent: "flex-end" }}>
+                  <div className="ag-actions">
                     {state && <Chip status={state.status} label={state.label} />}
                     {canEdit && (
                       <ActionMenu
                         label={`Actions for session ${session.title}`}
                         items={[
                           { label: "Edit session", onSelect: () => toggle(`session:${session.id}`) },
-                          ...(canceled
+                          // Each speaker gets their own presentation in the session (D-137).
+                          ...(canceled || session.presentations.length === 0
                             ? []
-                            : [{ label: "Add presentation", onSelect: () => toggle(`add-talk:${session.id}`) }]),
+                            : [{ label: "Add speaker", onSelect: () => toggle(`add-speaker:${session.id}`) }]),
+                          // No "Add presentation" (D-132): one presentation per session.
                           ...(session.state === "completed"
                             ? []
                             : [
@@ -361,33 +355,37 @@ function AgendaPanel({
                     />
                   </div>
                 )}
-                {open === `add-talk:${session.id}` && (
+                {open === `add-speaker:${session.id}` && session.presentations[0] && (
                   <div style={{ padding: "0 12px" }}>
-                    <PresentationForm eventId={eventId} sessionId={session.id} onClose={close} />
+                    <PresenterForm
+                      eventId={eventId}
+                      slotId={session.presentations[0].slot_id}
+                      asSpeaker
+                      onClose={close}
+                    />
                   </div>
                 )}
 
                 {session.presentations.length === 0 ? (
-                  <div className="note" style={{ padding: "8px 12px" }}>
-                    No presentations in this session.
+                  <div className="ag-talk">
+                    <div className="ag-time" />
+                    <div className="note">No presentations in this session.</div>
                   </div>
                 ) : (
-                  <table>
-                    <tbody>
-                      {session.presentations.map((item) => (
-                        <PresentationRow
-                          key={item.slot_id}
-                          eventId={eventId}
-                          timezone={timezone}
-                          item={item}
-                          canEdit={canEdit}
-                          open={open}
-                          toggle={toggle}
-                          close={close}
-                        />
-                      ))}
-                    </tbody>
-                  </table>
+                  session.presentations.map((item) => (
+                    <PresentationRow
+                      key={item.slot_id}
+                      eventId={eventId}
+                      timezone={timezone}
+                      sessionTitle={session.title}
+                      onlyOne={session.presentations.length === 1}
+                      item={item}
+                      canEdit={canEdit}
+                      open={open}
+                      toggle={toggle}
+                      close={close}
+                    />
+                  ))
                 )}
               </div>
             );
@@ -401,6 +399,8 @@ function AgendaPanel({
 function PresentationRow({
   eventId,
   timezone,
+  sessionTitle,
+  onlyOne,
   item,
   canEdit,
   open,
@@ -409,25 +409,20 @@ function PresentationRow({
 }: {
   eventId: string;
   timezone: string;
+  sessionTitle: string;
+  onlyOne: boolean;
   item: AgendaPresentation;
   canEdit: boolean;
   open: string | null;
   toggle: (key: string) => void;
   close: () => void;
 }) {
+  // No "Edit presentation" (D-132): its title follows the session (D-130) and it runs on
+  // the session's times (D-129). Edit the session instead.
+  // Co-presenters' presentations share the title (D-137); who presents tells them apart.
+  const who = item.speakers.map((person) => person.name).join(", ");
   const editor =
-    open === `talk:${item.slot_id}` ? (
-      <PresentationForm
-        eventId={eventId}
-        slotId={item.slot_id}
-        initial={{
-          title: item.title,
-          start: localClock(item.starts_at, timezone),
-          end: localClock(item.ends_at, timezone),
-        }}
-        onClose={close}
-      />
-    ) : open === `presenter:${item.slot_id}` ? (
+    open === `presenter:${item.slot_id}` ? (
       <PresenterForm eventId={eventId} slotId={item.slot_id} onClose={close} />
     ) : open?.startsWith(`remove-presenter:${item.slot_id}:`) ? (
       (() => {
@@ -445,67 +440,112 @@ function PresentationRow({
       })()
     ) : open === `delete-talk:${item.slot_id}` ? (
       <ConfirmDelete
-        what={`the presentation "${item.title}"`}
+        what={`the presentation "${item.title}"${who ? ` (${who})` : ""}`}
         onConfirm={() => agendaApi.deletePresentation(eventId, item.slot_id)}
         onClose={close}
       />
     ) : null;
 
+  const talkHref = `/events/${eventId}/talks/${item.slot_id}`;
+  const ownTitle = item.title !== sessionTitle;
+
   return (
-    <>
-      <tr>
-        {/* A presentation with no time of its own runs with its session (D-031). */}
-        <td style={{ width: 110 }} className="mono num note">
-          {item.starts_at
-            ? `${clock(item.starts_at, timezone)}${item.ends_at ? `–${clock(item.ends_at, timezone)}` : ""}`
-            : ""}
-        </td>
-        <td>
-          <Link href={`/events/${eventId}/talks/${item.slot_id}`}>{item.title}</Link>
-          <div className="note">
-            {item.speakers.length === 0
-              ? "No speaker assigned"
-              : item.speakers.map((person, index) => (
-                  <span key={person.id}>
-                    {index > 0 && ", "}
-                    {person.name}
-                    {person.organization ? ` (${person.organization})` : ""}
-                    {person.role !== "speaker" ? ` · ${humanize(person.role).toLowerCase()}` : ""}
-                    {canEdit && (
-                      <RemovePresenter
-                        name={person.name}
-                        onAsk={() => toggle(`remove-presenter:${item.slot_id}:${person.id}`)}
-                      />
-                    )}
-                  </span>
-                ))}
-          </div>
-        </td>
-        <td style={{ textAlign: "right", width: 200 }}>
-          <div style={{ display: "flex", gap: 6, justifyContent: "flex-end", alignItems: "center" }}>
-            <Chip status={item.status} label={item.status_label} />
+    <div className="ag-talk">
+      {/* A presentation with no time of its own runs with its session (D-031). */}
+      <div className="ag-time mono num note">
+        {item.starts_at ? (
+          <>
+            <span>{clock(item.starts_at, timezone)}</span>
+            {item.ends_at && item.ends_at !== item.starts_at && <span>{clock(item.ends_at, timezone)}</span>}
+          </>
+        ) : null}
+      </div>
+
+      <div className="ag-what">
+        {/*
+          A presentation named after its session is not named again (D-130); one with a
+          title of its own shows it above its speakers.
+        */}
+        {ownTitle && (
+          <Link href={talkHref} className="ag-talk-title">
+            {item.title}
+          </Link>
+        )}
+
+        {/* One speaker per line (D-131): who presents is what this row is for. */}
+        {item.speakers.length === 0 ? (
+          <div className="ag-spk empty">
+            <span className="avatar sm" aria-hidden="true">
+              ?
+            </span>
+            <span className="note">No speaker assigned yet</span>
             {canEdit && (
-              <ActionMenu
-                label={`Actions for presentation ${item.title}`}
-                items={[
-                  { label: "Edit presentation", onSelect: () => toggle(`talk:${item.slot_id}`) },
-                  { label: "Add presenter", onSelect: () => toggle(`presenter:${item.slot_id}`) },
-                  { label: "Delete presentation", onSelect: () => toggle(`delete-talk:${item.slot_id}`), danger: true },
-                ]}
-              />
+              <button type="button" className="btn ag-add" onClick={() => toggle(`presenter:${item.slot_id}`)}>
+                + Add presenter
+              </button>
             )}
           </div>
-        </td>
-      </tr>
-      {editor && (
-        <tr>
-          <td colSpan={3} style={{ borderTop: "none", paddingTop: 0 }}>
-            {editor}
-          </td>
-        </tr>
-      )}
-    </>
+        ) : (
+          <ul className="ag-spks" aria-label={`Speakers for ${item.title}${who ? ` — ${who}` : ""}`}>
+            {item.speakers.map((person) => (
+              <li key={person.id} className="ag-spk">
+                <span className="avatar sm" aria-hidden="true">
+                  {initialsOf(person.name)}
+                </span>
+                <span className="ag-name">{person.name}</span>
+                {person.organization && <span className="ag-org">{person.organization}</span>}
+                {person.role !== "speaker" && <span className="chip ag-role">{humanize(person.role)}</span>}
+                {canEdit && (
+                  <span className="ag-remove">
+                    <RemovePresenter
+                      name={person.name}
+                      onAsk={() => toggle(`remove-presenter:${item.slot_id}:${person.id}`)}
+                    />
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {editor && <div className="ag-editor">{editor}</div>}
+      </div>
+
+      <div className="ag-actions">
+        {/* The status opens the presentation, as its title would. */}
+        <Link href={talkHref} title="Open this presentation" className="ag-status">
+          <Chip status={item.status} label={item.status_label} />
+        </Link>
+        {/* "Add presenter" moved to the session's menu as "Add speaker" (D-137). */}
+        {canEdit && !onlyOne && (
+          <ActionMenu
+            label={`Actions for presentation ${item.title}${who ? ` (${who})` : ""}`}
+            items={[
+              /*
+               * A session's only presentation is not deleted on its own (D-132): with no
+               * "Add presentation" the session could never be filled again. "Delete
+               * session" removes both.
+               */
+              ...(onlyOne
+                ? []
+                : [{ label: "Delete presentation", onSelect: () => toggle(`delete-talk:${item.slot_id}`), danger: true }]),
+            ]}
+          />
+        )}
+      </div>
+    </div>
   );
+}
+
+/** "Dr. Priya Raman" → "PR": honorifics are not initials. */
+function initialsOf(name: string): string {
+  const words = name
+    .replace(/^(dr|prof|mr|mrs|ms|mx|sir|dame)\.?\s+/i, "")
+    .split(/\s+/)
+    .filter(Boolean);
+  if (words.length === 0) return "?";
+  const letters = words.length > 1 ? words[0]![0]! + words[words.length - 1]![0]! : words[0]!.slice(0, 2);
+  return letters.toUpperCase();
 }
 
 function SpeakersPanel({
@@ -580,7 +620,7 @@ function SpeakersPanel({
             <thead>
               <tr>
                 <th style={{ textAlign: "left" }}>Speaker</th>
-                <th style={{ textAlign: "left" }}>Presentations</th>
+                <th style={{ textAlign: "left" }}>Sessions</th>
                 <th style={{ textAlign: "left" }}>Files</th>
                 <th style={{ textAlign: "left", whiteSpace: "nowrap" }}>
                   Archive permission

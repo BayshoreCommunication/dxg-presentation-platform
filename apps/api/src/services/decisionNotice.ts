@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type pg from "pg";
 import type { Actor } from "@pmp/domain";
 import { hashToken } from "./portal.ts";
+import { lookFor } from "./emailLook.ts";
 
 const PORTAL_BASE = process.env.PORTAL_BASE ?? "http://localhost:3001";
 
@@ -104,7 +105,17 @@ export async function noticeToSpeakers(
       [talk.event_id, talk.client_id, speaker.id, speaker.email, subject, body.replaceAll(token, "[personal link removed]")],
     );
     await tx.query(`INSERT INTO pmp.outbox (topic, payload) VALUES ('email.send', $1)`, [
-      JSON.stringify({ communication_id: comm[0]!.id, to: speaker.email, subject, body }),
+      JSON.stringify({
+        communication_id: comm[0]!.id,
+        to: speaker.email,
+        subject,
+        body,
+        // The event's banner, sender and reply-to, and a button to upload again (D-138).
+        look: await lookFor(tx, talk.event_id, {
+          label: changes ? "Upload a corrected version" : "Open your presentation page",
+          url: link,
+        }),
+      }),
     ]);
     result.emailed.push(speaker.full_name);
   }

@@ -68,3 +68,42 @@ test("a real event's email is still sent", async () => {
   assert.equal(sent.length, 1);
   assert.ok(writes.some((write) => write.sql.includes("SET status = 'sent'")));
 });
+
+/** D-138: a speaker email queued with the event's look goes out branded, with its text too. */
+test("an email with a look is sent as branded HTML, from the event's sender, replying to its address", async () => {
+  const { sent, deps } = harness(false);
+  await handle(
+    {
+      id: "2",
+      topic: "email.send",
+      payload: {
+        communication_id: "c-2",
+        to: "speaker@gmail.com",
+        subject: "Upload your deck",
+        body: "Hi Ana,\n\nPlease upload by Friday.",
+        look: {
+          banner_url: "https://speakers.example.com/api/v1/email-banner/e1?v=abc",
+          button: { label: "Upload your presentation", url: "https://speakers.example.com/t/tok" },
+          event_name: "MedTech Forward",
+          from_name: "MedTech Forward organisers",
+          reply_to: "team@medtech.example.com",
+        },
+      },
+    },
+    deps,
+  );
+  assert.equal(sent.length, 1);
+  const message = sent[0]!;
+  assert.equal(message.body, "Hi Ana,\n\nPlease upload by Friday.", "the plain text goes too");
+  assert.match(message.html ?? "", /email-banner\/e1/);
+  assert.match(message.html ?? "", /href="https:\/\/speakers\.example\.com\/t\/tok"/);
+  assert.equal(message.fromName, "MedTech Forward organisers");
+  assert.equal(message.replyTo, "team@medtech.example.com");
+});
+
+test("an email without a look stays plain text", async () => {
+  const { sent, deps } = harness(false);
+  await handle(row("staff@gmail.com"), deps);
+  assert.equal(sent[0]!.html, undefined);
+  assert.equal(sent[0]!.fromName, undefined);
+});

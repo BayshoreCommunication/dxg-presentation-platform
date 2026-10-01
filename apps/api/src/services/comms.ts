@@ -4,8 +4,10 @@ import { appendAudit } from "@pmp/db";
 import { deriveTalkStatus } from "@pmp/domain";
 import type { Actor, DomainError, Result } from "@pmp/domain";
 import { atLeast, err, hasAnyRole, ok } from "@pmp/domain";
-import { EMAIL_STATUS, formatDeadline, formatSessionTime, wordsFor } from "@pmp/format";
+import { EMAIL_STATUS, formatDateRange, formatDeadline, formatSessionTime, wordsFor } from "@pmp/format";
 import { firstName } from "./firstName.ts";
+import { lookFor } from "./emailLook.ts";
+import { checkAddress, fillHtml, htmlToText, MESSAGE_MAX_CHARS, sanitizeEmailHtml } from "@pmp/email";
 
 const hashToken = (token: string): Buffer => createHash("sha256").update(token).digest();
 
@@ -15,7 +17,10 @@ export type TemplateRow = {
   id: string;
   name: string;
   subject: string;
+  /** The plain-text message — or, for a formatted one, its plain-text twin. */
   body: string;
+  /** The formatted message (D-139), sanitised; null for a plain-text template. */
+  body_html?: string | null;
 };
 
 /** Merge fields are resolved at send time, per recipient (FR-COM-001). */
@@ -72,10 +77,16 @@ export const DEFAULT_TEMPLATES = [
 /** Every merge field `send` fills in; anything else would reach the speaker as literal braces. */
 export const MERGE_FIELDS = [
   "speaker_first",
+  "speaker_last",
   "speaker_name",
   "event_name",
+  "event_venue",
+  "event_dates",
   "talk_title",
   "room",
+  "session_date",
+  "session_start",
+  "session_end",
   "session_time",
   "deadline",
   "upload_link",
@@ -84,30 +95,30 @@ export const MERGE_FIELDS = [
 
 const TEMPLATE_EDITORS = atLeast("presentation_manager");
 
-/**
- * An event's email template, edited (D-080). The wording was only ever the seeded default:
- * it lived in the database per event, but nothing could change it.
- *
- * Mail already sent keeps the text it was sent with (`communications` stores the rendered
- * copy), so an edit changes the next batch and never rewrites history.
- */
-export async function updateTemplate(
-  tx: pg.PoolClient,
-  actor: Actor,
-  eventId: string,
-  templateId: string,
-  input: { subject?: unknown; body?: unknown },
-): Promise<Result<TemplateRow, DomainError>> {
-  if (!hasAnyRole(actor, TEMPLATE_EDITORS)) {
-    return err({ code: "comms.forbidden", message: "Only a presentation manager, project manager or DXG administrator can edit email templates." });
-  }
+/** A template's subject and message, checked the same way wherever one is saved or tried. */
+function checkTemplateText(input: {
+  subject?: unknown;
+  body?: unknown;
+  body_html?: unknown;
+}): Result<{ subject: string; body: string; body_html: string | null }, DomainError> {
   const subject = typeof input.subject === "string" ? input.subject.trim() : "";
-  const body = typeof input.body === "string" ? input.body.replace(/\r\n/g, "\n").trim() : "";
+  // A formatted message (D-139) is cleaned here and its plain-text twin derived from it;
+  // every rule below is checked against that text, as a speaker reads it.
+  const rawHtml = typeof input.body_html === "string" && input.body_html.trim() ? input.body_html : null;
+  if (rawHtml && rawHtml.length > 200_000) {
+    return err({ code: "comms.template_invalid", message: "The message is too large — remove some images or formatting." });
+  }
+  const body_html = rawHtml ? sanitizeEmailHtml(rawHtml) : null;
+  const body = body_html
+    ? htmlToText(body_html)
+    : typeof input.body === "string"
+      ? input.body.replace(/\r\n/g, "\n").trim()
+      : "";
   if (subject.length < 1 || subject.length > 200) {
     return err({ code: "comms.template_invalid", message: "The subject needs 1–200 characters." });
   }
-  if (body.length < 1 || body.length > 20_000) {
-    return err({ code: "comms.template_invalid", message: "The message needs 1–20,000 characters." });
+  if (body.length < 1 || body.length > MESSAGE_MAX_CHARS) {
+    return err({ code: "comms.template_invalid", message: `The message needs 1–${MESSAGE_MAX_CHARS.toLocaleString("en-US")} characters.` });
   }
   const used = [...`${subject}\n${body}`.matchAll(/\{\{\s*([a-z_]+)\s*\}\}/gi)].map((match) => match[1]!.toLowerCase());
   const unknown = [...new Set(used.filter((field) => !(MERGE_FIELDS as readonly string[]).includes(field)))];
@@ -125,13 +136,36 @@ export async function updateTemplate(
       message: "Keep the Upload link in the message — it is each speaker's personal way to upload. Add it back with the Insert buttons.",
     });
   }
+  return ok({ subject, body, body_html });
+}
+
+/**
+ * An event's email template, edited (D-080). The wording was only ever the seeded default:
+ * it lived in the database per event, but nothing could change it.
+ *
+ * Mail already sent keeps the text it was sent with (`communications` stores the rendered
+ * copy), so an edit changes the next batch and never rewrites history.
+ */
+export async function updateTemplate(
+  tx: pg.PoolClient,
+  actor: Actor,
+  eventId: string,
+  templateId: string,
+  input: { subject?: unknown; body?: unknown; body_html?: unknown },
+): Promise<Result<TemplateRow, DomainError>> {
+  if (!hasAnyRole(actor, TEMPLATE_EDITORS)) {
+    return err({ code: "comms.forbidden", message: "Only a presentation manager, project manager or DXG administrator can edit email templates." });
+  }
+  const checked = checkTemplateText(input);
+  if (!checked.ok) return checked;
+  const { subject, body, body_html } = checked.value;
   const { rows } = await tx.query<TemplateRow & { client_id: string; old_subject: string }>(
     `UPDATE pmp.communication_templates t
-        SET subject = $3, body = $4, updated_at = now(), lock_version = t.lock_version + 1
+        SET subject = $3, body = $4, body_html = $5, updated_at = now(), lock_version = t.lock_version + 1
        FROM pmp.communication_templates prior
       WHERE t.id = prior.id AND t.id = $1 AND t.event_id = $2
-      RETURNING t.id, t.name, t.subject, t.body, t.client_id, prior.subject AS old_subject`,
-    [templateId, eventId, subject, body],
+      RETURNING t.id, t.name, t.subject, t.body, t.body_html, t.client_id, prior.subject AS old_subject`,
+    [templateId, eventId, subject, body, body_html],
   );
   const updated = rows[0];
   if (!updated) return err({ code: "comms.template_not_found", message: "This template no longer exists on this event — it may have been removed. Refresh the page." });
@@ -144,13 +178,134 @@ export async function updateTemplate(
     subjectId: updated.id,
     detail: { name: updated.name, subject_before: updated.old_subject, subject_after: subject },
   });
-  return ok({ id: updated.id, name: updated.name, subject: updated.subject, body: updated.body });
+  return ok({ id: updated.id, name: updated.name, subject: updated.subject, body: updated.body, body_html: updated.body_html ?? null });
+}
+
+/**
+ * A new template for this event, from the one being edited (D-138, Preseria's "save as new
+ * template"): an invitation and a reminder are rarely enough — a second-round reminder or a
+ * speaker-ready-room notice is another template, not an edit of the first.
+ */
+export async function createTemplate(
+  tx: pg.PoolClient,
+  actor: Actor,
+  eventId: string,
+  input: { name?: unknown; subject?: unknown; body?: unknown; body_html?: unknown },
+): Promise<Result<TemplateRow, DomainError>> {
+  if (!hasAnyRole(actor, TEMPLATE_EDITORS)) {
+    return err({ code: "comms.forbidden", message: "Only a presentation manager, project manager or DXG administrator can add email templates." });
+  }
+  const name = typeof input.name === "string" ? input.name.replace(/\s+/g, " ").trim() : "";
+  if (name.length < 1 || name.length > 80) {
+    return err({ code: "comms.template_invalid", message: "Give the new template a name of 1–80 characters." });
+  }
+  const checked = checkTemplateText(input);
+  if (!checked.ok) return checked;
+  const { rows: clash } = await tx.query(
+    `SELECT 1 FROM pmp.communication_templates WHERE event_id = $1 AND lower(name) = lower($2)`,
+    [eventId, name],
+  );
+  if (clash.length > 0) {
+    return err({ code: "comms.template_invalid", message: `This event already has a template called “${name}”. Choose another name.` });
+  }
+  const { rows } = await tx.query<TemplateRow & { client_id: string }>(
+    `INSERT INTO pmp.communication_templates (client_id, event_id, name, subject, body, body_html)
+     SELECT client_id, id, $2, $3, $4, $5 FROM pmp.events WHERE id = $1
+     RETURNING id, name, subject, body, body_html, client_id`,
+    [eventId, name, checked.value.subject, checked.value.body, checked.value.body_html],
+  );
+  const created = rows[0];
+  if (!created) return err({ code: "comms.event_not_found", message: "This event no longer exists — it may have been removed. Refresh the page." });
+  await appendAudit(tx, {
+    partitionId: eventId,
+    clientId: created.client_id,
+    actorUserId: actor.id,
+    action: "comms.template_created",
+    subjectType: "communication_template",
+    subjectId: created.id,
+    detail: { name },
+  });
+  return ok({ id: created.id, name: created.name, subject: created.subject, body: created.body, body_html: created.body_html ?? null });
+}
+
+/**
+ * One copy of the email, to an address staff choose (D-138, Preseria's "Send a test email"):
+ * the banner, button and wording exactly as a speaker gets them, filled in for the first
+ * speaker on the list. Its button and link open the speaker sign-in page — a test never
+ * carries anyone's personal link. Nothing is logged against a speaker; the audit records it.
+ */
+export async function sendTestEmail(
+  tx: pg.PoolClient,
+  actor: Actor,
+  eventId: string,
+  input: { to?: unknown; subject?: unknown; body?: unknown; body_html?: unknown },
+): Promise<Result<{ to: string }, DomainError>> {
+  if (!hasAnyRole(actor, TEMPLATE_EDITORS)) {
+    return err({ code: "comms.forbidden", message: "Only a presentation manager, project manager or DXG administrator can send a test email." });
+  }
+  const typed = typeof input.to === "string" ? input.to.trim() : "";
+  const address = checkAddress(typed);
+  if (!address.ok) {
+    return err({
+      code: "comms.test_invalid",
+      message: typed ? `${address.reason}${address.suggestion ? ` Did you mean ${address.suggestion}?` : ""}` : "Enter the address to send the test to.",
+    });
+  }
+  const checked = checkTemplateText(input);
+  if (!checked.ok) return checked;
+
+  const { rows: eventRows } = await tx.query<EventFacts & { is_practice: boolean }>(
+    `SELECT e.client_id, e.name, (e.settings ->> 'upload_deadline') AS deadline, e.timezone, e.is_practice,
+            v.name AS venue, e.starts_on::text AS starts_on, e.ends_on::text AS ends_on
+       FROM pmp.events e LEFT JOIN pmp.venues v ON v.id = e.venue_id WHERE e.id = $1`,
+    [eventId],
+  );
+  const event = eventRows[0];
+  if (!event) return err({ code: "comms.event_not_found", message: "This event no longer exists — it may have been removed. Refresh the page." });
+  // A practice event sends nothing at all (D-116) — not even a test.
+  if (event.is_practice) {
+    return err({ code: "comms.practice", message: "Practice events never send email. The preview shows exactly what it would look like." });
+  }
+
+  const templates = await ensureTemplates(tx, eventId);
+  const sample = templates[0] ? (await recipientsFor(tx, eventId, templates[0].id, false))[0] : undefined;
+  const talks = sample?.talks.length
+    ? sample.talks
+    : [{ title: "Sample presentation", room: "Main Hall", starts_at: `${event.starts_on}T14:00:00Z` }];
+  const signIn = `${PORTAL_BASE}/login`;
+  const values = {
+    ...personFields(sample?.name ?? "Alex Morgan"),
+    ...eventFields(event),
+    ...talkFields(talks, event.timezone),
+    deadline: event.deadline ? formatDeadline(event.deadline, event.timezone) : "the published deadline",
+    upload_link: signIn,
+  };
+  const rendered = renderTemplate({ subject: checked.value.subject, body: checked.value.body }, values);
+  await tx.query(`INSERT INTO pmp.outbox (topic, payload) VALUES ('email.send', $1)`, [
+    JSON.stringify({
+      to: address.address,
+      subject: `[Test] ${rendered.subject}`,
+      body: rendered.body,
+      ...(checked.value.body_html ? { html_body: fillHtml(checked.value.body_html, values) } : {}),
+      look: await lookFor(tx, eventId, { label: "Upload your presentation", url: signIn }),
+    }),
+  ]);
+  await appendAudit(tx, {
+    partitionId: eventId,
+    clientId: event.client_id,
+    actorUserId: actor.id,
+    action: "comms.test_sent",
+    subjectType: "event",
+    subjectId: eventId,
+    detail: { to: address.address, subject: rendered.subject },
+  });
+  return ok({ to: address.address });
 }
 
 export async function ensureTemplates(tx: pg.PoolClient, eventId: string): Promise<TemplateRow[]> {
   const { rows: existing } = await tx.query<TemplateRow>(
     // Insertion order, so the invitation leads and reminders follow it.
-    `SELECT id, name, subject, body FROM pmp.communication_templates
+    `SELECT id, name, subject, body, body_html FROM pmp.communication_templates
       WHERE event_id = $1 ORDER BY created_at, name`,
     [eventId],
   );
@@ -173,7 +328,7 @@ export async function ensureTemplates(tx: pg.PoolClient, eventId: string): Promi
   }
   const { rows } = await tx.query<TemplateRow>(
     // Insertion order, so the invitation leads and reminders follow it.
-    `SELECT id, name, subject, body FROM pmp.communication_templates
+    `SELECT id, name, subject, body, body_html FROM pmp.communication_templates
       WHERE event_id = $1 ORDER BY created_at, name`,
     [eventId],
   );
@@ -181,7 +336,7 @@ export async function ensureTemplates(tx: pg.PoolClient, eventId: string): Promi
 }
 
 /** One presentation a speaker is emailed about. */
-export type RecipientTalk = { title: string; room: string | null; starts_at: string; status: string };
+export type RecipientTalk = { title: string; room: string | null; starts_at: string; ends_at?: string; status: string };
 
 /**
  * One row per *speaker*, not per presentation (D-087). A speaker on two presentations
@@ -246,13 +401,14 @@ export async function recipientsFor(
     talk_title: string;
     room: string | null;
     starts_at: string;
+    ends_at: string;
     session_state: string;
     versions: { processing: string; inspection: string; review: string }[] | null;
     bounced: boolean;
     already_sent: boolean;
   }>(
     `SELECT sp.id AS speaker_id, sp.full_name AS name, sp.email::text AS email,
-            s.title AS talk_title, r.name AS room, se.starts_at, se.session_state,
+            s.title AS talk_title, r.name AS room, se.starts_at, se.ends_at, se.session_state,
             (SELECT json_agg(json_build_object('processing', fv.processing_state,
                                                'inspection', fv.inspection_state,
                                                'review', fv.review_state) ORDER BY fv.version_number)
@@ -297,7 +453,7 @@ export async function recipientsFor(
 
   const bySpeaker = new Map<string, Recipient>();
   for (const { row, status } of perTalk) {
-    const talk: RecipientTalk = { title: row.talk_title, room: row.room, starts_at: row.starts_at, status };
+    const talk: RecipientTalk = { title: row.talk_title, room: row.room, starts_at: row.starts_at, ends_at: row.ends_at, status };
     const existing = bySpeaker.get(row.speaker_id);
     if (existing) {
       existing.talks.push(talk);
@@ -328,11 +484,26 @@ export async function recipientsFor(
   return [...bySpeaker.values()];
 }
 
+export type EventFacts = {
+  client_id: string;
+  name: string;
+  deadline: string | null;
+  timezone: string;
+  venue: string | null;
+  starts_on: string;
+  ends_on: string;
+};
+
 type QueueInput = {
   eventId: string;
-  event: { client_id: string; name: string; deadline: string | null; timezone: string };
+  event: EventFacts;
   template: TemplateRow;
-  recipient: { speaker_id: string; name: string; email: string; talks: { title: string; room: string | null; starts_at: string }[] };
+  recipient: {
+    speaker_id: string;
+    name: string;
+    email: string;
+    talks: { title: string; room: string | null; starts_at: string; ends_at?: string }[];
+  };
 };
 
 /** "A", "A and B", "A, B and C". */
@@ -345,14 +516,30 @@ const listed = (items: string[]): string =>
  * with several presentations they read as a list ("A and B in Hall 1 and Hall 3 …").
  */
 export function talkFields(
-  talks: { title: string; room: string | null; starts_at: string }[],
+  talks: { title: string; room: string | null; starts_at: string; ends_at?: string }[],
   timezone: string,
-): { talk_title: string; room: string; session_time: string; presentations: string } {
+): {
+  talk_title: string;
+  room: string;
+  session_time: string;
+  session_date: string;
+  session_start: string;
+  session_end: string;
+  presentations: string;
+} {
   const when = (talk: { starts_at: string }) => formatSessionTime(talk.starts_at, timezone);
+  const day = (iso: string) =>
+    new Date(iso).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric", timeZone: timezone });
+  const clock = (iso: string) =>
+    new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: timezone, timeZoneName: "short" });
   return {
     talk_title: listed(talks.map((talk) => talk.title)),
     room: listed([...new Set(talks.map((talk) => talk.room ?? "TBC"))]),
     session_time: listed(talks.map(when)),
+    // D-138: the session's day and times on their own, as Preseria's macros give them.
+    session_date: listed([...new Set(talks.map((talk) => day(talk.starts_at)))]),
+    session_start: listed(talks.map((talk) => clock(talk.starts_at))),
+    session_end: listed(talks.map((talk) => (talk.ends_at ? clock(talk.ends_at) : "TBC"))),
     presentations: talks.map((talk) => `• ${talk.title} — ${talk.room ?? "Room TBC"}, ${when(talk)}`).join("\n"),
   };
 }
@@ -371,10 +558,10 @@ async function queueInvitation(tx: pg.PoolClient, input: QueueInput): Promise<st
     [input.recipient.speaker_id, input.eventId, input.event.client_id, hashToken(token)],
   );
 
-  const rendered = renderTemplate(input.template, {
-    speaker_first: firstName(input.recipient.name),
-    speaker_name: input.recipient.name,
-    event_name: input.event.name,
+  const uploadLink = `${PORTAL_BASE}/t/${token}`;
+  const values = {
+    ...personFields(input.recipient.name),
+    ...eventFields(input.event),
     // On the event's clock (D-072). This was the UTC time with no zone, so a 10:30
     // New York session was mailed out as "14:30".
     ...talkFields(input.recipient.talks, input.event.timezone),
@@ -382,8 +569,11 @@ async function queueInvitation(tx: pg.PoolClient, input: QueueInput): Promise<st
     deadline: input.event.deadline ? formatDeadline(input.event.deadline, input.event.timezone) : "the published deadline",
     // Where speakers actually reach the portal (D-080) — it was hard-coded to localhost,
     // so every production email would have carried a link that goes nowhere.
-    upload_link: `${PORTAL_BASE}/t/${token}`,
-  });
+    upload_link: uploadLink,
+  };
+  const rendered = renderTemplate(input.template, values);
+  // A formatted template (D-139) is sent as formatted HTML; `rendered.body` is its text twin.
+  const htmlBody = input.template.body_html ? fillHtml(input.template.body_html, values) : null;
 
   const { rows: comm } = await tx.query<{ id: string }>(
     `INSERT INTO pmp.communications (event_id, client_id, speaker_id, template_id, to_address, subject, body, status)
@@ -408,9 +598,33 @@ async function queueInvitation(tx: pg.PoolClient, input: QueueInput): Promise<st
       to: input.recipient.email,
       subject: rendered.subject,
       body: rendered.body,
+      ...(htmlBody ? { html_body: htmlBody } : {}),
+      // Banner, button to their own upload page, sender name and reply-to (D-138).
+      look: await lookFor(tx, input.eventId, { label: "Upload your presentation", url: uploadLink }),
     }),
   ]);
   return comm[0]!.id;
+}
+
+/** The speaker's name fields: first (without a title), last, and as written. */
+export function personFields(name: string): { speaker_first: string; speaker_last: string; speaker_name: string } {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  const first = firstName(name);
+  const last = words.length > 1 ? words.at(-1)! : "";
+  return { speaker_first: first, speaker_last: last, speaker_name: name.trim() };
+}
+
+/** The event's own fields: name, venue and its dates, worded for an email. */
+export function eventFields(event: Pick<EventFacts, "name" | "venue" | "starts_on" | "ends_on">): {
+  event_name: string;
+  event_venue: string;
+  event_dates: string;
+} {
+  return {
+    event_name: event.name,
+    event_venue: event.venue ?? "the venue",
+    event_dates: formatDateRange(event.starts_on, event.ends_on),
+  };
 }
 
 export type SendResult = {
@@ -446,11 +660,15 @@ export async function sendBatch(
     name: string;
     deadline: string | null;
     timezone: string;
+    venue: string | null;
+    starts_on: string;
+    ends_on: string;
   }>(
     `SELECT (SELECT count(*)::text FROM pmp.rooms WHERE event_id = e.id) AS rooms,
             (SELECT count(*)::text FROM pmp.event_days WHERE event_id = e.id) AS days,
-            e.client_id, e.name, (e.settings ->> 'upload_deadline') AS deadline, e.timezone
-       FROM pmp.events e WHERE e.id = $1`,
+            e.client_id, e.name, (e.settings ->> 'upload_deadline') AS deadline, e.timezone,
+            v.name AS venue, e.starts_on::text AS starts_on, e.ends_on::text AS ends_on
+       FROM pmp.events e LEFT JOIN pmp.venues v ON v.id = e.venue_id WHERE e.id = $1`,
     [input.eventId],
   );
   const event = readiness[0];
@@ -467,7 +685,7 @@ export async function sendBatch(
   }
 
   const { rows: templateRows } = await tx.query<TemplateRow>(
-    `SELECT id, name, subject, body FROM pmp.communication_templates WHERE id = $1`,
+    `SELECT id, name, subject, body, body_html FROM pmp.communication_templates WHERE id = $1`,
     [input.templateId],
   );
   const template = templateRows[0];
@@ -567,11 +785,15 @@ export async function sendUploadLink(
     name: string;
     deadline: string | null;
     timezone: string;
+    venue: string | null;
+    starts_on: string;
+    ends_on: string;
   }>(
     `SELECT (SELECT count(*)::text FROM pmp.rooms WHERE event_id = e.id) AS rooms,
             (SELECT count(*)::text FROM pmp.event_days WHERE event_id = e.id) AS days,
-            e.client_id, e.name, (e.settings ->> 'upload_deadline') AS deadline, e.timezone
-       FROM pmp.events e WHERE e.id = $1`,
+            e.client_id, e.name, (e.settings ->> 'upload_deadline') AS deadline, e.timezone,
+            v.name AS venue, e.starts_on::text AS starts_on, e.ends_on::text AS ends_on
+       FROM pmp.events e LEFT JOIN pmp.venues v ON v.id = e.venue_id WHERE e.id = $1`,
     [input.eventId],
   );
   const event = eventRows[0];

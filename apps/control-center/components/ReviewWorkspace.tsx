@@ -218,7 +218,7 @@ export function ReviewWorkspace({
                     onClick={() => setSelectedId(item.file_version_id)}
                   >
                     <td>
-                      <b>{item.speaker}</b> · {item.title}
+                      <b>{item.speaker ?? "No speaker"}</b> · {item.title}
                     </td>
                     <td style={{ textAlign: "right" }}>
                       {/* The worst open problem, not the first (often a lowercase "info") (D-108),
@@ -313,7 +313,7 @@ export function ReviewWorkspace({
 
             {confirmApprove && !approveBlocked && (
               <ConfirmInline
-                question={`Approve v${selected.version_number} of “${selected.title}”?`}
+                question={`Approve v${selected.version_number} of “${selected.title}”${selected.speaker ? ` by ${selected.speaker}` : ""}?`}
                 detail={
                   selected.room
                     ? `Then it waits on Room sync to be copied onto ${selected.room}'s PC and ticked loaded. An older version there stays in use until then.`

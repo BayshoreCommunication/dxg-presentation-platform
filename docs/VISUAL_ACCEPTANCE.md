@@ -165,6 +165,30 @@ The standalone screen keeps the name `Schedule import`, because there the import
 Nothing else is renamed, reordered or regrouped. The baseline's screen inventory is unchanged: this is
 a navigation change, not the removal of a screen.
 
+### 2026-10-01 — Control Center gains `Agenda` (D-134)
+
+**Deviation.** §2.1 fixes the sidebar's entries. Control Center now begins with `Agenda`, which opens the
+chosen event's page on its Agenda tab (`/events/{id}?tab=agenda`) and is highlighted while that tab is
+showing. The agenda is what staff edit most before an event, and it was reachable only by opening the
+event and then the tab. Travis's call (his list, item 5); **to be shown to DXG** with D-133.
+
+It is not a new screen — the tab is screen 18 (Event details), unchanged — and nothing else in the group is
+renamed or reordered. Like the other event screens it is greyed until an event is chosen.
+
+### 2026-10-01 — Portfolio and Create event move above the event switcher (D-133)
+
+**Deviation.** §2.1 fixes the sidebar's grouping, and the baseline lists `Portfolio` and `Create event`
+first under Control Center. They now form their own group, `Events`, above the event switcher; Control
+Center starts with `Review presentations`.
+
+Neither screen needs an event — they are how you get to one — yet they sat among screens that are greyed
+until an event is chosen, under a switcher that said "choose an event to open the greyed screens below".
+Above the switcher, the sidebar reads in order: find or make an event, choose it, work in it. Travis's
+call (his list, item 4); **to be shown to DXG**, as the sidebar structure is theirs.
+
+No screen is renamed, added or removed, and the order within every group is unchanged. A client account
+still sees only Client portal (the new group is staff-only, like Control Center).
+
 ### 2026-09-21 — a draft's card offers `Continue setup`, and its command centre redirects
 
 **Deviation.** §2.2 fixes the baseline's words as the product's words, and screen 1's portfolio card

@@ -90,7 +90,8 @@ export async function agentView(tx: pg.PoolClient, roomId: string): Promise<Agen
                                    AND (fv.review_state = 'approved' OR rf.sync_state = 'active')
       WHERE se.room_id = $1 AND (rf.id IS NOT NULL OR fv.id IS NULL
             OR fv.version_number = (SELECT max(v2.version_number) FROM pmp.file_versions v2 WHERE v2.file_id = f.id))
-      ORDER BY se.starts_at`,
+      -- Co-presenters share a start (D-137): keep their order steady between refreshes.
+      ORDER BY se.starts_at, s.position, s.created_at`,
     [roomId],
   );
 

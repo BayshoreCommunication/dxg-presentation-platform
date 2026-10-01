@@ -2,8 +2,8 @@
 
 import { formatDateRange } from "@pmp/format";
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
-import { usePathname, useParams, useRouter } from "next/navigation";
+import { Suspense, useEffect, useRef, useState } from "react";
+import { usePathname, useParams, useRouter, useSearchParams } from "next/navigation";
 import { Glyph, Icon } from "@/components/Icon";
 import { WhyNot } from "@/components/WhyNot";
 import { logout } from "@/lib/api";
@@ -47,14 +47,29 @@ const ADMIN_ROLES = ["platform_admin"];
 export const GROUPS: {
   group: string;
   roles?: string[];
+  /** Drawn above the event switcher: these screens belong to no one event (D-133). */
+  top?: boolean;
   items: { label: string; href?: string; roles?: string[]; icon: string }[];
 }[] = [
+  {
+    /*
+     * Portfolio and Create event used to head CONTROL CENTER, sitting among screens that
+     * are greyed until an event is chosen — though neither needs one. They are the way
+     * *to* an event, so they come before the switcher, and everything after it is that
+     * event's (D-133, Travis's call).
+     */
+    group: "EVENTS",
+    roles: STAFF_ROLES,
+    top: true,
+    items: [
+      { label: "Portfolio", href: "/", icon: "grid" },
+      { label: "Create event", href: "/events/new", icon: "plus" },
+    ],
+  },
   {
     group: "CONTROL CENTER",
     roles: STAFF_ROLES,
     items: [
-      { label: "Portfolio", href: "/", icon: "grid" },
-      { label: "Create event", href: "/events/new", icon: "plus" },
       /*
        * Schedule import is step 2 of Create event (D-027), so listing it here offered
        * it as somewhere to go when it is really somewhere you are taken. The screen
@@ -68,6 +83,12 @@ export const GROUPS: {
        * from that talk (agenda, risk list, review queue). As sidebar items they had no
        * talk to open and led nowhere.
        */
+      /*
+       * The agenda is a tab of the event's own page, which made it the one thing staff
+       * edit daily that the sidebar could not reach (D-134, Travis: "for easy navigation").
+       * First, because it is what everything below is built from.
+       */
+      { label: "Agenda", href: "/events/:id?tab=agenda", icon: "calendar" },
       { label: "Review presentations", href: "/events/:id/review", icon: "review" },
       // Every file of the event in one list (FR-FILE-005, D-079).
       { label: "Files", href: "/events/:id/files", icon: "folder" },
@@ -152,6 +173,66 @@ export function Sidebar({
   const eventId = params?.id;
   const current = events.find((event) => event.id === eventId);
 
+  const renderGroup = ({ group, roles, items }: (typeof GROUPS)[number]) => {
+            // Roles held anywhere, plus those on this event — a practice event's roles
+            // count only inside it (D-116).
+            const held = [
+              ...(principal?.roles ?? []),
+              ...(principal?.event_roles ?? []).filter((entry) => entry.event_id === eventId).map((entry) => entry.role),
+            ];
+            const allowed = (needed?: string[]) => !needed || needed.some((role) => held.includes(role));
+            // A whole group can be out of reach, and an item within a reachable one.
+            const visible = allowed(roles) ? items.filter((item) => allowed(item.roles)) : [];
+            // A group whose every entry is hidden would otherwise leave a stray heading.
+            if (visible.length === 0) return null;
+            return (
+            <div key={group} className="navgroup">
+              <div className="grp">{group}</div>
+              <div className="navitems">
+                {visible.map((item) => {
+                  // An ":id" link has nowhere to go until an event is chosen.
+                  const needsEvent = item.href?.includes(":id") ?? false;
+                  const href = needsEvent && !eventId ? undefined : item.href?.replace(":id", eventId ?? "");
+                  if (!href) {
+                    return (
+                      <a key={item.label} aria-disabled="true" title="Choose an event first">
+                        <span className="ico"><Icon name={item.icon} /></span>
+                        {item.label}
+                      </a>
+                    );
+                  }
+                  if (href.includes("?")) {
+                    // A tab of a page: whether it is "on" depends on the query too. Read in
+                    // its own Suspense boundary so no statically rendered page needs one.
+                    const plain = (
+                      <Link href={href}>
+                        <span className="ico"><Icon name={item.icon} /></span>
+                        {item.label}
+                      </Link>
+                    );
+                    return (
+                      <Suspense key={item.label} fallback={plain}>
+                        <TabLink href={href} pathname={pathname} icon={item.icon} label={item.label} />
+                      </Suspense>
+                    );
+                  }
+                  return (
+                    <Link key={item.label} href={href} className={pathname === href ? "on" : ""}>
+                      <span className="ico"><Icon name={item.icon} /></span>
+                      {item.label}
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+            );
+  };
+  const topNav = (
+    <nav className="topnav" aria-label="Events">
+      {GROUPS.filter((entry) => entry.top).map(renderGroup)}
+    </nav>
+  );
+
   return (
     <aside>
       <div className="logo">
@@ -166,6 +247,8 @@ export function Sidebar({
         )}
       </div>
       <div className="sidebody">
+        {/* Portfolio and Create event: no event needed, so above the switcher (D-133). */}
+        {topNav}
         {/*
           The event context slot from the baseline (VISUAL_ACCEPTANCE §2.1), which used
           to be a hardcoded string naming the seeded event — correct exactly once, and a
@@ -220,50 +303,24 @@ export function Sidebar({
             </>
           )}
         </div>
-        <nav>
-          {GROUPS.map(({ group, roles, items }) => {
-            // Roles held anywhere, plus those on this event — a practice event's roles
-            // count only inside it (D-116).
-            const held = [
-              ...(principal?.roles ?? []),
-              ...(principal?.event_roles ?? []).filter((entry) => entry.event_id === eventId).map((entry) => entry.role),
-            ];
-            const allowed = (needed?: string[]) => !needed || needed.some((role) => held.includes(role));
-            // A whole group can be out of reach, and an item within a reachable one.
-            const visible = allowed(roles) ? items.filter((item) => allowed(item.roles)) : [];
-            // A group whose every entry is hidden would otherwise leave a stray heading.
-            if (visible.length === 0) return null;
-            return (
-            <div key={group} className="navgroup">
-              <div className="grp">{group}</div>
-              <div className="navitems">
-                {visible.map((item) => {
-                  // An ":id" link has nowhere to go until an event is chosen.
-                  const needsEvent = item.href?.includes(":id") ?? false;
-                  const href = needsEvent && !eventId ? undefined : item.href?.replace(":id", eventId ?? "");
-                  if (!href) {
-                    return (
-                      <a key={item.label} aria-disabled="true" title="Choose an event first">
-                        <span className="ico"><Icon name={item.icon} /></span>
-                        {item.label}
-                      </a>
-                    );
-                  }
-                  return (
-                    <Link key={item.label} href={href} className={pathname === href ? "on" : ""}>
-                      <span className="ico"><Icon name={item.icon} /></span>
-                      {item.label}
-                    </Link>
-                  );
-                })}
-              </div>
-            </div>
-            );
-          })}
-        </nav>
+        <nav aria-label="This event">{GROUPS.filter((entry) => !entry.top).map(renderGroup)}</nav>
         {principal && <AccountMenu principal={principal} />}
       </div>
     </aside>
+  );
+}
+
+/** A sidebar link to one tab of a page (`/events/x?tab=agenda`): on when both match (D-134). */
+function TabLink({ href, pathname, icon, label }: { href: string; pathname: string; icon: string; label: string }) {
+  const params = useSearchParams();
+  const [path, query] = href.split("?");
+  const wanted = new URLSearchParams(query);
+  const on = pathname === path && [...wanted].every(([key, value]) => params?.get(key) === value);
+  return (
+    <Link href={href} className={on ? "on" : ""} aria-current={on ? "page" : undefined}>
+      <span className="ico"><Icon name={icon} /></span>
+      {label}
+    </Link>
   );
 }
 

@@ -21,8 +21,8 @@ import { scanner, storage } from "./ingest.ts";
  * size, type and storage key. A macro-enabled deck is refused — macros are blocked for
  * speakers' files too.
  */
-export type AssetKind = "header" | "template";
-export const ASSET_KINDS: readonly AssetKind[] = ["header", "template"];
+export type AssetKind = "header" | "template" | "email_banner";
+export const ASSET_KINDS: readonly AssetKind[] = ["header", "template", "email_banner"];
 
 export type AssetRecord = {
   key: string;
@@ -33,12 +33,61 @@ export type AssetRecord = {
 };
 
 const EDITORS = atLeast("presentation_manager");
-const LIMITS: Record<AssetKind, number> = { header: 5 * 1024 * 1024, template: 50 * 1024 * 1024 };
+const LIMITS: Record<AssetKind, number> = {
+  header: 5 * 1024 * 1024,
+  template: 50 * 1024 * 1024,
+  // An email banner is downloaded by every speaker's mail client: keep it light (D-138).
+  email_banner: 2 * 1024 * 1024,
+};
+
+/** The email banner's shape, as Preseria asks for it: exactly 1200 px wide, 200–600 px high. */
+export const BANNER_WIDTH = 1200;
+export const BANNER_MIN_HEIGHT = 200;
+export const BANNER_MAX_HEIGHT = 600;
+
+/** A PNG's or JPEG's pixel size, read from its header — the file is never decoded. */
+export function imageSize(body: Buffer): { width: number; height: number } | null {
+  // PNG: the IHDR chunk is always first, width and height at bytes 16 and 20.
+  if (body.length >= 24 && body.subarray(12, 16).toString("latin1") === "IHDR") {
+    return { width: body.readUInt32BE(16), height: body.readUInt32BE(20) };
+  }
+  // JPEG: walk the markers to the first start-of-frame.
+  if (body[0] === 0xff && body[1] === 0xd8) {
+    let at = 2;
+    while (at + 9 < body.length) {
+      if (body[at] !== 0xff) return null;
+      const marker = body[at + 1]!;
+      if (marker === 0xd8 || (marker >= 0xd0 && marker <= 0xd7) || marker === 0x01) {
+        at += 2;
+        continue;
+      }
+      const length = body.readUInt16BE(at + 2);
+      const isFrame = marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc;
+      if (isFrame) return { height: body.readUInt16BE(at + 5), width: body.readUInt16BE(at + 7) };
+      at += 2 + length;
+    }
+  }
+  return null;
+}
 
 const bad = (message: string): DomainError => ({ code: "events.bad_asset", message });
 
 /** What the bytes are, from their first bytes — the name and the browser's word are not trusted. */
 function sniff(kind: AssetKind, body: Buffer, fileName: string): { contentType: string } | DomainError {
+  if (kind === "email_banner") {
+    const png = body.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+    const jpeg = body[0] === 0xff && body[1] === 0xd8 && body[2] === 0xff;
+    // PNG and JPEG only: those are the formats every mail client shows.
+    if (!png && !jpeg) return bad("The email banner must be a PNG or JPG image.");
+    const size = imageSize(body);
+    if (!size) return bad("The email banner could not be read. Save it again as PNG or JPG and retry.");
+    if (size.width !== BANNER_WIDTH || size.height < BANNER_MIN_HEIGHT || size.height > BANNER_MAX_HEIGHT) {
+      return bad(
+        `The email banner must be exactly ${BANNER_WIDTH} px wide and ${BANNER_MIN_HEIGHT}–${BANNER_MAX_HEIGHT} px high. This one is ${size.width} × ${size.height} px.`,
+      );
+    }
+    return { contentType: png ? "image/png" : "image/jpeg" };
+  }
   if (kind === "header") {
     if (body.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) {
       return { contentType: "image/png" };
@@ -84,7 +133,7 @@ const cleanName = (raw: string, kind: AssetKind): string => {
     .join("")
     .trim()
     .slice(0, 200);
-  return cleaned || (kind === "header" ? "header" : "template.pptx");
+  return cleaned || (kind === "header" ? "header" : kind === "email_banner" ? "email-banner" : "template.pptx");
 };
 
 export async function putAsset(
@@ -104,7 +153,8 @@ export async function putAsset(
   const body = input.body;
   if (!Buffer.isBuffer(body) || body.length === 0) return err(bad("The file is empty."));
   if (body.length > LIMITS[kind]) {
-    return err(bad(`That file is too large — the ${kind === "header" ? "header" : "template"} limit is ${LIMITS[kind] / 1024 / 1024} MB.`));
+    const what = kind === "header" ? "header" : kind === "email_banner" ? "email banner" : "template";
+    return err(bad(`That file is too large — the ${what} limit is ${LIMITS[kind] / 1024 / 1024} MB.`));
   }
   const fileName = cleanName(input.fileName, kind);
   const sniffed = sniff(kind, body, fileName);

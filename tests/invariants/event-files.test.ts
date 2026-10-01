@@ -34,7 +34,9 @@ type Listing = {
     size_bytes: number;
     status: string;
     downloadable: boolean;
-    history: { id: string; version_number: number }[];
+    approved_at: string | null;
+    approved_by: string | null;
+    history: { id: string; version_number: number; approved_at: string | null; approved_by: string | null }[];
   }[];
   total: number;
   pages: number;
@@ -121,6 +123,34 @@ describe("event files: the list", () => {
     const paged = (await (await get(`/events/${MEDTECH}/files?limit=1&page=1`, admin)).json()) as Listing;
     assert.equal(paged.items.length, Math.min(1, paged.total));
     assert.equal(paged.pages, paged.total);
+  });
+
+  test("an approved file says who approved it and when; one not approved says nobody", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const body = (await (await get(`/events/${MEDTECH}/files?limit=100`, admin)).json()) as Listing;
+    const approved = body.items.filter((item) => item.status === "approved");
+    assert.ok(approved.length > 0, "fixture: MedTech has an approved file");
+    for (const item of approved) {
+      assert.ok(item.approved_by, `${item.filename}: the approver's name travels with the row`);
+      assert.ok(item.approved_at && !Number.isNaN(Date.parse(item.approved_at)), `${item.filename}: and the time`);
+      const newest = item.history[0]!;
+      assert.equal(newest.approved_by, item.approved_by, "the history carries the same approver on the newest version");
+    }
+    for (const item of body.items.filter((item) => item.status === "review")) {
+      assert.equal(item.approved_by, null, `${item.filename}: nothing approved shows no approver`);
+      assert.equal(item.approved_at, null);
+    }
+  });
+
+  test("sorting by approval puts the newest approval first and unapproved files last", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const body = (await (await get(`/events/${MEDTECH}/files?sort=approved&dir=desc&limit=100`, admin)).json()) as Listing;
+    const times = body.items.map((item) => (item.approved_at ? Date.parse(item.approved_at) : 0));
+    for (let i = 1; i < times.length; i += 1) {
+      assert.ok(times[i - 1]! >= times[i]!, `row ${i} is not later-approved than row ${i - 1}`);
+    }
+    const firstUnapproved = times.indexOf(0);
+    if (firstUnapproved !== -1) assert.ok(times.slice(firstUnapproved).every((t) => t === 0), "unapproved files trail");
   });
 
   test("searching narrows by filename", async (t: TestContext) => {

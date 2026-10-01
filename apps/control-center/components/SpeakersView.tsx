@@ -36,7 +36,7 @@ export function SpeakersView({
   initial: SpeakerRow[];
   duplicates: DuplicatePair[];
   /** Talks a new speaker can be assigned to straight away. */
-  talks: { slot_id: string; label: string }[];
+  talks: SessionChoice[];
 }) {
   const router = useRouter();
   const [rows, setRows] = useState(initial);
@@ -135,7 +135,7 @@ export function SpeakersView({
 
   function statusOf(row: SpeakerRow): { status: string; label: string } {
     if (row.talks === 0)
-      return { status: "canceled", label: "No presentations" };
+      return { status: "canceled", label: "No sessions" };
     if (row.talks_with_files === 0)
       return { status: "missing", label: "Not submitted" };
     // Sent back by a reviewer (D-090) — the portal says "Needs revision", so this does too.
@@ -204,7 +204,7 @@ export function SpeakersView({
           </span>
           <WhyNot
             reason={
-              missing.length > 0 ? null : "Nobody to remind — every speaker with a presentation has sent a file."
+              missing.length > 0 ? null : "Nobody to remind — every speaker in a session has sent a file."
             }
           />
         </span>
@@ -331,7 +331,8 @@ export function SpeakersView({
               <thead>
                 <tr>
                   <th>Speaker</th>
-                  <th>Presentations</th>
+                  {/* "Sessions" (D-136): a speaker is added to a session (D-135). */}
+                  <th>Sessions</th>
                   <th>Status</th>
                   <th style={{ whiteSpace: "nowrap" }}>
                     Archive permission
@@ -411,7 +412,7 @@ export function SpeakersView({
                               const label = !row.email
                                 ? "Add an email address first"
                                 : row.talks === 0
-                                  ? "Assign a presentation first"
+                                  ? "Add them to a session first"
                                   : "Email upload link";
                               return (
                                 <HoverTip label={label}>
@@ -505,7 +506,7 @@ export function SpeakersView({
                               !row.email
                                 ? "No email address yet — use Edit email to add one."
                                 : row.talks === 0
-                                  ? "Not on a presentation yet — add them to one on the event's Agenda tab first."
+                                  ? "Not in a session yet — add them to one on the event's Agenda tab first."
                                   : null
                             }
                           />
@@ -586,7 +587,7 @@ export function SpeakersView({
               setToast(
                 `${who.full_name} removed` +
                   (result.presentations > 0
-                    ? ` · taken off ${result.presentations} presentation${result.presentations === 1 ? "" : "s"}`
+                    ? ` · taken off ${result.presentations} session${result.presentations === 1 ? "" : "s"}`
                     : ""),
               );
               await reload();
@@ -630,6 +631,9 @@ export function SpeakersView({
   );
 }
 
+/** One session a speaker can be added to (D-135): the value is its presentation. */
+export type SessionChoice = { slot_id: string; label: string; day: string; time: string; room: string };
+
 function AddSpeakerDialog({
   eventId,
   talks,
@@ -637,7 +641,7 @@ function AddSpeakerDialog({
   onAdded,
 }: {
   eventId: string;
-  talks: { slot_id: string; label: string }[];
+  talks: SessionChoice[];
   onClose: () => void;
   onAdded: (message: string) => void;
 }) {
@@ -663,7 +667,7 @@ function AddSpeakerDialog({
       return;
     }
     if (!slotId) {
-      setError("Choose the presentation this speaker is giving.");
+      setError("Choose the session this speaker is presenting in.");
       return;
     }
     setSaving(true);
@@ -678,8 +682,8 @@ function AddSpeakerDialog({
       const talk = talks.find((candidate) => candidate.slot_id === slotId);
       onAdded(
         result.created
-          ? `${name.trim()} added to ${talk?.label ?? "the presentation"}`
-          : `${name.trim()} was already on this event — now on ${talk?.label ?? "that presentation"} too`,
+          ? `${name.trim()} added to ${talk?.label ?? "the session"}`
+          : `${name.trim()} was already on this event — now in ${talk?.label ?? "that session"} too`,
       );
     } catch (caught) {
       setError(
@@ -752,11 +756,11 @@ function AddSpeakerDialog({
             />
           </div>
           <div className="field">
-            <label htmlFor="new-speaker-talk">Presentation</label>
+            <label htmlFor="new-speaker-talk">Session</label>
             {talks.length === 0 && (
               <div className="note" style={{ marginBottom: 6 }}>
-                Add the presentation to the agenda first — a speaker is always
-                added to one.
+                Add the session to the agenda first — a speaker is always added
+                to one.
               </div>
             )}
             <select
@@ -767,18 +771,33 @@ function AddSpeakerDialog({
               disabled={talks.length === 0}
               onChange={(event) => setSlotId(event.target.value)}
             >
-              {/* Required (D-095): a speaker is added to a presentation. */}
+              {/* Required (D-095): a speaker is added to a session's presentation. */}
               <option value="" disabled>
                 {talks.length === 0
-                  ? "No presentations on the agenda yet"
-                  : "Choose a presentation…"}
+                  ? "No sessions on the agenda yet"
+                  : "Choose a session…"}
               </option>
-              {talks.map((talk) => (
-                <option key={talk.slot_id} value={talk.slot_id}>
-                  {talk.label}
-                </option>
+              {/* Grouped by day, as on the Agenda tab; each says when and where (D-135). */}
+              {[...new Set(talks.map((talk) => talk.day))].map((day) => (
+                <optgroup key={day} label={day}>
+                  {talks
+                    .filter((talk) => talk.day === day)
+                    .map((talk) => (
+                      <option key={talk.slot_id} value={talk.slot_id}>
+                        {talk.time} · {talk.label} — {talk.room}
+                      </option>
+                    ))}
+                </optgroup>
               ))}
             </select>
+            {(() => {
+              const chosen = talks.find((talk) => talk.slot_id === slotId);
+              return chosen ? (
+                <div className="note" style={{ marginTop: 6 }}>
+                  {chosen.day} · {chosen.time} · {chosen.room}
+                </div>
+              ) : null;
+            })()}
           </div>
           <div
             style={{
@@ -806,7 +825,7 @@ function AddSpeakerDialog({
           </div>
           {/* D-111. With no presentations at all, the note above the list already says why. */}
           <WhyNot
-            reason={!slotId && talks.length > 0 ? "Choose the presentation this speaker gives to continue." : null}
+            reason={!slotId && talks.length > 0 ? "Choose the session this speaker presents in to continue." : null}
           />
         </div>
       </form>
@@ -915,8 +934,8 @@ function RemoveSpeakerDialog({
           <p style={{ marginTop: 0 }}>
             {speaker.full_name} will be taken off{" "}
             {speaker.talks === 1
-              ? "their presentation"
-              : `their ${speaker.talks} presentations`}{" "}
+              ? "their session"
+              : `their ${speaker.talks} sessions`}{" "}
             and removed from this event. Their upload link and access code stop
             working at once.
           </p>

@@ -1,5 +1,6 @@
 import type pg from "pg";
-import type { EmailSender, Message } from "@pmp/email";
+import type { EmailLook, EmailSender, Message } from "@pmp/email";
+import { renderEmailHtml } from "@pmp/email";
 import { suppressionReason } from "./guard.ts";
 
 export type OutboxRow = { id: string; topic: string; payload: Record<string, unknown> };
@@ -52,6 +53,10 @@ export async function handle(row: OutboxRow, deps: Deps): Promise<void> {
     subject?: string;
     body?: string;
     communication_id?: string;
+    /** Speaker mail's branding (D-138): banner, button, sender name and reply-to. */
+    look?: EmailLook & { from_name?: string | null; reply_to?: string | null };
+    /** The formatted message (D-139), sanitised by the API; `body` is its plain-text twin. */
+    html_body?: string;
   };
   if (!payload.to || !payload.subject) {
     throw new Error("email.send payload needs `to` and `subject`");
@@ -75,12 +80,20 @@ export async function handle(row: OutboxRow, deps: Deps): Promise<void> {
     return; // Dispatched: it was decided, not deferred — retrying would refuse again.
   }
 
+  const look = payload.look;
   const message: Message = {
     to: payload.to,
     subject: payload.subject,
     body: payload.body ?? "",
     kind: row.topic,
     ref: communicationId,
+    ...(look
+      ? {
+          html: renderEmailHtml({ subject: payload.subject, body: payload.body ?? "", body_html: payload.html_body ?? null, ...look }),
+          ...(look.from_name ? { fromName: look.from_name } : {}),
+          ...(look.reply_to ? { replyTo: look.reply_to } : {}),
+        }
+      : {}),
   };
   const delivery = await deps.sender.send(message);
 

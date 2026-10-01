@@ -15,9 +15,10 @@ import { withSystemScope } from "@pmp/db";
  * never reach the client's package. And for a co-presented talk the archive read one
  * presenter's permission, chosen by chance.
  *
- * So: staff can set it; and a co-presented talk goes in only as far as *every* presenter
- * agreed. The talk here is really uploaded through the portal and really approved, so
- * the archive's own scope is what is checked.
+ * So: staff can set it. Since D-137 co-presenters each have their own presentation and
+ * file, so each file goes in only as far as *its own* speaker agreed — a co-presenter's
+ * permission no longer decides someone else's deck. The lead's file here is really
+ * uploaded through the portal and really approved, so the archive's own scope is checked.
  */
 const API = process.env.API_BASE ?? "http://localhost:4000/api/v1";
 const PASSWORD = "dxg-development-password";
@@ -52,12 +53,12 @@ type Scope = {
   excluded: { title: string; speaker: string | null; reason: string }[];
 };
 const scope = async (): Promise<Scope> => (await (await call("GET", `/events/${eventId}/archive/scope`)).json()) as Scope;
+/** The lead's own presentation in the archive scope (D-137: the co-presenter has a twin). */
 const ours = async () => {
   const current = await scope();
-  return {
-    included: current.included.find((row) => row.title === TALK),
-    excluded: current.excluded.find((row) => row.title === TALK),
-  };
+  const lead = (row: { title: string; speaker: string | null }) =>
+    row.title === TALK && (row.speaker ?? "").includes("Release Lead");
+  return { included: current.included.find(lead), excluded: current.excluded.find(lead) };
 };
 
 async function addPresenter(name: string, email: string): Promise<string> {
@@ -220,44 +221,51 @@ describe("setting a release permission", () => {
   });
 });
 
-describe("a co-presented talk is archived only as far as every presenter agreed", () => {
-  test("both presenters are named", async (t: TestContext) => {
+describe("each co-presenter's file follows their own permission (D-137)", () => {
+  test("the lead's presentation names the lead alone", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
     const { included, excluded } = await ours();
     const speaker = (included ?? excluded)?.speaker ?? "";
-    assert.ok(speaker.includes("Release Lead") && speaker.includes("Release Co"), speaker);
+    assert.ok(speaker.includes("Release Lead"), speaker);
+    assert.ok(!speaker.includes("Release Co"), `the co-presenter has a presentation of their own: ${speaker}`);
   });
 
-  test("one presenter not set keeps it out, whatever the other agreed", async (t: TestContext) => {
+  test("the co-presenter not set does not hold back the lead's file", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
     await setRelease(lead, "full");
     await setRelease(co, "undecided");
+    const { included } = await ours();
+    assert.deepEqual(included?.formats, ["pptx", "pdf"]);
+  });
+
+  test("the co-presenter withholding does not hold it back either", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    await setRelease(lead, "full");
+    await setRelease(co, "none");
+    const { included } = await ours();
+    assert.deepEqual(included?.formats, ["pptx", "pdf"]);
+  });
+
+  test("the lead not set keeps the lead's file out", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    await setRelease(lead, "undecided");
+    await setRelease(co, "full");
     const { included, excluded } = await ours();
     assert.equal(included, undefined);
     assert.equal(excluded?.reason, "release permission not set");
   });
 
-  test("one presenter withholding keeps it out", async (t: TestContext) => {
+  test("the lead withholding keeps it out", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
-    await setRelease(lead, "full");
-    await setRelease(co, "none");
+    await setRelease(lead, "none");
     const { excluded } = await ours();
     assert.equal(excluded?.reason, "speaker withheld permission");
   });
 
-  test("full and PDF only goes in as PDF only", async (t: TestContext) => {
+  test("the lead's PDF only goes in as PDF only", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
-    await setRelease(lead, "full");
-    await setRelease(co, "pdf_only");
+    await setRelease(lead, "pdf_only");
     const { included } = await ours();
     assert.deepEqual(included?.formats, ["pdf"]);
-  });
-
-  test("both full goes in as PowerPoint and PDF", async (t: TestContext) => {
-    if (!up) return t.skip("API not running");
-    await setRelease(lead, "full");
-    await setRelease(co, "full");
-    const { included } = await ours();
-    assert.deepEqual(included?.formats, ["pptx", "pdf"]);
   });
 });

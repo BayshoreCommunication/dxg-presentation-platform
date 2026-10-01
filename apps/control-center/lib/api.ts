@@ -1124,7 +1124,8 @@ export type ReminderSchedule = {
 
 export type CommsView = {
   reminders: ReminderSchedule;
-  templates: { id: string; name: string; subject: string; body: string }[];
+  /** `body_html` is the formatted message (D-139); `body` its plain-text twin, or the whole of a plain one. */
+  templates: { id: string; name: string; subject: string; body: string; body_html?: string | null }[];
   /** The merge fields a template may use (D-080). */
   merge_fields: string[];
   recipients: CommRecipient[];
@@ -1139,7 +1140,26 @@ export type CommsView = {
     created_at: string;
   }[];
   stats: { queued: number; sent: number; delivered: number; opened: number; clicked: number; bounced: number; practice?: number };
+  /** How the speaker emails look (D-138). */
+  email: EmailSettings | null;
 };
+
+export type EmailSettings = { sender_name: string | null; reply_to: string | null; banner_url?: string | null };
+
+/** Sender name and reply-to for the event's speaker emails (D-138). */
+export const saveEmailSettings = (eventId: string, settings: { sender_name: string; reply_to: string }) =>
+  request<EmailSettings>(`/events/${eventId}/email-settings`, { method: "PUT", body: JSON.stringify(settings) });
+
+/** A new template from the one being edited (D-138). */
+export const createTemplate = (eventId: string, input: { name: string; subject: string; body: string; body_html?: string }) =>
+  request<{ id: string; name: string; subject: string; body: string }>(`/events/${eventId}/comms/templates`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+
+/** One copy of the email to an address of your choice (D-138). */
+export const sendTestEmail = (eventId: string, input: { to: string; subject: string; body: string; body_html?: string }) =>
+  request<{ to: string }>(`/events/${eventId}/comms/test`, { method: "POST", body: JSON.stringify(input) });
 
 export const getComms = (eventId: string) =>
   request<CommsView>(`/events/${eventId}/comms`);
@@ -1280,6 +1300,8 @@ export type FileVersionRow = {
   uploaded_at: string;
   uploaded_by: string | null;
   source: string;
+  approved_at: string | null;
+  approved_by: string | null;
   review_state: string;
   processing_state: string;
   sha256: string | null;
@@ -1305,6 +1327,8 @@ export type FileRow = {
   uploaded_at: string;
   uploaded_by: string | null;
   source: string;
+  approved_at: string | null;
+  approved_by: string | null;
   review_state: string;
   processing_state: string;
   inspection_state: string;
@@ -1330,7 +1354,7 @@ export type FileQuery = {
   q?: string;
   status?: FileStatus | "all";
   room?: string;
-  sort?: "uploaded" | "name" | "speaker" | "location" | "size";
+  sort?: "uploaded" | "name" | "speaker" | "location" | "size" | "approved";
   dir?: "asc" | "desc";
   page?: number;
   limit?: number;
@@ -1369,15 +1393,28 @@ export async function downloadFilesZip(eventId: string, versionIds: string[]): P
 }
 
 /** Save an event's email template (D-080). Mail already sent keeps the text it went out with. */
-export const updateTemplate = (eventId: string, templateId: string, subject: string, body: string) =>
-  request<{ id: string; name: string; subject: string; body: string }>(
+export const updateTemplate = (eventId: string, templateId: string, subject: string, body: string, bodyHtml?: string) =>
+  request<{ id: string; name: string; subject: string; body: string; body_html?: string | null }>(
     `/events/${eventId}/comms/templates/${templateId}`,
-    { method: "PATCH", body: JSON.stringify({ subject, body }) },
+    { method: "PATCH", body: JSON.stringify({ subject, body, ...(bodyHtml ? { body_html: bodyHtml } : {}) }) },
   );
+
+/** An image for a formatted email (D-139); the answer is its public address. */
+export async function uploadEmailImage(eventId: string, file: File): Promise<string> {
+  const response = await fetch(`${API_BASE_URL}/events/${eventId}/email-images`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "content-type": "application/octet-stream", "x-file-name": encodeURIComponent(file.name) },
+    body: file,
+  });
+  const payload = (await response.json().catch(() => ({}))) as { url?: string; message?: string };
+  if (!response.ok || !payload.url) throw new Error(payload.message ?? "The image could not be added.");
+  return payload.url;
+}
 
 /* ── event header & slide template (D-093) ───────────────────────────────── */
 
-export type AssetKind = "header" | "template";
+export type AssetKind = "header" | "template" | "email_banner";
 export type BrandAsset = { file_name: string; content_type: string; size_bytes: number; uploaded_at: string };
 
 /** Where the browser loads an asset from; `version` busts the cache after a replace. */

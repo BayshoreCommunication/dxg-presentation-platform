@@ -100,7 +100,7 @@ import {
   changeSpeakerEmail,
 } from "./services/agendaEdit.ts";
 import {
-  ensureTemplates, updateTemplate, MERGE_FIELDS,
+  ensureTemplates, updateTemplate, createTemplate, sendTestEmail, MERGE_FIELDS,
   recipientsFor,
   sendBatch,
   sendUploadLink,
@@ -109,6 +109,7 @@ import {
   recordDeliveryEvent,
   findCommunication,
 } from "./services/comms.ts";
+import { emailSettings, updateEmailSettings, putEmailImage, emailImageOf, readEmailImage } from "./services/emailLook.ts";
 import { verifySnsMessage, parseSesEvent } from "@pmp/email";
 import type { SnsMessage } from "@pmp/email";
 import {
@@ -628,6 +629,11 @@ const NON_STAFF_PATHS = [
   "/api/v1/client/",
   "/api/v1/webhooks/",
   "/api/v1/agent/",
+  // The event's email banner, fetched by speakers' mail clients with no sign-in (D-138).
+  // A GET-only route that serves that one image and nothing else.
+  "/api/v1/email-banner/",
+  // Images placed in a formatted email's message (D-139), fetched the same way.
+  "/api/v1/email-image/",
   "/ops/",
 ];
 
@@ -1030,7 +1036,7 @@ app.get("/api/v1/events/:eventId/files", async (req, res) => {
   const eventId = String(req.params.eventId);
   const text = (value: unknown) => (typeof value === "string" && value.length > 0 ? value : undefined);
   const statuses = ["all", "review", "approved", "changes", "blocked", "other"];
-  const sorts = ["uploaded", "name", "speaker", "location", "size"];
+  const sorts = ["uploaded", "name", "speaker", "location", "size", "approved"];
   const query: FileQuery = {
     ...(text(req.query.q) ? { q: text(req.query.q)!.slice(0, 200) } : {}),
     ...(statuses.includes(String(req.query.status)) ? { status: String(req.query.status) as NonNullable<FileQuery["status"]> } : {}),
@@ -1896,10 +1902,32 @@ async function sendAsset(res: express.Response, kind: AssetKind, asset: AssetRec
   const name = asset.file_name.replace(/["\\\r\n]/g, "_");
   res.setHeader(
     "content-disposition",
-    `${kind === "header" ? "inline" : "attachment"}; filename="${name}"; filename*=UTF-8''${encodeURIComponent(asset.file_name)}`,
+    `${kind === "template" ? "attachment" : "inline"}; filename="${name}"; filename*=UTF-8''${encodeURIComponent(asset.file_name)}`,
   );
   res.send(body);
 }
+
+/**
+ * The event's email banner, for mail clients (D-138). Public on purpose: a speaker's mail
+ * client fetches it with nobody's sign-in. It is the one asset served this way, and only
+ * the banner — staff chose it to be shown to every speaker. `?v=` (a fingerprint of the
+ * stored file) makes each banner its own address, so it can be cached for good.
+ */
+app.get("/api/v1/email-banner/:eventId", async (req, res) => {
+  const eventId = String(req.params.eventId);
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(eventId)) {
+    return res.status(404).end();
+  }
+  const asset = await withSystemScope((tx) => assetOf(tx, eventId, "email_banner"));
+  if (!asset) return res.status(404).end();
+  const body = await readAsset(asset);
+  res.setHeader("content-type", asset.content_type);
+  res.setHeader("x-content-type-options", "nosniff");
+  res.setHeader("cache-control", req.query.v ? "public, max-age=31536000, immutable" : "public, max-age=300");
+  // Mail clients and their image proxies load it from anywhere.
+  res.setHeader("cross-origin-resource-policy", "cross-origin");
+  return res.send(body);
+});
 
 app.put("/api/v1/events/:eventId/assets/:kind", async (req, res) => {
   const actor = actorFrom(req);
@@ -2665,6 +2693,8 @@ app.get("/api/v1/events/:eventId/comms", async (req, res) => {
     return {
       templates,
       merge_fields: MERGE_FIELDS,
+      // How the emails look (D-138): sender name, reply-to and the banner's address.
+      email: await emailSettings(tx, eventId),
       // The invitation audience marks everyone already invited (once only, D-086, D-108).
       recipients: invitation ? await recipientsFor(tx, eventId, invitation.id, false, undefined, false, true) : [],
       missing: invitation ? await recipientsFor(tx, eventId, invitation.id, true) : [],
@@ -2682,12 +2712,87 @@ app.patch("/api/v1/events/:eventId/comms/templates/:templateId", async (req, res
   const actor = actorFrom(req);
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   const eventId = String(req.params.eventId);
-  const body = (req.body ?? {}) as { subject?: unknown; body?: unknown };
+  const body = (req.body ?? {}) as { subject?: unknown; body?: unknown; body_html?: unknown };
   const result = await withScope(scopeFor(req, eventId), (tx) =>
     updateTemplate(tx, actor, eventId, String(req.params.templateId), body),
   );
   if (!result.ok) {
     return res.status(result.error.code === "comms.template_invalid" ? 422 : statusFor(result.error)).json(result.error);
+  }
+  return res.json(result.value);
+});
+
+/** A new template, saved from the one being edited (D-138). */
+app.post("/api/v1/events/:eventId/comms/templates", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  const eventId = String(req.params.eventId);
+  const body = (req.body ?? {}) as { name?: unknown; subject?: unknown; body?: unknown; body_html?: unknown };
+  const result = await withScope(scopeFor(req, eventId), (tx) => createTemplate(tx, actor, eventId, body));
+  if (!result.ok) {
+    return res.status(result.error.code === "comms.template_invalid" ? 422 : statusFor(result.error)).json(result.error);
+  }
+  return res.status(201).json(result.value);
+});
+
+/** One copy of the email being edited, to an address staff choose (D-138). */
+app.post("/api/v1/events/:eventId/comms/test", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  const eventId = String(req.params.eventId);
+  const body = (req.body ?? {}) as { to?: unknown; subject?: unknown; body?: unknown; body_html?: unknown };
+  const result = await withScope(scopeFor(req, eventId), (tx) => sendTestEmail(tx, actor, eventId, body));
+  if (!result.ok) {
+    const code = result.error.code;
+    const status = code === "comms.template_invalid" || code === "comms.test_invalid" || code === "comms.practice" ? 422 : statusFor(result.error);
+    return res.status(status).json(result.error);
+  }
+  return res.status(201).json(result.value);
+});
+
+/** An image for a formatted message, from the editor's image button (D-139). */
+app.post("/api/v1/events/:eventId/email-images", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  let fileName = String(req.header("x-file-name") ?? "image");
+  try {
+    fileName = decodeURIComponent(fileName);
+  } catch {
+    // Not percent-encoded — use it as sent.
+  }
+  const eventId = String(req.params.eventId);
+  const result = await withScope(scopeFor(req, eventId), (tx) => putEmailImage(tx, actor, eventId, { body: req.body, fileName }));
+  if (!result.ok) {
+    return res.status(result.error.code === "comms.bad_image" ? 422 : statusFor(result.error)).json(result.error);
+  }
+  return res.status(201).json(result.value);
+});
+
+/** That image, for mail clients — public like the banner; each upload is a new address. */
+app.get("/api/v1/email-image/:eventId/:imageId", async (req, res) => {
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const eventId = String(req.params.eventId);
+  const imageId = String(req.params.imageId);
+  if (!uuid.test(eventId) || !uuid.test(imageId)) return res.status(404).end();
+  const image = await withSystemScope((tx) => emailImageOf(tx, eventId, imageId));
+  if (!image) return res.status(404).end();
+  const body = await readEmailImage(image);
+  res.setHeader("content-type", image.content_type);
+  res.setHeader("x-content-type-options", "nosniff");
+  res.setHeader("cache-control", "public, max-age=31536000, immutable");
+  res.setHeader("cross-origin-resource-policy", "cross-origin");
+  return res.send(body);
+});
+
+/** Sender name and reply-to for the event's speaker emails (D-138). */
+app.put("/api/v1/events/:eventId/email-settings", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  const eventId = String(req.params.eventId);
+  const body = (req.body ?? {}) as { sender_name?: unknown; reply_to?: unknown };
+  const result = await withScope(scopeFor(req, eventId), (tx) => updateEmailSettings(tx, actor, eventId, body));
+  if (!result.ok) {
+    return res.status(result.error.code === "comms.settings_invalid" ? 422 : statusFor(result.error)).json(result.error);
   }
   return res.json(result.value);
 });

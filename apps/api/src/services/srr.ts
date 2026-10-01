@@ -7,6 +7,7 @@ import { formatBytes, formatBytesDelta, formatSessionTime, VERSION_STATE, wordsF
 import { ingestVersion, versionFacts } from "./ingest.ts";
 import type { VersionFacts } from "./ingest.ts";
 import { approvedRoomCopiesSql } from "./queries.ts";
+import { lookFor } from "./emailLook.ts";
 
 /* ── screen 11: Speaker Ready Room dashboard ─────────────────────────────── */
 
@@ -839,7 +840,8 @@ export async function emailReceipt(
     [row.event_id, row.client_id, detail.speaker.id, row.email, subject, body],
   );
   await tx.query(`INSERT INTO pmp.outbox (topic, payload) VALUES ('email.send', $1)`, [
-    JSON.stringify({ communication_id: comm[0]!.id, to: row.email, subject, body }),
+    // A receipt asks nothing of the speaker, so it carries the event's look but no button (D-138).
+    JSON.stringify({ communication_id: comm[0]!.id, to: row.email, subject, body, look: await lookFor(tx, row.event_id, null) }),
   ]);
   await appendAudit(tx, {
     partitionId: row.event_id,

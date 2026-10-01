@@ -101,6 +101,20 @@ const GLYPHS: Record<string, Part[]> = {
     },
     { d: "M1.667 6.667h12.666", stroke: true },
   ],
+  // The event's agenda (D-134): a page with its header band and binding rings.
+  calendar: [
+    {
+      d: "M2 7c0-2.2 0-3.3.683-3.983C3.367 2.333 4.467 2.333 6.667 2.333h2.666c2.2 0 3.3 0 3.984.684C14 3.7 14 4.8 14 7v2.667c0 2.2 0 3.3-.683 3.983-.684.683-1.784.683-3.984.683H6.667c-2.2 0-3.3 0-3.984-.683C2 12.967 2 11.867 2 9.667Z",
+      fill: FILL,
+      stroke: true,
+    },
+    {
+      d: "M2 6c.02-1.6.12-2.45.683-2.983C3.367 2.333 4.467 2.333 6.667 2.333h2.666c2.2 0 3.3 0 3.984.684.563.533.663 1.383.683 2.983Z",
+      fill: INNER,
+      stroke: true,
+    },
+    { d: "M5.333 1.333v2.334M10.667 1.333v2.334M5.333 9h.006M8 9h.006M10.667 9h.006M5.333 11.667h.006M8 11.667h.006", stroke: true },
+  ],
   // KPI header glyphs.
   clock: [
     { d: CIRCLE, fill: FILL, stroke: true },

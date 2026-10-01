@@ -84,6 +84,9 @@ aside{width:250px;flex-shrink:0;background:transparent;color:var(--foreground);d
 .evtctx .note{font-size:12px;color:var(--subtle-foreground);padding-left:2px}
 aside nav{display:flex;flex-direction:column;gap:20px;flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;scrollbar-width:none}
 aside nav::-webkit-scrollbar{display:none}
+/* The Events group sits above the switcher and takes only its own height (D-133). */
+aside nav.topnav{flex:none;overflow:visible}
+.topnav + .evtctx{border-top:.8px solid var(--border);padding-top:14px}
 .navgroup{display:flex;flex-direction:column;gap:12px}
 .navitems{display:flex;flex-direction:column;gap:2px}
 .grp{padding:0;font-size:12px;line-height:1.6;letter-spacing:0;text-transform:uppercase;color:var(--muted-foreground);white-space:nowrap}
@@ -1154,3 +1157,114 @@ input,select,textarea{border-width:1px}
 .room-now-label{font-family:var(--font-mono, ui-monospace, monospace);font-size:11px;letter-spacing:.1em;color:var(--dim);margin-bottom:4px}
 .room-now-text{color:var(--white);font-size:15px;line-height:1.45}
 .room-now-note{color:var(--dim);font-size:11.5px;margin-top:8px}
+
+/* ── Agenda tab: session cards (D-131) ─────────────────────────────────── */
+.ag-sess{border:1px solid var(--line);border-radius:8px;margin-bottom:10px;background:var(--card)}
+.ag-sess.canceled{opacity:.7}
+.ag-sess.canceled .ag-title{text-decoration:line-through}
+.ag-head,.ag-talk{display:grid;grid-template-columns:64px minmax(0,1fr) auto;gap:4px 14px;align-items:start;padding:10px 12px}
+.ag-head{background:var(--mist);border-radius:8px 8px 0 0}
+.ag-talk{border-top:1px solid var(--line)}
+.ag-time{display:flex;flex-direction:column;gap:2px;font-size:13px;line-height:1.35}
+.ag-time span:last-child:not(:first-child){color:var(--muted-foreground)}
+.ag-what{min-width:0}
+.ag-title{font-size:14px;line-height:1.35}
+.ag-talk-title{display:inline-block;font-weight:600;margin-bottom:6px}
+.ag-actions{display:flex;gap:6px;align-items:center;justify-content:flex-end;flex-wrap:wrap}
+.ag-status{text-decoration:none}
+.ag-spks{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
+.ag-spk{display:flex;align-items:center;gap:10px;min-height:30px;padding:2px 6px;margin:0 -6px;border-radius:6px}
+.ag-spk:hover{background:var(--mist)}
+.ag-name{flex-shrink:0;max-width:100%;font-weight:500;color:var(--cell-foreground);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ag-org{flex:0 1 auto;font-size:13px;color:var(--muted-foreground);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.ag-role{height:20px;font-size:11px}
+.ag-remove{margin-left:auto;opacity:.55}
+.ag-spk:hover .ag-remove,.ag-remove:focus-within{opacity:1}
+.ag-add{margin-left:auto;padding:2px 10px}
+.ag-editor{margin-top:8px}
+@media (max-width:640px){
+  .ag-head{grid-template-columns:minmax(0,1fr) auto}
+  /* A presentation's status and menu go under its speakers, so names keep the width. */
+  .ag-talk{grid-template-columns:minmax(0,1fr)}
+  .ag-talk .ag-actions{justify-content:flex-start}
+  .ag-time{grid-column:1/-1;flex-direction:row;gap:6px}
+  .ag-time span:last-child:not(:first-child)::before{content:"– "}
+  .ag-time:empty{display:none}
+}
+
+/* ── Communications: the email preview (D-138) ─────────────────────────── */
+/* An email is white in every mail client, so the sheet stays white in the dark theme too. */
+.mail-preview{border:1px solid var(--line);border-radius:10px;background:#f3f4f6;padding:12px;margin-bottom:12px}
+.mail-meta{display:flex;flex-direction:column;gap:2px;font-size:12px;color:#4b5563;padding:0 4px 10px}
+.mail-meta b{display:inline-block;min-width:58px;font-weight:600;color:#111827}
+.mail-sheet{max-width:600px;margin:0 auto;background:#fff;border-radius:10px;overflow:hidden;color:#1f2937}
+.mail-banner{display:block;width:100%;height:auto}
+.mail-head{padding:18px 24px;background:#111827;color:#fff;font-size:16px;font-weight:600}
+.mail-cta{display:flex;justify-content:center;padding:22px 24px 4px}
+.mail-cta span{display:inline-block;padding:11px 22px;border-radius:8px;background:#111827;color:#fff;font-size:14px;font-weight:600}
+.mail-body{white-space:pre-wrap;font:inherit;font-size:14px;line-height:1.6;margin:0;padding:18px 24px 14px;color:#1f2937}
+.mail-foot{padding:10px 24px 16px;border-top:1px solid #e5e7eb;font-size:12px;color:#6b7280}
+
+/* ── Communications: the formatted message editor (D-139) ─────────────── */
+/* White like the email it writes, in both themes. */
+.rich-editor{border:1px solid var(--line);border-radius:8px;background:#fff;color:#1f2937;overflow:hidden}
+.rich-editor .ql-toolbar.ql-snow{border:0;border-bottom:1px solid #e5e7eb;background:#fafafa}
+.rich-editor .ql-container.ql-snow{border:0;font-family:inherit;font-size:14px}
+.rich-editor .ql-editor{min-height:280px;max-height:520px;overflow-y:auto;line-height:1.6;color:#1f2937}
+.rich-editor .ql-editor img{max-width:100%}
+.rich-editor .ql-snow .ql-picker.ql-size .ql-picker-label[data-value="12px"]::before,
+.rich-editor .ql-snow .ql-picker.ql-size .ql-picker-item[data-value="12px"]::before{content:"Small"}
+.rich-editor .ql-snow .ql-picker.ql-size .ql-picker-label[data-value="18px"]::before,
+.rich-editor .ql-snow .ql-picker.ql-size .ql-picker-item[data-value="18px"]::before{content:"Large"}
+.rich-editor .ql-snow .ql-picker.ql-size .ql-picker-label[data-value="24px"]::before,
+.rich-editor .ql-snow .ql-picker.ql-size .ql-picker-item[data-value="24px"]::before{content:"Huge"}
+.rich-editor .ql-snow .ql-picker.ql-size .ql-picker-item[data-value="12px"]{font-size:12px}
+.rich-editor .ql-snow .ql-picker.ql-size .ql-picker-item[data-value="18px"]{font-size:18px}
+.rich-editor .ql-snow .ql-picker.ql-size .ql-picker-item[data-value="24px"]{font-size:24px}
+.rich-foot{display:flex;justify-content:space-between;gap:12px;padding:6px 12px;border-top:1px solid #e5e7eb;background:#fafafa}
+.rich-count{font-size:12px;color:#6b7280;font-variant-numeric:tabular-nums}
+.rich-count.over{color:#b91c1c;font-weight:600}
+.mail-body.formatted{white-space:normal}
+.mail-body.formatted p{margin:0}
+.mail-body.formatted img{max-width:100%;height:auto}
+
+/* ── Communications layout (D-139 polish) ──────────────────────────────── */
+.look-grid,.tpl-facts,.test-send{--kl:var(--muted-foreground)}
+.look-grid .kl,.tpl-facts .kl,.test-send .kl{display:block;margin-bottom:6px;font-size:12px;font-weight:500;color:var(--kl)}
+/* Banner beside the sender fields; the banner is a thumbnail, not the full 1200 px. */
+.look-grid{display:grid;grid-template-columns:minmax(0,380px) minmax(0,1fr);gap:20px 28px;align-items:start}
+.look-banner img{max-height:140px;object-fit:cover}
+.look-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 16px}
+.look-fields input{width:100%}
+.look-actions{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.look-actions .why-not{flex:1 1 220px;margin:0}
+.tpl-head{display:flex;gap:8px;align-items:center}
+.tpl-head select{min-width:220px}
+/* Editor left, the email right; the preview stays in view while the message is written. */
+.tpl-grid{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:24px;align-items:start}
+.tpl-grid.view{grid-template-columns:minmax(0,1fr) 300px}
+.tpl-main input#tpl-subject{width:100%}
+.tpl-side{position:sticky;top:16px}
+.tpl-grid.view .tpl-side{position:static}
+.tpl-msg-head{display:flex;justify-content:space-between;align-items:flex-end;gap:8px;margin-bottom:6px}
+.tpl-msg-head label{margin:0}
+.tpl-bar{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:12px 24px;margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}
+.tpl-bar-actions{display:flex;flex-wrap:wrap;gap:8px}
+.tpl-bar .test-send{flex:0 1 380px}
+.tpl-new{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-top:12px}
+.tpl-new input{width:100%}
+.tpl-facts{display:flex;flex-direction:column;gap:16px;padding:14px;border:1px solid var(--line);border-radius:10px;background:var(--mist)}
+.test-send-row{display:flex;gap:8px}
+.test-send-row input{flex:1 1 auto;min-width:0}
+.test-send .why-not{margin-top:6px}
+.mail-preview{margin-bottom:0}
+@media (max-width:1100px){
+  .tpl-grid,.tpl-grid.view{grid-template-columns:minmax(0,1fr)}
+  .tpl-side{position:static}
+}
+@media (max-width:720px){
+  .look-grid,.look-fields{grid-template-columns:minmax(0,1fr)}
+  .tpl-head{flex-wrap:wrap}
+  .tpl-head select{min-width:0;flex:1 1 auto}
+}
+

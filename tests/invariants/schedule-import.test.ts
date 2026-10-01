@@ -248,6 +248,46 @@ describe("the blank template is downloadable and importable", () => {
   });
 });
 
+describe("co-presenters get a presentation each (D-137)", () => {
+  type Agenda = { items: { title: string; presentations: { slot_id: string; speakers: { name: string }[] }[] }[] };
+  const sessionNamed = async (title: string) =>
+    ((await (await fetch(`${API}/events/${eventId}/agenda`, { headers: { cookie: admin } })).json()) as Agenda).items.find(
+      (session) => session.title === title,
+    );
+  const ROW = [
+    "Session Title,Session Location,Session Date,Session Start,Session End,Presenter 1 Email,Presenter 1 First Name,Presenter 1 Last Name,Presenter 2 Email,Presenter 2 First Name,Presenter 2 Last Name",
+    "Two Voices,Ballroom E,04/03/2027,9:00 AM,10:00 AM,one.voice@example.invalid,Ona,Voice,two.voice@example.invalid,Tove,Voice",
+  ].join("\n");
+
+  test("a row with two presenters makes two presentations, one each", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const response = await commit(await upload(ROW));
+    assert.equal(response.status, 200);
+    const session = await sessionNamed("Two Voices");
+    assert.ok(session, "the session was imported");
+    assert.equal(session.presentations.length, 2);
+    const people = session.presentations.map((talk) => talk.speakers.map((person) => person.name));
+    assert.deepEqual(
+      people.map((names) => names.length),
+      [1, 1],
+      "each presentation has exactly one speaker",
+    );
+    assert.deepEqual(people.flat().sort(), ["Ona Voice", "Tove Voice"]);
+  });
+
+  test("importing the same file again adds nothing", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const response = await commit(await upload(ROW));
+    assert.equal(response.status, 200);
+    const session = await sessionNamed("Two Voices");
+    assert.equal(session!.presentations.length, 2, "still two presentations");
+    assert.deepEqual(
+      session!.presentations.map((talk) => talk.speakers.length),
+      [1, 1],
+    );
+  });
+});
+
 after(async () => {
   if (!up) return;
   await removeTestEvents([EVENT_NAME]);

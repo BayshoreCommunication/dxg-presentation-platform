@@ -202,7 +202,7 @@ paths:
         - {$ref: '#/components/parameters/q'}
         - {name: status, in: query, schema: {type: string, enum: [all, review, approved, changes, blocked, other]}}
         - {name: room, in: query, schema: {type: string}, description: "Room id, or `none` for talks with no room"}
-        - {name: sort, in: query, schema: {type: string, enum: [uploaded, name, speaker, location, size], default: uploaded}}
+        - {name: sort, in: query, schema: {type: string, enum: [uploaded, name, speaker, location, size, approved], default: uploaded}}
         - {name: dir, in: query, schema: {type: string, enum: [asc, desc], default: desc}}
         - {name: page, in: query, schema: {type: integer, minimum: 1, default: 1}, description: "Page-numbered, not cursor: the tab counts and folders need the whole event anyway (D-079)"}
         - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 10}}

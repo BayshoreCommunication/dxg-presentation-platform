@@ -110,6 +110,11 @@ of these is missing or unsafe (`apps/api/src/config.ts`): https `STAFF_BASE`/`PO
 `MAIL_FROM`, `TRUST_PROXY=1`, and no `DEV_MFA_SECRET`. Compose derives most of them from the few
 values in `.env`.
 
+Email banners (D-138) are fetched by speakers' mail clients from `PUBLIC_API_BASE/api/v1/email-banner/…`.
+`PUBLIC_API_BASE` is optional and defaults to `PORTAL_BASE` (the speakers' host proxies `/api`, Caddyfile); set it
+only if mail should load images from another host. A change to speaker-email rendering needs the **dispatcher**
+rebuilt, not only the api.
+
 Optional: `AUTH_RATE_LIMIT` (sign-in attempts per address per 5 minutes, default 30 in production),
 `REMINDERS_DISABLED=1`, `EMAIL_DNS_CHECK=0`, `CORS_ORIGINS` (extra allowed origins).
 

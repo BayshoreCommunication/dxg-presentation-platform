@@ -1106,11 +1106,15 @@ export async function resolveDay(
 }
 
 /**
- * Everyone on the slot, in the order the row names them.
+ * Everyone in the session, in the order the row names them — **each on a presentation of
+ * their own** (D-137).
  *
- * A second (or sixth) presenter is another row in `speaker_assignments`, not another
- * slot — people presenting one talk share the talk, its file and its approval, which
- * is exactly what that table expresses.
+ * Until D-137 a second (or sixth) presenter was another row in `speaker_assignments` on
+ * the same slot, so co-presenters shared one file: whoever uploaded last replaced
+ * everyone else's deck, and approving it retired theirs. Now each speaker gets their own
+ * presentation in the session, with its own file, versions, review, sign-off, room copy
+ * and Launch. `slotId` is where the caller wants people; `presentationFor` decides which
+ * presentation of that session each person actually lands on.
  *
  * DXG's template fills the presenter's email and leaves the name columns empty on
  * every row, so a presenter identified only by an address still has to become a
@@ -1128,8 +1132,9 @@ export async function syncPresenters(
     presenters: { name: string; email: string }[];
     organization: string;
   },
-): Promise<Set<string>> {
-  const touched = new Set<string>();
+): Promise<Map<string, string>> {
+  // speaker id → the presentation they were put on.
+  const touched = new Map<string, string>();
   for (const [index, presenter] of input.presenters.entries()) {
     const displayName = presenter.name || provisionalName(presenter.email);
     if (!displayName) continue;
@@ -1160,14 +1165,68 @@ export async function syncPresenters(
       ]);
     }
 
-    touched.add(speakerId);
+    const slotId = await presentationFor(tx, input.slotId, speakerId);
+    touched.set(speakerId, slotId);
     await tx.query(
       `INSERT INTO pmp.speaker_assignments (speaker_id, slot_id, event_id, client_id)
        VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING`,
-      [speakerId, input.slotId, input.eventId, input.clientId],
+      [speakerId, slotId, input.eventId, input.clientId],
     );
   }
   return touched;
+}
+
+/**
+ * The presentation `speakerId` should be on when they are put on `slotId` (D-137). A
+ * co-presenter's presentation is a *twin* of the one they were put on: same session, same
+ * title. In order:
+ *  1. `slotId` itself, when they are already on it or nobody presents it (a new session,
+ *     a speaker replaced) — the caller asked for exactly that presentation;
+ *  2. their own twin of it, when they already have one — so a re-import or a repeated
+ *     add changes nothing;
+ *  3. a twin nobody presents and nothing has been uploaded to;
+ *  4. otherwise a new twin, with `slotId`'s title, times and distribution flag.
+ * A speaker giving two differently titled talks in one session keeps one presentation
+ * for each.
+ */
+export async function presentationFor(tx: pg.PoolClient, slotId: string, speakerId: string): Promise<string> {
+  const { rows: target } = await tx.query<{ mine: boolean; occupied: boolean }>(
+    `SELECT EXISTS (SELECT 1 FROM pmp.speaker_assignments WHERE slot_id = $1 AND speaker_id = $2 AND replaced_by IS NULL) AS mine,
+            EXISTS (SELECT 1 FROM pmp.speaker_assignments WHERE slot_id = $1 AND replaced_by IS NULL) AS occupied`,
+    [slotId, speakerId],
+  );
+  if (target[0]?.mine || !target[0]?.occupied) return slotId;
+
+  const twins = `SELECT s.id FROM pmp.slots s, pmp.slots me
+                  WHERE me.id = $1 AND s.session_id = me.session_id AND s.title = me.title AND s.id <> me.id`;
+  const { rows: own } = await tx.query<{ id: string }>(
+    `SELECT t.id FROM (${twins}) t
+       JOIN pmp.speaker_assignments sa ON sa.slot_id = t.id AND sa.replaced_by IS NULL AND sa.speaker_id = $2
+       JOIN pmp.slots s ON s.id = t.id
+      ORDER BY s.position, s.created_at LIMIT 1`,
+    [slotId, speakerId],
+  );
+  if (own[0]) return own[0].id;
+
+  const { rows: free } = await tx.query<{ id: string }>(
+    `SELECT t.id FROM (${twins}) t JOIN pmp.slots s ON s.id = t.id
+      WHERE NOT EXISTS (SELECT 1 FROM pmp.speaker_assignments sa WHERE sa.slot_id = t.id AND sa.replaced_by IS NULL)
+        AND NOT EXISTS (SELECT 1 FROM pmp.files f WHERE f.slot_id = t.id)
+      ORDER BY s.position, s.created_at LIMIT 1`,
+    [slotId],
+  );
+  if (free[0]) return free[0].id;
+
+  const { rows: sibling } = await tx.query<{ id: string }>(
+    `INSERT INTO pmp.slots (session_id, event_id, client_id, title, position, starts_at, ends_at, restricted)
+     SELECT s.session_id, s.event_id, s.client_id, s.title,
+            (SELECT COALESCE(max(position), 0) + 1 FROM pmp.slots WHERE session_id = s.session_id),
+            s.starts_at, s.ends_at, s.restricted
+       FROM pmp.slots s WHERE s.id = $1
+     RETURNING id`,
+    [slotId],
+  );
+  return sibling[0]!.id;
 }
 
 /**
@@ -1224,6 +1283,7 @@ export async function saveTypedRow(
           `SELECT se.id, s.id AS slot_id
              FROM pmp.sessions se JOIN pmp.slots s ON s.session_id = se.id
             WHERE se.id = $1 AND se.event_id = $2
+            ORDER BY s.position, s.created_at
             LIMIT 1`,
           [input.sessionId, input.eventId],
         )
@@ -1246,9 +1306,12 @@ export async function saveTypedRow(
         WHERE id = $1`,
       [existing.id, roomId, trackId, dayId, row.title, row.starts_at, row.ends_at],
     );
+    // Every presentation that was this one's twin — co-presenters' own presentations
+    // (D-137) — follows, so they never drift to a different title or time.
     await tx.query(
-      `UPDATE pmp.slots SET title = $2, starts_at = $3::timestamptz, ends_at = $4::timestamptz
-        WHERE id = $1`,
+      `UPDATE pmp.slots s SET title = $2, starts_at = $3::timestamptz, ends_at = $4::timestamptz
+         FROM pmp.slots me
+        WHERE me.id = $1 AND s.session_id = me.session_id AND (s.id = me.id OR s.title = me.title)`,
       [existing.slot_id, row.title, row.slot_starts_at, row.slot_ends_at],
     );
     sessionId = existing.id;
@@ -1427,6 +1490,8 @@ export async function commitImport(
          FROM pmp.sessions se JOIN pmp.slots s ON s.session_id = se.id
         WHERE se.event_id = $1 AND se.room_id = $2 AND se.starts_at = $3::timestamptz
           AND lower(s.title) = lower($4)
+        -- The session's first presentation; each presenter then finds their own (D-137).
+        ORDER BY s.position, s.created_at
         LIMIT 1`,
       [input.eventId, roomId, row.starts_at, row.title],
     );
@@ -1461,9 +1526,11 @@ export async function commitImport(
       // rather than silently clearing one somebody is relying on.
       if (row.slot_starts_at || row.slot_ends_at) {
         await tx.query(
-          `UPDATE pmp.slots SET starts_at = COALESCE($2::timestamptz, starts_at),
-                                ends_at   = COALESCE($3::timestamptz, ends_at)
-            WHERE id = $1`,
+          // Co-presenters' presentations (D-137) share the time.
+          `UPDATE pmp.slots s SET starts_at = COALESCE($2::timestamptz, s.starts_at),
+                                  ends_at   = COALESCE($3::timestamptz, s.ends_at)
+             FROM pmp.slots me
+            WHERE me.id = $1 AND s.session_id = me.session_id AND (s.id = me.id OR s.title = me.title)`,
           [slotId, row.slot_starts_at, row.slot_ends_at],
         );
       }
@@ -1490,13 +1557,15 @@ export async function commitImport(
       created += 1;
     }
 
-    for (const speakerId of await syncPresenters(tx, {
-      eventId: input.eventId,
-      clientId,
-      slotId,
-      presenters: row.presenters,
-      organization: row.organization,
-    })) {
+    for (const speakerId of (
+      await syncPresenters(tx, {
+        eventId: input.eventId,
+        clientId,
+        slotId,
+        presenters: row.presenters,
+        organization: row.organization,
+      })
+    ).keys()) {
       speakers.add(speakerId);
     }
   }

@@ -10,6 +10,11 @@ const COPY: Record<AssetKind, { accept: string; hint: string; choose: string }> 
     hint: "PNG, JPEG or WebP · up to 5 MB · shown across the top of the speaker portal. A wide image works best (about 1600 × 400).",
     choose: "Upload header…",
   },
+  email_banner: {
+    accept: "image/png,image/jpeg",
+    hint: "PNG or JPG · exactly 1200 px wide and 200–600 px high · up to 2 MB · shown across the top of every email to speakers.",
+    choose: "Upload email banner…",
+  },
   template: {
     accept: ".pptx,.potx,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.openxmlformats-officedocument.presentationml.template",
     hint: "PowerPoint .pptx or .potx · up to 50 MB · speakers download it from the portal to build their deck.",
@@ -38,13 +43,20 @@ export function BrandAssetField({
   kind,
   initial,
   disabled = false,
+  onChange,
 }: {
   eventId: string;
   kind: AssetKind;
   initial: BrandAsset | null;
   disabled?: boolean;
+  /** Told about every upload and removal, e.g. to refresh an email preview (D-138). */
+  onChange?: (asset: BrandAsset | null) => void;
 }) {
-  const [asset, setAsset] = useState<BrandAsset | null>(initial);
+  const [asset, setAssetState] = useState<BrandAsset | null>(initial);
+  const setAsset = (next: BrandAsset | null) => {
+    setAssetState(next);
+    onChange?.(next);
+  };
   const [busy, setBusy] = useState<"upload" | "remove" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const input = useRef<HTMLInputElement>(null);
@@ -88,6 +100,22 @@ export function BrandAssetField({
           if (file) void upload(file);
         }}
       />
+
+      {asset && kind === "email_banner" && (
+        <img
+          src={assetUrl(eventId, "email_banner", asset.uploaded_at)}
+          alt="Email banner"
+          style={{
+            display: "block",
+            width: "100%",
+            height: "auto",
+            borderRadius: 8,
+            border: "1px solid var(--line)",
+            marginBottom: 8,
+            background: "var(--muted)",
+          }}
+        />
+      )}
 
       {asset && kind === "header" && (
         <img

@@ -208,6 +208,8 @@ export async function archiveEmails(tx: pg.PoolClient, eventId: string): Promise
 export type EarlierVersion = {
   slot_id: string;
   title: string;
+  /** The presentation's speaker(s): co-presenters share a title and a room (D-137). */
+  speaker: string | null;
   room: string | null;
   version_number: number;
   review_state: string;
@@ -223,6 +225,9 @@ export async function earlierVersions(
   if (finals.length === 0) return [];
   const { rows } = await tx.query<EarlierVersion>(
     `SELECT s.id AS slot_id, s.title, r.name AS room, fv.version_number, fv.review_state,
+            (SELECT string_agg(sp.full_name, ', ' ORDER BY sp.full_name)
+               FROM pmp.speaker_assignments sa JOIN pmp.speakers sp ON sp.id = sa.speaker_id
+              WHERE sa.slot_id = s.id AND sa.replaced_by IS NULL) AS speaker,
             encode(fv.sha256, 'hex') AS sha256, fv.s3_key, fv.original_filename
        FROM pmp.file_versions fv
        JOIN pmp.files f ON f.id = fv.file_id
@@ -241,6 +246,27 @@ export async function earlierVersions(
 
 /** A name safe to use as a folder or file in a zip, from free text. */
 const safeName = (value: string) => value.replace(/[\\/:*?"<>|]+/g, "-").replace(/\s+/g, " ").trim().slice(0, 80) || "untitled";
+
+/**
+ * A zip path nobody has taken yet in this package (D-137). Co-presenters each have their
+ * own file in the same room, and two of them can well both call theirs `final.pptx`; a
+ * zip with two entries of one name loses one of them on extraction. The first keeps the
+ * plain name, so a single-speaker talk's path is unchanged; a later one gains its
+ * speaker's name, then a number if even that is taken.
+ */
+function claimPath(taken: Set<string>, path: string, speaker: string | null): string {
+  const dot = path.lastIndexOf(".");
+  const [stem, ext] = dot > path.lastIndexOf("/") ? [path.slice(0, dot), path.slice(dot)] : [path, ""];
+  const candidates = [path, ...(speaker ? [`${stem} - ${safeName(speaker)}${ext}`] : [])];
+  for (let n = 2; ; n += 1) {
+    const free = candidates.find((candidate) => !taken.has(candidate.toLowerCase()));
+    if (free) {
+      taken.add(free.toLowerCase());
+      return free;
+    }
+    candidates.splice(0, candidates.length, `${stem}${speaker ? ` - ${safeName(speaker)}` : ""} (${n})${ext}`);
+  }
+}
 
 /** The emails as zip entries: one readable text file each, plus a spreadsheet log. */
 function emailEntries(emails: ArchiveEmail[]): { name: string; body: Buffer }[] {
@@ -317,6 +343,7 @@ export async function buildPackage(
 
   const entries: { name: string; body: Buffer }[] = [];
   const manifestFiles: Record<string, unknown>[] = [];
+  const takenPaths = new Set<string>();
 
   for (const candidate of scope.included.filter((row) => row.formats.includes("pptx"))) {
     let body: Buffer;
@@ -326,7 +353,7 @@ export async function buildPackage(
       await tx.query(`UPDATE pmp.archive_packages SET archive_state = 'draft' WHERE id = $1`, [packageId]);
       return err({
         code: "archive.object_missing",
-        message: `The stored file for “${candidate.title}” could not be read from storage. Nothing was packaged.`,
+        message: `The stored file for “${candidate.title}”${candidate.speaker ? ` (${candidate.speaker})` : ""} could not be read from storage. Nothing was packaged.`,
         detail: { slot_id: candidate.slot_id, s3_key: candidate.s3_key },
       });
     }
@@ -335,10 +362,14 @@ export async function buildPackage(
       await tx.query(`UPDATE pmp.archive_packages SET archive_state = 'draft' WHERE id = $1`, [packageId]);
       return err({
         code: "archive.checksum_mismatch",
-        message: `The stored file for “${candidate.title}” has changed or is damaged, so nothing was packaged. Contact DXG support before building again.`,
+        message: `The stored file for “${candidate.title}”${candidate.speaker ? ` (${candidate.speaker})` : ""} has changed or is damaged, so nothing was packaged. Contact DXG support before building again.`,
       });
     }
-    const entryName = `${candidate.room ?? "Unassigned"}/${candidate.original_filename ?? "presentation.pptx"}`;
+    const entryName = claimPath(
+      takenPaths,
+      `${candidate.room ?? "Unassigned"}/${candidate.original_filename ?? "presentation.pptx"}`,
+      candidate.speaker,
+    );
     entries.push({ name: entryName, body });
     manifestFiles.push({
       path: entryName,
@@ -368,21 +399,28 @@ export async function buildPackage(
       await tx.query(`UPDATE pmp.archive_packages SET archive_state = 'draft' WHERE id = $1`, [packageId]);
       return err({
         code: "archive.object_missing",
-        message: `Version ${version.version_number} of “${version.title}” could not be read from storage. Nothing was packaged.`,
+        message: `Version ${version.version_number} of “${version.title}”${version.speaker ? ` (${version.speaker})` : ""} could not be read from storage. Nothing was packaged.`,
       });
     }
     if (sha256Of(body) !== version.sha256) {
       await tx.query(`UPDATE pmp.archive_packages SET archive_state = 'draft' WHERE id = $1`, [packageId]);
       return err({
         code: "archive.checksum_mismatch",
-        message: `Version ${version.version_number} of “${version.title}” has changed or is damaged, so nothing was packaged. Contact DXG support before building again.`,
+        message: `Version ${version.version_number} of “${version.title}”${version.speaker ? ` (${version.speaker})` : ""} has changed or is damaged, so nothing was packaged. Contact DXG support before building again.`,
       });
     }
-    const entryName = `${version.room ?? "Unassigned"}/earlier versions/${safeName(version.title)}/v${version.version_number} ${version.original_filename ?? "presentation.pptx"}`;
+    // One folder per presentation: co-presenters share the title, so the speaker names it (D-137).
+    const folder = version.speaker ? `${safeName(version.title)} - ${safeName(version.speaker)}` : safeName(version.title);
+    const entryName = claimPath(
+      takenPaths,
+      `${version.room ?? "Unassigned"}/earlier versions/${folder}/v${version.version_number} ${version.original_filename ?? "presentation.pptx"}`,
+      null,
+    );
     entries.push({ name: entryName, body });
     historyFiles.push({
       path: entryName,
       talk: version.title,
+      speaker: version.speaker,
       version: version.version_number,
       review_state: version.review_state,
       sha256: version.sha256,
@@ -400,6 +438,7 @@ export async function buildPackage(
    * rather than silently missing — the same rule the exclusions follow.
    */
   const pdfEntries: { name: string; body: Buffer }[] = [];
+  const takenPdfPaths = new Set<string>();
   const pdfFiles: Record<string, unknown>[] = [];
   const notConverted: { talk: string; speaker: string | null; reason: string }[] = [];
   const forPdf = scope.included.filter((row) => row.formats.includes("pdf"));
@@ -427,7 +466,7 @@ export async function buildPackage(
       continue;
     }
     const base = (candidate.original_filename ?? "presentation").replace(/\.[^.]+$/, "");
-    const entryName = `${candidate.room ?? "Unassigned"}/${base}.pdf`;
+    const entryName = claimPath(takenPdfPaths, `${candidate.room ?? "Unassigned"}/${base}.pdf`, candidate.speaker);
     pdfEntries.push({ name: entryName, body });
     pdfFiles.push({
       path: entryName,

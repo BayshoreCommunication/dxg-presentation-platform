@@ -3,11 +3,19 @@ import path from "node:path";
 // Type-only: erased at build time, so the SDK is loaded lazily and only when
 // the SES transport is actually used.
 import type { SESv2Client } from "@aws-sdk/client-sesv2";
+import { fromHeader } from "./look.ts";
 
 export type Message = {
   to: string;
   subject: string;
+  /** The plain-text email — always sent, and the whole email when there is no `html`. */
   body: string;
+  /** The branded version of the same email (D-138), sent alongside `body`. */
+  html?: string | undefined;
+  /** The event's sender name, shown with the platform's own address (D-138). */
+  fromName?: string | undefined;
+  /** Where speakers' replies go for this event; else the server's MAIL_REPLY_TO. */
+  replyTo?: string | undefined;
   /** What produced it, for the delivery log and for debugging. */
   kind: string;
   ref?: string | undefined;
@@ -38,6 +46,8 @@ export class FileSender implements EmailSender {
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const file = path.join(this.directory, `${id}.json`);
     await writeFile(file, JSON.stringify({ ...message, written_at: new Date().toISOString() }, null, 2));
+    // The branded email beside it, to open in a browser and see what a speaker sees (D-138).
+    if (message.html) await writeFile(path.join(this.directory, `${id}.html`), message.html);
     console.error(`[mail] ${message.to} · ${message.subject} → ${file}`);
     return { id, accepted: true, detail: { file } };
   }
@@ -130,15 +140,18 @@ export class SesSender implements EmailSender {
 
     const response = await client.send(
       new SendEmailCommand({
-        FromEmailAddress: this.config.from,
+        FromEmailAddress: fromHeader(this.config.from, message.fromName),
         Destination: { ToAddresses: [message.to] },
-        ...(this.config.replyTo ? { ReplyToAddresses: [this.config.replyTo] } : {}),
+        ...((message.replyTo ?? this.config.replyTo) ? { ReplyToAddresses: [(message.replyTo ?? this.config.replyTo)!] } : {}),
         ...(this.config.configurationSet ? { ConfigurationSetName: this.config.configurationSet } : {}),
         EmailTags: tags,
         Content: {
           Simple: {
             Subject: { Data: message.subject, Charset: "UTF-8" },
-            Body: { Text: { Data: message.body, Charset: "UTF-8" } },
+            Body: {
+              Text: { Data: message.body, Charset: "UTF-8" },
+              ...(message.html ? { Html: { Data: message.html, Charset: "UTF-8" } } : {}),
+            },
           },
         },
       }),
@@ -157,5 +170,7 @@ export function senderFromEnv(): EmailSender {
 }
 
 export * from "./sns.ts";
+export * from "./look.ts";
+export * from "./richText.ts";
 export * from "./validate.ts";
 export * from "./verify.ts";

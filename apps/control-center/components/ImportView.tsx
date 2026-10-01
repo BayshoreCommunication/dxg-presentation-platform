@@ -64,21 +64,6 @@ const PRESENTER_SHORT_LABELS: Record<string, string> = {
 const shortLabel = (field: string): string | undefined =>
   PRESENTER_SHORT_LABELS[field.split(".")[1] ?? ""];
 
-/**
- * The same, for the Presentation box: it is headed "Presentation" and then said
- * "Presentation Start", "Presentation End", "Presentation Duration" inside it.
- *
- * The Session box repeats itself the same way and is deliberately left alone: "Session
- * Start" and "Presentation Start" are the two fields in this dialog most easily
- * confused, and shortening both would leave the box heading as the only thing telling
- * them apart.
- */
-const PRESENTATION_SHORT_LABELS: Record<string, string> = {
-  "slot.start": "Start",
-  "slot.end": "End",
-  "slot.duration": "Duration",
-};
-
 /** Presenter 2 onwards, so a sixth presenter is labelled without listing eighteen keys. */
 ["speaker2", "speaker3", "speaker4", "speaker5", "speaker6"].forEach((prefix, index) => {
   const ordinal = index + 2;
@@ -92,8 +77,6 @@ const FIELD_HINTS: Record<string, string> = {
   "session.date": "mm/dd/yyyy",
   "session.start": "h:mm AM/PM",
   "session.end": "h:mm AM/PM",
-  "slot.start": "h:mm AM/PM",
-  "slot.end": "h:mm AM/PM",
   "speaker.email": "name@example.com",
 };
 
@@ -104,7 +87,13 @@ const FIELD_HINTS: Record<string, string> = {
  */
 const SESSION_TEXT_FIELDS = ["session.title", "room.name"];
 const SESSION_WHEN_FIELDS = ["session.date", "session.start", "session.end"];
-const PRESENTATION_FIELDS = ["slot.start", "slot.end", "slot.duration"];
+/*
+ * There is no Presentation box (D-129). The dialog used to show the presentation's own
+ * Start / End / Duration under the session's, and the two sets of times were the
+ * confusion the whole layout was built to manage. A presentation runs with its session;
+ * a file that still carries "Presentation Start / End" columns is read as before, and
+ * the staged row shows those times in its line, but nobody edits them here.
+ */
 /**
  * Mirrors PRESENTER_PREFIXES in the importer. The first is `speaker`, not `speaker1`:
  * it predates there being more than one.
@@ -116,7 +105,7 @@ const presenterFields = (prefix: string) => [
   `${prefix}.email`,
 ];
 
-const TIME_FIELDS = new Set(["session.start", "session.end", "slot.start", "slot.end"]);
+const TIME_FIELDS = new Set(["session.start", "session.end"]);
 const DATE_FIELDS = new Set(["session.date"]);
 
 /**
@@ -136,12 +125,6 @@ const toTimeInput = (value: string): string | null => {
   if (meridiem === "am" && hour === 12) hour = 0;
   if (hour > 23) return null;
   return `${String(hour).padStart(2, "0")}:${match[2]}`;
-};
-
-/** Minutes between two `HH:MM` clock values; negative when the second is earlier. */
-const minutesBetween = (from: string, to: string): number => {
-  const parts = (value: string) => Number(value.slice(0, 2)) * 60 + Number(value.slice(3, 5));
-  return parts(to) - parts(from);
 };
 
 /** The same, for a date cell. `mm/dd/yyyy` in, ISO out; the importer reads both. */
@@ -314,54 +297,14 @@ function RowEditor({
       </label>
     );
 
-    if (field === "slot.duration") {
-      /*
-       * Read-only, and derived wherever it can be (D-040). A duration is stored
-       * nowhere — no table has a column for it, and the importer only ever turns one
-       * into an end time — so it is not a second fact about a presentation but a
-       * second spelling of the one the Start and End already give. Two editable
-       * spellings of one fact is how a row comes to read 5:10 PM → 5:25 PM beside
-       * "55 min". Length is set by setting the times.
-       *
-       * It keeps the shape of the inputs it sits between rather than becoming a line
-       * of prose: the three fields describe one thing, and a box among boxes is read
-       * as part of the same group. Disabled rather than merely `readOnly`, so that it
-       * looks unavailable as well as behaving that way.
-       */
-      const minutes = /^\d{1,3}$/.test(value.trim()) ? Number(value.trim()) : null;
-      const startClock = toTimeInput((draft["slot.start"] ?? "").trim());
-      const endClock = toTimeInput((draft["slot.end"] ?? "").trim());
-      const derived = startClock && endClock ? minutesBetween(startClock, endClock) : null;
-      // Falls back to zero rather than to an empty box: a presentation with no times of
-      // its own has no length of its own — it runs with its session — and "0 min" says
-      // that in the same shape as every other value this field shows.
-      const shown = derived ?? minutes ?? 0;
-
-      return (
-        <div className="field" key={field}>
-          <label htmlFor={`edit-${field}`}>{visible ?? full}</label>
-          <input
-            id={`edit-${field}`}
-            style={{ width: "100%" }}
-            value={`${shown} min`}
-            disabled
-            readOnly
-            aria-label={`${full} in minutes`}
-          />
-          {/* D-111: the greyed box says why on the page. */}
-          <WhyNot reason="Worked out from Start and End — change those to change the length." />
-        </div>
-      );
-    }
-
     if (TIME_FIELDS.has(field) || DATE_FIELDS.has(field)) {
       const isDate = DATE_FIELDS.has(field);
       const picker = isDate ? toDateInput(value) : toTimeInput(value);
 
       /*
-       * Each clock is bounded by the ones it has to agree with, so the wrong answer is
-       * never offered rather than merely marked afterwards: a presentation cannot
-       * reach outside its session, and neither end of a pair can cross the other.
+       * Each clock is bounded by the one it has to agree with, so the wrong answer is
+       * never offered rather than merely marked afterwards: neither end of the session
+       * can cross the other.
        *
        * The bounds are mutual, which is what makes an already-broken row fixable: a row
        * arriving 10:25 → 10:10 shows both fields red, and correcting *either* one puts
@@ -373,21 +316,11 @@ function RowEditor({
        * no second copy of the rule to drift.
        */
       const clock = (name: string) => toTimeInput((draft[name] ?? "").trim()) || undefined;
-      const later = (a?: string, b?: string) => (a && b ? (a > b ? a : b) : (a ?? b));
-      const earlier = (a?: string, b?: string) => (a && b ? (a < b ? a : b) : (a ?? b));
       const sessionFrom = clock("session.start");
       const sessionTo = clock("session.end");
 
       const bounds: { min?: string; max?: string } =
-        field === "slot.start"
-          ? { min: sessionFrom, max: earlier(clock("slot.end"), sessionTo) }
-          : field === "slot.end"
-            ? { min: later(clock("slot.start"), sessionFrom), max: sessionTo }
-            : field === "session.start"
-              ? { max: sessionTo }
-              : field === "session.end"
-                ? { min: sessionFrom }
-                : {};
+        field === "session.start" ? { max: sessionTo } : field === "session.end" ? { min: sessionFrom } : {};
 
 
       if (picker !== null) {
@@ -586,10 +519,6 @@ function RowEditor({
           <Section heading="Session">
             {line(SESSION_TEXT_FIELDS)}
             <div style={{ marginTop: 10 }}>{line(SESSION_WHEN_FIELDS)}</div>
-          </Section>
-
-          <Section heading="Presentation">
-            {line(PRESENTATION_FIELDS, (field) => PRESENTATION_SHORT_LABELS[field])}
           </Section>
 
           <Section heading="Presenters">

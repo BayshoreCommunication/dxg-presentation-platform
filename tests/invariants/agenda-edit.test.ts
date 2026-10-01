@@ -134,6 +134,37 @@ describe("sessions", () => {
     assert.equal(sessions[0]!.starts_at, "2027-06-01T13:30:00.000Z");
   });
 
+  test("a presentation named after its session is renamed with it; one with its own name is not", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    // The session's own presentation took the session's title on creation (D-064) and
+    // followed the rename above (D-130).
+    const [before] = await agenda();
+    const own = before!.presentations.find((item) => item.slot_id === slotId)!;
+    assert.equal(own.title, "Opening Keynote (revised)", "the presentation followed the session's new title");
+
+    const added = await call("POST", `/events/${eventId}/sessions/${sessionId}/presentations`, {
+      title: "Fireside chat",
+      start: "",
+      end: "",
+    });
+    assert.equal(added.status, 201);
+    const response = await call("PATCH", `/events/${eventId}/sessions/${sessionId}`, {
+      ...SESSION,
+      title: "Opening Keynote (final)",
+      room: "Hall B",
+      start: "09:30",
+      end: "10:30",
+    });
+    assert.equal(response.status, 200);
+    assert.equal(((await response.json()) as { presentations_renamed: number }).presentations_renamed, 1);
+    const [after] = await agenda();
+    const titles = after!.presentations.map((item) => item.title).sort();
+    assert.deepEqual(titles, ["Fireside chat", "Opening Keynote (final)"]);
+    const fireside = after!.presentations.find((item) => item.title === "Fireside chat")!;
+    const removed = await call("DELETE", `/events/${eventId}/presentations/${fireside.slot_id}`);
+    assert.equal(removed.status, 200, "the extra presentation is cleaned up again");
+  });
+
   test("a session that ends before it starts is refused", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
     const response = await call("PATCH", `/events/${eventId}/sessions/${sessionId}`, {
@@ -217,8 +248,9 @@ describe("presentations and presenters", () => {
 
     const removed = await call("DELETE", `/events/${eventId}/presentations/${addedSlot}/presenters/${moderator.id}`);
     assert.equal(removed.status, 200);
-    const after = (await agenda())[0]!.presentations.find((item) => item.slot_id === addedSlot)!;
-    assert.equal(after.speakers.length, 0);
+    // D-137: an extra presentation left with nobody and no file is tidied away.
+    const after = (await agenda())[0]!.presentations.find((item) => item.slot_id === addedSlot);
+    assert.equal(after, undefined, "the emptied extra presentation is gone");
     const speakers = (await (await call("GET", `/events/${eventId}/speakers`)).json()) as {
       items: { full_name: string }[];
     };
@@ -227,8 +259,80 @@ describe("presentations and presenters", () => {
 
   test("a presentation with no files can be deleted", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
-    assert.equal((await call("DELETE", `/events/${eventId}/presentations/${addedSlot}`)).status, 200);
+    const made = await call("POST", `/events/${eventId}/sessions/${sessionId}/presentations`, { title: "Spare", start: "", end: "" });
+    assert.equal(made.status, 201);
+    const spare = ((await made.json()) as { slot_id: string }).slot_id;
+    assert.equal((await call("DELETE", `/events/${eventId}/presentations/${spare}`)).status, 200);
     assert.equal((await agenda())[0]!.presentations.length, 1);
+  });
+});
+
+describe("co-presenters each have their own presentation (D-137)", () => {
+  let coSlot = "";
+
+  test("a second speaker added to a presented session gets a presentation of their own", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const before = (await agenda())[0]!.presentations;
+    assert.equal(before.length, 1);
+    assert.ok(before[0]!.speakers.length >= 1, "fixture: the session's presentation has a speaker");
+    const added = await call("POST", `/events/${eventId}/presentations/${slotId}/presenters`, {
+      name: "Probe Co-presenter",
+      email: "copresenter.probe@example.invalid",
+      organization: "",
+    });
+    assert.equal(added.status, 201);
+    coSlot = ((await added.json()) as { slot_id: string }).slot_id;
+    assert.notEqual(coSlot, slotId, "not put on the first speaker's presentation");
+    const after = (await agenda())[0]!.presentations;
+    assert.equal(after.length, 2, "the session now holds two presentations");
+    const theirs = after.find((item) => item.slot_id === coSlot)!;
+    assert.deepEqual(theirs.speakers.map((person) => person.name), ["Probe Co-presenter"]);
+    assert.equal(theirs.title, before[0]!.title, "same title as the session's presentation");
+    const first = after.find((item) => item.slot_id === slotId)!;
+    assert.ok(!first.speakers.some((person) => person.name === "Probe Co-presenter"), "the first presentation is untouched");
+  });
+
+  test("adding the same person to that session again is refused, not duplicated", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const again = await call("POST", `/events/${eventId}/speakers`, {
+      name: "Probe Co-presenter",
+      email: "copresenter.probe@example.invalid",
+      organization: "",
+      slot_id: slotId,
+    });
+    assert.equal(again.status, 409);
+    assert.equal((await agenda())[0]!.presentations.length, 2);
+  });
+
+  test("renaming the session renames every co-presenter's presentation", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const current = (await agenda())[0]!;
+    // An earlier test gave the presentation a title of its own; line the session up with
+    // it first, so both presentations carry the session's title before the rename.
+    const shared = current.presentations[0]!.title;
+    const patch = (title: string) =>
+      call("PATCH", `/events/${eventId}/sessions/${sessionId}`, {
+        ...SESSION,
+        title,
+        room: current.room ?? SESSION.room,
+        start: "09:30",
+        end: "10:30",
+      });
+    assert.equal((await patch(shared)).status, 200);
+    const response = await patch("Co-presented keynote");
+    assert.equal(response.status, 200);
+    const titles = (await agenda())[0]!.presentations.map((item) => item.title);
+    assert.ok(titles.every((title) => title === "Co-presented keynote"), `all follow: ${titles.join(" / ")}`);
+  });
+
+  test("taking the co-presenter off removes their empty presentation, and keeps the speaker", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const theirs = (await agenda())[0]!.presentations.find((item) => item.slot_id === coSlot)!;
+    const person = theirs.speakers[0]!;
+    assert.equal((await call("DELETE", `/events/${eventId}/presentations/${coSlot}/presenters/${person.id}`)).status, 200);
+    const after = (await agenda())[0]!.presentations;
+    assert.equal(after.length, 1, "back to the one presentation");
+    assert.equal(after[0]!.slot_id, slotId);
   });
 });
 

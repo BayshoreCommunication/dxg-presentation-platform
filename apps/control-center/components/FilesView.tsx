@@ -79,7 +79,7 @@ export function FilesView({
     setQuery((current) => ({
       ...current,
       sort,
-      dir: current.sort === sort ? (current.dir === "asc" ? "desc" : "asc") : sort === "uploaded" || sort === "size" ? "desc" : "asc",
+      dir: current.sort === sort ? (current.dir === "asc" ? "desc" : "asc") : sort === "uploaded" || sort === "size" || sort === "approved" ? "desc" : "asc",
       page: 1,
     }));
 
@@ -279,6 +279,7 @@ export function FilesView({
                   <SortHead label="Speaker" sort="speaker" query={query} onSort={sortBy} />
                   <SortHead label="Location" sort="location" query={query} onSort={sortBy} />
                   <th>Status</th>
+                  <SortHead label="Approved by" sort="approved" query={query} onSort={sortBy} />
                   <SortHead label="Size" sort="size" query={query} onSort={sortBy} />
                   <th style={{ width: 44 }} aria-label="Actions" />
                 </tr>
@@ -323,6 +324,9 @@ export function FilesView({
                     </td>
                     <td>
                       <StatusChip row={row} />
+                    </td>
+                    <td>
+                      <ApprovedBy version={row} timeZone={timeZone} />
                     </td>
                     <td className="muted num">{formatBytes(row.size_bytes)}</td>
                     <td>
@@ -523,6 +527,33 @@ function Check({
   );
 }
 
+/**
+ * Who approved this version and when (the Files screen's "Approved by" column). A version
+ * nobody has approved yet shows a dash rather than a blank, so the column never looks broken.
+ * The approval stays on a version that a newer approval has since replaced; the Status
+ * column says which is current.
+ */
+function ApprovedBy({ version, timeZone }: { version: { approved_by: string | null; approved_at: string | null }; timeZone: string }) {
+  if (!version.approved_by || !version.approved_at) {
+    return (
+      <span className="muted" aria-label="Not approved yet">
+        —
+      </span>
+    );
+  }
+  return (
+    <span className="owner" title={`Approved ${fullDate(version.approved_at, timeZone)}`}>
+      <span className="avatar sm">{initials(version.approved_by)}</span>
+      <span className="ellipsis">
+        {version.approved_by}
+        <small className="muted" style={{ display: "block" }} suppressHydrationWarning>
+          {relativeTime(version.approved_at, timeZone)}
+        </small>
+      </span>
+    </span>
+  );
+}
+
 function SortHead({
   label,
   sort,
@@ -643,6 +674,7 @@ function FileDrawer({
     ["Room", row.room ?? "No room yet"],
     ["Session", sessionTime(row.starts_at, timeZone)],
     ["Uploaded", `${fullDate(row.uploaded_at, timeZone)} · ${row.uploaded_by ?? SOURCE_LABEL[row.source] ?? row.source}`],
+    ["Approved", row.approved_by ? `${fullDate(row.approved_at!, timeZone)} · ${row.approved_by}` : "Not approved yet"],
     // "room PC", the one name staff are given for it (D-112).
     ["Loaded on room PCs", row.rooms_synced > 0 ? `${row.rooms_synced} room${row.rooms_synced === 1 ? "" : "s"}` : "Not loaded on a room PC yet"],
   ];
@@ -715,6 +747,11 @@ function FileDrawer({
                   </small>
                   {/* The file's checksum is no longer shown: staff never need it (S36, D-112). */}
                   <small>{version.uploaded_by ?? SOURCE_LABEL[version.source] ?? version.source}</small>
+                  {version.approved_by && (
+                    <small>
+                      Approved by {version.approved_by} · {fullDate(version.approved_at!, timeZone)}
+                    </small>
+                  )}
                   <span className={state.className} title={wordsFor(VERSION_STATE, versionCode(version)).meaning}>
                     {state.label}
                   </span>

@@ -229,6 +229,10 @@ function PresenterFields({
   );
 }
 
+/**
+ * Not shown anywhere since D-132 (one presentation per session; its title and times follow
+ * the session). Kept, with its endpoints, for an event that needs several talks per session.
+ */
 export function PresentationForm({
   eventId,
   sessionId,
@@ -315,7 +319,22 @@ export function PresentationForm({
   );
 }
 
-export function PresenterForm({ eventId, slotId, onClose }: { eventId: string; slotId: string; onClose: () => void }) {
+/**
+ * Adds a person to a session (D-137). Given a presentation nobody presents, they take it;
+ * otherwise the server gives them a presentation of their own in the same session, with
+ * its own file — so `asSpeaker` words it as adding a speaker to the session.
+ */
+export function PresenterForm({
+  eventId,
+  slotId,
+  onClose,
+  asSpeaker = false,
+}: {
+  eventId: string;
+  slotId: string;
+  onClose: () => void;
+  asSpeaker?: boolean;
+}) {
   const [value, setValue] = useState<PresenterInput>({ name: "", email: "", organization: "" });
   const { busy, error, run } = useSave();
   return (
@@ -326,15 +345,19 @@ export function PresenterForm({ eventId, slotId, onClose }: { eventId: string; s
         void run(() => agendaApi.addPresenter(eventId, slotId, value), onClose);
       }}
     >
-      <b>Add presenter</b>
-      <div className="note">Matched to an existing speaker by email, or added to the event.</div>
+      <b>{asSpeaker ? "Add speaker" : "Add presenter"}</b>
+      <div className="note">
+        {asSpeaker
+          ? "They get their own presentation in this session, with their own file and upload link. Matched to an existing speaker by email, or added to the event."
+          : "Matched to an existing speaker by email, or added to the event."}
+      </div>
       <PresenterFields value={value} onChange={setValue} idPrefix={`presenter-${slotId}`} />
       {error && (
         <div className="err" style={{ marginTop: 10, marginBottom: 0 }}>
           {error}
         </div>
       )}
-      <Actions busy={busy} label="Add presenter" onCancel={onClose} />
+      <Actions busy={busy} label={asSpeaker ? "Add speaker" : "Add presenter"} onCancel={onClose} />
     </form>
   );
 }

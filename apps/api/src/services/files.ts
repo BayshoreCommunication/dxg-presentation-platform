@@ -44,6 +44,9 @@ export type FileRow = {
   uploaded_at: string;
   uploaded_by: string | null;
   source: string;
+  /** When and by whom this version was approved; empty until it is. */
+  approved_at: string | null;
+  approved_by: string | null;
   review_state: string;
   processing_state: string;
   inspection_state: string;
@@ -63,6 +66,9 @@ export type FileVersionRow = {
   uploaded_at: string;
   uploaded_by: string | null;
   source: string;
+  /** When and by whom this version was approved; empty until it is. */
+  approved_at: string | null;
+  approved_by: string | null;
   review_state: string;
   processing_state: string;
   sha256: string | null;
@@ -73,7 +79,7 @@ export type FileQuery = {
   q?: string;
   status?: FileStatus | "all";
   roomId?: string;
-  sort?: "uploaded" | "name" | "speaker" | "location" | "size";
+  sort?: "uploaded" | "name" | "speaker" | "location" | "size" | "approved";
   dir?: "asc" | "desc";
   page?: number;
   limit?: number;
@@ -116,6 +122,7 @@ const FILES_SQL = `
          v.original_filename AS filename, v.size_bytes::text, v.total_bytes::text,
          v.created_at AS uploaded_at,
          COALESCE(usp.full_name, uu.display_name) AS uploaded_by, v.source,
+         v.approved_at, ua.display_name AS approved_by,
          v.review_state, v.processing_state, v.inspection_state,
          (SELECT count(*)::int FROM pmp.inspection_findings inf
            WHERE inf.file_version_id = v.id AND inf.waived_at IS NULL
@@ -131,6 +138,7 @@ const FILES_SQL = `
     LEFT JOIN pmp.rooms r ON r.id = se.room_id
     LEFT JOIN pmp.speakers usp ON usp.id = v.uploaded_by_speaker
     LEFT JOIN pmp.users uu ON uu.id = v.uploaded_by_user
+    LEFT JOIN pmp.users ua ON ua.id = v.approved_by
    WHERE v.rn = 1`;
 
 async function allFiles(tx: pg.PoolClient, eventId: string): Promise<FileRow[]> {
@@ -161,6 +169,9 @@ function sortRows(rows: FileRow[], sort: NonNullable<FileQuery["sort"]>, dir: "a
         return `${row.room ?? "~"} ${row.starts_at}`;
       case "size":
         return row.size_bytes;
+      case "approved":
+        // Files not approved yet sort as "oldest": they trail newest-first, lead oldest-first.
+        return row.approved_at ? Date.parse(row.approved_at) : 0;
       default:
         return Date.parse(row.uploaded_at);
     }
@@ -252,10 +263,12 @@ async function versionHistory(tx: pg.PoolClient, fileIds: string[]): Promise<Fil
   const { rows } = await tx.query<Omit<FileVersionRow, "downloadable" | "size_bytes"> & { size_bytes: string }>(
     `SELECT fv.id, fv.file_id, fv.version_number, fv.original_filename AS filename, fv.size_bytes::text,
             fv.created_at AS uploaded_at, COALESCE(sp.full_name, u.display_name) AS uploaded_by, fv.source,
-            fv.review_state, fv.processing_state, encode(fv.sha256, 'hex') AS sha256
+            fv.review_state, fv.processing_state, encode(fv.sha256, 'hex') AS sha256,
+            fv.approved_at, ua.display_name AS approved_by
        FROM pmp.file_versions fv
        LEFT JOIN pmp.speakers sp ON sp.id = fv.uploaded_by_speaker
        LEFT JOIN pmp.users u ON u.id = fv.uploaded_by_user
+       LEFT JOIN pmp.users ua ON ua.id = fv.approved_by
       WHERE fv.file_id = ANY($1::uuid[])
       ORDER BY fv.version_number DESC`,
     [fileIds],

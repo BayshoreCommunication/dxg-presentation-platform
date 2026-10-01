@@ -3201,3 +3201,116 @@ confirmations, check-in, SRR, presentation detail, command centre and Help lose 
 connection-code word. Heartbeat, device keys and the sync endpoints stay server-side for later room software.
 Invariants: new `manual-room-loading.test.ts` (7 tests); whole suite 311/316 — the 5 failures are cross-event tests
 that need a version awaiting review in the local MedTech seed (known data issue). Not committed yet.
+
+## 2026-09-30 — Communications has no counter tiles (D-126)
+Opened and Link clicked could never move on production (SES open/click tracking is deliberately off; it would reroute
+every speaker's personal link through a tracking domain) and the other four tiles repeated the delivery log. All six
+removed; each email's status stays in the delivery log and bounces on the speaker's row. API still returns the counts.
+Deployed 2026-09-30 with D-125 as 412b9fb. Deploy lesson: extracting the tar over `/opt/pmp` never removes files
+deleted from git — a stale `DeviceKeyButton.tsx` broke the staff build; the procedure in `docs/infra/PRODUCTION.md`
+now deletes untracked files before building and runs under `set -e -o pipefail`.
+
+## 2026-09-30 — The holding screen shows the next talk (D-127)
+Room Agent's holding-screen preview shows, under "NEXT", the room's first talk not yet presented whose start is no
+more than 15 minutes past (day when not today, time, title, speaker); with nothing upcoming, the event name alone.
+The room software's own holding screen still shows event and room only until it receives the schedule (after G0-1).
+Deployed as 633e7f6.
+
+## 2026-10-01 — Launch is recorded by the person who presses it (D-128)
+Since D-125 rooms have no registered PC, so Launch wrote nothing: every talk stayed "not presented" and "NEXT" never
+moved on. Migration 026 makes `launch_logs.agent_id` optional and adds `recorded_by` (one of the two must be set);
+Launch always writes its record. Test added to `manual-room-loading.test.ts` (launch → shown as presented).
+Deployed 2026-10-01 as 55671cf after backup `backups/pmp-2026-10-01T044530Z.dump`; `/opt/pmp/DEPLOYED_COMMIT` = 55671cf.
+
+## 2026-10-01 — Local dev: database, Redis and ClamAV restart with Docker
+`docker-compose.yml` gives postgres, redis and clamav `restart: unless-stopped`, so a Docker Desktop restart no longer
+leaves the local API answering 500 (ECONNREFUSED 5434). Worker and dispatcher still crash if the database goes away —
+restart the dev stack after a database restart. Commit 1cf167f on `main`, local-dev only; nothing to deploy.
+
+## Open items as of 2026-10-01
+- G0-1 on Windows 11: linked-OLE/picture deck times out under automation (fails safely); Office on the test PC is not
+  activated (grace ends 2026-10-04 — three days away); items 2–6 and 9–14 need an attended session at the PC (presenter view with 2–3
+  monitors, crash recovery, holding screen, offline restart); COM driver needs VS Build Tools + admin; Keynote test
+  file still to make. Recordings wanted for DXG sign-off.
+- Decision pending with Travis/DXG: whether Launch ever opens PowerPoint remotely (recommended: on the room PC only).
+- The "what we need from DXG" note for the Windows test was deleted; recreate if asked.
+
+## 2026-10-01 — Files screen: "Approved by" column (Travis's list, item 1)
+Each file row and each version now carry `approved_at` and the approver's display name (`file_versions.approved_by`
+was already written on approval; no migration). Files table gets a sortable "Approved by" column after Status
+(initials, name, when; a dash with "Not approved yet" for anything unapproved); `sort=approved` on
+`GET /events/{id}/files` (newest approval first by default, unapproved last); the detail drawer shows an "Approved"
+fact and each approved version reads "Approved by … · date". Invariants: 2 new in `event-files.test.ts` (12/12).
+Walked on MedTech and the practice event. Not committed yet. Items 2–9 of the list await Travis's answers.
+
+## 2026-10-01 — Import row editor loses its Presentation box (D-129; Travis's list, item 2)
+`ImportView`'s row editor shows Session and Presenters only; the presentation Start / End / Duration fields, the
+derived-duration box and the slot-time picker bounds are gone with their helpers. Importer, template and staged-row
+line unchanged. SCREEN_SPECS updated. Not committed yet.
+
+## 2026-10-01 — Session rename carries its presentation; Agenda tab stops repeating the title (D-130; list item 3a)
+`agendaEdit.updateSession` renames same-titled presentations with the session; `EventTabs.PresentationRow` hides a
+title equal to the session's and puts the talk link on the speakers line. Invariant added to `agenda-edit.test.ts`
+(14/14). Walked on MedTech's Agenda tab. Not committed yet. "Remove presentation (Edit)" from item 3 still to clarify.
+
+## 2026-10-01 — Agenda tab: one speaker per line (D-131)
+`EventTabs` session cards rebuilt as a time / what / actions grid; presentations list their speakers one per line with
+initials and organisation; status chip links to the presentation; narrow screens stack actions under speakers.
+Walked on MedTech at desktop, phone width (no page overflow) and dark; remove-presenter confirmation opens under the
+speaker. Not committed yet.
+
+## 2026-10-01 — Migration 027: repair presentation titles left behind by session renames (D-130)
+Travis saw "CardioNext Trial Results" on the Speakers tab after renaming the session to "CardioNext Trial" (renamed
+before D-130). `027_presentation_titles_follow_session.sql` moves such leftovers to the session's title using the
+audit history; idempotent; deliberate presentation titles untouched. Applied locally: MedTech's three presentations
+now match their sessions; Speakers tab shows "CardioNext Trial". **Deploy note:** a migration — take the backup first.
+Not committed yet.
+
+## 2026-10-01 — Agenda tab: no Add / Edit presentation (D-132)
+Both menu items and their inline forms removed from `EventTabs`; Delete presentation hidden for a session's only
+presentation. Endpoints, `PresentationForm` and tests kept. Walked on MedTech: session menu = Edit / Cancel / Delete
+session; presentation menu = Add presenter. Not committed yet.
+
+## 2026-10-01 — Sidebar: Events group above the switcher (D-133; Travis's list, item 4)
+Portfolio and Create event moved out of Control Center into `EVENTS` above the event switcher. Walked with no event
+chosen and on MedTech Files. VISUAL_ACCEPTANCE §5 deviation written — **show DXG**. Not committed yet.
+
+## 2026-10-01 — Sidebar: Agenda in Control Center (D-134; Travis's list, item 5)
+Walked: from Files → Agenda tab with the item highlighted; Overview tab clears the highlight and shows Overview; the
+sidebar link from the event page switches back to Agenda; no console errors. VISUAL_ACCEPTANCE §5 deviation written —
+**show DXG** together with D-133. Not committed yet.
+
+## 2026-10-01 — Add speaker: choose a session (D-135; Travis's list, item 6)
+`speakers/page.tsx` builds day-grouped session choices with time and room; `AddSpeakerDialog` field is "Session".
+Walked on MedTech (one day, three sessions); dialog cancelled, nothing added. Not committed yet.
+
+## 2026-10-01 — Speaker lists: "Sessions" column (D-136)
+SpeakersView and EventTabs' Speakers tab say Sessions; related speaker wording follows. Walked both. Not committed yet.
+
+## 2026-10-01 — Co-presenters each have their own presentation and file (D-137; Travis's list, item 7)
+Root cause: one file per session, so co-presenters' uploads replaced each other. Each speaker now gets their own
+presentation (twin) in the session; migration 028 split existing shared ones locally (CardioNext: Alicia keeps the
+file, Laiba new; Sensor Talk: Rakibul keeps it, Kwame new). Archive zip collisions prevented. New
+`co-presenter-uploads.test.ts` 3/3; affected suites 105/105. **Deploy note:** migration 028 — take the backup first;
+tell DXG that co-presenters whose deck was overwritten must upload their own again. Not committed yet.
+
+## 2026-10-01 — Branded speaker emails like Preseria's (D-138; Travis's list, item 8)
+Email banner (1200 × 200–600 px, public versioned URL), HTML emails with an upload button (plain text kept), sender name
+and reply-to per event, six more merge fields, test send, save as new template. Walked on MedTech: banner uploaded,
+settings saved, preview shows banner → button → message, test send queued; rendered HTML checked in the browser (the
+running local dispatcher predates the change — restart the stack to see HTML in `.data/mail/*.html`). Unit 303 pass;
+email-related invariants 70/70. **Deploy note:** rebuild the dispatcher too. Not committed yet.
+
+## 2026-10-01 — Formatted email messages in Preseria's editor (D-139)
+Template messages are written in Quill with Preseria's toolbar and counter; the server sanitises and keeps a plain-text
+twin; images upload and are served publicly. Walked on MedTech: bold, bulleted item and centred line saved and shown in
+the preview; Insert puts the field at the cursor. Unit 310 pass; email invariants 71/71. **Deploy:** migration 029
+(backup first), rebuild api, staff and dispatcher (new packages: quill, sanitize-html). The two high `npm audit`
+findings (postcss via next, pdfjs-dist) predate this. Not committed yet.
+
+## 2026-10-01 — Communications screen tidied (Travis: "looks so clumsy on edit template")
+"How your emails look" is one compact row (banner thumbnail beside sender name and reply-to). Templates: the editor
+and the live preview sit side by side (stacked under ~1100 px), the preview stays in view while writing; the fifteen
+Insert buttons are one grouped "Insert detail" menu (Speaker / Event / Session / Link, via FloatingMenu, keeps the
+cursor); Save / Save as new / Cancel and the test send share one action bar; view mode shows the preview beside a small
+panel (who it goes to, test send). Preview keeps blank lines. Checked at 1440, 1031 and 375 px, no overflow.

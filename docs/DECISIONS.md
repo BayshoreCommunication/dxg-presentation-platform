@@ -2406,3 +2406,147 @@ by hand and have none, so every Launch said "Recorded as presented" and recorded
 presented and the holding screen's "next" never moved on. Migration 026 lets `launch_logs.agent_id` be empty and adds
 `recorded_by` (the staff member), with a check that one of the two is set; Launch now always writes its record.
 Test: manual-room-loading.test.ts (launch → shown as presented).
+
+## D-129 (2026-10-01): The import row editor has no Presentation box — Status: ACCEPTED (Travis's call)
+The row editor on Schedule import (and inside Create event) showed, under the session's date, start and end, a second
+"Presentation" box with the presentation's own Start, End and a derived Duration. Two sets of times in one dialog was
+the confusion every earlier layout rule (D-031, D-032, D-040) existed to manage, and for DXG's agendas a presentation
+runs with its session. The box is removed; nothing about a presentation's times is edited here. The importer still
+reads "Presentation Start / End / Duration" columns when a file carries them (the template keeps them, D-029), stores
+them on the slot as before, and the staged row still shows "talk 10:00–10:20" when they differ from the session; the
+preview's checks on them are unchanged. Spec: SCREEN_SPECS "Completing an incomplete agenda".
+
+## D-130 (2026-10-01): A presentation named after its session follows a rename — Status: ACCEPTED (Travis's call)
+DXG's agendas have one presentation per session and the import (and "Add session", D-064) give it the session's
+title; that title is what Files, review, check-in, the Speaker Ready Room and every email call the talk. Correcting a
+session's title on the Agenda tab left the presentation on the old one, so the tab showed both and every other screen
+the stale one. **Now:** `updateSession` renames each presentation in the session whose title was the session's old
+title (`presentations_renamed` in the result and the audit record); a presentation with a title of its own keeps it.
+**Agenda tab:** a presentation whose title is its session's is not named again under the session — the row is the
+speakers, and the first name links to the talk ("No speaker assigned" links when there is nobody); a presentation with
+its own title still shows it, linked, above its speakers. Presentations left behind before this change are repaired by
+migration 027, which uses the audit log's `session.updated` history: a presentation still carrying a title its session
+was renamed *from* takes the session's current title, unless a later `slot.updated` gave it that title on purpose.
+
+## D-131 (2026-10-01): Agenda tab — one speaker per line — Status: ACCEPTED (Travis: "improvise this section … show the speakers name separately")
+Each session card on the event's Agenda tab is a three-column grid: time (start over end, so every title starts on
+the same line), what (title, then room · track), actions (state chip, ⋯). Each presentation below it uses the same
+columns: its own time if it has one, its title only when it differs from the session's (D-130), then **its speakers as
+a list, one per line** — initials, name, organisation (muted, shrinks first), a role tag when not "speaker", and the ×
+to remove (quiet until hovered; still only asks, D-113). No speaker shows "No speaker assigned yet" with "+ Add
+presenter". The presentation's status chip opens the presentation. Below 640 px the status and menu move under the
+speakers so names keep the width. Styles: `.ag-*` in globals.css; works in both themes.
+
+## D-132 (2026-10-01): One presentation per session on the Agenda tab — Status: ACCEPTED (Travis's call)
+The import makes exactly one presentation per session, the requirements never ask for more, and D-129/D-130 made a
+presentation's title and times follow its session. So the Agenda tab no longer offers **Add presentation** (session
+menu) or **Edit presentation** (presentation menu); "Add session" still creates session, presentation and presenter
+together, and a presentation's menu keeps **Add presenter**. **Delete presentation** is offered only when a session
+has more than one presentation: deleting a session's only one would leave a session nothing can refill, and "Delete
+session" removes both. **Kept for later:** the endpoints (`POST /events/{id}/sessions/{id}/presentations`,
+`PATCH`/`DELETE /events/{id}/presentations/{id}`), `PresentationForm` in AgendaEditor.tsx, and their invariant tests,
+for an event that needs several talks per session.
+
+## D-133 (2026-10-01): Portfolio and Create event get their own sidebar group above the switcher — Status: ACCEPTED (Travis's call; to show DXG)
+They head a new staff-only group `EVENTS` drawn above the event switcher (`top: true` in Sidebar.tsx `GROUPS`,
+rendered in its own `nav.topnav`, divided from the switcher by a hairline); `CONTROL CENTER` now holds only the event's
+screens (Review presentations, Files, Communications, Archive builder). Neither screen needs an event, and the old
+place put them among links greyed until one is chosen. Deviation recorded in VISUAL_ACCEPTANCE §5 since DXG approved
+the sidebar structure.
+
+## D-134 (2026-10-01): "Agenda" in the sidebar's Control Center — Status: ACCEPTED (Travis's call; to show DXG)
+First item of `CONTROL CENTER`, linking to `/events/{id}?tab=agenda` with a two-tone `calendar` glyph in the D-078
+recipe. Two fixes made it work: **EventTabs reads its tab from the address** (`useSearchParams`, which Next keeps in
+step with the tabs' own `history.replaceState`) instead of state set once at mount — otherwise the sidebar link did
+nothing while already on the event page, and choosing Overview after arriving on Agenda kept showing Agenda; and the
+sidebar marks a link with a query (`TabLink`) "on" only when path *and* query match, read inside its own Suspense
+boundary so no static page needs one. Deviation recorded in VISUAL_ACCEPTANCE §5.
+
+## D-135 (2026-10-01): Add speaker chooses a session — Status: ACCEPTED (Travis's list, item 6)
+The Add speaker dialog's required field was "Presentation", a flat list of titles. With one presentation per session
+(D-132) and its title following the session (D-130), staff think in sessions, so the field is **Session**: options
+grouped by day (`<optgroup>`, as the Agenda tab groups them), each "11:15 AM · CardioNext Trial — Room 212", and the
+chosen one restated below ("Wednesday, March 11 · 11:15 AM · Room 212"). Times are on the event's clock (the page now
+also reads the event summary for its timezone); canceled sessions are still left out. The value is still the
+session's presentation (`slot_id`) and `POST /events/{id}/speakers` is unchanged. Messages say "session".
+
+## D-136 (2026-10-01): Speaker lists count sessions — Status: ACCEPTED (Travis's call)
+Follows D-135. The "Presentations" column on the Speakers screen and on the event page's Speakers tab is now
+**Sessions**, and the wording tied to it follows: status "No sessions", "Add them to a session first", "Not in a session
+yet — add them to one on the event's Agenda tab first", the reminder note, Add speaker's "Choose the session this
+speaker presents in", and Remove speaker's "taken off their session(s)". Where "presentation" means the slide files
+(archive permission notes, "Files they uploaded stay with the presentations") it is unchanged.
+
+## D-137 (2026-10-01): Co-presenters each have their own presentation and file — Status: ACCEPTED (Travis's call; supersedes D-031's "a second presenter is a second assignment, not a second slot")
+**Problem (Travis's list, item 7):** everyone in a session shared one presentation and so one file. Whoever uploaded
+last became the next version of everyone's deck, and approving it retired the others'; on MedTech, Rakibul's v3
+replaced Kwame Osei's deck. **Now each speaker in a session has a presentation of their own** — a *twin*: same
+session, same title (it follows the session, D-130), same times — with its own file, versions, review, sign-off, room
+copy and Launch. Nothing downstream changed: those already work per presentation.
+**Placement** (`presentationFor` in scheduleImport.ts, used by `syncPresenters`, so import, typed agenda, Add session,
+Add speaker and the Agenda's Add speaker all follow it): the chosen presentation if the person is on it or nobody is;
+else their own twin; else a twin nobody presents with nothing uploaded; else a new twin. Re-imports therefore change
+nothing, and a speaker giving two differently titled talks keeps one presentation for each. Add speaker refuses a
+person already on that presentation or its twin. Taking someone off leaves no empty twin behind (deleted when it has
+no speaker, no file and the session has other presentations). Re-import matching and twin updates (title, times)
+apply to every twin; Room Agent orders twins steadily.
+**Existing data — migration 028:** each presentation with two or more current speakers is split. The keeper is
+whoever uploaded the newest version (still on it), else the first assigned; they keep the presentation, its file and
+its history. Every other speaker gets a new empty twin and must upload their own deck; earlier versions they uploaded
+stay in the kept file's history, downloadable from Files. **Deploy: back up first.**
+**Screens:** the Agenda's session menu has **Add speaker** (gives them their own presentation; the presentation menu
+loses "Add presenter"); each co-presenter is a row with their own status; Add speaker offers each session once;
+review confirm and Agenda dialogs name the speaker. **Archive:** zip paths are claimed per package — a co-presenter's
+same-named file gets " - Speaker" before the extension, and earlier versions are filed per speaker — so no entry is
+lost on extraction. D-132's "one presentation per session" now reads "one presentation per speaker per session".
+Tests: `co-presenter-uploads.test.ts` (two presenters, two files, neither replaces the other, cross-upload refused),
+D-137 cases in agenda-edit and schedule-import, speakers-add-and-send updated.
+
+## D-138 (2026-10-01): Branded speaker emails, after Preseria's "Customize Email Template" — Status: ACCEPTED (Travis's list, item 8)
+Travis pointed at support.preseria.com/getstarted/#customize-email-template. What it has and we lacked, now built:
+- **Email banner** per event — branding asset `email_banner` (brandAssets.ts): PNG or JPG only, **exactly 1200 px wide,
+  200–600 px high** (read from the image header, never trusted from the name), ≤ 2 MB, virus-scanned like every upload.
+  Served to mail clients from a **public** address, `GET /api/v1/email-banner/{eventId}?v={fingerprint}` — the one
+  asset served without sign-in (listed in `NON_STAFF_PATHS`), cached immutably because a new banner is a new `v`.
+  Preseria's per-session banner override is not built.
+- **Branded HTML email** (`packages/email/src/look.ts` `renderEmailHtml`): banner (or the event name), one button —
+  "Upload your presentation" with the speaker's own link; "Upload a corrected version" on a changes-needed notice; none
+  on a receipt — then the template's message (escaped; web links linked; only http(s) ever linked or loaded), footer
+  with the event name. Sent as HTML **and** the plain text, which stays exactly what staff wrote. The API queues each
+  speaker email with a `look` (emailLook.ts `lookFor`); the dispatcher renders it. Staff account mail stays plain.
+- **Sender name and reply-to** per event (`PUT /events/{id}/email-settings`, stored in `branding.email_settings`):
+  the From address stays the platform's verified one, shown with the event's name (`"Name" <address>`, RFC 2047 for
+  non-ASCII; no header injection); reply-to overrides `MAIL_REPLY_TO`. Validated (a name, not an address; reply-to by
+  `checkAddress`), audited.
+- **More merge fields**: speaker's last name, venue, event dates, session date, start time and end time (Preseria's
+  macros); "talk_title" is now labelled "Session title" (D-136).
+- **Send a test email** (`POST /events/{id}/comms/test`): the email as it stands, to any address, filled in for the
+  first speaker, with the banner, button, sender and reply-to; its button and link open the speaker sign-in page — a
+  test never carries a personal link. "[Test]" in the subject; audited; refused on practice events (D-116).
+- **Save as new template** (`POST /events/{id}/comms/templates`): name required and unique per event; same checks as
+  editing (the Upload link must stay).
+Screen: Communications gains "How your emails look" (banner, sender name, reply-to) and a preview drawn as the email
+is (From, Subject, banner, button, message, footer). Automated sending and email history already existed (automatic
+reminders D-096, delivery log). **Deploy:** rebuild api, staff **and dispatcher**; optional `PUBLIC_API_BASE` (defaults
+to `PORTAL_BASE`, whose host proxies `/api`). Tests: look.test.ts (6), dispatcher handle.test.ts (+2),
+`email-look.test.ts` (9 invariants).
+
+## D-139 (2026-10-01): Email messages are formatted, in Preseria's editor — Status: ACCEPTED (Travis: "email template editing doesn't match with the example")
+D-138 kept the message a plain-text box. Preseria's Compose Email is a rich-text editor (Quill, snow theme): font,
+size, bold / italic / underline / strike, text and highlight colour, superscript / subscript, numbered and bulleted
+lists, alignment, link, image, clear formatting, and a character counter (n / 10000). Ours is now the same editor
+(`components/RichEditor.tsx`, quill 2.0.3, BSD-3) with that toolbar and counter. Formats are written as **inline
+styles** (Quill's style attributors for font, size, align, colour) because mail clients drop stylesheets; images go
+through `POST /events/{id}/email-images` (PNG/JPEG/GIF ≤ 2 MB, ≤ 2400 px wide, virus-scanned) and are placed by a
+public address, `GET /api/v1/email-image/{eventId}/{imageId}` (open path like the banner), because almost no mail
+client shows pasted-in images. The Insert buttons put the `{{field}}` where the cursor is.
+**Server:** whatever the editor sends is cleaned (`packages/email/src/richText.ts`, sanitize-html 2.18, MIT):
+allowlisted formatting tags; inline styles limited to the toolbar's (colour, background, font-family, font-size,
+text-align, weight, style, decoration, vertical-align); links http/https/mailto, images http/https; scripts, handlers,
+data: URIs, forms and iframes dropped; empty lines kept as `<p><br /></p>`; paragraphs get `margin:0`.
+`communication_templates.body_html` (**migration 029**) holds it; `body` stays the plain-text twin (`htmlToText`:
+bullets, numbering, "label (url)") — the email's text part, the delivery log's and archive's copy, and what the
+10,000-character limit and the "keep the Upload link" rule are checked on. A template with no `body_html` is plain
+text, as before, and opens in the editor converted line for line. Sending fills `{{field}}`s into the HTML as escaped
+text (a name is never markup), the upload link as a link; the dispatcher places it under the banner and button.
+Tests: richText.test.ts (7), email-look.test.ts formatted cases (4; 13 total).

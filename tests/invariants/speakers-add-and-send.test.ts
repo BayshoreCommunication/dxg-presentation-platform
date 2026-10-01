@@ -92,6 +92,9 @@ async function agendaWithTwoTalks(eventId: string, date: string): Promise<string
     .map((talk) => talk.slot_id);
 }
 
+/** The presentation each run speaker landed on: their own, next to `sendSlot` (D-137). */
+const landedOn = new Map<string, string>();
+
 /** Adds a speaker to the send probe and returns its id. Unique per run, so "once" starts fresh. */
 async function newSpeaker(label: string, input: { email?: string } = {}): Promise<string> {
   const response = await call(admin, "POST", `/events/${sendEventId}/speakers`, {
@@ -101,8 +104,9 @@ async function newSpeaker(label: string, input: { email?: string } = {}): Promis
     slot_id: sendSlot,
   });
   assert.equal(response.status, 201, `fixture: speaker ${label}`);
-  const { speaker_id } = (await response.json()) as { speaker_id: string };
+  const { speaker_id, slot_id } = (await response.json()) as { speaker_id: string; slot_id: string };
   runSpeakers.push(speaker_id);
+  landedOn.set(speaker_id, slot_id);
   return speaker_id;
 }
 
@@ -208,6 +212,17 @@ after(async () => {
     if (runSpeakers.length > 0) {
       await withSystemScope(async (tx) => {
         await tx.query(`DELETE FROM pmp.speaker_assignments WHERE speaker_id = ANY($1::uuid[])`, [runSpeakers]);
+        // Their own presentations (D-137) go too when nothing else is on them, as
+        // taking a co-presenter off on the agenda does.
+        await tx.query(
+          `DELETE FROM pmp.slots s
+            WHERE s.event_id = $1
+              AND NOT EXISTS (SELECT 1 FROM pmp.speaker_assignments sa WHERE sa.slot_id = s.id)
+              AND NOT EXISTS (SELECT 1 FROM pmp.files f WHERE f.slot_id = s.id)
+              AND EXISTS (SELECT 1 FROM pmp.slots o WHERE o.session_id = s.session_id AND o.title = s.title
+                            AND o.created_at < s.created_at)`,
+          [sendEventId],
+        );
       });
     }
     await call(admin, "POST", `/events/${sendEventId}/archive`);
@@ -457,7 +472,7 @@ describe("emailing the upload link (D-086)", () => {
     // Every speaker is added to a presentation (D-095); one can still end up on none
     // when they are taken off it on the agenda.
     const speakerId = await newSpeaker("NoTalk", { email: `link.notalk.${RUN}@example.invalid` });
-    const off = await call(admin, "DELETE", `/events/${sendEventId}/presentations/${sendSlot}/presenters/${speakerId}`);
+    const off = await call(admin, "DELETE", `/events/${sendEventId}/presentations/${landedOn.get(speakerId)}/presenters/${speakerId}`);
     assert.equal(off.status, 200, "fixture: taken off the presentation");
     const response = await sendLink(speakerId);
     assert.equal(response.status, 422);
