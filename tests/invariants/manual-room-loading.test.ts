@@ -221,6 +221,14 @@ describe("room PCs are loaded and ticked by hand (D-125)", () => {
       schedule: { slot_id: string; launchable: boolean; sync_state: string | null }[];
     };
     assert.equal(view.schedule.find((item) => item.slot_id === slotId)?.launchable, true);
+
+    // D-128: Launch is recorded by the person who pressed it — there is no room PC.
+    const launched = await call("POST", `/rooms/${roomId}/launch`, { slot_id: slotId });
+    assert.equal(((await launched.json()) as { launched: boolean }).launched, true);
+    const after = (await (await call("GET", `/rooms/${roomId}/agent-view`)).json()) as {
+      schedule: { slot_id: string; presented_at: string | null }[];
+    };
+    assert.ok(after.schedule.find((item) => item.slot_id === slotId)?.presented_at, "shown as presented");
   });
 
   test("a newer approval is Update pending ack until it is loaded; loading it replaces the old copy", async (t: TestContext) => {

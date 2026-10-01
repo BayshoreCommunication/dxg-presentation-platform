@@ -528,11 +528,14 @@ export async function launch(
     [input.roomId],
   );
 
-  if (row.agent_id) {
+  // Always recorded (D-128): by the room PC when there is one, else by the person who
+  // pressed Launch — rooms loaded by hand (D-125) have no room PC, and this used to be
+  // skipped, so "Recorded as presented" recorded nothing.
+  {
     await tx.query(
-      `INSERT INTO pmp.launch_logs (agent_id, room_id, event_id, client_id, file_version_id,
+      `INSERT INTO pmp.launch_logs (agent_id, recorded_by, room_id, event_id, client_id, file_version_id,
                                     agent_seq, action, occurred_at, detail)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,now(),$8)`,
+       VALUES ($1,$9,$2,$3,$4,$5,$6,$7,now(),$8)`,
       [
         row.agent_id,
         input.roomId,
@@ -542,6 +545,7 @@ export async function launch(
         seqRows[0]!.next,
         allowed ? "launch" : "holding_screen",
         JSON.stringify({ slot_id: input.slotId, sync_state: row.sync_state, allowed }),
+        row.agent_id ? null : actor.id,
       ],
     );
   }

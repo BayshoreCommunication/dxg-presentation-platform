@@ -2399,3 +2399,10 @@ room's next talk the audience is waiting for — its day (when not today), time,
 yet presented whose start is no more than 15 minutes past. With nothing upcoming it shows the event name alone. This is
 the platform's preview; the room software's own holding screen (apps/room-agent) shows event and room only until it
 receives the room's schedule (after G0-1).
+
+## D-128 (2026-09-30): Launch is recorded by the person who presses it — Status: ACCEPTED (bug fix)
+Launch on Room Agent wrote its launch record only when the room had a registered room PC. Since D-125 rooms are loaded
+by hand and have none, so every Launch said "Recorded as presented" and recorded nothing — the talk never showed as
+presented and the holding screen's "next" never moved on. Migration 026 lets `launch_logs.agent_id` be empty and adds
+`recorded_by` (the staff member), with a check that one of the two is set; Launch now always writes its record.
+Test: manual-room-loading.test.ts (launch → shown as presented).
