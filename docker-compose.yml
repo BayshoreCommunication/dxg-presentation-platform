@@ -2,10 +2,13 @@
 # Postgres applies db/migrations/*.sql automatically on first start (lexical order).
 # App services (api/worker/dispatcher/cron) are added here when the backend is scaffolded.
 # Reset database: docker compose down -v && docker compose up -d
+# All three restart with Docker unless stopped by hand — a database that silently stayed
+# down made every local sign-in fail with "Something went wrong".
 services:
   postgres:
     image: postgres:16-alpine
     container_name: pmp-postgres
+    restart: unless-stopped
     environment:
       POSTGRES_USER: pmp
       POSTGRES_PASSWORD: pmp_dev          # dev only — never a real secret
@@ -24,6 +27,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: pmp-redis
+    restart: unless-stopped
     command: ["redis-server", "--appendonly", "no"]   # transport only (D-003): availability, not durability
     ports:
       - "6380:6379"                        # 6380 to avoid clashing with other local redis
@@ -36,6 +40,7 @@ services:
   clamav:
     image: clamav/clamav:stable
     container_name: pmp-clamav
+    restart: unless-stopped
     ports:
       - "3310:3310"                        # clamd TCP
     volumes:
