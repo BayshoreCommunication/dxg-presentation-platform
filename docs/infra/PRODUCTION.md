@@ -168,7 +168,10 @@ for s in api staff portal; do
   [ "$(docker image inspect pmp-$s --format '{{.Id}}')" = "$(docker inspect pmp-$s-1 --format '{{.Image}}')" ] \
     && echo "$s ok" || echo "$s STILL RUNNING THE OLD IMAGE"; done
 docker compose logs --since 5m api worker staff portal | grep -iE "error|refusing|fatal"
-docker image prune -f; df -h /                          # 8. keep the disk under 80 %
+docker image prune -f                                   # 8. keep the disk under 80 %. Build cache is the
+docker builder prune -f --filter until=24h              #    real consumer (55 GB by 2026-10-04 — every
+df -h /                                                 #    rebuild adds layers, image prune never
+                                                        #    touches them); keeping today's keeps builds fast
 rm -f /tmp/pmp-$C.tar.gz /tmp/tracked-$C.txt
 ```
 
@@ -226,7 +229,9 @@ port is not published on the host: check health through the public URL, not `127
   so a stopped worker never looks like a site outage.
 - **Logs**: `docker compose logs -f api worker dispatcher`. Worth watching: `[dispatcher] not sent to …`
   (suppressed or invalid addresses), `[reminders] …`, `pdf` failures, `refusing to start`.
-- **Disk**: Postgres volume and Docker images; alert at 80 %.
+- **Disk**: alert at 80 %. Docker **build cache** is what fills it — 55 GB of the 61 GB used on 2026-10-04, against
+  70 MB of database — and `docker image prune` does not touch it; `docker builder prune -f --filter until=24h` does
+  (§6 step 8). `docker system df` shows the split.
 - **SES**: bounce and complaint rates in the SES console (keep bounce < 2 %, complaints < 0.1 %).
 
 ## 9. Rehearsal (before every significant change)

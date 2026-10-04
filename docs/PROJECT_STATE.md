@@ -3407,3 +3407,10 @@ session's own title when it differs from the talk's — payload gains `session_t
 used to carry. Tinted green once approved or final. Walked locally in review, with a passed deadline and a differently
 titled session, locked final, and at phone width (time range kept on one line). co-presenter + reminders 16/16, unit
 313/313. Not deployed.
+
+## 2026-10-04 — Deployed 35f9909 to production (portal talk info as icon rows)
+Backup `backups/pmp-2026-10-04T115143Z.dump` first; no migrations; api and portal rebuilt one at a time (staff and
+dispatcher untouched); all services up, api/worker healthy, both sites 200, `/ops/health` ok with worker up, unsigned
+`/portal/talks` refused (401), no errors in the logs. **Disk reached 80 %**: `docker system df` showed 55 GB of build
+cache (54 GB reclaimable) against 70 MB of database; `docker builder prune -f --filter until=24h` brought the disk to
+34 % (52 GB free) with every service still healthy. Runbook §6 step 8 and §8 now include the build-cache prune.
