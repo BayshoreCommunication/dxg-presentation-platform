@@ -147,6 +147,71 @@ const STATUS_TONE: Record<string, string> = {
 const APPROVED = ["approved", "approved_delivering", "update_pending_ack", "synchronized_onsite"];
 
 /**
+ * The road from "nothing yet" to "ready in your room", as four steps (Preseria's
+ * presenter dashboard shows the same journey). The chip says where a talk is; the
+ * steps say where that is *on the way*, which is what a speaker reading "Received — in
+ * review" actually wants to know: what has happened, what is happening, what is left.
+ *
+ * Driven by the same `status` as the chip, so the two cannot disagree. A cancelled or
+ * finished talk has no journey left and shows none.
+ */
+type StepState = "done" | "now" | "todo" | "warn";
+type Step = { label: string; state: StepState; note?: string };
+
+function journeyFor(status: string, loaded: boolean): Step[] | null {
+  const step = (label: string, state: StepState, note?: string): Step => ({ label, state, ...(note ? { note } : {}) });
+  switch (status) {
+    case "missing":
+      return [step("Upload", "now", "Send your slides below"), step("Checks", "todo"), step("Review", "todo"), step("Ready in your room", "todo")];
+    case "processing":
+      return [step("Upload", "done"), step("Checks", "now", "Usually a minute"), step("Review", "todo"), step("Ready in your room", "todo")];
+    case "attention":
+      return [step("Upload", "done"), step("Checks", "warn", "Please upload again"), step("Review", "todo"), step("Ready in your room", "todo")];
+    case "submitted":
+      return [step("Upload", "done"), step("Checks", "done"), step("Review", "now", "The DXG team has it"), step("Ready in your room", "todo")];
+    case "needs_revision":
+      return [step("Upload", "done"), step("Checks", "done"), step("Review", "warn", "Changes needed — see below"), step("Ready in your room", "todo")];
+    case "approved":
+    case "approved_delivering":
+    case "update_pending_ack":
+      // The talk's status says "approved"; the room copy (D-140) knows whether the room
+      // PC already has it. Once it does, the last step is done whatever the status says.
+      return loaded
+        ? [step("Upload", "done"), step("Checks", "done"), step("Review", "done"), step("Ready in your room", "done", "Loaded on the room PC")]
+        : [step("Upload", "done"), step("Checks", "done"), step("Review", "done"), step("Ready in your room", "now", "Being loaded before your session")];
+    case "synchronized_onsite":
+      return [step("Upload", "done"), step("Checks", "done"), step("Review", "done"), step("Ready in your room", "done", "Loaded on the room PC")];
+    default:
+      return null;
+  }
+}
+
+function Journey({ status, loaded }: { status: string; loaded: boolean }) {
+  const steps = journeyFor(status, loaded);
+  if (!steps) return null;
+  const at = steps.findIndex((item) => item.state !== "done");
+  return (
+    <ol className="journey" aria-label="Where your presentation is">
+      {steps.map((item, index) => (
+        <li
+          key={item.label}
+          className={`journey-step ${item.state}`}
+          aria-current={index === at ? "step" : undefined}
+        >
+          <span className="journey-mark" aria-hidden="true">
+            {item.state === "done" ? "✓" : item.state === "warn" ? "!" : index + 1}
+          </span>
+          <span className="journey-text">
+            <span className="journey-label">{item.label}</span>
+            {item.note && <span className="journey-note">{item.note}</span>}
+          </span>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+/**
  * The event's upload deadline as a speaker should read it (D-071) — worded by the same
  * `formatDeadline` the emails use, so the portal and the reminder cannot disagree.
  */
@@ -206,6 +271,7 @@ function TalkCard({
         <span className={`chip ${status.tone}`}>{status.label}</span>
       </div>
       <div className="cbd">
+        {!talk.final_locked && <Journey status={talk.status} loaded={Boolean(talk.room_copy?.loaded)} />}
         {status.next && !talk.final_locked && (
           <div style={{ marginBottom: 12, fontSize: 14 }}>{status.next}</div>
         )}

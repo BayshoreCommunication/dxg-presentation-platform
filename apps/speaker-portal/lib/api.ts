@@ -92,8 +92,13 @@ export type PortalTalk = {
 export type PortalAsset = { file_name: string; size_bytes: number; uploaded_at: string };
 
 /** An event asset for the signed-in speaker's event; `version` busts the cache after a replace. */
-/** One of the speaker's own uploads, to download (D-140). */
-export const portalDownloadUrl = (versionId: string) => `${BASE}/portal/file-versions/${versionId}/download`;
+/**
+ * One of the speaker's own uploads, to download (D-140). The browser's path, like the
+ * asset URL below: this goes into an `href`, and `BASE` is the API's internal origin
+ * when the page is rendered on the server — so the server wrote one address and the
+ * browser another, and React reported the mismatch on every talk with a file.
+ */
+export const portalDownloadUrl = (versionId: string) => `${BROWSER_BASE}/portal/file-versions/${versionId}/download`;
 
 export const portalAssetUrl = (kind: "header" | "template", version: string) =>
   `${BROWSER_BASE}/portal/assets/${kind}?v=${encodeURIComponent(version)}`;

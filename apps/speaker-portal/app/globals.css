@@ -527,6 +527,29 @@ input,select,textarea{border-width:1px}
 .talk-facts dt{font-size:11px;font-weight:500;letter-spacing:.025em;text-transform:uppercase;color:var(--subtle-foreground)}
 .talk-facts dd{margin:2px 0 0;font-size:14px;color:var(--foreground)}
 .room-copy{display:flex;flex-direction:column;gap:2px;margin:0 0 14px;padding:10px 14px;border-left:3px solid var(--success,#16a34a);border-radius:0 8px 8px 0;background:var(--muted)}
+/* The four-step journey above a talk's status line: done ✓, the current step ringed, the rest faint. */
+.journey{display:flex;align-items:flex-start;gap:0;margin:0 0 14px;padding:0;list-style:none;counter-reset:none}
+.journey-step{position:relative;display:flex;flex:1 1 0;min-width:0;flex-direction:column;align-items:center;gap:6px;padding:0 4px;text-align:center}
+.journey-step::before{content:"";position:absolute;top:11px;left:-50%;width:100%;height:2px;background:var(--line)}
+.journey-step:first-child::before{display:none}
+.journey-step.done::before{background:var(--success)}
+.journey-step.now::before{background:var(--success)}
+.journey-step.warn::before{background:var(--success)}
+.journey-mark{position:relative;z-index:1;display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;border:2px solid var(--line);background:var(--card);font-size:12px;font-weight:600;line-height:1;color:var(--muted-foreground)}
+.journey-step.done .journey-mark{border-color:var(--success);background:var(--success);color:#fff}
+.journey-step.now .journey-mark{border-color:var(--primary);color:var(--primary);box-shadow:0 0 0 4px var(--accent)}
+.journey-step.warn .journey-mark{border-color:var(--amber);background:var(--amber);color:#fff}
+.journey-text{display:flex;flex-direction:column;gap:2px;min-width:0}
+.journey-label{font-size:13px;font-weight:500;line-height:1.2;color:var(--muted-foreground)}
+.journey-step.done .journey-label,.journey-step.now .journey-label,.journey-step.warn .journey-label{color:var(--foreground)}
+.journey-note{font-size:12px;line-height:1.3;color:var(--muted-foreground)}
+.journey-step.warn .journey-note{color:var(--amber-text)}
+@media (max-width:520px){
+  .journey{flex-direction:column;gap:10px}
+  .journey-step{flex-direction:row;align-items:flex-start;text-align:left;padding:0}
+  .journey-step::before{top:-10px;left:11px;width:2px;height:10px}
+  .journey-text{padding-top:3px}
+}
 .my-files{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
 .my-file{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 14px;border:1px solid var(--line);border-radius:10px}
 .my-file-name{display:flex;flex-direction:column;align-items:flex-start;gap:4px;min-width:0}
