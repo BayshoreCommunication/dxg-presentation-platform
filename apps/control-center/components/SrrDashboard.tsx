@@ -43,9 +43,9 @@ export function SrrDashboardView({
   // Why "Check in →" is greyed, once above the list rather than on every row (R33, D-111).
   const checkInBlocked =
     data.stations.length === 0
-      ? "Check in is off until this room has a station. Add one under Stations below."
+      ? "Check in is off until this room has a desk. Add one under Desks above."
       : data.stations.every((station) => station.busy)
-        ? "Every station is in use. To free one, check a speaker out: open their check-in and press Check out."
+        ? "Every desk is in use. To free one, check a speaker out: open their check-in and press Check out."
         : null;
 
   async function check(speakerId: string, stationId: string) {
@@ -82,6 +82,10 @@ export function SrrDashboardView({
 
       {error && <div className="err">{error}</div>}
 
+      {data.stations.length === 0 && (
+        <StationsCard eventId={eventId} stations={data.stations} onChanged={() => router.refresh()} />
+      )}
+
       {/* ── At the desks now: one card per desk (D-121) ─────────────────────────── */}
       <div className="card">
         <div className="chd">
@@ -90,7 +94,7 @@ export function SrrDashboardView({
         </div>
         <div className="cbd">
           {data.stations.length === 0 ? (
-            <div className="empty">No desks yet. Add them under &ldquo;Manage desks&rdquo; below.</div>
+            <div className="empty">No desks yet. Add the room&rsquo;s desks above, then speakers can be checked in here.</div>
           ) : (
             <div className="desk-grid">
               {data.stations.map((station) => {
@@ -241,11 +245,16 @@ export function SrrDashboardView({
         </div>
       )}
 
-      {/* Setting up desks is a once-per-event job, so it sits folded away (D-121). */}
-      <details className="manage-desks">
-        <summary>Manage desks ({data.stations.length})</summary>
+      {/*
+        Setting up desks was folded away under a "Manage desks" toggle (D-121) because it
+        is a once-per-event job — and so a room with no desks opened on two empty panels
+        and a greyed Check in, with the one thing to do hidden behind a line of small
+        text. The card is always open now, and until the room has a desk it sits at the
+        top, because then it *is* the job.
+      */}
+      {data.stations.length > 0 && (
         <StationsCard eventId={eventId} stations={data.stations} onChanged={() => router.refresh()} />
-      </details>
+      )}
     </>
   );
 }
@@ -300,7 +309,7 @@ function CheckInButton({
   const free = stations.filter((station) => !station.busy);
   if (stations.length === 0) {
     return (
-      <button className="btn pri" disabled title="Add a station under Stations below first">
+      <button className="btn pri" disabled title="Add a desk under Desks first">
         Check in →
       </button>
     );
@@ -311,7 +320,7 @@ function CheckInButton({
         ref={trigger}
         className="btn pri"
         disabled={disabled || free.length === 0}
-        title={free.length === 0 ? "Every station is in use. Check a speaker out to free one." : undefined}
+        title={free.length === 0 ? "Every desk is in use. Check a speaker out to free one." : undefined}
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
@@ -319,7 +328,7 @@ function CheckInButton({
         {label}
       </button>
       <FloatingMenu open={open} trigger={trigger} menu={menu} width={220}>
-          <div className="label">At which station?</div>
+          <div className="label">At which desk?</div>
           {stations.map((station) => (
             <button
               key={station.id}
@@ -377,8 +386,8 @@ function StationsCard({
   return (
     <div className="card">
       <div className="chd">
-        <h3>Stations · {stations.length}</h3>
-        <span className="m">the desks speakers check in at</span>
+        <h3>Desks · {stations.length}</h3>
+        <span className="m">where speakers check in — rename or remove them here</span>
       </div>
       <div className="cbd" style={{ padding: "0 0 4px" }}>
         {error && (
@@ -393,7 +402,7 @@ function StationsCard({
           </div>
         )}
         {stations.length === 0 ? (
-          <div className="empty">No stations yet. Add the desks this room has, then speakers can be checked in.</div>
+          <div className="empty">No desks yet. Add each desk this room has — speakers are checked in at one.</div>
         ) : (
           <table>
             <tbody>
@@ -486,15 +495,15 @@ function StationsCard({
           }}
         >
           <input
-            aria-label="New station name"
-            placeholder="Station name"
+            aria-label="New desk name"
+            placeholder="Desk name, e.g. Desk 1"
             value={draft}
             maxLength={60}
             onChange={(event) => setDraft(event.target.value)}
             style={{ flex: 1 }}
           />
           <button className="btn pri" disabled={working || !draft.trim()}>
-            Add station
+            Add desk
           </button>
         </form>
       </div>

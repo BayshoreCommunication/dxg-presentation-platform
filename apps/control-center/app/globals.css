@@ -1149,8 +1149,6 @@ input,select,textarea{border-width:1px}
 .desk.busy{border-color:var(--foreground)}
 .desk-name{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted-foreground)}
 .desk-who{font-weight:600;margin:2px 0}
-.manage-desks{margin-top:4px}
-.manage-desks>summary{cursor:pointer;font-size:13px;color:var(--secondary-foreground);margin-bottom:10px}
 
 /* Room Agent's "Now" (D-124). */
 .room-now{background:#0F2A36;border:1px solid #2A5566;border-radius:8px;padding:12px 16px;margin-bottom:14px}
