@@ -153,3 +153,52 @@ describe("co-presenters each upload their own file (D-137)", () => {
     assert.equal(after, before, "Theo's file gained no version");
   });
 });
+
+describe("speakers see and download their own files (D-140)", () => {
+  type Talk = {
+    slot_id: string;
+    ends_at: string | null;
+    room_copy: unknown;
+    versions: { id: string; version_number: number; downloadable: boolean; review_state: string }[];
+  };
+  const talksOf = async (cookie: string): Promise<Talk[]> =>
+    ((await (await fetch(`${API}/portal/talks`, { headers: { cookie } })).json()) as { items: Talk[] }).items;
+
+  test("the talk list carries every upload, with its id, review state and whether it can be downloaded", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const talks = await talksOf(people[ONE]!.cookie);
+    assert.equal(talks.length, 1, "Uma sees only her own presentation, not Theo's");
+    const talk = talks[0]!;
+    assert.equal(talk.slot_id, people[ONE]!.slotId);
+    assert.ok(talk.ends_at, "the session's end, for the duration");
+    assert.ok("room_copy" in talk, "what the room will show is reported (null until approved)");
+    assert.ok(talk.versions.length >= 1);
+    for (const version of talk.versions) {
+      assert.match(version.id, /^[0-9a-f-]{36}$/);
+      assert.equal(typeof version.downloadable, "boolean");
+      assert.equal(typeof version.review_state, "string");
+    }
+  });
+
+  test("a speaker downloads their own upload, byte for byte", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const mine = (await talksOf(people[ONE]!.cookie))[0]!.versions.find((version) => version.downloadable);
+    assert.ok(mine, "fixture: a clean upload");
+    const response = await fetch(`${API}/portal/file-versions/${mine.id}/download`, { headers: { cookie: people[ONE]!.cookie } });
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get("content-disposition") ?? "", /attachment; filename="uma\.pptx"/);
+    const body = Buffer.from(await response.arrayBuffer());
+    assert.equal(body.subarray(0, 2).toString("latin1"), "PK", "the PowerPoint package itself");
+  });
+
+  test("a co-presenter's file, or no session at all, is refused", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const theirs = (await talksOf(people[TWO]!.cookie))[0]!.versions[0]!;
+    const asUma = await fetch(`${API}/portal/file-versions/${theirs.id}/download`, { headers: { cookie: people[ONE]!.cookie } });
+    assert.equal(asUma.status, 404, "Theo's file is not Uma's to download");
+    const anonymous = await fetch(`${API}/portal/file-versions/${theirs.id}/download`);
+    assert.equal(anonymous.status, 401);
+    const nonsense = await fetch(`${API}/portal/file-versions/not-a-uuid/download`, { headers: { cookie: people[ONE]!.cookie } });
+    assert.equal(nonsense.status, 404);
+  });
+});

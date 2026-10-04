@@ -60,15 +60,30 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export type Finding = { check_code: string; severity: string; detail: Record<string, unknown> };
 
+/** One of the speaker's uploads (D-140). */
+export type PortalVersion = {
+  id: string;
+  version_number: number;
+  file_name: string;
+  size_bytes: string;
+  created_at: string;
+  state: string;
+  review_state: string;
+  downloadable: boolean;
+};
+
 export type PortalTalk = {
   slot_id: string;
   title: string;
   room: string | null;
   starts_at: string;
+  ends_at: string | null;
   final_locked: boolean;
   status: string;
   status_label: string;
-  versions: { version_number: number; file_name: string; size_bytes: string; created_at: string; state: string }[];
+  versions: PortalVersion[];
+  /** What the room will show: the approved version, and whether it is on the room's PC (D-140). */
+  room_copy: { version_number: number; loaded: boolean } | null;
   findings: Finding[];
   /** Notes the DXG team wrote to the speaker, newest first (D-070). */
   feedback: { body: string; created_at: string; version_number: number }[];
@@ -77,6 +92,9 @@ export type PortalTalk = {
 export type PortalAsset = { file_name: string; size_bytes: number; uploaded_at: string };
 
 /** An event asset for the signed-in speaker's event; `version` busts the cache after a replace. */
+/** One of the speaker's own uploads, to download (D-140). */
+export const portalDownloadUrl = (versionId: string) => `${BASE}/portal/file-versions/${versionId}/download`;
+
 export const portalAssetUrl = (kind: "header" | "template", version: string) =>
   `${BROWSER_BASE}/portal/assets/${kind}?v=${encodeURIComponent(version)}`;
 

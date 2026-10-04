@@ -3314,3 +3314,17 @@ and the live preview sit side by side (stacked under ~1100 px), the preview stay
 Insert buttons are one grouped "Insert detail" menu (Speaker / Event / Session / Link, via FloatingMenu, keeps the
 cursor); Save / Save as new / Cancel and the test send share one action bar; view mode shows the preview beside a small
 panel (who it goes to, test send). Preview keeps blank lines. Checked at 1440, 1031 and 375 px, no overflow.
+
+## 2026-10-01 — Deployed d8f99d7 to production (D-129–D-139)
+Backup `backups/pmp-2026-10-01T100817Z.dump` first; code extracted with sudo (the tree is root-owned) and no stray
+files; api, dispatcher, staff and portal rebuilt; migrations 027–029 applied; all services up, api/worker healthy;
+health ok; both sites answer; `/api/v1/email-banner/` reachable without sign-in (404 for an unknown event); uptime
+alarms OK; no errors in the logs. Migration 028 split one shared presentation — DXG Presentation Test Project, "How To
+Be A Great Presenter": Tim Turner keeps the file (5 versions), Jim Smith has a new empty presentation. 027 changed
+nothing there (no rename recorded; its presentation title differs from the session's only in a capital "a").
+Travis confirmed item 3 is complete (Edit/Add presentation removed, D-132). Open: item 9 (client portal).
+
+## 2026-10-01 — Speaker portal as a presenter dashboard (D-140; Travis's list, item 9 — last item)
+Talk cards show date/time + zone, location, duration, files uploaded, what the room will show, and every upload with a
+Download button (speaker's own files only). Walked as two seeded speakers (waiting for review; approved and loaded in
+Ballroom A), downloaded in the browser, checked at phone width. Invariants 6/6 in co-presenter-uploads. Not committed.

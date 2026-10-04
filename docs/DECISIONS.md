@@ -2550,3 +2550,19 @@ bullets, numbering, "label (url)") — the email's text part, the delivery log's
 text, as before, and opens in the editor converted line for line. Sending fills `{{field}}`s into the HTML as escaped
 text (a name is never markup), the upload link as a link; the dispatcher places it under the banner and button.
 Tests: richText.test.ts (7), email-look.test.ts formatted cases (4; 13 total).
+
+## D-140 (2026-10-01): The speaker portal is a presenter dashboard, like Preseria's — Status: ACCEPTED (Travis's list, item 9)
+Travis's "client portal" item meant the **speakers'** view (he pointed at support.preseria.com/web/presenters/dashboard
+and chose "the speakers" and "see what rooms see"). Each talk card now carries Preseria's session information —
+**date and time with the time zone, location (room – event), duration (hidden when zero), files uploaded** — then,
+once a version is approved, **what the room will show**: "Version N is ready in <room>" when DXG has ticked it loaded on
+the room PC (D-125), otherwise "Version N is approved for <room> — the DXG team will load it". **Your files** lists every
+upload, newest first, with version, size, when, a plain status ("Approved — the room will show this", "Waiting for
+review", "Changes requested", "Earlier version", "Being checked", "Not accepted — failed the security check") and a
+**Download** button for any clean stored file. API: `GET /portal/talks` adds `ends_at`, `room_copy` and per-version
+`id`, `review_state`, `downloadable`; only current assignments are listed. New `GET /portal/file-versions/{id}/download`:
+the portal runs without row-level security, so ownership is checked in the query (the version's presentation must be
+assigned to this speaker, on this event — a co-presenter's file is "not found", D-137); only stored files; audited as
+`file.downloaded` with `via: speaker_portal`. Not built from Preseria's page: the customisable welcome message, the
+consent message, editable titles, per-presentation file limits and the tutorial. Tests: co-presenter-uploads.test.ts
+(+3: talk payload, byte-for-byte download, co-presenter / anonymous refused).

@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import type pg from "pg";
 import type { Finding } from "@pmp/files";
 import { deriveTalkStatus, TALK_STATUS_LABEL } from "@pmp/domain";
+import { appendAudit } from "@pmp/db";
 import { ingestVersion, storage } from "./ingest.ts";
 
 export { storage };
@@ -34,15 +35,36 @@ export async function resolveToken(tx: pg.PoolClient, token: string): Promise<Po
   return rows[0] ?? null;
 }
 
+/** One upload, as its speaker sees it (D-140). */
+export type PortalVersion = {
+  id: string;
+  version_number: number;
+  file_name: string;
+  size_bytes: string;
+  created_at: string;
+  /** processing_state: stored, quarantined, checking… */
+  state: string;
+  review_state: string;
+  /** A clean, stored file — the only kind that can be downloaded. */
+  downloadable: boolean;
+};
+
 export type PortalTalk = {
   slot_id: string;
   title: string;
   room: string | null;
   starts_at: string;
+  /** The talk's end, or its session's (D-140: Preseria shows the duration). */
+  ends_at: string | null;
   final_locked: boolean;
   status: string;
   status_label: string;
-  versions: { version_number: number; file_name: string; size_bytes: string; created_at: string; state: string }[];
+  versions: PortalVersion[];
+  /**
+   * What the room will show (D-140): the approved version, and whether DXG has loaded it
+   * onto the room's PC (D-125). Null until a version is approved.
+   */
+  room_copy: { version_number: number; loaded: boolean } | null;
   findings: Finding[];
   /** Notes the DXG team wrote to the speaker, newest first (D-070). Never internal or client-lane notes. */
   feedback: { body: string; created_at: string; version_number: number }[];
@@ -55,30 +77,43 @@ export async function portalTalks(tx: pg.PoolClient, session: PortalSession): Pr
     title: string;
     room: string | null;
     starts_at: string;
+    ends_at: string | null;
     final_locked: boolean;
     session_state: string;
     versions: { processing: string; inspection: string; review: string }[] | null;
-    version_rows:
-      | { version_number: number; file_name: string; size_bytes: string; created_at: string; state: string }[]
-      | null;
+    version_rows: Omit<PortalVersion, "downloadable">[] | null;
+    room_copy: { version_number: number; loaded: boolean } | null;
     findings: Finding[] | null;
     feedback: { body: string; created_at: string; version_number: number }[] | null;
   }>(
-    `SELECT s.id AS slot_id, s.title, r.name AS room, se.starts_at, s.final_locked, se.session_state,
+    `SELECT s.id AS slot_id, s.title, r.name AS room, se.starts_at, COALESCE(s.ends_at, se.ends_at) AS ends_at,
+            s.final_locked, se.session_state,
             (SELECT json_agg(json_build_object('processing', fv.processing_state,
                                                'inspection', fv.inspection_state,
                                                'review', fv.review_state)
                              ORDER BY fv.version_number)
                FROM pmp.file_versions fv JOIN pmp.files f ON f.id = fv.file_id
               WHERE f.slot_id = s.id) AS versions,
-            (SELECT json_agg(json_build_object('version_number', fv.version_number,
+            (SELECT json_agg(json_build_object('id', fv.id,
+                                               'version_number', fv.version_number,
                                                'file_name', fv.original_filename,
                                                'size_bytes', fv.size_bytes::text,
                                                'created_at', fv.created_at,
-                                               'state', fv.processing_state)
+                                               'state', fv.processing_state,
+                                               'review_state', fv.review_state)
                              ORDER BY fv.version_number DESC)
                FROM pmp.file_versions fv JOIN pmp.files f ON f.id = fv.file_id
               WHERE f.slot_id = s.id) AS version_rows,
+            -- What the room will show (D-140): the approved version, and whether it is ticked
+            -- loaded on the room's PC (D-125) in the talk's current room.
+            (SELECT json_build_object('version_number', fv.version_number,
+                                      'loaded', EXISTS (SELECT 1 FROM pmp.room_files rf
+                                                         WHERE rf.file_version_id = fv.id
+                                                           AND rf.room_id = se.room_id
+                                                           AND rf.sync_state = 'active'))
+               FROM pmp.file_versions fv JOIN pmp.files f ON f.id = fv.file_id
+              WHERE f.slot_id = s.id AND fv.review_state = 'approved'
+              ORDER BY fv.version_number DESC LIMIT 1) AS room_copy,
             (SELECT json_agg(json_build_object('check_code', inf.check_code,
                                                'severity', inf.severity, 'detail', inf.detail))
                FROM pmp.inspection_findings inf
@@ -101,7 +136,7 @@ export async function portalTalks(tx: pg.PoolClient, session: PortalSession): Pr
        JOIN pmp.slots s ON s.id = sa.slot_id
        JOIN pmp.sessions se ON se.id = s.session_id
        LEFT JOIN pmp.rooms r ON r.id = se.room_id
-      WHERE sa.speaker_id = $1
+      WHERE sa.speaker_id = $1 AND sa.replaced_by IS NULL
       ORDER BY se.starts_at`,
     [session.speaker_id],
   );
@@ -118,10 +153,12 @@ export async function portalTalks(tx: pg.PoolClient, session: PortalSession): Pr
       title: row.title,
       room: row.room,
       starts_at: row.starts_at,
+      ends_at: row.ends_at,
       final_locked: row.final_locked,
       status,
       status_label: TALK_STATUS_LABEL[status],
-      versions: row.version_rows ?? [],
+      versions: (row.version_rows ?? []).map((version) => ({ ...version, downloadable: version.state === "stored" })),
+      room_copy: row.room_copy,
       findings: row.findings ?? [],
       feedback: row.feedback ?? [],
     };
@@ -238,3 +275,57 @@ export async function completeUpload(
   return { ok: true, value: result.value };
 }
 
+/**
+ * A speaker downloads one of their own uploads (D-140, after Preseria's presenter
+ * dashboard). The portal runs without row-level security, so ownership is checked here:
+ * the version must belong to a presentation this speaker is currently assigned to, on this
+ * event. Anyone else's file — a co-presenter's included (D-137) — is "not found". Only a
+ * clean, stored file leaves; every download is in the audit chain.
+ */
+export async function portalDownload(
+  tx: pg.PoolClient,
+  session: PortalSession,
+  versionId: string,
+): Promise<{ ok: true; filename: string; body: Buffer } | { ok: false; status: number; code: string; message: string }> {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(versionId)) {
+    return { ok: false, status: 404, code: "file_version.not_found", message: "That file isn't one of yours." };
+  }
+  const { rows } = await tx.query<{
+    id: string;
+    filename: string;
+    s3_key: string;
+    processing_state: string;
+    version_number: number;
+  }>(
+    `SELECT fv.id, fv.original_filename AS filename, fv.s3_key, fv.processing_state, fv.version_number
+       FROM pmp.file_versions fv
+       JOIN pmp.files f ON f.id = fv.file_id
+       JOIN pmp.speaker_assignments sa ON sa.slot_id = f.slot_id
+      WHERE fv.id = $1 AND fv.event_id = $2 AND sa.speaker_id = $3 AND sa.replaced_by IS NULL
+      LIMIT 1`,
+    [versionId, session.event_id, session.speaker_id],
+  );
+  const version = rows[0];
+  if (!version) return { ok: false, status: 404, code: "file_version.not_found", message: "That file isn't one of yours." };
+  if (version.processing_state !== "stored") {
+    return {
+      ok: false,
+      status: 409,
+      code: "file.not_downloadable",
+      message:
+        version.processing_state === "quarantined"
+          ? "This file failed the security check, so it was not kept and can't be downloaded."
+          : "This file is still being checked. Try again in a minute.",
+    };
+  }
+  const body = await storage.read(version.s3_key);
+  await appendAudit(tx, {
+    partitionId: session.event_id,
+    clientId: session.client_id,
+    action: "file.downloaded",
+    subjectType: "file_version",
+    subjectId: version.id,
+    detail: { filename: version.filename, bytes: body.length, by_speaker: session.speaker_id, via: "speaker_portal" },
+  });
+  return { ok: true, filename: version.filename, body };
+}

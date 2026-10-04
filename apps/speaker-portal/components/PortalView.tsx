@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { portalAssetUrl, presenterLogout } from "@/lib/api";
-import type { CompleteResult, PortalSession, PortalTalk } from "@/lib/api";
+import { portalAssetUrl, portalDownloadUrl, presenterLogout } from "@/lib/api";
+import type { CompleteResult, PortalSession, PortalTalk, PortalVersion } from "@/lib/api";
 import { UploadPanel } from "./UploadPanel";
 import { remember, REMEMBERED } from "./PresenterLogin";
 import { formatBytes, formatDeadline, SPEAKER_TALK_STATUS } from "@pmp/format";
@@ -114,6 +114,7 @@ export function PortalView({
         <TalkCard
           key={talk.slot_id}
           talk={talk}
+          eventName={session.event.name}
           timezone={session.event.timezone}
           deadline={session.event.upload_deadline}
           onChange={reload}
@@ -151,11 +152,13 @@ function deadlineText(deadline: string, timeZone: string): { label: string; pass
 
 function TalkCard({
   talk,
+  eventName,
   timezone,
   deadline,
   onChange,
 }: {
   talk: PortalTalk;
+  eventName: string;
   timezone: string;
   deadline: string | null;
   onChange: () => Promise<void>;
@@ -178,15 +181,18 @@ function TalkCard({
     talk.status === "needs_revision" ||
     talk.status === "attention";
   const showUpload = needsUpload || replacing;
+  // Preseria's card (D-140): date and time with the zone, location, duration, files uploaded.
   const when = new Date(talk.starts_at).toLocaleString("en-US", {
     weekday: "short",
     month: "short",
     day: "numeric",
-    hour: "2-digit",
+    hour: "numeric",
     minute: "2-digit",
-    hour12: false,
     timeZone: timezone,
+    timeZoneName: "short",
   });
+  const minutes = talk.ends_at ? Math.round((Date.parse(talk.ends_at) - Date.parse(talk.starts_at)) / 60_000) : 0;
+  const uploaded = talk.versions.filter((version) => version.state !== "quarantined").length;
 
   return (
     <div className="card">
@@ -195,11 +201,47 @@ function TalkCard({
         <span className={`chip ${status.tone}`}>{status.label}</span>
       </div>
       <div className="cbd">
-        <div className="note" style={{ marginBottom: 4 }}>
-          {talk.room} · {when}
-        </div>
         {status.next && !talk.final_locked && (
           <div style={{ marginBottom: 12, fontSize: 14 }}>{status.next}</div>
+        )}
+
+        <dl className="talk-facts">
+          <div>
+            <dt>Date &amp; time</dt>
+            <dd>{when}</dd>
+          </div>
+          <div>
+            <dt>Location</dt>
+            <dd>
+              {talk.room ?? "Room to be confirmed"} – {eventName}
+            </dd>
+          </div>
+          {minutes > 0 && (
+            <div>
+              <dt>Duration</dt>
+              <dd>{minutes} min</dd>
+            </div>
+          )}
+          <div>
+            <dt>Files uploaded</dt>
+            <dd>{uploaded}</dd>
+          </div>
+        </dl>
+
+        {/* What the room will show (D-140): the version the room plays, and whether it is loaded there yet. */}
+        {talk.room_copy && (
+          <div className="room-copy">
+            <b>
+              {talk.room_copy.loaded
+                ? `Version ${talk.room_copy.version_number} is ready in ${talk.room ?? "your room"}`
+                : `Version ${talk.room_copy.version_number} is approved for ${talk.room ?? "your room"}`}
+            </b>
+            <span className="note">
+              {talk.room_copy.loaded
+                ? "It is loaded on the room's presentation PC — this is exactly what the room will show."
+                : "The DXG team will load it onto the room's presentation PC before your session. This is what the room will show."}
+            </span>
+          </div>
         )}
 
         <div className="grid2" style={{ marginBottom: 12 }}>
@@ -234,33 +276,23 @@ function TalkCard({
           </div>
         </div>
 
-        <h3 style={{ fontSize: 13, marginBottom: 8 }}>Your presentation</h3>
+        <h3 style={{ fontSize: 13, marginBottom: 8 }}>Your files</h3>
 
         {/*
           Once a file is in, the card shows that file — its name and size — and no upload
           box. A new file is taken only when the team asks for one (a requested revision or
           a problem found) or when the last one failed the virus check.
         */}
-        {latest && (
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              gap: 12,
-              alignItems: "center",
-              border: "1px solid var(--line)",
-              borderRadius: 10,
-              padding: "12px 14px",
-              marginBottom: showUpload ? 12 : 0,
-            }}
-          >
-            <span className="mono" style={{ overflowWrap: "anywhere" }}>
-              {latest.file_name}
-            </span>
-            <span className="mono num" style={{ whiteSpace: "nowrap" }}>
-              {formatBytes(Number(latest.size_bytes))}
-            </span>
-          </div>
+        {/*
+          Every upload, newest first, each downloadable once it has passed its checks (D-140,
+          after Preseria's presenter dashboard). The one the room will show is marked.
+        */}
+        {talk.versions.length > 0 && (
+          <ul className="my-files" style={{ marginBottom: showUpload ? 12 : 0 }}>
+            {talk.versions.map((version) => (
+              <FileRow key={version.id} version={version} timezone={timezone} />
+            ))}
+          </ul>
         )}
 
         {talk.final_locked ? (
@@ -366,6 +398,53 @@ function TalkCard({
         )}
       </div>
     </div>
+  );
+}
+
+/** A speaker's word for where one of their uploads stands (D-140). */
+function versionWords(version: PortalVersion): { label: string; tone: string } {
+  if (version.state === "quarantined") return { label: "Not accepted — failed the security check", tone: "c-bad" };
+  if (version.state !== "stored") return { label: "Being checked", tone: "c-info" };
+  switch (version.review_state) {
+    case "approved":
+      return { label: "Approved — the room will show this", tone: "c-ok" };
+    case "changes_requested":
+      return { label: "Changes requested", tone: "c-warn" };
+    case "rejected":
+      return { label: "Not accepted", tone: "c-bad" };
+    case "superseded":
+      return { label: "Earlier version", tone: "" };
+    default:
+      return { label: "Waiting for review", tone: "c-info" };
+  }
+}
+
+function FileRow({ version, timezone }: { version: PortalVersion; timezone: string }) {
+  const words = versionWords(version);
+  const uploadedAt = new Date(version.created_at).toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: timezone,
+  });
+  return (
+    <li className="my-file">
+      <div className="my-file-name">
+        <b className="mono">{version.file_name}</b>
+        <span className="note">
+          Version {version.version_number} · {formatBytes(Number(version.size_bytes))} · uploaded {uploadedAt}
+        </span>
+        <span className={`chip ${words.tone}`}>{words.label}</span>
+      </div>
+      {version.downloadable ? (
+        <a className="btn" href={portalDownloadUrl(version.id)} download>
+          Download
+        </a>
+      ) : (
+        <span className="note">{version.state === "quarantined" ? "Not kept" : "Available after checks"}</span>
+      )}
+    </li>
   );
 }
 

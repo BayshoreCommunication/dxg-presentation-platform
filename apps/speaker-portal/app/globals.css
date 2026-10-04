@@ -521,3 +521,16 @@ th{font-weight:500}
 .btn{height:36px;padding:0 14px;font-size:13px;border-width:1px}
 input,select,textarea{border-width:1px}
 .search{border-width:1px}
+
+/* ── Presenter dashboard card (D-140, after Preseria's) ─────────────────── */
+.talk-facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px 16px;margin:0 0 14px;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--muted)}
+.talk-facts dt{font-size:11px;font-weight:500;letter-spacing:.025em;text-transform:uppercase;color:var(--subtle-foreground)}
+.talk-facts dd{margin:2px 0 0;font-size:14px;color:var(--foreground)}
+.room-copy{display:flex;flex-direction:column;gap:2px;margin:0 0 14px;padding:10px 14px;border-left:3px solid var(--success,#16a34a);border-radius:0 8px 8px 0;background:var(--muted)}
+.my-files{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.my-file{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 14px;border:1px solid var(--line);border-radius:10px}
+.my-file-name{display:flex;flex-direction:column;align-items:flex-start;gap:4px;min-width:0}
+.my-file-name b{overflow-wrap:anywhere}
+.my-file .btn{flex-shrink:0}
+@media (max-width:520px){.my-file{flex-direction:column;align-items:stretch}.my-file .btn{text-align:center}}
+

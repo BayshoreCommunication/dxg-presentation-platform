@@ -11,6 +11,7 @@ import type { FileQuery } from "./services/files.ts";
 import {
   resolveToken,
   portalTalks,
+  portalDownload,
   beginUpload,
   uploadState,
   completeUpload,
@@ -1413,6 +1414,21 @@ app.get("/api/v1/portal/assets/:kind", (req, res) =>
     const asset = await assetOf(tx, session.event_id, kind);
     if (!asset) return res.status(404).json({ code: "events.asset_not_found", message: "Nothing has been uploaded." });
     return sendAsset(res, kind, asset);
+  }),
+);
+
+/** A speaker's own upload, downloaded from their portal (D-140). */
+app.get("/api/v1/portal/file-versions/:versionId/download", (req, res) =>
+  withPortalSession(req, res, async (session, tx) => {
+    const result = await portalDownload(tx, session, String(req.params.versionId));
+    if (!result.ok) return res.status(result.status).json({ code: result.code, message: result.message });
+    res.setHeader("content-type", "application/octet-stream");
+    res.setHeader(
+      "content-disposition",
+      `attachment; filename="${result.filename.replace(/["\\\r\n]/g, "_")}"; filename*=UTF-8''${encodeURIComponent(result.filename)}`,
+    );
+    res.setHeader("cache-control", "private, no-store");
+    return res.send(result.body);
   }),
 );
 
