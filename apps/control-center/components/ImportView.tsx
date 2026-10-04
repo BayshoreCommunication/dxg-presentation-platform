@@ -11,6 +11,7 @@ import {
   AGENDA_MAX_BYTES,
   AGENDA_MAX_LABEL,
   startManualImport,
+  resumeTypedAgenda,
   addImportRow,
   removeImportRow,
   restoreImportRows,
@@ -678,10 +679,17 @@ function RowEditor({
 export function ImportView({
   eventId,
   embedded = false,
+  hasSessions = false,
   onCommitted,
 }: {
   eventId: string;
   embedded?: boolean;
+  /**
+   * The event already has an agenda, so open on it rather than on the empty upload
+   * box. Step 2 of the wizard unmounts on "Save & continue"; without this, "Back"
+   * showed nothing of what had just been typed, though every row was on the event.
+   */
+  hasSessions?: boolean;
   onCommitted?: (result: { created: number; updated: number; unchanged: number }) => void;
 }) {
   const router = useRouter();
@@ -715,6 +723,18 @@ export function ImportView({
   const dragDepth = useRef(0);
   /** Bytes sent of bytes total, while a file is going up. */
   const [sending, setSending] = useState<{ name: string; sent: number; total: number } | null>(null);
+
+  const resumed = useRef(false);
+  useEffect(() => {
+    if (!hasSessions || preview || resumed.current) return;
+    resumed.current = true;
+    void run(async () => {
+      const next = await resumeTypedAgenda(eventId);
+      // Nothing to show after all (every session cancelled): the three ways in stay.
+      if (next.rows.length > 0) apply(next);
+    });
+    // `run` and `apply` are stable for the component's life; the ref makes this fire once.
+  }, [hasSessions, eventId]);
 
   function apply(next: ImportPreview) {
     setPreview(next);

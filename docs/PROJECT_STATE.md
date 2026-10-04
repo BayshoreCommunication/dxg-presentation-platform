@@ -3367,3 +3367,12 @@ stale `/tmp/build.log` from the morning's deploy read as success; build in the f
 `Created` time against `docker inspect <container> .Image` before `up -d`. Worker follows the api image; dispatcher
 untouched (no email rendering changes). All services up, api/worker healthy, both sites 200, `/ops/health` ok with
 worker up on both hosts, the new media route refuses an unsigned request (401), no errors in the logs, disk 78 %.
+
+## 2026-10-04 — The typed agenda comes back on step 2 (wizard "Back" showed the empty upload box)
+Typed rows were saved to the event as they went (D-053) but lived only in the browser: step 2 unmounted on
+"Save & continue" and "Back" opened on nothing. `POST /events/:id/imports/existing` stages a typed agenda from the
+event's sessions (`typedAgendaRows`: venue wall-clock date/times, presenters across co-presenter twins, names split
+for the template's columns), each row tied to its session so a correction updates rather than duplicates; the add-row
+route numbers after the staged rows (`bodyRows`). ImportView opens on it when the wizard says the event has an agenda.
+Walked in the browser (type → continue → back → row shown "On the event"). Invariants: draft-resume +4 (14/14);
+import/agenda/co-presenter/speakers 98/98; unit 313/313. Not deployed.

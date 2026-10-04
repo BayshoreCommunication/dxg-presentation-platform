@@ -231,7 +231,7 @@ export function CreateEventWizard({
 
           {step === 2 && draft && (
             <>
-              <ImportView eventId={draft.id} embedded onCommitted={setImported} />
+              <ImportView eventId={draft.id} embedded hasSessions={hasAgenda} onCommitted={setImported} />
 
             </>
           )}

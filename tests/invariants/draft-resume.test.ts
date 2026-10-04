@@ -110,6 +110,77 @@ after(async () => {
   if (up) await removeTestEvents([NAME]);
 });
 
+/*
+ * A typed agenda lived only in the browser: step 2 of the wizard unmounted on
+ * "Save & continue", and "Back" showed the empty upload box as if nothing had been
+ * typed, though every saved row was on the event (D-053). The screen now opens on the
+ * event's sessions, each row tied to the session it stands for.
+ */
+describe("the typed agenda comes back when step 2 is opened again", () => {
+  let typedId = "";
+  let reopened = "";
+  const ROW = {
+    "session.title": "Typed Talk",
+    "room.name": "Ballroom B",
+    "session.date": "03/15/2027",
+    "session.start": "2:00 PM",
+    "session.end": "3:00 PM",
+    "speaker.email": "typed@example.invalid",
+    "speaker.first_name": "Tove",
+    "speaker.last_name": "Typed",
+  };
+  type Preview = { upload_id: string; manual: boolean; saved_rows: number[]; rows: { row: number; cells: Record<string, string> }[] };
+  const post = (path: string, body?: unknown) =>
+    fetch(`${API}${path}`, { method: "POST", headers: json(admin), ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+  const sessionsOf = async (id: string) =>
+    ((await (await fetch(`${API}/events/${id}/agenda`, { headers: { cookie: admin } })).json()) as { items: { title: string }[] }).items;
+
+  test("a row typed in is on the event straight away", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    typedId = await createDraft(BASICS);
+    const blank = (await (await post(`/events/${typedId}/imports/blank`)).json()) as Preview;
+    const saved = (await (await post(`/imports/${blank.upload_id}/cells`, { row: 2, cells: ROW })).json()) as Preview;
+    assert.deepEqual(saved.saved_rows, [2]);
+    assert.equal((await getDraft(typedId)).sessions, 1);
+  });
+
+  test("opening the typed agenda again shows that row, in the venue's own words", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const response = await post(`/events/${typedId}/imports/existing`);
+    assert.equal(response.status, 201);
+    const preview = (await response.json()) as Preview;
+    reopened = preview.upload_id;
+    assert.equal(preview.manual, true);
+    assert.equal(preview.rows.length, 1);
+    assert.equal(preview.rows[0]!.row, 2);
+    for (const [field, value] of Object.entries(ROW)) {
+      assert.equal(preview.rows[0]!.cells[field], value, field);
+    }
+    assert.deepEqual(preview.saved_rows, [2], "the row is already on the event, and says so");
+  });
+
+  test("a correction on the reopened agenda updates the session rather than adding one", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const response = await post(`/imports/${reopened}/cells`, { row: 2, cells: { "session.title": "Typed Talk, renamed" } });
+    assert.equal(response.status, 200);
+    const sessions = await sessionsOf(typedId);
+    assert.equal(sessions.length, 1, "still one session");
+    assert.equal(sessions[0]!.title, "Typed Talk, renamed");
+  });
+
+  test("a session added on the reopened agenda is numbered after the ones it opened on", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const added = (await (
+      await post(`/imports/${reopened}/rows`, {
+        cells: { ...ROW, "session.title": "Second Talk", "session.start": "4:00 PM", "session.end": "5:00 PM" },
+      })
+    ).json()) as Preview;
+    assert.deepEqual(added.rows.map((row) => row.row), [2, 3]);
+    assert.deepEqual([...added.saved_rows].sort(), [2, 3]);
+    assert.equal((await sessionsOf(typedId)).length, 2);
+  });
+});
+
 describe("an unfinished draft can be picked back up", () => {
   test("it carries back every box step 1 filled in", async (t: TestContext) => {
     if (!up) return t.skip("API not running");

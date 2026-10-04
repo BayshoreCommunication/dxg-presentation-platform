@@ -5,6 +5,7 @@ import type { Actor, DomainError, Result } from "@pmp/domain";
 import { err, ok } from "@pmp/domain";
 import { checkAddress } from "@pmp/email";
 import { verifyAddress } from "@pmp/email";
+import { firstName } from "./firstName.ts";
 import { formatDateRange } from "@pmp/format";
 
 /* ── column mapping (FR-IMP-001) ─────────────────────────────────────────── */
@@ -306,6 +307,84 @@ export function agendaTemplateCsv(eventName?: string): string {
  */
 export function manualAgendaCsv(): string {
   return TEMPLATE_COLUMNS.map((column) => csvCell(column.heading)).join(",") + "\r\n";
+}
+
+/** A stored instant as the venue's own `mm/dd/yyyy` and `h:mm AM/PM` — the cells a typed row holds. */
+function wallClock(at: Date, timeZone: string): { date: string; time: string } {
+  const date = new Intl.DateTimeFormat("en-US", { timeZone, month: "2-digit", day: "2-digit", year: "numeric" }).format(at);
+  const time = new Intl.DateTimeFormat("en-US", { timeZone, hour: "numeric", minute: "2-digit", hour12: true }).format(at);
+  return { date, time };
+}
+
+/**
+ * The event's sessions as the rows a typed agenda would hold, with the session each
+ * row stands for, so the typed-agenda screen can open on what the event already has.
+ *
+ * The screen kept its rows only in the browser: step 2 of the create-event wizard
+ * unmounted on "Save & continue", and coming back showed the empty upload box as if
+ * nothing had been typed — the sessions were on the event all along (D-053), with
+ * nothing to show them. Each row carries its session id, so an edit updates that
+ * session rather than making a second (`persistTypedRow`).
+ *
+ * Presenters are gathered across every presentation in the session — co-presenters
+ * each have their own (D-137) — and stored names are split for the template's first
+ * and last name columns the way `firstName` reads them.
+ */
+export async function typedAgendaRows(
+  tx: pg.PoolClient,
+  eventId: string,
+  timeZone: string,
+): Promise<{ cells: string[]; sessionId: string }[]> {
+  const { rows } = await tx.query<{
+    id: string;
+    title: string;
+    room: string | null;
+    starts_at: Date;
+    ends_at: Date;
+    presenters: { full_name: string; email: string | null }[] | null;
+  }>(
+    `SELECT se.id, se.title, r.name AS room, se.starts_at, se.ends_at,
+            (SELECT json_agg(json_build_object('full_name', p.full_name, 'email', p.email) ORDER BY p.first_seen)
+               FROM (SELECT DISTINCT ON (sp.id) sp.id, sp.full_name, sp.email, s.position AS first_seen
+                       FROM pmp.slots s
+                       JOIN pmp.speaker_assignments sa ON sa.slot_id = s.id AND sa.replaced_by IS NULL
+                       JOIN pmp.speakers sp ON sp.id = sa.speaker_id AND sp.removed_at IS NULL
+                      WHERE s.session_id = se.id
+                      ORDER BY sp.id, s.position) p) AS presenters
+       FROM pmp.sessions se
+       LEFT JOIN pmp.rooms r ON r.id = se.room_id
+      WHERE se.event_id = $1 AND se.session_state <> 'canceled'
+      ORDER BY se.starts_at, r.name NULLS LAST, se.title`,
+    [eventId],
+  );
+  return rows.map((row) => {
+    const start = wallClock(row.starts_at, timeZone);
+    const end = wallClock(row.ends_at, timeZone);
+    const cells: Record<string, string> = {
+      "session.title": row.title,
+      "room.name": row.room ?? "",
+      "session.date": start.date,
+      "session.start": start.time,
+      "session.end": end.time,
+    };
+    (row.presenters ?? []).slice(0, PRESENTER_PREFIXES.length).forEach((presenter, index) => {
+      const prefix = PRESENTER_PREFIXES[index]!;
+      const first = firstName(presenter.full_name);
+      const last = presenter.full_name.slice(first.length).trim();
+      cells[`${prefix}.email`] = presenter.email ?? "";
+      cells[`${prefix}.first_name`] = first;
+      cells[`${prefix}.last_name`] = last;
+    });
+    return {
+      cells: TEMPLATE_COLUMNS.map((column) => (column.field ? (cells[column.field] ?? "") : "")),
+      sessionId: row.id,
+    };
+  });
+}
+
+/** `typedAgendaRows` as the CSV a typed agenda is staged from: the template's headings, then one line per session. */
+export function typedAgendaCsv(rows: { cells: string[] }[]): string {
+  return manualAgendaCsv() + rows.map((row) => row.cells.map(csvCell).join(",") + "\r\n").join("");
 }
 
 /* ── finding the header row ───────────────────────────────────────────────── */

@@ -883,6 +883,10 @@ export const uploadImport = (
 export const startManualImport = (eventId: string) =>
   request<ImportPreview>(`/events/${eventId}/imports/blank`, { method: "POST" });
 
+/** The typed-agenda screen opened on the sessions the event already has, each row tied to its session. */
+export const resumeTypedAgenda = (eventId: string) =>
+  request<ImportPreview>(`/events/${eventId}/imports/existing`, { method: "POST" });
+
 /**
  * Appends a row, with its values. Manual agendas only.
  *

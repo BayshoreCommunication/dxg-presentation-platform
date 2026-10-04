@@ -67,6 +67,8 @@ import {
   saveTypedRow,
   deleteTypedSession,
   manualAgendaCsv,
+  typedAgendaRows,
+  typedAgendaCsv,
   autoMap,
   agendaTemplateCsv,
   IMPORT_FIELDS,
@@ -1927,6 +1929,8 @@ const importCache = new Map<
     manual?: boolean;
     /** How many rows the operator has typed in. */
     blankRows?: number;
+    /** Rows the staged file itself carries — a typed agenda opened on the event's sessions has some. */
+    bodyRows?: number;
     /** Row numbers taken out of the import; skipped rather than renumbered. */
     excluded?: number[];
     /**
@@ -2084,6 +2088,35 @@ app.post("/api/v1/events/:eventId/imports/blank", async (req, res) => {
 });
 
 /**
+ * A typed agenda opened on what the event already has: one row per session, each
+ * tied to its session so a correction updates it (D-053) rather than adding a twin.
+ * This is how step 2 of the wizard shows the agenda again after "Save & continue".
+ */
+app.post("/api/v1/events/:eventId/imports/existing", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+
+  const eventId = String(req.params.eventId);
+  const uploadId = randomUUID();
+  const fileName = "manual-entry.csv";
+  const result = await withScope(scopeFor(req, eventId), async (tx) => {
+    const { rows: eventRows } = await tx.query<{ timezone: string }>(`SELECT timezone FROM pmp.events WHERE id = $1`, [eventId]);
+    const rows = await typedAgendaRows(tx, eventId, eventRows[0]?.timezone ?? "UTC");
+    const body = Buffer.from(typedAgendaCsv(rows), "utf8");
+    // Data rows are numbered from 2: the headings are row 1.
+    const sessions = Object.fromEntries(rows.map((row, index) => [index + 2, row.sessionId]));
+    importCache.set(uploadId, { eventId, fileName, body, manual: true, blankRows: 0, bodyRows: rows.length, sessions });
+    return buildPreview(tx, { eventId, fileName, body, actorId: actor.id, s3Key: `imports/${uploadId}`, blankRows: 0 });
+  });
+  if (!result.ok) {
+    importCache.delete(uploadId);
+    return res.status(statusFor(result.error)).json(result.error);
+  }
+  importCache.set(uploadId, { ...importCache.get(uploadId)!, effectiveMapping: [...result.value.mapping] });
+  return res.status(201).json({ ...result.value, upload_id: uploadId, manual: true, saved_rows: savedRows(uploadId) });
+});
+
+/**
  * Runs the cached file back through validation with whatever is currently known.
  *
  * Also remembers the mapping the preview settled on. The commit writes the import
@@ -2218,10 +2251,11 @@ app.post("/api/v1/imports/:uploadId/rows", async (req, res) => {
 
   const blankRows = (cached.blankRows ?? 0) + 1;
   /*
-   * A typed agenda carries no rows from a file, so its data rows are numbered from 2
-   * — the headings are row 1 — and the row just appended is the last of them.
+   * Data rows are numbered from 2 — the headings are row 1 — and the row just
+   * appended is the last of them: after any rows the staged file carries (a typed
+   * agenda opened on the event's sessions has some) and the rows typed before it.
    */
-  const addedRow = blankRows + 1;
+  const addedRow = 1 + (cached.bodyRows ?? 0) + blankRows;
   const overrides: RowOverrides = { ...cached.overrides };
   if (Object.keys(cells).length > 0) overrides[addedRow] = cells;
   importCache.set(uploadId, { ...cached, blankRows, overrides });
