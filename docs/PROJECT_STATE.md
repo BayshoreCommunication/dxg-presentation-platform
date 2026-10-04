@@ -3358,3 +3358,12 @@ status line, driven by the same status as the chip and completed by the room cop
 from the browser path (every talk with a file logged a hydration mismatch). Invariants: schedule-import fixtures moved
 inside their event; 111/111 across import, agenda, drafts, dates, configuration, reminders, files, review. Unit 313/313.
 Not deployed.
+
+## 2026-10-04 — Deployed 2fa20d0 to production (D-142, D-143)
+Backup `backups/pmp-2026-10-04T094643Z.dump` first; archive extracted with sudo; the only untracked file on the server
+is `deploy/server/.env` (kept). No migrations pending (migrate: up to date). api, staff and portal rebuilt — **one at a
+time**: a `nohup sh -c "set -o pipefail …"` background build silently never ran (dash rejects `pipefail`) and the
+stale `/tmp/build.log` from the morning's deploy read as success; build in the foreground and check the image's
+`Created` time against `docker inspect <container> .Image` before `up -d`. Worker follows the api image; dispatcher
+untouched (no email rendering changes). All services up, api/worker healthy, both sites 200, `/ops/health` ok with
+worker up on both hosts, the new media route refuses an unsigned request (401), no errors in the logs, disk 78 %.
