@@ -45,13 +45,15 @@ minutes without a heartbeat.
 
 | Item | Monthly |
 |---|---|
-| Server: Lightsail 8 GB / 2 vCPU (or EC2 t3.large) — ClamAV alone needs ~1.5 GB, LibreOffice and two Next servers the rest | ~$44 (Lightsail) |
+| Server: Lightsail 4 GB / 2 vCPU / 80 GB SSD — what `pmp-prod` is. ClamAV takes ~1.5 GB, LibreOffice and the two Next servers the rest; ~1.6 GB free in steady state | $24 |
 | S3: presentations + PDFs + archives + 30 days of backups, a few GB–tens of GB | ~$1–5 |
 | SES: $0.10 per 1,000 emails | <$1 |
 | Data transfer out beyond the Lightsail allowance | usually $0 |
-| **Total** | **≈ $50 / month** |
+| **Total** | **≈ $30 / month** |
 
-4 GB works for a pilot if ClamAV's memory is watched; below that, ClamAV will be killed.
+4 GB is enough for DXG's events as long as images are built **one at a time** (§6) — three Next/npm builds at
+once leave nothing for ClamAV. Below 4 GB, ClamAV is killed. The 8 GB plan ($44) is the step up if that ever
+binds; nothing else in the stack needs it.
 
 ## 3. One-time AWS setup (a person runs these; nothing is created by the code)
 
@@ -76,7 +78,7 @@ Use the `rfpilot` AWS profile (the account where SES for av-rfpilot.com lives), 
    (after the server is up; the API confirms the subscription and verifies every message's
    signature). Put the topic ARN in `SNS_TOPIC_ARNS`. Bounces then suppress the address for good
    (D-097).
-4. **Server** — Lightsail (or EC2) Ubuntu 24.04, 8 GB, static IP, firewall open to 22 (your IP only),
+4. **Server** — Lightsail (or EC2) Ubuntu 24.04, 4 GB / 80 GB (§2), static IP, firewall open to 22 (your IP only),
    80 and 443. Install Docker Engine + the compose plugin.
 5. **DNS** — `A` records for `pmp.av-rfpilot.com` and `speakers.av-rfpilot.com` → the static IP
    (`AAAA` too if the server has IPv6). Caddy cannot obtain certificates until these resolve.
