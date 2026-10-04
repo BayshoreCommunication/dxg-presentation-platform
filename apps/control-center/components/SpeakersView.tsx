@@ -330,7 +330,14 @@ export function SpeakersView({
             <table>
               <thead>
                 <tr>
-                  <th>Speaker</th>
+                  {/*
+                    The speaker column is the one that gives way when the table is
+                    squeezed, and it gave way completely: with four buttons in the
+                    action cell it was left so narrow that an address wrapped one
+                    letter per line. A floor keeps a name and its address readable;
+                    the card scrolls sideways beyond that.
+                  */}
+                  <th style={{ minWidth: 220 }}>Speaker</th>
                   {/* "Sessions" (D-136): a speaker is added to a session (D-135). */}
                   <th>Sessions</th>
                   <th>Status</th>
@@ -345,7 +352,7 @@ export function SpeakersView({
                     </InfoTip>
                   </th>
                   <th>Upload link</th>
-                  <th style={{ textAlign: "right" }}>Action</th>
+                  <th style={{ textAlign: "right", width: 1 }}>Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -371,7 +378,7 @@ export function SpeakersView({
                         </span>
                       </td>
                       <td className="num">{row.talks}</td>
-                      <td>
+                      <td style={{ whiteSpace: "nowrap" }}>
                         <Chip status={status.status} label={status.label} />
                       </td>
                       <td>
@@ -394,15 +401,22 @@ export function SpeakersView({
                           ))}
                         </select>
                       </td>
-                      <td>
+                      <td style={{ whiteSpace: "nowrap" }}>
                         <EmailStatus email={row.last_email} />
                       </td>
-                      <td>
+                      {/*
+                        The actions stack. Side by side they were the widest thing in
+                        the row — wider than the card at the widths the table is actually
+                        shown at — and the last of them was cut off at the edge. One
+                        under another they take a column the width of the longest label,
+                        every one visible, and the row grows down instead of out.
+                      */}
+                      <td style={{ width: 1, whiteSpace: "nowrap" }}>
                         <span
                           style={{
                             display: "flex",
-                            flexWrap: "nowrap",
-                            justifyContent: "flex-end",
+                            flexDirection: "column",
+                            alignItems: "stretch",
                             gap: 6,
                           }}
                         >
@@ -648,7 +662,12 @@ function AddSpeakerDialog({
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [organization, setOrganization] = useState("");
-  const [slotId, setSlotId] = useState("");
+  /*
+   * One session on the agenda is not a choice, so it is chosen: the dialog opened
+   * with "Choose a session…" over a list of exactly one, and the only thing to do
+   * was pick it. With two or more the pick is real and stays with the operator.
+   */
+  const [slotId, setSlotId] = useState(talks.length === 1 ? talks[0]!.slot_id : "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -855,9 +874,11 @@ const ICON_BUTTON: React.CSSProperties = {
   padding: "0 10px",
   display: "inline-flex",
   alignItems: "center",
-  justifyContent: "center",
+  // Stacked in a column, the labels line up on the left like a menu.
+  justifyContent: "flex-start",
   gap: 6,
   whiteSpace: "nowrap",
+  width: "100%",
 };
 
 function EmailStatus({ email }: { email: SpeakerRow["last_email"] }) {
