@@ -6,7 +6,7 @@ import { listTalks } from "./services/talks.ts";
 import { ASSET_KINDS, putAsset, removeAsset, assetOf, readAsset } from "./services/brandAssets.ts";
 import type { AssetKind, AssetRecord } from "./services/brandAssets.ts";
 import { eventSummary, riskList, reviewQueue, syncFleet } from "./services/queries.ts";
-import { eventFiles, downloadVersion, bulkDownload } from "./services/files.ts";
+import { eventFiles, downloadVersion, bulkDownload, versionMedia, versionMediaEntry } from "./services/files.ts";
 import type { FileQuery } from "./services/files.ts";
 import {
   resolveToken,
@@ -1693,6 +1693,47 @@ app.get("/api/v1/file-versions/:versionId/preview", async (req, res) => {
   res.setHeader("content-type", "application/pdf");
   res.setHeader("content-disposition", "inline");
   res.setHeader("cache-control", "private, max-age=300");
+  return res.send(body);
+});
+
+/**
+ * The videos and sounds in a version, by slide, and each one's bytes. The preview is a
+ * PDF, which cannot carry them — a slide with a video showed its poster frame, or
+ * nothing — so the viewer plays them from the stored file beside the slide.
+ */
+app.get("/api/v1/file-versions/:versionId/media", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  const result = await withScope(scopeFor(req), (tx) => versionMedia(tx, String(req.params.versionId)));
+  if (!result.ok) return res.status(result.error.code === "file.not_downloadable" ? 409 : statusFor(result.error)).json(result.error);
+  res.setHeader("cache-control", "private, max-age=300");
+  return res.json(result.value);
+});
+
+app.get("/api/v1/file-versions/:versionId/media/:name", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  const result = await withScope(scopeFor(req), (tx) =>
+    versionMediaEntry(tx, String(req.params.versionId), String(req.params.name)),
+  );
+  if (!result.ok) return res.status(result.error.code === "file.not_downloadable" ? 409 : statusFor(result.error)).json(result.error);
+  const { body, content_type } = result.value;
+  res.setHeader("content-type", content_type);
+  res.setHeader("accept-ranges", "bytes");
+  res.setHeader("cache-control", "private, max-age=300");
+  // A <video> seeks by asking for byte ranges; without 206 answers the scrubber is dead.
+  const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range ?? "");
+  if (range && (range[1] || range[2])) {
+    const start = range[1] ? Number(range[1]) : Math.max(0, body.length - Number(range[2]));
+    const end = range[1] && range[2] ? Math.min(Number(range[2]), body.length - 1) : body.length - 1;
+    if (start > end || start >= body.length) {
+      res.setHeader("content-range", `bytes */${body.length}`);
+      return res.status(416).end();
+    }
+    res.status(206);
+    res.setHeader("content-range", `bytes ${start}-${end}/${body.length}`);
+    return res.send(body.subarray(start, end + 1));
+  }
   return res.send(body);
 });
 

@@ -260,6 +260,7 @@ export function PresentationDetailView({
               <SlideViewer
                 key={latest.file_version_id}
                 url={previewUrl(latest.file_version_id)}
+                versionId={latest.file_version_id}
                 title={`${initial.talk.title}, version ${latest.version_number}`}
               />
             </div>

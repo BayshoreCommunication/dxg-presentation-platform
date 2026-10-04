@@ -206,6 +206,22 @@ const API_BASE_URL = BROWSER_BASE;
 /** The version's slide preview as a PDF, for an <iframe> (D-074). */
 export const previewUrl = (versionId: string) => `${API_BASE_URL}/file-versions/${versionId}/preview`;
 
+/** A video or sound embedded in a deck, and the slide it plays on (1-based, preview page order). */
+export type SlideMedia = {
+  slide: number;
+  name: string;
+  kind: "video" | "audio";
+  content_type: string;
+  size: number;
+};
+
+/** The media a version carries. The preview PDF cannot hold them; the viewer plays them from here. */
+export const versionMedia = (versionId: string) =>
+  request<{ items: SlideMedia[] }>(`/file-versions/${versionId}/media`).then((result) => result.items);
+
+export const mediaUrl = (versionId: string, name: string) =>
+  `${API_BASE_URL}/file-versions/${versionId}/media/${encodeURIComponent(name)}`;
+
 /** Queue (or retry) a version's slide preview. */
 export const requestPreview = (versionId: string) =>
   request<{ queued: number }>(`/file-versions/${versionId}/preview`, { method: "POST" });

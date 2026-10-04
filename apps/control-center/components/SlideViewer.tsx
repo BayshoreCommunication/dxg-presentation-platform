@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
+import { mediaUrl, versionMedia, type SlideMedia } from "@/lib/api";
 
 /**
  * A slide deck laid out the way presenters know it (D-075): numbered thumbnails down
@@ -13,8 +14,29 @@ import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
  * as a 5-slide one. Arrow keys, Page Up/Down, Home and End move between slides while
  * the viewer has focus.
  */
-export function SlideViewer({ url, title }: { url: string; title: string }) {
+export function SlideViewer({ url, title, versionId }: { url: string; title: string; versionId?: string }) {
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
+  /*
+   * The deck's embedded videos and sounds, by slide. The PDF the slides are drawn
+   * from cannot carry them, so a slide with a video showed its poster frame — or a
+   * blank where the video sat — and the upload looked as if it had lost it. They are
+   * played from the stored file instead, under the slide they belong to.
+   */
+  const [media, setMedia] = useState<SlideMedia[]>([]);
+  useEffect(() => {
+    setMedia([]);
+    if (!versionId) return;
+    let cancelled = false;
+    versionMedia(versionId)
+      .then((items) => {
+        if (!cancelled) setMedia(items);
+      })
+      // No list is only no players: the slides still show.
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [versionId]);
   const [error, setError] = useState<string | null>(null);
   const [current, setCurrent] = useState(1);
   const [expanded, setExpanded] = useState(false);
@@ -197,7 +219,11 @@ export function SlideViewer({ url, title }: { url: string; title: string }) {
             padding: 18,
           }}
         >
-          {doc ? <MainSlide doc={doc} page={current} /> : <span className="note">Loading slides…</span>}
+          {doc ? (
+            <MainSlide doc={doc} page={current} media={versionId ? media.filter((item) => item.slide === current) : []} versionId={versionId} />
+          ) : (
+            <span className="note">Loading slides…</span>
+          )}
         </div>
       </div>
     </div>
@@ -322,7 +348,18 @@ function Thumbnail({
   );
 }
 
-function MainSlide({ doc, page }: { doc: PDFDocumentProxy; page: number }) {
+function MainSlide({
+  doc,
+  page,
+  media = [],
+  versionId,
+}: {
+  doc: PDFDocumentProxy;
+  page: number;
+  /** What plays on this slide, if anything. */
+  media?: SlideMedia[];
+  versionId?: string;
+}) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const box = useRef<HTMLDivElement>(null);
   const render = useRef<{ task: RenderTask | null }>({ task: null });
@@ -339,6 +376,7 @@ function MainSlide({ doc, page }: { doc: PDFDocumentProxy; page: number }) {
     return () => observer.disconnect();
   }, []);
 
+  const hasMedia = media.length > 0 && Boolean(versionId);
   useEffect(() => {
     if (!canvas.current || width === 0) return;
     void (async () => {
@@ -349,11 +387,63 @@ function MainSlide({ doc, page }: { doc: PDFDocumentProxy; page: number }) {
       const fitted = Math.min(width, (height * base.width) / base.height);
       if (canvas.current) await draw(doc, page, canvas.current, fitted, render.current);
     })();
-  }, [doc, page, width]);
+  }, [doc, page, width, hasMedia]);
 
   return (
-    <div ref={box} style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <canvas ref={canvas} style={{ display: "block", boxShadow: "0 2px 10px rgba(20, 24, 27, .18)", background: "white" }} />
+    <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", gap: 10, minHeight: 0 }}>
+      <div ref={box} style={{ flex: 1, minHeight: 0, width: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <canvas ref={canvas} style={{ display: "block", boxShadow: "0 2px 10px rgba(20, 24, 27, .18)", background: "white" }} />
+      </div>
+      {hasMedia && versionId && <SlideMediaStrip media={media} versionId={versionId} />}
+    </div>
+  );
+}
+
+/**
+ * The players for one slide's media, under its still. The still is what the PDF made
+ * of the slide — the video's poster frame at best — so the strip says what it is:
+ * the video itself, as uploaded, and where on the slide it sits is in the still.
+ */
+function SlideMediaStrip({ media, versionId }: { media: SlideMedia[]; versionId: string }) {
+  const [unplayable, setUnplayable] = useState<Set<string>>(new Set());
+  const videos = media.filter((item) => item.kind === "video");
+  const sounds = media.filter((item) => item.kind === "audio");
+  return (
+    <div style={{ flexShrink: 0, display: "flex", flexDirection: "column", gap: 6, maxHeight: "45%" }}>
+      <div className="note" style={{ fontSize: 12 }}>
+        {videos.length > 0 ? `${videos.length === 1 ? "Video" : `${videos.length} videos`} on this slide` : "Sound on this slide"}
+        {videos.length > 0 && sounds.length > 0 ? ` and ${sounds.length === 1 ? "a sound" : `${sounds.length} sounds`}` : ""} — plays
+        here as uploaded; the slide above is a still.
+      </div>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-start", minHeight: 0 }}>
+        {media.map((item) =>
+          unplayable.has(item.name) ? (
+            <span key={item.name} className="note" style={{ fontSize: 12 }}>
+              {item.name}: this format ({item.content_type.split("/")[1]}) can't be played in a browser. It plays in PowerPoint
+              in the room.
+            </span>
+          ) : item.kind === "video" ? (
+            <video
+              key={item.name}
+              controls
+              preload="metadata"
+              src={mediaUrl(versionId, item.name)}
+              aria-label={`Video ${item.name}`}
+              style={{ maxHeight: 180, maxWidth: "100%", borderRadius: 6, background: "black" }}
+              onError={() => setUnplayable((now) => new Set(now).add(item.name))}
+            />
+          ) : (
+            <audio
+              key={item.name}
+              controls
+              preload="metadata"
+              src={mediaUrl(versionId, item.name)}
+              aria-label={`Sound ${item.name}`}
+              onError={() => setUnplayable((now) => new Set(now).add(item.name))}
+            />
+          ),
+        )}
+      </div>
     </div>
   );
 }

@@ -52,9 +52,15 @@ export function SlidePreview({ item }: { item: QueueItem }) {
     return (
       <div>
         {/* Thumbnails on the left, the slide large on the right (D-075). */}
-        <SlideViewer key={item.file_version_id} url={src} title={`${item.title}, version ${item.version_number}`} />
+        <SlideViewer
+          key={item.file_version_id}
+          url={src}
+          versionId={item.file_version_id}
+          title={`${item.title}, version ${item.version_number}`}
+        />
         <div className="note" style={{ marginTop: 4 }}>
-          Rendered from the uploaded file — fonts and video can differ slightly from PowerPoint.{" "}
+          Rendered from the uploaded file — fonts can differ slightly from PowerPoint; a slide&rsquo;s video plays
+          under it.{" "}
           <a href={src} target="_blank" rel="noreferrer">
             Open as PDF ↗
           </a>

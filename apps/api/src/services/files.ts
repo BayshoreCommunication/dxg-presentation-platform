@@ -1,6 +1,6 @@
 import type pg from "pg";
 import { appendAudit } from "@pmp/db";
-import { writeZip } from "@pmp/files";
+import { slideMedia, readSlideMedia, type SlideMedia, writeZip } from "@pmp/files";
 import { storage } from "./ingest.ts";
 
 /**
@@ -337,6 +337,51 @@ export async function downloadVersion(
     detail: { filename: version.filename, bytes: body.length },
   });
   return { ok: true, value: { filename: version.filename, body } };
+}
+
+const notDownloadable = (version: Downloadable): Result<never> => ({
+  ok: false,
+  error: {
+    code: "file.not_downloadable",
+    message:
+      version.processing_state === "quarantined"
+        ? "This file failed the virus check, so it is held back and can't be downloaded. Ask the speaker for a clean copy."
+        : "This file is still being checked. Try again in a minute.",
+  },
+});
+
+const NOT_FOUND: Result<never> = {
+  ok: false,
+  error: { code: "file_version.not_found", message: "This file no longer exists — it may have been removed. Refresh the page." },
+};
+
+/**
+ * The videos and sounds embedded in one version, by slide (`slideMedia`). Read from
+ * the stored file on each request: a deck is a few tens of MB and the list is a few
+ * relationship parts, so this is cheaper than a column to keep in step.
+ */
+export async function versionMedia(tx: pg.PoolClient, versionId: string): Promise<Result<{ items: SlideMedia[] }>> {
+  const [version] = await loadVersions(tx, [versionId]);
+  if (!version) return NOT_FOUND;
+  if (!canDownload(version.processing_state)) return notDownloadable(version);
+  const body = await storage.read(version.s3_key);
+  return { ok: true, value: { items: slideMedia(body) } };
+}
+
+/** One embedded media file's bytes, for the viewer to play. Not audited: it is a part of a file already on screen. */
+export async function versionMediaEntry(
+  tx: pg.PoolClient,
+  versionId: string,
+  name: string,
+): Promise<Result<{ body: Buffer; content_type: string }>> {
+  const [version] = await loadVersions(tx, [versionId]);
+  if (!version) return NOT_FOUND;
+  if (!canDownload(version.processing_state)) return notDownloadable(version);
+  const entry = readSlideMedia(await storage.read(version.s3_key), name);
+  if (!entry) {
+    return { ok: false, error: { code: "file_version.media_not_found", message: "That video isn't in this file." } };
+  }
+  return { ok: true, value: entry };
 }
 
 /** Enough for "the files for this room"; a whole-event bundle is what the archive is for. */
