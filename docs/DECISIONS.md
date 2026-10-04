@@ -2566,3 +2566,16 @@ assigned to this speaker, on this event — a co-presenter's file is "not found"
 `file.downloaded` with `via: speaker_portal`. Not built from Preseria's page: the customisable welcome message, the
 consent message, editable titles, per-presentation file limits and the tutorial. Tests: co-presenter-uploads.test.ts
 (+3: talk payload, byte-for-byte download, co-presenter / anonymous refused).
+
+## D-141 (2026-10-04): A speaker's link works through their presentation day — Status: ACCEPTED (Travis's call)
+Speakers should be able to come back with their upload link to manage and download their files, including on the
+day they present. Links lasted 30 days from sending, so an invitation sent six weeks ahead had died by then. **Every
+speaker link** — emailed invitation and reminder, "changes needed" notice, Copy link — now lasts until 30 days from
+now or the end of the seventh day after the event ends (event's clock), whichever is later (`SPEAKER_LINK_EXPIRES_SQL`
+in portal.ts). **Migration 030** extends links still valid today the same way (expired or withdrawn ones stay dead;
+access codes untouched) and adds the new sentence to invitation and reminder templates still word for word the old
+default (edited or formatted ones are left alone). **Wording:** the default invitation says "Keep this email. The
+same link works right up to and on the day of your presentation: come back any time to see your files, replace one
+with a new version, or download what you uploaded."; the reminder says the same in one line; the email's button reads
+"Upload and manage your files"; the speaker dashboard repeats it under the speaker's name. Each sign-in still lasts
+at most 24 hours (8 idle); the link signs them in again. Tests: email-look.test.ts (+3).

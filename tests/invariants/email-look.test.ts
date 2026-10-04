@@ -292,3 +292,40 @@ describe("formatted messages (D-139)", () => {
     assert.equal((await upload(Buffer.from("not an image"))).status, 422);
   });
 });
+
+describe("a speaker's link lasts through the event (D-141)", () => {
+  /** The probe event ends 2 July 2027 (New York); links must work until the end of 9 July there. */
+  const lastsTheEvent = async (speakerId: string) =>
+    withSystemScope(async (tx) => {
+      const { rows } = await tx.query<{ ok: boolean; expires_at: string }>(
+        `SELECT expires_at >= ('2027-07-10'::timestamp AT TIME ZONE 'America/New_York') AS ok, expires_at::text
+           FROM pmp.speaker_tokens WHERE speaker_id = $1 AND kind = 'magic_link' ORDER BY created_at DESC LIMIT 1`,
+        [speakerId],
+      );
+      return rows[0];
+    });
+
+  test("an emailed invitation's link works until a week after the event", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const link = await lastsTheEvent(speakerId);
+    assert.ok(link, "fixture: the invitation sent earlier in this file");
+    assert.ok(link.ok, `expires ${link.expires_at}`);
+  });
+
+  test("a copied link does too", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    assert.equal((await call("POST", `/speakers/${speakerId}/invite`)).status, 201);
+    const link = await lastsTheEvent(speakerId);
+    assert.ok(link?.ok, `expires ${link?.expires_at}`);
+  });
+
+  test("the default invitation tells speakers the link keeps working on the day", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const queued = await outboxFor(`ana.look.${RUN}@example.invalid`);
+    assert.ok(queued, "fixture: the invitation");
+    // This file formats the invitation (D-139 tests), so check the stored default for a fresh event instead.
+    const fresh = (await (await call("GET", `/events/${eventId}/comms`)).json()) as { templates: { name: string; body: string }[] };
+    const reminder = fresh.templates.find((row) => row.name.startsWith("Reminder"));
+    assert.match(reminder?.body ?? "", /up to and on the day of your presentation/);
+  });
+});

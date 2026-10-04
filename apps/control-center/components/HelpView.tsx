@@ -90,7 +90,7 @@ export const GUIDES: Section[] = [
         title: "Change an email template",
         who: "Presentation manager or above",
         steps: [
-          "Communications → How your emails look: upload the email banner (PNG or JPG, exactly 1200 px wide and 200–600 px high), and set the sender name and reply-to address. Every speaker email opens with the banner and an Upload your presentation button.",
+          "Communications → How your emails look: upload the email banner (PNG or JPG, exactly 1200 px wide and 200–600 px high), and set the sender name and reply-to address. Every speaker email opens with the banner and an “Upload and manage your files” button. Speakers can use their link to replace and download their files up to and on their presentation day.",
           "Choose the template → Edit template.",
           "Write the message. The toolbar formats it like a word processor — font, size, bold, colour, lists, alignment, links and images. Use the Insert buttons (Speaker's first name, Session date, Venue, Upload link, Deadline…) for details that differ per speaker; they go where the cursor is.",
           "Read the preview underneath — it is the email exactly as a real speaker would get it.",

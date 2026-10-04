@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type pg from "pg";
 import type { Actor } from "@pmp/domain";
-import { hashToken } from "./portal.ts";
+import { hashToken, SPEAKER_LINK_EXPIRES_SQL } from "./portal.ts";
 import { lookFor } from "./emailLook.ts";
 
 const PORTAL_BASE = process.env.PORTAL_BASE ?? "http://localhost:3001";
@@ -74,7 +74,7 @@ export async function noticeToSpeakers(
     const token = randomUUID();
     await tx.query(
       `INSERT INTO pmp.speaker_tokens (speaker_id, event_id, client_id, kind, token_hash, expires_at)
-       VALUES ($1, $2, $3, 'magic_link', $4, now() + interval '30 days')`,
+       VALUES ($1, $2, $3, 'magic_link', $4, ${SPEAKER_LINK_EXPIRES_SQL})`,
       [speaker.id, talk.event_id, talk.client_id, hashToken(token)],
     );
 

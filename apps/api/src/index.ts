@@ -12,6 +12,7 @@ import {
   resolveToken,
   portalTalks,
   portalDownload,
+  SPEAKER_LINK_EXPIRES_SQL,
   beginUpload,
   uploadState,
   completeUpload,
@@ -1362,7 +1363,7 @@ app.post("/api/v1/speakers/:speakerId/invite", async (req, res) => {
     if (!rows[0]) return null;
     await tx.query(
       `INSERT INTO pmp.speaker_tokens (speaker_id, event_id, client_id, kind, token_hash, expires_at)
-       VALUES ($1, $2, $3, 'magic_link', $4, now() + interval '30 days')`,
+       VALUES ($1, $2, $3, 'magic_link', $4, ${SPEAKER_LINK_EXPIRES_SQL})`,
       [speakerId, rows[0].event_id, rows[0].client_id, hashToken(token)],
     );
     return rows[0].event_id;

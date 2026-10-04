@@ -7,6 +7,7 @@ import { atLeast, err, hasAnyRole, ok } from "@pmp/domain";
 import { EMAIL_STATUS, formatDateRange, formatDeadline, formatSessionTime, wordsFor } from "@pmp/format";
 import { firstName } from "./firstName.ts";
 import { lookFor } from "./emailLook.ts";
+import { SPEAKER_LINK_EXPIRES_SQL } from "./portal.ts";
 import { checkAddress, fillHtml, htmlToText, MESSAGE_MAX_CHARS, sanitizeEmailHtml } from "@pmp/email";
 
 const hashToken = (token: string): Buffer => createHash("sha256").update(token).digest();
@@ -48,6 +49,8 @@ export const DEFAULT_TEMPLATES = [
       "",
       "{{upload_link}}",
       "",
+      "Keep this email. The same link works right up to and on the day of your presentation: come back any time to see your files, replace one with a new version, or download what you uploaded.",
+      "",
       "Requirements: 16:9 widescreen, PowerPoint (.pptx) preferred, PDF accepted. Embed all fonts and use H.264 .mp4 for video.",
       "",
       "The DXG presentation team",
@@ -66,6 +69,8 @@ export const DEFAULT_TEMPLATES = [
       "The deadline is {{deadline}}.",
       "",
       "{{upload_link}}",
+      "",
+      "The same link lets you manage your files and download them, up to and on the day of your presentation.",
       "",
       "If you've already sent it another way, reply to this email and we'll check.",
       "",
@@ -287,7 +292,7 @@ export async function sendTestEmail(
       subject: `[Test] ${rendered.subject}`,
       body: rendered.body,
       ...(checked.value.body_html ? { html_body: fillHtml(checked.value.body_html, values) } : {}),
-      look: await lookFor(tx, eventId, { label: "Upload your presentation", url: signIn }),
+      look: await lookFor(tx, eventId, { label: "Upload and manage your files", url: signIn }),
     }),
   ]);
   await appendAudit(tx, {
@@ -554,7 +559,7 @@ async function queueInvitation(tx: pg.PoolClient, input: QueueInput): Promise<st
   const token = randomUUID();
   await tx.query(
     `INSERT INTO pmp.speaker_tokens (speaker_id, event_id, client_id, kind, token_hash, expires_at)
-     VALUES ($1,$2,$3,'magic_link',$4, now() + interval '30 days')`,
+     VALUES ($1,$2,$3,'magic_link',$4, ${SPEAKER_LINK_EXPIRES_SQL})`,
     [input.recipient.speaker_id, input.eventId, input.event.client_id, hashToken(token)],
   );
 
@@ -600,7 +605,7 @@ async function queueInvitation(tx: pg.PoolClient, input: QueueInput): Promise<st
       body: rendered.body,
       ...(htmlBody ? { html_body: htmlBody } : {}),
       // Banner, button to their own upload page, sender name and reply-to (D-138).
-      look: await lookFor(tx, input.eventId, { label: "Upload your presentation", url: uploadLink }),
+      look: await lookFor(tx, input.eventId, { label: "Upload and manage your files", url: uploadLink }),
     }),
   ]);
   return comm[0]!.id;

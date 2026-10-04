@@ -10,6 +10,16 @@ export { storage };
 /** Speaker tokens are stored hashed and recipient-bound (BUILD_SPEC §13). */
 export const hashToken = (token: string): Buffer => createHash("sha256").update(token).digest();
 
+/**
+ * When a speaker's personal link stops working (D-141): 30 days from now, or the end of
+ * the seventh day after the event, whichever is later — on the event's clock. Speakers come
+ * back on their presentation day to check and download their files, and a link sent six
+ * weeks ahead used to have expired by then. SQL for `expires_at`; `$2` is the event's id
+ * in every statement that uses it.
+ */
+export const SPEAKER_LINK_EXPIRES_SQL = `GREATEST(now() + interval '30 days',
+  (SELECT (e.ends_on + 8)::timestamp AT TIME ZONE e.timezone FROM pmp.events e WHERE e.id = $2))`;
+
 export type PortalSession = {
   speaker_id: string;
   speaker_name: string;

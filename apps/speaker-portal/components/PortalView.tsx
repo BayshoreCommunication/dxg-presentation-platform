@@ -66,6 +66,11 @@ export function PortalView({
           <span className="note">
             Speaker Upload · {session.speaker.name}
           </span>
+          {/* D-141: the same link keeps working through the event, so speakers can come back on the day. */}
+          <span className="note" style={{ maxWidth: "60ch" }}>
+            Come back with the same link any time, up to and on the day of your presentation, to see your files,
+            replace one with a new version, or download what you uploaded.
+          </span>
         </div>
         <button
           className="btn"

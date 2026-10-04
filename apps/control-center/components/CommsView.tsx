@@ -778,7 +778,7 @@ function EmailPreview({
             <div className="mail-head">{eventName}</div>
           )}
           <div className="mail-cta">
-            <span>Upload your presentation</span>
+            <span>Upload and manage your files</span>
           </div>
           {html ? (
             // The staff member's own editor output, or a template the server already cleaned (D-139).

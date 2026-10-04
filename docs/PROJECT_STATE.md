@@ -3333,3 +3333,9 @@ Ballroom A), downloaded in the browser, checked at phone width. Invariants 6/6 i
 Backup `backups/pmp-2026-10-04T050820Z.dump`; extracted with sudo, no stray files; api and portal rebuilt (worker
 follows the api image); no migrations pending; api/worker healthy, health ok, both sites 200, the new speaker download
 refuses an unsigned request (401), uptime alarms OK, no errors in the logs. **Travis's nine-item list is complete.**
+
+## 2026-10-04 — Speaker links last through the event (D-141)
+Links last until a week after the event (or 30 days, if later); migration 030 extends live links and updates
+unedited default templates; invitation, reminder, email button and speaker dashboard say the link works on the day.
+Production preview: no live links need extending (its events start within days); templates still on the default text
+will gain the sentence. Local: email-look 16/16. Not committed.
