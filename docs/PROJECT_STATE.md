@@ -3391,3 +3391,10 @@ sentence in unedited default templates. Walked in the browser as an approved spe
 v1 request 403) and a speaker in review (no Download, "once the DXG team approves it"). Invariants: email-look,
 comms-cadence, co-presenter-uploads, automatic-reminders 36/36; release-permission, event-files 30/30 (with
 co-presenter); unit 313/313. Not deployed.
+
+## 2026-10-04 — Deployed b646e4a to production (D-144, migration 031)
+Backup `backups/pmp-2026-10-04T113432Z.dump` first. 031 previewed inside a rolled-back transaction: it would update all
+8 invitations and 8 reminders (none formatted or edited). Applied: all 16 now say "download your presentation once
+it's approved". api and portal rebuilt one at a time (staff and dispatcher untouched — the dispatcher does not read the
+default templates; the api writes them into each event). All services up, api/worker healthy, both sites 200,
+`/ops/health` ok with worker up on both hosts, unsigned portal download refused (401), no errors in the logs, disk 77 %.
