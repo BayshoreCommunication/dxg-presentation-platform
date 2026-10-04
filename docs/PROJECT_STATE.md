@@ -3339,3 +3339,8 @@ Links last until a week after the event (or 30 days, if later); migration 030 ex
 unedited default templates; invitation, reminder, email button and speaker dashboard say the link works on the day.
 Production preview: no live links need extending (its events start within days); templates still on the default text
 will gain the sentence. Local: email-look 16/16. Not committed.
+
+## 2026-10-04 — Deployed 1ea9bd9 to production (D-141)
+Backup `backups/pmp-2026-10-04T054836Z.dump`; no stray files; api, staff and portal rebuilt; migration 030 applied —
+the default invitation and reminder of six events (twelve templates) now say the link works on the day; no live links
+needed extending. All services up, api/worker healthy, both sites 200, uptime alarms OK, no errors in the logs.
