@@ -2579,3 +2579,19 @@ same link works right up to and on the day of your presentation: come back any t
 with a new version, or download what you uploaded."; the reminder says the same in one line; the email's button reads
 "Upload and manage your files"; the speaker dashboard repeats it under the speaker's name. Each sign-in still lasts
 at most 24 hours (8 idle); the link signs them in again. Tests: email-look.test.ts (+3).
+
+## D-142 (2026-10-04): A slide's embedded video plays beside its still, from the stored file — Status: ACCEPTED
+The slide preview is the version's PDF (D-074), and a PDF cannot carry video: a slide with an embedded movie showed its
+poster frame or a blank, which read as "the upload lost the video". It had not. `packages/files/media.ts` reads the
+`.pptx` package and ties each embedded video or sound to the slide it plays on (presentation order, PowerPoint's double
+`video`/`media` relationship folded to one entry). Two routes under a version — `GET …/media` (the list) and
+`GET …/media/:name` (the bytes, with 206 byte ranges so the scrubber works) — use the download's own access and
+quarantine checks and are not audited (a part of a file already on screen). The viewer shows a native player under the
+slide's still with a line saying which is which; a format the browser cannot decode gets a note that it plays in
+PowerPoint in the room. No transcoding: MP4/H.264 plays everywhere, which is what the requirements already ask for.
+Tests: media.test.ts (3).
+
+## D-143 (2026-10-04): No "External" group in the staff sidebar — Status: ACCEPTED (Travis's call)
+The Client portal link sat in its own sidebar group and read as one more staff screen. It is removed; `/client/:id`
+is unchanged and reached by its own link, by clients by right and by staff as a preview. A client admin account has
+no sidebar entry for it; if one is wanted, show the link to that role only.

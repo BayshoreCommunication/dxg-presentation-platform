@@ -281,8 +281,9 @@ export async function configureEvent(
     timezone: string;
     starts_on: string;
     ends_on: string;
+    settings: Record<string, unknown> | null;
   }>(
-    `SELECT client_id, status, venue_id, timezone, starts_on::text, ends_on::text
+    `SELECT client_id, status, venue_id, timezone, starts_on::text, ends_on::text, settings
        FROM pmp.events WHERE id = $1`,
     [eventId],
   );
@@ -295,6 +296,23 @@ export async function configureEvent(
   if (input.settings !== undefined) {
     const invalid = checkSettings(input.settings, input.basics?.starts_on ?? eventRows[0].starts_on);
     if (invalid) return err(invalid);
+    /*
+     * A deadline being *set* has to be one that can still be met. Only a changed one
+     * is held to this, the way a start date is (D-101): re-saving an event whose
+     * deadline has since passed, without touching it, is not refused. Counted in the
+     * event's own time zone, as the deadline itself is.
+     */
+    const deadline = (input.settings as Record<string, unknown>).upload_deadline;
+    const stored = eventRows[0].settings?.upload_deadline;
+    if (typeof deadline === "string" && deadline !== "" && deadline !== stored) {
+      const today = todayIn(input.basics?.timezone ?? eventRows[0].timezone);
+      if (deadline < today) {
+        return err({
+          code: "events.bad_settings",
+          message: `The upload deadline (${formatDate(deadline)}) has already passed. Choose a day from today on.`,
+        });
+      }
+    }
   }
   if (input.branding !== undefined) {
     const invalid = checkBranding(input.branding);

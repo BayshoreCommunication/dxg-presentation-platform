@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Kpi } from "@/components/Kpi";
 import { useRouter } from "next/navigation";
 import type { ImportPreview, StagedRow } from "@/lib/api";
@@ -21,7 +22,7 @@ import {
 } from "@/lib/api";
 import { formatBytes, IMPORT_ROW, timeZoneLabel, wordsFor } from "@pmp/format";
 import { Chip } from "@/components/Chip";
-import { DateField, TimeField } from "@/components/DateTimeField";
+import { DateField, TimeField, stepAfter, stepBefore } from "@/components/DateTimeField";
 import { WhyNot } from "@/components/WhyNot";
 
 /**
@@ -198,6 +199,7 @@ function RowEditor({
   label,
   problems,
   timeZone,
+  dates,
   savesAtOnce = false,
   busy,
   onCancel,
@@ -213,6 +215,8 @@ function RowEditor({
     suggestion?: { field: string; value: string };
   }[];
   timeZone: string;
+  /** The event's first and last day, `YYYY-MM-DD`: the calendar offers nothing outside them. */
+  dates?: { from: string; to: string };
   /** Manual entry: each saved row goes into the event straight away (D-053, D-108). */
   savesAtOnce?: boolean;
   busy: boolean;
@@ -271,14 +275,23 @@ function RowEditor({
    */
   const leave = () => (dirty ? setConfirmingDiscard(true) : onCancel());
   const stillMissing = row.missing.filter((field) => !(draft[field] ?? "").trim());
-  // Why Save row is greyed, shown under it as well as on hover (D-111, S21).
-  const saveBlocked = outOfRange
-    ? "A time here is outside the range its field allows — fix the red boxes."
-    : stillMissing.length > 0
+  /*
+   * Why Save row is greyed, shown under it as well as on hover (D-111, S21).
+   *
+   * Missing fields are named first. A required picker left empty is marked
+   * `aria-invalid` too — that is what draws its red border — so `outOfRange` is
+   * true for a row nobody has typed a time into yet, and leading with it told the
+   * operator a blank box held a time "outside the range its field allows". The
+   * range message is only right once every required box has something in it.
+   */
+  const saveBlocked =
+    stillMissing.length > 0
       ? `Still needed: ${stillMissing.map((field) => FIELD_LABELS[field] ?? field).join(", ")}.`
-      : !dirty
-        ? "No changes to save."
-        : null;
+      : outOfRange
+        ? "A date or time here is outside the range its field allows — fix the red boxes."
+        : !dirty
+          ? "No changes to save."
+          : null;
 
   const set = (field: string, value: string) => setDraft({ ...draft, [field]: value });
 
@@ -319,8 +332,27 @@ function RowEditor({
       const sessionFrom = clock("session.start");
       const sessionTo = clock("session.end");
 
+      /*
+       * A session date is bounded by the event's own dates, the way each clock is
+       * bounded by the other: the calendar greys out every day the event does not run,
+       * so a day outside it is never offered. The importer refuses one all the same
+       * (`outsideEvent`), for a value that arrived in a file rather than from the
+       * picker.
+       */
+      /*
+       * The shared edge is excluded: a session that starts at noon is offered 12:15
+       * onwards as its end, and one that ends at noon is offered up to 11:45 as its
+       * start. The database refuses a session of no length (CHECK ends_at > starts_at)
+       * and so does `commitImport`; offering noon here was offering that refusal.
+       */
       const bounds: { min?: string; max?: string } =
-        field === "session.start" ? { max: sessionTo } : field === "session.end" ? { min: sessionFrom } : {};
+        field === "session.start"
+          ? { max: stepBefore(sessionTo) }
+          : field === "session.end"
+            ? { min: stepAfter(sessionFrom) }
+            : isDate && dates
+              ? { min: dates.from, max: dates.to }
+              : {};
 
 
       if (picker !== null) {
@@ -334,11 +366,21 @@ function RowEditor({
          * because the selected time renders whether or not the filter offers it;
          * the field is marked and Save refuses it, exactly as before.
          */
+        /*
+         * Both strings sort as they read — `HH:MM` and `YYYY-MM-DD` — so one comparison
+         * serves a clock and a date alike. A clock is judged against the other clock
+         * itself rather than against the grid-aligned bound the list was built from:
+         * a file's 9:05 → 9:10 is a real session, if an odd one, and must not go red
+         * merely because the picker would have offered 9:15 as the earliest end.
+         */
         const stranded =
           picker !== "" &&
-          !isDate &&
-          ((bounds.min !== undefined && picker < bounds.min) ||
-            (bounds.max !== undefined && picker > bounds.max));
+          (field === "session.end"
+            ? sessionFrom !== undefined && picker <= sessionFrom
+            : field === "session.start"
+              ? sessionTo !== undefined && picker >= sessionTo
+              : (bounds.min !== undefined && picker < bounds.min) ||
+                (bounds.max !== undefined && picker > bounds.max));
         const invalid = stranded || (isMissing && empty);
 
         return (
@@ -349,6 +391,8 @@ function RowEditor({
                 id={`edit-${field}`}
                 value={picker}
                 onChange={(next) => set(field, next)}
+                min={bounds.min}
+                max={bounds.max}
                 invalid={invalid}
                 {...(visible && visible !== full ? { ariaLabel: full } : {})}
               />
@@ -422,7 +466,14 @@ function RowEditor({
 
   const sessionTitle = row.cells["session.title"] || "untitled session";
 
-  return (
+  /*
+   * On <body>, not in the card. `.card` enters with a transform animation, and a
+   * transformed ancestor is what `position: fixed` measures against — so the backdrop
+   * dimmed only the card and the dialog was centred in it, sitting over the page
+   * heading and scrolling with the table instead of holding the window (the same
+   * reason SlideViewer and the date picker's popper are portalled).
+   */
+  return createPortal(
     <div
       role="dialog"
       aria-modal="true"
@@ -611,7 +662,8 @@ function RowEditor({
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -1358,6 +1410,7 @@ export function ImportView({
               label={rowLabel(row)}
               problems={problemsByRow.get(editing) ?? []}
               timeZone={preview?.timezone ?? "UTC"}
+              {...(preview?.starts_on && preview.ends_on ? { dates: { from: preview.starts_on, to: preview.ends_on } } : {})}
               savesAtOnce={Boolean(preview?.manual)}
               busy={busy}
               onCancel={() => {
@@ -1379,7 +1432,8 @@ export function ImportView({
         (() => {
           const row = rows.find((candidate) => candidate.row === deleting);
           if (!row) return null;
-          return (
+          // On <body> for the reason given in RowEditor: fixed inside the card is not fixed.
+          return createPortal(
             <div
               role="dialog"
               aria-modal="true"
@@ -1425,7 +1479,8 @@ export function ImportView({
                   </div>
                 </div>
               </div>
-            </div>
+            </div>,
+            document.body,
           );
         })()}
 
@@ -1460,6 +1515,7 @@ export function ImportView({
               label={rows.length + 1}
               problems={[]}
               timeZone={preview.timezone}
+              {...(preview.starts_on && preview.ends_on ? { dates: { from: preview.starts_on, to: preview.ends_on } } : {})}
               savesAtOnce={Boolean(preview.manual)}
               busy={busy}
               onCancel={() => setAdding(false)}

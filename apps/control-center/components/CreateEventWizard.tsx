@@ -8,7 +8,7 @@ import { ColorPicker } from "@/components/ColorPicker";
 import { ReminderDaysField, reminderDaysFrom } from "@/components/ReminderDaysField";
 import { BrandAssetField, assetFrom } from "@/components/BrandAssetField";
 import { ImportView } from "@/components/ImportView";
-import { DateField } from "@/components/DateTimeField";
+import { DateField, today } from "@/components/DateTimeField";
 import { WhyNot } from "@/components/WhyNot";
 import { timeZoneOptions } from "@pmp/format";
 
@@ -247,12 +247,14 @@ export function CreateEventWizard({
                   shape the value has. Whatever was typed here was stored verbatim and
                   then did not display there at all. One control, one format (D-044).
 
-                  Bounded by the event's own start: a deadline after the event has begun
-                  is not a deadline.
+                  Bounded at both ends: a deadline after the event has begun is not a
+                  deadline, and one that has already passed cannot be met — the calendar
+                  opened on last month with every day of it on offer.
                 */}
                 <DateField
                   id="upload-deadline"
                   value={deadline}
+                  min={today()}
                   max={basics.starts_on || undefined}
                   onChange={setDeadline}
                   ariaLabel="Speaker upload deadline"

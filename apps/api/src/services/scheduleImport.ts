@@ -5,6 +5,7 @@ import type { Actor, DomainError, Result } from "@pmp/domain";
 import { err, ok } from "@pmp/domain";
 import { checkAddress } from "@pmp/email";
 import { verifyAddress } from "@pmp/email";
+import { formatDateRange } from "@pmp/format";
 
 /* ── column mapping (FR-IMP-001) ─────────────────────────────────────────── */
 
@@ -473,6 +474,9 @@ export type ImportPreview = {
   file_name: string;
   /** The event's timezone, so the screen renders and edits times in it, not the browser's. */
   timezone: string;
+  /** The event's first and last day, `YYYY-MM-DD`: the only days a session may be on. */
+  starts_on: string;
+  ends_on: string;
   required_fields: readonly string[];
   headers: string[];
   mapping: (ImportField | null)[];
@@ -593,6 +597,16 @@ export function toDateTime(date: string, time: string): string | null {
   return `${iso}T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00`;
 }
 
+/**
+ * Whether a date cell names a day the event does not run. Compared as calendar days
+ * in the venue's own reckoning — `toCalendarDate` is what `toDateTime` reads — so a
+ * late session on the last day is not pushed over the line by the UTC offset.
+ */
+export function outsideEvent(date: string, event: { from: string; to: string }): boolean {
+  const day = toCalendarDate(date);
+  return day !== null && (day < event.from || day > event.to);
+}
+
 export async function buildPreview(
   tx: pg.PoolClient,
   input: {
@@ -654,11 +668,12 @@ export async function buildPreview(
   );
   const roomNames = roomRows.map((room) => room.name);
 
-  const { rows: tzRows } = await tx.query<{ timezone: string }>(
-    `SELECT timezone FROM pmp.events WHERE id = $1`,
+  const { rows: tzRows } = await tx.query<{ timezone: string; starts_on: string; ends_on: string }>(
+    `SELECT timezone, starts_on::text, ends_on::text FROM pmp.events WHERE id = $1`,
     [input.eventId],
   );
   const timeZone = tzRows[0]?.timezone ?? "UTC";
+  const eventDates = tzRows[0] ? { from: tzRows[0].starts_on, to: tzRows[0].ends_on } : null;
 
   const { rows: existingSessions } = await tx.query<{ room: string | null; starts_at: string; title: string }>(
     `SELECT r.name AS room, se.starts_at, s.title
@@ -801,6 +816,19 @@ export async function buildPreview(
         column: "session.date",
         severity: "blocking",
         message: `Could not read a date and time from “${date} ${start}”.`,
+      });
+    } else if (eventDates && outsideEvent(date, eventDates)) {
+      /*
+       * The same rule the agenda editor applies to a typed session (`agenda.bad_dates`).
+       * Without it a file's row on a day the event does not run was accepted, and the
+       * commit quietly added that day to the event — while the event's own dates, which
+       * every deadline and reminder is set against, still said otherwise.
+       */
+      issues.push({
+        row: rowNumber,
+        column: "session.date",
+        severity: "blocking",
+        message: `Session date ${date} is outside the event, which runs ${formatDateRange(eventDates.from, eventDates.to)}.`,
       });
     }
 
@@ -1006,6 +1034,8 @@ export async function buildPreview(
   return ok({
     file_name: input.fileName,
     timezone: timeZone,
+    starts_on: eventDates?.from ?? "",
+    ends_on: eventDates?.to ?? "",
     required_fields: REQUIRED_FIELDS,
     headers,
     mapping,
@@ -1255,12 +1285,21 @@ export async function saveTypedRow(
     });
   }
 
-  const { rows: eventRows } = await tx.query<{ client_id: string }>(
-    `SELECT client_id FROM pmp.events WHERE id = $1`,
+  const { rows: eventRows } = await tx.query<{ client_id: string; starts_on: string; ends_on: string }>(
+    `SELECT client_id, starts_on::text, ends_on::text FROM pmp.events WHERE id = $1`,
     [input.eventId],
   );
   const clientId = eventRows[0]?.client_id;
-  if (!clientId) return err({ code: "import.event_not_found", message: "This event no longer exists — it may have been removed. Refresh the page." });
+  if (!clientId || !eventRows[0]) return err({ code: "import.event_not_found", message: "This event no longer exists — it may have been removed. Refresh the page." });
+  const eventDates = { from: eventRows[0].starts_on, to: eventRows[0].ends_on };
+  // The rule the agenda editor applies to a typed session (`agenda.bad_dates`), held
+  // here as well because this row is written to the event the moment it is saved.
+  if (outsideEvent(row.cells["session.date"] ?? "", eventDates)) {
+    return err({
+      code: "import.row_outside_event",
+      message: `That day is outside the event, which runs ${formatDateRange(eventDates.from, eventDates.to)}. Choose a day within it.`,
+    });
+  }
 
   const { rows: roomRows } = await tx.query<{ id: string; name: string }>(
     `SELECT id, name FROM pmp.rooms WHERE event_id = $1`,
@@ -1409,12 +1448,13 @@ export async function commitImport(
     mapping: readonly (ImportField | null)[];
   },
 ): Promise<Result<{ created: number; updated: number; unchanged: number; speakers: number }, DomainError>> {
-  const { rows: eventRows } = await tx.query<{ client_id: string }>(
-    `SELECT client_id FROM pmp.events WHERE id = $1`,
+  const { rows: eventRows } = await tx.query<{ client_id: string; starts_on: string; ends_on: string }>(
+    `SELECT client_id, starts_on::text, ends_on::text FROM pmp.events WHERE id = $1`,
     [input.eventId],
   );
   const clientId = eventRows[0]?.client_id;
-  if (!clientId) return err({ code: "import.event_not_found", message: "This event no longer exists — it may have been removed. Refresh the page." });
+  if (!clientId || !eventRows[0]) return err({ code: "import.event_not_found", message: "This event no longer exists — it may have been removed. Refresh the page." });
+  const eventDates = { from: eventRows[0].starts_on, to: eventRows[0].ends_on };
 
   /*
    * The event's locations, read once and keyed the way `buildPreview` compares them.
@@ -1458,8 +1498,15 @@ export async function commitImport(
     return false;
   };
 
+  // A day the event does not run, refused here for the same reason as `impossible`:
+  // the rows come from the browser, and the preview's verdict is not re-read.
   const blocking = input.rows.filter(
-    (row) => !row.title || !row.room || !row.starts_at || impossible(row),
+    (row) =>
+      !row.title ||
+      !row.room ||
+      !row.starts_at ||
+      impossible(row) ||
+      outsideEvent(row.cells["session.date"] ?? "", eventDates),
   );
   if (blocking.length > 0) {
     return err({

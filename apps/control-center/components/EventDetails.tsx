@@ -7,7 +7,7 @@ import type { EventDraft } from "@/lib/api";
 import { configureEvent, ApiError } from "@/lib/api";
 import { Chip } from "@/components/Chip";
 import { eventStatusChip } from "@/lib/eventStatus";
-import { DateField } from "@/components/DateTimeField";
+import { DateField, today } from "@/components/DateTimeField";
 import { ColorPicker } from "@/components/ColorPicker";
 import { ReminderDaysField, reminderDaysFrom, sameDays } from "@/components/ReminderDaysField";
 import { BrandAssetField, assetFrom } from "@/components/BrandAssetField";
@@ -251,13 +251,16 @@ export function EventDetails({
             <div className="field">
               <label htmlFor="event-deadline">Upload deadline</label>
               {/*
-                The DXG dashboard's picker (D-044), bounded by the event itself: a
-                deadline after the event has started is not a deadline, and one before
-                the agenda exists cannot be met. The event's own dates are the window.
+                The DXG dashboard's picker (D-044), bounded at both ends: a deadline
+                after the event has started is not a deadline, and one that has already
+                passed cannot be met. A deadline stored before today still displays —
+                the picker shows what is selected whether or not it would offer it — so
+                an old event reads as it was; only a new choice is held to the window.
               */}
               <DateField
                 id="event-deadline"
                 value={deadline}
+                min={today()}
                 max={setup.starts_on}
                 disabled={readOnly}
                 onChange={setDeadline}

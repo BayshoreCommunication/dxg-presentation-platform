@@ -137,17 +137,28 @@ export function TimeField({
    * time absent from this list does not display at all — and a field showing
    * nothing where the row holds 11:45 would hide the very thing to be corrected.
    */
+  /*
+   * One bound is enough to filter on. The list used to be built only when both were
+   * given, so a session whose start was chosen first still offered every time of the
+   * day for its end — 7:15 AM for a session starting at noon — until the end was
+   * also filled, at which point the start was finally trimmed. The side without a
+   * bound simply runs to the edge of the day.
+   */
   const step = TIME_STEP_MINUTES;
   const offered: Date[] | undefined =
-    floor === null || ceiling === null
+    floor === null && ceiling === null
       ? undefined
       : (() => {
+          const lo = floor ?? 0;
+          const hi = ceiling ?? 24 * 60 - 1;
           const times: Date[] = [];
-          for (let at = Math.ceil(floor / step) * step; at <= ceiling; at += step) {
+          for (let at = Math.ceil(lo / step) * step; at <= hi; at += step) {
             times.push(new Date(2000, 0, 1, Math.floor(at / 60), at % 60));
           }
+          // A supplied bound off the grid is still offered: a session ending 10:50
+          // can start at 10:50 even though the list steps by fifteen.
           for (const edge of [floor, ceiling]) {
-            if (!times.some((time) => minutesOf(time) === edge)) {
+            if (edge !== null && !times.some((time) => minutesOf(time) === edge)) {
               times.push(new Date(2000, 0, 1, Math.floor(edge / 60), edge % 60));
             }
           }
@@ -190,3 +201,31 @@ export function TimeField({
 
 /** Used by callers that need the same conversions, e.g. to compare two clocks. */
 export const clockToMinutes = clockMinutes;
+
+/** Today on this computer, `YYYY-MM-DD` — the earliest day a deadline can still be met. */
+export const today = (): string => dateToDay(new Date());
+
+const minutesToClock = (minutes: number): string =>
+  `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+
+/**
+ * The first time the picker offers strictly after `clock`, and the last strictly
+ * before it — both on the picker's own grid, so a bound handed back to `TimeField`
+ * is a time it would list anyway rather than an odd minute added at the edge.
+ *
+ * For a session that starts at noon the earliest end is 12:15, not noon: the
+ * database holds CHECK (ends_at > starts_at), and a list that offered noon was
+ * offering a session of no length. Clamped to the day, so a start of 23:50 still
+ * has a (red, refused) answer rather than none.
+ */
+export const stepAfter = (clock?: string): string | undefined => {
+  const minutes = clockMinutes(clock);
+  if (minutes === null) return undefined;
+  return minutesToClock(Math.min((Math.floor(minutes / TIME_STEP_MINUTES) + 1) * TIME_STEP_MINUTES, 24 * 60 - TIME_STEP_MINUTES));
+};
+
+export const stepBefore = (clock?: string): string | undefined => {
+  const minutes = clockMinutes(clock);
+  if (minutes === null) return undefined;
+  return minutesToClock(Math.max((Math.ceil(minutes / TIME_STEP_MINUTES) - 1) * TIME_STEP_MINUTES, 0));
+};

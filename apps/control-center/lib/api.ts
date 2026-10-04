@@ -747,6 +747,9 @@ export type ImportPreview = {
   file_name: string;
   /** The event's timezone — times are rendered in it, never the browser's. */
   timezone: string;
+  /** The event's first and last day, `YYYY-MM-DD` — the only days a session may be on. */
+  starts_on: string;
+  ends_on: string;
   required_fields: string[];
   headers: string[];
   mapping: (ImportField | null)[];

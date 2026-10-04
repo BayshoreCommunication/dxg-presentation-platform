@@ -3344,3 +3344,17 @@ will gain the sentence. Local: email-look 16/16. Not committed.
 Backup `backups/pmp-2026-10-04T054836Z.dump`; no stray files; api, staff and portal rebuilt; migration 030 applied —
 the default invitation and reminder of six events (twelve templates) now say the link works on the day; no live links
 needed extending. All services up, api/worker healthy, both sites 200, uptime alarms OK, no errors in the logs.
+
+## 2026-10-04 — Travis's screenshot round: agenda editor, pickers, speakers, SRR, slides with video, portal journey (D-142, D-143)
+Agenda row editor: "Still needed" is named before "outside the range" (a blank required picker was read as out of
+range); session dates bounded to the event's dates in the picker and refused by the importer, commit and typed-row save
+(`outsideEvent`, mirrors `agenda.bad_dates`); the row editor and delete dialogs portal to `<body>` (fixed inside the
+animated card dimmed only the card); start/end time lists filter on one bound alone and exclude the shared minute.
+Upload deadline bounded to today…event start in the wizard and Event details, and a changed deadline in the past is
+refused (only when changed, as D-101). Speakers table: actions stacked, name column floored; Add speaker preselects the
+only session. Sidebar: External group removed (D-143). SRR: desks card always open, first when the room has none;
+"desk" throughout. Slides: embedded video plays under its still (D-142). Speaker portal: four-step journey above the
+status line, driven by the same status as the chip and completed by the room copy's loaded flag; download link built
+from the browser path (every talk with a file logged a hydration mismatch). Invariants: schedule-import fixtures moved
+inside their event; 111/111 across import, agenda, drafts, dates, configuration, reminders, files, review. Unit 313/313.
+Not deployed.

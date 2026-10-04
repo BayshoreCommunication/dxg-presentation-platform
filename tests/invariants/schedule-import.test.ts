@@ -236,7 +236,7 @@ describe("the blank template is downloadable and importable", () => {
       // The template's own fourteen columns (D-029), in its order. The three
       // Presentation* columns and the Presenter 2 block are left empty, as an
       // organiser filling in a single-presenter session would leave them.
-      "Template Row,Ballroom D,04/02/2027,9:00 AM,10:00 AM,,,,chair@example.invalid,Dana,Reyes,,,",
+      "Template Row,Ballroom D,03/14/2027,9:00 AM,10:00 AM,,,,chair@example.invalid,Dana,Reyes,,,",
     ].join("\r\n");
 
     const preview = await upload(filled);
@@ -256,7 +256,7 @@ describe("co-presenters get a presentation each (D-137)", () => {
     );
   const ROW = [
     "Session Title,Session Location,Session Date,Session Start,Session End,Presenter 1 Email,Presenter 1 First Name,Presenter 1 Last Name,Presenter 2 Email,Presenter 2 First Name,Presenter 2 Last Name",
-    "Two Voices,Ballroom E,04/03/2027,9:00 AM,10:00 AM,one.voice@example.invalid,Ona,Voice,two.voice@example.invalid,Tove,Voice",
+    "Two Voices,Ballroom E,03/14/2027,9:00 AM,10:00 AM,one.voice@example.invalid,Ona,Voice,two.voice@example.invalid,Tove,Voice",
   ].join("\n");
 
   test("a row with two presenters makes two presentations, one each", async (t: TestContext) => {
