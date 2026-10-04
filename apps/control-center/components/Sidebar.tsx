@@ -32,7 +32,8 @@ import type { Principal, EventRow } from "@/lib/api";
  * inventing a second, quietly divergent permission model:
  *   · staff groups  → `STAFF_ROLES` in index.ts, via the deny-by-default gate
  *   · Staff accounts → `ADMIN_ROLES` in services/admin.ts
- *   · Client portal  → open: clients by right, staff as a preview
+ *   · Client portal  → not listed; reached by its own link (`/client/:id`), open to
+ *                      clients by right and to staff as a preview
  */
 const STAFF_ROLES = [
   "platform_admin",
@@ -117,15 +118,12 @@ export const GROUPS: {
       { label: "Event assignments", href: "/admin/assignments", roles: ADMIN_ROLES, icon: "clipboard" },
     ],
   },
-  {
-    group: "EXTERNAL",
-    items: [
-      // No "Speaker portal": it is a separate site speakers reach from their emailed link.
-      // Open to clients, and to staff as a preview of what their client sees — the
-      // screen bands itself accordingly. No `roles`, because nobody signed in is refused.
-      { label: "Client portal", href: "/client/:id", icon: "globe" },
-    ],
-  },
+  /*
+   * No "EXTERNAL" group. The speaker portal is a separate site speakers reach from
+   * their emailed link, and the client portal (`/client/:id`) is reached from its
+   * own link as well — it was listed here, and read as one more staff screen rather
+   * than the client's own front door. The route itself is unchanged.
+   */
 ];
 
 /**
