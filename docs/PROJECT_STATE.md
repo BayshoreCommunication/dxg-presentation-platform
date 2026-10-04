@@ -3376,3 +3376,10 @@ for the template's columns), each row tied to its session so a correction update
 route numbers after the staged rows (`bodyRows`). ImportView opens on it when the wizard says the event has an agenda.
 Walked in the browser (type → continue → back → row shown "On the event"). Invariants: draft-resume +4 (14/14);
 import/agenda/co-presenter/speakers 98/98; unit 313/313. Not deployed.
+
+## 2026-10-04 — Deployed d304ec8 to production (typed agenda comes back on step 2)
+Backup `backups/pmp-2026-10-04T110422Z.dump` first; archive extracted with sudo, only `deploy/server/.env` untracked;
+no migrations pending; api and staff rebuilt one at a time in the foreground (image times checked), portal untouched
+(no portal, email or dispatcher changes). api/worker/staff recreated and running the new images; both sites 200,
+`/ops/health` ok with worker up on both hosts, `POST …/imports/existing` refuses an unsigned request (401), no errors
+in the logs, disk 79 %.
