@@ -167,7 +167,11 @@ export async function portalTalks(tx: pg.PoolClient, session: PortalSession): Pr
       final_locked: row.final_locked,
       status,
       status_label: TALK_STATUS_LABEL[status],
-      versions: (row.version_rows ?? []).map((version) => ({ ...version, downloadable: version.state === "stored" })),
+      // Only the approved version (D-144): the one the room will show is the one a speaker takes away.
+      versions: (row.version_rows ?? []).map((version) => ({
+        ...version,
+        downloadable: version.state === "stored" && version.review_state === "approved",
+      })),
       room_copy: row.room_copy,
       findings: row.findings ?? [],
       feedback: row.feedback ?? [],
@@ -305,9 +309,10 @@ export async function portalDownload(
     filename: string;
     s3_key: string;
     processing_state: string;
+    review_state: string;
     version_number: number;
   }>(
-    `SELECT fv.id, fv.original_filename AS filename, fv.s3_key, fv.processing_state, fv.version_number
+    `SELECT fv.id, fv.original_filename AS filename, fv.s3_key, fv.processing_state, fv.review_state, fv.version_number
        FROM pmp.file_versions fv
        JOIN pmp.files f ON f.id = fv.file_id
        JOIN pmp.speaker_assignments sa ON sa.slot_id = f.slot_id
@@ -326,6 +331,19 @@ export async function portalDownload(
         version.processing_state === "quarantined"
           ? "This file failed the security check, so it was not kept and can't be downloaded."
           : "This file is still being checked. Try again in a minute.",
+    };
+  }
+  /*
+   * Only the approved version (D-144). A speaker's earlier uploads, and one still in
+   * review, stay with the DXG team: the version a speaker takes away is the one the
+   * room will show, so there is never a question of which copy is "the" presentation.
+   */
+  if (version.review_state !== "approved") {
+    return {
+      ok: false,
+      status: 403,
+      code: "file.not_approved",
+      message: "Only your approved presentation can be downloaded. This version hasn't been approved.",
     };
   }
   const body = await storage.read(version.s3_key);

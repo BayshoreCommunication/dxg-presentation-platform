@@ -69,7 +69,7 @@ export function PortalView({
           {/* D-141: the same link keeps working through the event, so speakers can come back on the day. */}
           <span className="note" style={{ maxWidth: "60ch" }}>
             Come back with the same link any time, up to and on the day of your presentation, to see your files,
-            replace one with a new version, or download what you uploaded.
+            replace one with a new version, or download your presentation once it&rsquo;s approved.
           </span>
         </div>
         <button
@@ -263,6 +263,15 @@ function TalkCard({
   });
   const minutes = talk.ends_at ? Math.round((Date.parse(talk.ends_at) - Date.parse(talk.starts_at)) / 60_000) : 0;
   const uploaded = talk.versions.filter((version) => version.state !== "quarantined").length;
+  // The approved version, the newest upload still with the team, and everything older (D-144).
+  const approvedVersion = talk.versions.find((version) => version.state === "stored" && version.review_state === "approved");
+  const pending =
+    latest && latest !== approvedVersion && (!approvedVersion || latest.version_number > approvedVersion.version_number)
+      ? latest
+      : undefined;
+  const earlier = talk.versions.filter((version) => version !== approvedVersion && version !== pending);
+  const uploadBlocked = latest?.state === "quarantined";
+  const notesFor = (versionNumber: number) => talk.feedback.filter((note) => note.version_number === versionNumber);
 
   return (
     <div className="card">
@@ -299,86 +308,95 @@ function TalkCard({
           </div>
         </dl>
 
-        {/* What the room will show (D-140): the version the room plays, and whether it is loaded there yet. */}
-        {talk.room_copy && (
-          <div className="room-copy">
-            <b>
-              {talk.room_copy.loaded
-                ? `Version ${talk.room_copy.version_number} is ready in ${talk.room ?? "your room"}`
-                : `Version ${talk.room_copy.version_number} is approved for ${talk.room ?? "your room"}`}
-            </b>
-            <span className="note">
-              {talk.room_copy.loaded
-                ? "It is loaded on the room's presentation PC — this is exactly what the room will show."
-                : "The DXG team will load it onto the room's presentation PC before your session. This is what the room will show."}
-            </span>
+        {/* A35 (D-113): once the talk is approved the deadline no longer applies, so it goes. */}
+        {!approved && (
+          <div className="deadline-line">
+            <span className="kl" style={{ margin: 0 }}>Upload deadline</span>{" "}
+            {deadline ? (
+              (() => {
+                const { label, passed } = deadlineText(deadline, timezone);
+                return (
+                  <>
+                    <b>{label}</b>
+                    {passed && (
+                      <div className="note">The deadline has passed — you can still upload; the team will review it.</div>
+                    )}
+                  </>
+                );
+              })()
+            ) : (
+              <span className="note">None set — upload as soon as you can.</span>
+            )}
           </div>
         )}
 
-        <div className="grid2" style={{ marginBottom: 12 }}>
-          {/* A35 (D-113): once the talk is approved the deadline no longer applies, so it goes. */}
-          {!approved && (
-            <div>
-              <div className="kl">Upload deadline</div>
-              {deadline ? (
-                (() => {
-                  const { label, passed } = deadlineText(deadline, timezone);
-                  return (
-                    <>
-                      <b>{label}</b>
-                      {passed && (
-                        <div className="note">The deadline has passed — you can still upload; the team will review it.</div>
-                      )}
-                    </>
-                  );
-                })()
-              ) : (
-                <span className="note">No deadline set — upload as soon as you can.</span>
-              )}
-            </div>
-          )}
-          <div>
-            <div className="kl">Requirements</div>
-            <div className="note">
-              · 16:9 widescreen · PowerPoint (.pptx) preferred, PDF accepted
-              <br />· Embed all fonts and videos (H.264 .mp4)
-              <br />· Up to 10 GB — uploads resume if your connection drops
-            </div>
+        {/*
+          The files, in the order a speaker cares about them (D-144): the approved one —
+          the only one that can be downloaded, and what the room will show — first and
+          set apart; a newer upload still with the team under it; everything older folded
+          away. The team's notes sit under the upload they are about, so a request that was
+          dealt with two versions ago no longer reads like an open one.
+        */}
+        {talk.versions.length > 0 && <h3 className="files-head">Your presentation</h3>}
+
+        {approvedVersion && (
+          <div className="file-block">
+            <ApprovedFile
+              version={approvedVersion}
+              timezone={timezone}
+              room={talk.room}
+              loaded={Boolean(talk.room_copy?.loaded)}
+            />
+            <FileNotes notes={notesFor(approvedVersion.version_number)} timezone={timezone} />
           </div>
-        </div>
+        )}
 
-        <h3 style={{ fontSize: 13, marginBottom: 8 }}>Your files</h3>
+        {pending && (
+          <div className="file-block">
+            <FileRow version={pending} timezone={timezone} />
+            <FileNotes notes={notesFor(pending.version_number)} timezone={timezone} urgent={pending.review_state === "changes_requested"} />
+          </div>
+        )}
 
-        {/*
-          Once a file is in, the card shows that file — its name and size — and no upload
-          box. A new file is taken only when the team asks for one (a requested revision or
-          a problem found) or when the last one failed the virus check.
-        */}
-        {/*
-          Every upload, newest first, each downloadable once it has passed its checks (D-140,
-          after Preseria's presenter dashboard). The one the room will show is marked.
-        */}
-        {talk.versions.length > 0 && (
-          <ul className="my-files" style={{ marginBottom: showUpload ? 12 : 0 }}>
-            {talk.versions.map((version) => (
-              <FileRow key={version.id} version={version} timezone={timezone} />
-            ))}
-          </ul>
+        {talk.versions.length > 0 && !approvedVersion && !uploadBlocked && (
+          <div className="note" style={{ marginTop: 6 }}>
+            You&rsquo;ll be able to download your presentation here once the DXG team approves it.
+          </div>
+        )}
+
+        {earlier.length > 0 && (
+          <details className="earlier">
+            <summary>
+              Earlier uploads ({earlier.length})
+            </summary>
+            <div className="note" style={{ margin: "6px 0 8px" }}>
+              Kept for the record. Only your approved presentation can be downloaded.
+            </div>
+            <ul className="my-files">
+              {earlier.map((version) => (
+                <li key={version.id} className="file-block">
+                  <FileRow version={version} timezone={timezone} compact />
+                  <FileNotes notes={notesFor(version.version_number)} timezone={timezone} />
+                </li>
+              ))}
+            </ul>
+          </details>
         )}
 
         {talk.final_locked ? (
-          <div className="lane cli" style={{ marginTop: 10 }}>
+          <div className="lane cli" style={{ marginTop: 12 }}>
             <b>Locked as the final onsite version.</b> Your presentation was confirmed in the Speaker
             Ready Room, so it can no longer be replaced here. Please speak to the team onsite.
           </div>
         ) : showUpload ? (
-          <>
+          <div className="upload-area">
             {replacing && !needsUpload && (
               <div className="note" style={{ marginBottom: 8 }}>
                 Your new version goes to the DXG team for review.
                 {approved && " Your approved version stays in use until the new one is approved."}
               </div>
             )}
+            <Requirements open />
             <UploadPanel
               slotId={talk.slot_id}
               onComplete={async (completed) => {
@@ -392,39 +410,17 @@ function TalkCard({
                 Keep my current version
               </button>
             )}
-          </>
+          </div>
         ) : (
           latest && (
-            <div style={{ marginTop: 10 }}>
-              <span className="note">Need to change your slides? </span>
+            <div className="replace-line">
+              <span className="note">Need to change your slides?</span>
               <button className="btn" onClick={() => setReplacing(true)}>
                 Upload a new version
               </button>
+              <Requirements />
             </div>
           )
-        )}
-
-        {/* Notes the team wrote to the speaker (D-070) — only the speaker lane, never internal notes. */}
-        {talk.feedback.length > 0 && (
-          <div style={{ marginTop: 14 }}>
-            <h3 style={{ fontSize: 13, marginBottom: 8 }}>Feedback from the DXG team</h3>
-            {talk.feedback.map((note, index) => (
-              <div className="lane cli" key={`${note.created_at}-${index}`} style={{ whiteSpace: "pre-wrap" }}>
-                <span className="note">
-                  About upload {note.version_number} ·{" "}
-                  {new Date(note.created_at).toLocaleString("en-US", {
-                    month: "short",
-                    day: "numeric",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                    timeZone: timezone,
-                  })}
-                </span>
-                <br />
-                {note.body}
-              </div>
-            ))}
-          </div>
         )}
 
         {result && (
@@ -490,32 +486,119 @@ function versionWords(version: PortalVersion): { label: string; tone: string } {
   }
 }
 
-function FileRow({ version, timezone }: { version: PortalVersion; timezone: string }) {
+function FileRow({ version, timezone, compact = false }: { version: PortalVersion; timezone: string; compact?: boolean }) {
   const words = versionWords(version);
-  const uploadedAt = new Date(version.created_at).toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    timeZone: timezone,
-  });
   return (
-    <li className="my-file">
+    <div className={`my-file${compact ? " compact" : ""}`}>
       <div className="my-file-name">
         <b className="mono">{version.file_name}</b>
         <span className="note">
-          Version {version.version_number} · {formatBytes(Number(version.size_bytes))} · uploaded {uploadedAt}
+          Version {version.version_number} · {formatBytes(Number(version.size_bytes))} · uploaded{" "}
+          {uploadedAt(version.created_at, timezone)}
         </span>
-        <span className={`chip ${words.tone}`}>{words.label}</span>
       </div>
-      {version.downloadable ? (
-        <a className="btn" href={portalDownloadUrl(version.id)} download>
+      <span className={`chip ${words.tone}`}>{words.label}</span>
+    </div>
+  );
+}
+
+const uploadedAt = (at: string, timezone: string) =>
+  new Date(at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: timezone });
+
+/**
+ * The approved version, set apart (D-144): the one the room will show and the only one
+ * a speaker can download. What the room box used to say on its own is said here, beside
+ * the file it is about, so the card says it once.
+ */
+function ApprovedFile({
+  version,
+  timezone,
+  room,
+  loaded,
+}: {
+  version: PortalVersion;
+  timezone: string;
+  room: string | null;
+  loaded: boolean;
+}) {
+  return (
+    <div className="file-approved">
+      <div className="file-approved-head">
+        <span className="chip c-ok">{loaded ? "Ready in your room" : "Approved"}</span>
+        <span className="note">
+          {loaded
+            ? `Loaded on the presentation PC in ${room ?? "your room"} — exactly what the room will show.`
+            : `This is what ${room ?? "your room"} will show. The DXG team loads it before your session.`}
+        </span>
+      </div>
+      <div className="file-approved-body">
+        <div className="my-file-name">
+          <b className="mono">{version.file_name}</b>
+          <span className="note">
+            Version {version.version_number} · {formatBytes(Number(version.size_bytes))} · uploaded{" "}
+            {uploadedAt(version.created_at, timezone)}
+          </span>
+        </div>
+        <a className="btn pri" href={portalDownloadUrl(version.id)} download>
           Download
         </a>
-      ) : (
-        <span className="note">{version.state === "quarantined" ? "Not kept" : "Available after checks"}</span>
-      )}
-    </li>
+      </div>
+    </div>
+  );
+}
+
+/** The team's notes on one upload, under it. `urgent` when they are what the speaker has to act on now. */
+function FileNotes({
+  notes,
+  timezone,
+  urgent = false,
+}: {
+  notes: PortalTalk["feedback"];
+  timezone: string;
+  urgent?: boolean;
+}) {
+  if (notes.length === 0) return null;
+  return (
+    <div className={`file-notes${urgent ? " urgent" : ""}`}>
+      <div className="file-notes-head">{urgent ? "What the DXG team asked you to change" : "Note from the DXG team"}</div>
+      {notes.map((note, index) => (
+        <div key={`${note.created_at}-${index}`} className="file-note">
+          <span className="note">
+            {new Date(note.created_at).toLocaleString("en-US", {
+              month: "short",
+              day: "numeric",
+              hour: "numeric",
+              minute: "2-digit",
+              timeZone: timezone,
+            })}
+          </span>
+          <div style={{ whiteSpace: "pre-wrap" }}>{note.body}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** What a file has to be, open while uploading and a click away otherwise. */
+function Requirements({ open = false }: { open?: boolean }) {
+  const list = (
+    <ul className="req-list">
+      <li>16:9 widescreen</li>
+      <li>PowerPoint (.pptx) preferred, PDF accepted</li>
+      <li>Embed all fonts and videos (H.264 .mp4)</li>
+      <li>Up to 10 GB — uploads resume if your connection drops</li>
+    </ul>
+  );
+  return open ? (
+    <div className="req">
+      <div className="kl">File requirements</div>
+      {list}
+    </div>
+  ) : (
+    <details className="req">
+      <summary>File requirements</summary>
+      {list}
+    </details>
   );
 }
 

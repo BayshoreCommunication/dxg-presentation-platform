@@ -180,10 +180,32 @@ describe("speakers see and download their own files (D-140)", () => {
     }
   });
 
-  test("a speaker downloads their own upload, byte for byte", async (t: TestContext) => {
+  test("an upload that isn't approved can't be downloaded, and says so", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
+    const mine = (await talksOf(people[ONE]!.cookie))[0]!.versions[0]!;
+    assert.equal(mine.review_state, "awaiting_review", "fixture: a clean upload, not yet reviewed");
+    assert.equal(mine.downloadable, false, "the talk list says it can't be downloaded yet");
+    const response = await fetch(`${API}/portal/file-versions/${mine.id}/download`, { headers: { cookie: people[ONE]!.cookie } });
+    assert.equal(response.status, 403);
+    assert.equal(((await response.json()) as { code: string }).code, "file.not_approved");
+  });
+
+  test("once approved, a speaker downloads it, byte for byte", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const queue = (await (await fetch(`${API}/events/${eventId}/review-queue`, { headers: { cookie: staff } })).json()) as {
+      items: { file_version_id: string; slot_id: string; lock_version: number }[];
+    };
+    const item = queue.items.find((entry) => entry.slot_id === people[ONE]!.slotId);
+    assert.ok(item, "fixture: the upload is waiting for review");
+    const claimed = (await (
+      await post(`/file-versions/${item.file_version_id}:transition`, { action: "claim", lock_version: item.lock_version })
+    ).json()) as { lock_version: number };
+    const approved = await post(`/file-versions/${item.file_version_id}:transition`, { action: "approve", lock_version: claimed.lock_version });
+    assert.equal(approved.status, 200, "fixture: the version is approved");
+
     const mine = (await talksOf(people[ONE]!.cookie))[0]!.versions.find((version) => version.downloadable);
-    assert.ok(mine, "fixture: a clean upload");
+    assert.ok(mine, "the approved version is the downloadable one");
+    assert.equal(mine.review_state, "approved");
     const response = await fetch(`${API}/portal/file-versions/${mine.id}/download`, { headers: { cookie: people[ONE]!.cookie } });
     assert.equal(response.status, 200);
     assert.match(response.headers.get("content-disposition") ?? "", /attachment; filename="uma\.pptx"/);

@@ -555,5 +555,29 @@ input,select,textarea{border-width:1px}
 .my-file-name{display:flex;flex-direction:column;align-items:flex-start;gap:4px;min-width:0}
 .my-file-name b{overflow-wrap:anywhere}
 .my-file .btn{flex-shrink:0}
+/* The file section (D-144): the approved file set apart, a pending one under it, older ones folded away. */
+.deadline-line{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px;margin:0 0 14px;font-size:14px}
+.files-head{font-size:13px;margin:4px 0 8px}
+.file-block{display:flex;flex-direction:column;gap:6px;margin-bottom:8px}
+.my-file.compact{padding:10px 12px}
+.file-approved{border:1px solid var(--success);border-radius:10px;background:var(--ok-soft);overflow:hidden}
+.file-approved-head{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;padding:10px 14px 0}
+.file-approved-body{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 14px 12px}
+.file-approved-body .btn{flex-shrink:0}
+.file-notes{border-left:2px solid var(--border);background:var(--muted);border-radius:0 8px 8px 0;padding:8px 12px;font-size:13px}
+.file-notes.urgent{border-left-color:var(--amber);background:var(--warn-soft)}
+.file-notes-head{font-size:12px;font-weight:500;color:var(--foreground);margin-bottom:4px}
+.file-notes.urgent .file-notes-head{color:var(--amber-text)}
+.file-note+.file-note{margin-top:6px}
+.earlier{margin:6px 0 4px;font-size:13px}
+.earlier>summary,.req>summary{cursor:pointer;color:var(--secondary-foreground);font-size:13px;width:fit-content}
+.earlier>summary:hover,.req>summary:hover{color:var(--foreground)}
+.upload-area{margin-top:12px}
+.replace-line{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;margin-top:12px}
+.replace-line .req{flex-basis:100%}
+.req{margin-bottom:10px}
+.req-list{margin:4px 0 0;padding-left:18px;font-size:13px;color:var(--secondary-foreground)}
+.req-list li{margin:2px 0}
+@media (max-width:520px){.file-approved-body{flex-direction:column;align-items:stretch}.file-approved-body .btn{text-align:center}}
 @media (max-width:520px){.my-file{flex-direction:column;align-items:stretch}.my-file .btn{text-align:center}}
 

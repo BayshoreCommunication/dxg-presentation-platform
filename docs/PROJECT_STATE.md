@@ -3383,3 +3383,11 @@ no migrations pending; api and staff rebuilt one at a time in the foreground (im
 (no portal, email or dispatcher changes). api/worker/staff recreated and running the new images; both sites 200,
 `/ops/health` ok with worker up on both hosts, `POST …/imports/existing` refuses an unsigned request (401), no errors
 in the logs, disk 79 %.
+
+## 2026-10-04 — Speakers download only the approved version; file section reorganised (D-144)
+Server refuses non-approved downloads (403 `file.not_approved`); card leads with the approved file, folds earlier
+uploads with their notes, shows the open request in amber. Migration 031 corrects the "download what you uploaded"
+sentence in unedited default templates. Walked in the browser as an approved speaker (one Download, v1 folded, direct
+v1 request 403) and a speaker in review (no Download, "once the DXG team approves it"). Invariants: email-look,
+comms-cadence, co-presenter-uploads, automatic-reminders 36/36; release-permission, event-files 30/30 (with
+co-presenter); unit 313/313. Not deployed.

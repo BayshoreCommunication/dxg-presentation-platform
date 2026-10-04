@@ -2595,3 +2595,16 @@ Tests: media.test.ts (3).
 The Client portal link sat in its own sidebar group and read as one more staff screen. It is removed; `/client/:id`
 is unchanged and reached by its own link, by clients by right and by staff as a preview. A client admin account has
 no sidebar entry for it; if one is wanted, show the link to that role only.
+
+## D-144 (2026-10-04): A speaker downloads only their approved presentation — Status: ACCEPTED (Travis's call)
+D-140 let a speaker download every upload that passed its checks. Now only the **approved** version can be downloaded:
+`portalDownload` refuses any other with 403 `file.not_approved`, and the talk payload's `downloadable` follows the same
+rule, so the version a speaker takes away is always the one the room will show. The talk card was reorganised around
+it: the approved file is set apart (green card, the only Download button, what the room box used to say folded in); a
+newer upload still with the team sits under it; earlier uploads fold away under "Earlier uploads (n)"; the team's
+notes sit under the upload they are about (amber "What the DXG team asked you to change" when it is the open request),
+so a request dealt with versions ago no longer reads as current; requirements are open while uploading and a click
+away otherwise. Wording: the portal intro, the default invitation and the default reminder now say "download your
+presentation once it's approved"; **migration 031** rewrites stored invitations/reminders still word for word the 030
+default (unformatted only; edited ones untouched; re-running changes nothing). Tests: co-presenter-uploads (refused
+before approval with 403; downloadable byte for byte after approval).
