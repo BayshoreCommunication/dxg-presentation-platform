@@ -75,6 +75,8 @@ export type PortalVersion = {
 export type PortalTalk = {
   slot_id: string;
   title: string;
+  /** The session this presentation is in, which can be titled differently from the talk. */
+  session_title: string;
   room: string | null;
   starts_at: string;
   ends_at: string | null;

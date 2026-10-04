@@ -62,6 +62,8 @@ export type PortalVersion = {
 export type PortalTalk = {
   slot_id: string;
   title: string;
+  /** The session this presentation is in — its own title, which can differ from the talk's. */
+  session_title: string;
   room: string | null;
   starts_at: string;
   /** The talk's end, or its session's (D-140: Preseria shows the duration). */
@@ -85,6 +87,7 @@ export async function portalTalks(tx: pg.PoolClient, session: PortalSession): Pr
   const { rows } = await tx.query<{
     slot_id: string;
     title: string;
+    session_title: string;
     room: string | null;
     starts_at: string;
     ends_at: string | null;
@@ -96,7 +99,7 @@ export async function portalTalks(tx: pg.PoolClient, session: PortalSession): Pr
     findings: Finding[] | null;
     feedback: { body: string; created_at: string; version_number: number }[] | null;
   }>(
-    `SELECT s.id AS slot_id, s.title, r.name AS room, se.starts_at, COALESCE(s.ends_at, se.ends_at) AS ends_at,
+    `SELECT s.id AS slot_id, s.title, se.title AS session_title, r.name AS room, se.starts_at, COALESCE(s.ends_at, se.ends_at) AS ends_at,
             s.final_locked, se.session_state,
             (SELECT json_agg(json_build_object('processing', fv.processing_state,
                                                'inspection', fv.inspection_state,
@@ -161,6 +164,7 @@ export async function portalTalks(tx: pg.PoolClient, session: PortalSession): Pr
     return {
       slot_id: row.slot_id,
       title: row.title,
+      session_title: row.session_title,
       room: row.room,
       starts_at: row.starts_at,
       ends_at: row.ends_at,

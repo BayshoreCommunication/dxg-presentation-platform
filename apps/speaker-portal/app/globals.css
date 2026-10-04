@@ -523,9 +523,6 @@ input,select,textarea{border-width:1px}
 .search{border-width:1px}
 
 /* ── Presenter dashboard card (D-140, after Preseria's) ─────────────────── */
-.talk-facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px 16px;margin:0 0 14px;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--muted)}
-.talk-facts dt{font-size:11px;font-weight:500;letter-spacing:.025em;text-transform:uppercase;color:var(--subtle-foreground)}
-.talk-facts dd{margin:2px 0 0;font-size:14px;color:var(--foreground)}
 .room-copy{display:flex;flex-direction:column;gap:2px;margin:0 0 14px;padding:10px 14px;border-left:3px solid var(--success,#16a34a);border-radius:0 8px 8px 0;background:var(--muted)}
 /* The four-step journey above a talk's status line: done ✓, the current step ringed, the rest faint. */
 .journey{display:flex;align-items:flex-start;gap:0;margin:0 0 14px;padding:0;list-style:none;counter-reset:none}
@@ -555,8 +552,16 @@ input,select,textarea{border-width:1px}
 .my-file-name{display:flex;flex-direction:column;align-items:flex-start;gap:4px;min-width:0}
 .my-file-name b{overflow-wrap:anywhere}
 .my-file .btn{flex-shrink:0}
+/* The talk at a glance: icon rows (When / Where / During / Deadline), tinted green once approved or final. */
+.talk-info{list-style:none;margin:0 0 14px;padding:12px 14px;display:flex;flex-direction:column;gap:10px;border:1px solid var(--line);border-radius:10px;background:var(--muted);font-size:14px;line-height:1.45;color:var(--foreground)}
+.talk-info.done{background:var(--ok-soft);border-color:color-mix(in srgb,var(--success) 30%,transparent)}
+.talk-info li{display:flex;align-items:flex-start;gap:12px;min-width:0}
+.talk-info li>span{min-width:0;overflow-wrap:anywhere}
+.talk-info b{font-weight:600}
+.talk-info .nowrap{white-space:nowrap}
+.talk-info .tz{font-size:12px;color:var(--muted-foreground);white-space:nowrap}
+.info-icon{flex-shrink:0;margin-top:1px;color:var(--foreground)}
 /* The file section (D-144): the approved file set apart, a pending one under it, older ones folded away. */
-.deadline-line{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px;margin:0 0 14px;font-size:14px}
 .files-head{font-size:13px;margin:4px 0 8px}
 .file-block{display:flex;flex-direction:column;gap:6px;margin-bottom:8px}
 .my-file.compact{padding:10px 12px}

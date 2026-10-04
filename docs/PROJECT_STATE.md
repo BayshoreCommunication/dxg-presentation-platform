@@ -3398,3 +3398,12 @@ Backup `backups/pmp-2026-10-04T113432Z.dump` first. 031 previewed inside a rolle
 it's approved". api and portal rebuilt one at a time (staff and dispatcher untouched — the dispatcher does not read the
 default templates; the api writes them into each event). All services up, api/worker healthy, both sites 200,
 `/ops/health` ok with worker up on both hosts, unsigned portal download refused (401), no errors in the logs, disk 77 %.
+
+## 2026-10-04 — Speaker portal: talk info as icon rows (Travis's Preseria reference)
+The facts grid (Date & time / Location / Duration / Files uploaded) and the separate deadline line are one block of
+icon rows: **When** (day, "11:15–11:45 AM", zone as "EDT, UTC−04:00", duration), **Where** (room), **During** (the
+session's own title when it differs from the talk's — payload gains `session_title` — then the event), and
+**DEADLINE** (upload by / was …, still uploadable) or, once locked onsite, **FINAL** with the message the lower lane
+used to carry. Tinted green once approved or final. Walked locally in review, with a passed deadline and a differently
+titled session, locked final, and at phone width (time range kept on one line). co-presenter + reminders 16/16, unit
+313/313. Not deployed.

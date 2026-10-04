@@ -251,18 +251,12 @@ function TalkCard({
     talk.status === "needs_revision" ||
     talk.status === "attention";
   const showUpload = needsUpload || replacing;
-  // Preseria's card (D-140): date and time with the zone, location, duration, files uploaded.
-  const when = new Date(talk.starts_at).toLocaleString("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    timeZone: timezone,
-    timeZoneName: "short",
-  });
-  const minutes = talk.ends_at ? Math.round((Date.parse(talk.ends_at) - Date.parse(talk.starts_at)) / 60_000) : 0;
-  const uploaded = talk.versions.filter((version) => version.state !== "quarantined").length;
+  // When, on the event's clock (D-140): the day, the start and end, and the zone said two ways.
+  const start = new Date(talk.starts_at);
+  const end = talk.ends_at ? new Date(talk.ends_at) : null;
+  const dayText = start.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric", timeZone: timezone });
+  const zoneText = zoneLabel(start, timezone);
+  const minutes = end ? Math.round((end.getTime() - start.getTime()) / 60_000) : 0;
   // The approved version, the newest upload still with the team, and everything older (D-144).
   const approvedVersion = talk.versions.find((version) => version.state === "stored" && version.review_state === "approved");
   const pending =
@@ -285,50 +279,80 @@ function TalkCard({
           <div style={{ marginBottom: 12, fontSize: 14 }}>{status.next}</div>
         )}
 
-        <dl className="talk-facts">
-          <div>
-            <dt>Date &amp; time</dt>
-            <dd>{when}</dd>
-          </div>
-          <div>
-            <dt>Location</dt>
-            <dd>
-              {talk.room ?? "Room to be confirmed"} – {eventName}
-            </dd>
-          </div>
-          {minutes > 0 && (
-            <div>
-              <dt>Duration</dt>
-              <dd>{minutes} min</dd>
-            </div>
+        {/*
+          The talk at a glance, as Preseria's presenter page lays it out: one line each for
+          when, where and during what, each behind its icon, then the deadline — which,
+          once the presentation is locked onsite, says that instead. The bold part is what
+          a speaker scans for; the zone is there but quiet.
+        */}
+        <ul className={`talk-info${approved || talk.final_locked ? " done" : ""}`}>
+          <li>
+            <InfoIcon name="clock" />
+            <span>
+              When:{" "}
+              <b>
+                {dayText} · <span className="nowrap">{timeRange(start, end && minutes > 0 ? end : null, timezone)}</span>
+              </b>{" "}
+              <span className="tz">({zoneText})</span>
+              {minutes > 0 && <span className="tz"> · {minutes} min</span>}
+            </span>
+          </li>
+          <li>
+            <InfoIcon name="pin" />
+            <span>
+              Where: <b>{talk.room ?? "Room to be confirmed"}</b>
+            </span>
+          </li>
+          <li>
+            <InfoIcon name="calendar" />
+            <span>
+              During:{" "}
+              {talk.session_title && talk.session_title !== talk.title ? (
+                <>
+                  <b>{talk.session_title}</b> – {eventName}
+                </>
+              ) : (
+                <b>{eventName}</b>
+              )}
+            </span>
+          </li>
+          {talk.final_locked ? (
+            <li>
+              <InfoIcon name="lock" />
+              <span>
+                <b>FINAL:</b> Your presentation was confirmed in the Speaker Ready Room.
+                <br />
+                It is now final — you can&rsquo;t upload new files or make changes here. Please speak to the team onsite.
+              </span>
+            </li>
+          ) : (
+            // A35 (D-113): once the talk is approved the deadline no longer applies, so it goes.
+            !approved && (
+              <li>
+                <InfoIcon name="deadline" />
+                <span>
+                  <b>DEADLINE:</b>{" "}
+                  {deadline ? (
+                    (() => {
+                      const { label, passed } = deadlineText(deadline, timezone);
+                      return passed ? (
+                        <>
+                          The deadline for uploading was {label}.
+                          <br />
+                          You can still upload — the team will review it.
+                        </>
+                      ) : (
+                        <>Please upload by {label}.</>
+                      );
+                    })()
+                  ) : (
+                    <>None set — upload as soon as you can.</>
+                  )}
+                </span>
+              </li>
+            )
           )}
-          <div>
-            <dt>Files uploaded</dt>
-            <dd>{uploaded}</dd>
-          </div>
-        </dl>
-
-        {/* A35 (D-113): once the talk is approved the deadline no longer applies, so it goes. */}
-        {!approved && (
-          <div className="deadline-line">
-            <span className="kl" style={{ margin: 0 }}>Upload deadline</span>{" "}
-            {deadline ? (
-              (() => {
-                const { label, passed } = deadlineText(deadline, timezone);
-                return (
-                  <>
-                    <b>{label}</b>
-                    {passed && (
-                      <div className="note">The deadline has passed — you can still upload; the team will review it.</div>
-                    )}
-                  </>
-                );
-              })()
-            ) : (
-              <span className="note">None set — upload as soon as you can.</span>
-            )}
-          </div>
-        )}
+        </ul>
 
         {/*
           The files, in the order a speaker cares about them (D-144): the approved one —
@@ -383,12 +407,7 @@ function TalkCard({
           </details>
         )}
 
-        {talk.final_locked ? (
-          <div className="lane cli" style={{ marginTop: 12 }}>
-            <b>Locked as the final onsite version.</b> Your presentation was confirmed in the Speaker
-            Ready Room, so it can no longer be replaced here. Please speak to the team onsite.
-          </div>
-        ) : showUpload ? (
+        {talk.final_locked ? null : showUpload ? (
           <div className="upload-area">
             {replacing && !needsUpload && (
               <div className="note" style={{ marginBottom: 8 }}>
@@ -484,6 +503,63 @@ function versionWords(version: PortalVersion): { label: string; tone: string } {
     default:
       return { label: "Waiting for review", tone: "c-info" };
   }
+}
+
+/** "11:15–11:45 AM", or "11:30 AM–12:30 PM" when the two halves of the day differ. */
+function timeRange(start: Date, end: Date | null, timeZone: string): string {
+  const clock = (at: Date) => at.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone });
+  const from = clock(start);
+  if (!end) return from;
+  const to = clock(end);
+  const [fromTime, fromHalf] = from.split(" ");
+  const [, toHalf] = to.split(" ");
+  return fromHalf === toHalf ? `${fromTime}–${to}` : `${from}–${to}`;
+}
+
+/** "EDT, UTC−04:00": the zone's short name and its offset at that moment. */
+function zoneLabel(at: Date, timeZone: string): string {
+  const part = (style: "short" | "longOffset") =>
+    new Intl.DateTimeFormat("en-US", { timeZone, timeZoneName: style }).formatToParts(at).find((p) => p.type === "timeZoneName")?.value ?? "";
+  const short = part("short");
+  const offset = part("longOffset").replace(/^GMT/, "UTC").replace("-", "−") || "UTC";
+  return short && !short.startsWith("GMT") ? `${short}, ${offset}` : offset;
+}
+
+/** The info rows' icons, drawn here so the portal ships no icon set for four glyphs. */
+function InfoIcon({ name }: { name: "clock" | "pin" | "calendar" | "deadline" | "lock" }) {
+  const paths: Record<typeof name, React.ReactNode> = {
+    clock: (
+      <>
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 7v5l3 2" />
+      </>
+    ),
+    pin: <path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21Zm0-9a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z" />,
+    calendar: (
+      <>
+        <rect x="3.5" y="5" width="17" height="15.5" rx="2" />
+        <path d="M3.5 10h17M8 3v4M16 3v4" />
+      </>
+    ),
+    deadline: (
+      <>
+        <path d="M9 4.5h6M12 4.5V7" />
+        <circle cx="12" cy="14" r="7" />
+        <path d="M12 10.5V14l2.2 1.6" />
+      </>
+    ),
+    lock: (
+      <>
+        <rect x="5" y="10.5" width="14" height="10" rx="2" />
+        <path d="M8 10.5V7.5a4 4 0 0 1 8 0v3" />
+      </>
+    ),
+  };
+  return (
+    <svg className="info-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {paths[name]}
+    </svg>
+  );
 }
 
 function FileRow({ version, timezone, compact = false }: { version: PortalVersion; timezone: string; compact?: boolean }) {
