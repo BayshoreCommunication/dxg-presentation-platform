@@ -3328,3 +3328,8 @@ Travis confirmed item 3 is complete (Edit/Add presentation removed, D-132). Open
 Talk cards show date/time + zone, location, duration, files uploaded, what the room will show, and every upload with a
 Download button (speaker's own files only). Walked as two seeded speakers (waiting for review; approved and loaded in
 Ballroom A), downloaded in the browser, checked at phone width. Invariants 6/6 in co-presenter-uploads. Not committed.
+
+## 2026-10-04 — Deployed e182bc2 to production (D-140)
+Backup `backups/pmp-2026-10-04T050820Z.dump`; extracted with sudo, no stray files; api and portal rebuilt (worker
+follows the api image); no migrations pending; api/worker healthy, health ok, both sites 200, the new speaker download
+refuses an unsigned request (401), uptime alarms OK, no errors in the logs. **Travis's nine-item list is complete.**
