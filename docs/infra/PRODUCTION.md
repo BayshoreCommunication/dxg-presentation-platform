@@ -120,13 +120,71 @@ Optional: `AUTH_RATE_LIMIT` (sign-in attempts per address per 5 minutes, default
 
 ## 6. Updating
 
+The server has no GitHub access and `/opt/pmp` is a `git archive`, not a clone, so an update is
+**archive → copy → extract → build → migrate → up**, run from the deploying machine (the only IP the
+firewall admits on port 22; key `~/.ssh/pmp-lightsail.pem`). Every production deploy since 2026-09-27
+has gone this way; the deploy records in `docs/PROJECT_STATE.md` are the log.
+
+**On this machine** — from the commit that is on `main`:
+
 ```bash
-cd dxg-presentation-platform && git pull
-cd deploy/server && docker compose build
-docker compose --profile ops run --rm migrate      # migrations are forward-only and idempotent
-docker compose up -d                                # recreates changed services; ~seconds of downtime
+cd dxg-presentation-platform
+C=$(git rev-parse --short HEAD)
+git archive --format=tar.gz -o /tmp/pmp-$C.tar.gz $C
+git ls-tree -r --name-only $C -- apps packages db scripts deploy > /tmp/tracked-$C.txt
+scp -i ~/.ssh/pmp-lightsail.pem /tmp/pmp-$C.tar.gz /tmp/tracked-$C.txt ubuntu@3.146.210.9:/tmp/
+ssh -i ~/.ssh/pmp-lightsail.pem ubuntu@3.146.210.9
 ```
-The API drains in-flight requests on SIGTERM before exiting.
+
+**On the server** — one step at a time, each checked before the next:
+
+```bash
+cd /opt/pmp/deploy/server
+docker compose exec -T backup backup.sh now            # 1. backup first — it prints the S3 key; note it
+
+C=<the commit>                                          # 2. extract over the tree (it is root-owned)
+sudo tar -xzf /tmp/pmp-$C.tar.gz -C /opt/pmp
+echo $C | sudo tee /opt/pmp/.deployed-commit
+
+(cd /opt/pmp && find apps packages db scripts deploy -type f | sort) \
+  | comm -23 - <(sort /tmp/tracked-$C.txt)              # 3. files tar left behind that git no longer has
+# Delete what it lists — EXCEPT deploy/server/.env, the live settings, which is never in git.
+# tar never removes anything; a stale .tsx once broke the staff build (2026-09-30).
+
+docker compose build api                                # 4. one image at a time, in the FOREGROUND
+docker compose build staff                              #    (the box has 4 GB; three Next/npm builds
+docker compose build portal                             #    at once starve ClamAV). dispatcher only
+                                                        #    when packages/email or apps/dispatcher changed.
+for s in api staff portal; do docker image inspect pmp-$s --format "$s {{.Created}}"; done
+                                                        #    every rebuilt image must carry today's time
+
+docker compose --profile ops run --rm migrate           # 5. forward-only and idempotent; "up to date" is fine
+docker compose up -d                                    # 6. recreates the services whose image changed;
+                                                        #    ~seconds of downtime, the API drains on SIGTERM
+docker compose ps                                       # 7. everything Up, api/worker/clamav/postgres healthy
+for s in api staff portal; do
+  [ "$(docker image inspect pmp-$s --format '{{.Id}}')" = "$(docker inspect pmp-$s-1 --format '{{.Image}}')" ] \
+    && echo "$s ok" || echo "$s STILL RUNNING THE OLD IMAGE"; done
+docker compose logs --since 5m api worker staff portal | grep -iE "error|refusing|fatal"
+docker image prune -f; df -h /                          # 8. keep the disk under 80 %
+rm -f /tmp/pmp-$C.tar.gz /tmp/tracked-$C.txt
+```
+
+**From outside**, then record the deploy in `docs/PROJECT_STATE.md` (backup key, commit, what was rebuilt,
+what the checks said) and commit that:
+
+```bash
+curl -s https://pmp.av-rfpilot.com/ops/health        # {"status":"ok","database":"up","worker":"up"}
+curl -s https://speakers.av-rfpilot.com/ops/health   # the same
+curl -so /dev/null -w '%{http_code}\n' https://pmp.av-rfpilot.com/login        # 200
+curl -so /dev/null -w '%{http_code}\n' https://speakers.av-rfpilot.com/login   # 200
+```
+
+Things that have gone wrong, so they are checked above: a background build started through `sh -c`
+with `set -o pipefail` never ran (Ubuntu's `sh` is dash, which rejects it) and an old `/tmp/build.log`
+read as a finished build — hence foreground builds and the image-time and image-ID checks (2026-10-04);
+a build piped through `| tail` hid its failure — hence no pipes around `build` (2026-09-30). The API's
+port is not published on the host: check health through the public URL, not `127.0.0.1:4000`.
 
 ## 7. Backups and restore
 
