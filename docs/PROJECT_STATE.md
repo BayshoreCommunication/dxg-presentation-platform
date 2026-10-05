@@ -3433,3 +3433,9 @@ bounces/complaints; audit appends race; DST and UTC-day bugs in agenda import; X
 role; MFA attempt cap per challenge; UI items (sign-out failure shown as success, role-gated buttons, stale tables).
 Note: verifying the tests against the old code really merged a seeded speaker locally (the old code allowed it) —
 reset with demo:reset.
+
+## 2026-10-05 — Deployed 90cdfb5 to production (D-145 security fixes + agenda menu fix)
+Backup `backups/pmp-2026-10-05T071950Z.dump` first; no migrations; api and staff rebuilt one at a time (portal and
+dispatcher untouched); all services up, api/worker healthy, both sites 200, no errors in the logs; build cache pruned,
+disk 31 %. Re-tested on production with unauthenticated reads: `/api/v1/timezones` 401, `/api/V1/timezones` 404 (was
+200), a dashless id 404, an encoded-slash upload path 400.
