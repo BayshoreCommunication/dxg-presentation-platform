@@ -29,6 +29,11 @@ export class LocalStorage implements Storage {
   }
 
   private uploadDir(uploadId: string): string {
+    // Upload ids are UUIDs the server issued; anything else (`..`, a slash) would make this a
+    // path outside the uploads folder, and `assemble`/`abort` delete what it names.
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(uploadId)) {
+      throw new Error("Not an upload id.");
+    }
     return path.join(this.root, "uploads", uploadId);
   }
 

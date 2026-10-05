@@ -211,23 +211,8 @@ export async function beginUpload(
     return { ok: false, code: "file.too_large", message: "That file is larger than 10 GB, the most we can accept. Make it smaller (for example, compress the videos) and try again." };
   }
 
-  const { rows: locked } = await tx.query<{ final_locked: boolean }>(
-    `SELECT s.final_locked FROM pmp.slots s
-       JOIN pmp.speaker_assignments sa ON sa.slot_id = s.id
-      WHERE s.id = $1 AND sa.speaker_id = $2`,
-    [input.slotId, session.speaker_id],
-  );
-  if (!locked[0]) {
-    return { ok: false, code: "portal.not_your_talk", message: "That talk is not assigned to you." };
-  }
-  if (locked[0].final_locked) {
-    return {
-      ok: false,
-      code: "file.final_locked",
-      message:
-        "This presentation has been confirmed as the final onsite version in the Speaker Ready Room, so it can no longer be replaced here. Please speak to the team onsite.",
-    };
-  }
+  const refused = await refuseSlot(tx, session, input.slotId);
+  if (refused) return refused;
 
   const uploadId = randomUUID();
   await tx.query(
@@ -270,6 +255,37 @@ export type CompleteResult = {
 };
 
 /**
+ * Why this speaker may not upload to this talk, or null when they may: it must be a talk
+ * on their event that they are currently assigned to (not replaced), and not locked as
+ * the final onsite version. Shared by the start and the finish of an upload.
+ */
+async function refuseSlot(
+  tx: pg.PoolClient,
+  session: PortalSession,
+  slotId: string,
+): Promise<{ ok: false; code: string; message: string } | null> {
+  const notYours = { ok: false as const, code: "portal.not_your_talk", message: "That talk is not assigned to you." };
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(slotId)) return notYours;
+  const { rows } = await tx.query<{ final_locked: boolean }>(
+    `SELECT s.final_locked FROM pmp.slots s
+       JOIN pmp.speaker_assignments sa ON sa.slot_id = s.id
+      WHERE s.id = $1 AND sa.speaker_id = $2 AND sa.replaced_by IS NULL AND s.event_id = $3
+      LIMIT 1`,
+    [slotId, session.speaker_id, session.event_id],
+  );
+  if (!rows[0]) return notYours;
+  if (rows[0].final_locked) {
+    return {
+      ok: false,
+      code: "file.final_locked",
+      message:
+        "This presentation has been confirmed as the final onsite version in the Speaker Ready Room, so it can no longer be replaced here. Please speak to the team onsite.",
+    };
+  }
+  return null;
+}
+
+/**
  * Completion runs the real pipeline in order: assemble → whole-file checksum →
  * scan (fail closed) → store → inspect. `stored` is unreachable without a clean
  * scan, so invariant I-2 holds here exactly as it does in the domain package.
@@ -279,6 +295,13 @@ export async function completeUpload(
   session: PortalSession,
   input: { uploadId: string; slotId: string; fileName: string; expectedSha256?: string },
 ): Promise<{ ok: true; value: CompleteResult } | { ok: false; code: string; message: string }> {
+  /*
+   * Checked again here, not only when the upload began: the talk comes from this
+   * request's body, so without it a speaker could begin on their own talk and finish on
+   * anyone's — any event's, or one locked as final in the Speaker Ready Room since.
+   */
+  const refused = await refuseSlot(tx, session, input.slotId);
+  if (refused) return refused;
   const result = await ingestVersion(tx, {
     eventId: session.event_id,
     clientId: session.client_id,

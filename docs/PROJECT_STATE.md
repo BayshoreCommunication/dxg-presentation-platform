@@ -3421,3 +3421,15 @@ command center's KPI row, "Rooms ready") painted over it and "Delete session" wa
 the shared `FloatingMenu` (D-107): on `<body>`, fixed, flips above when there is no room, follows scrolling. Walked on
 the seeded agenda: all four items topmost over the KPI cards, Delete still red, Edit session opens the editor. Not
 deployed.
+
+## 2026-10-05 — Whole-system review; security group fixed (D-145)
+Five parallel read-only reviews (access control, file pipeline, agenda/events, email/jobs/portal, staff UI) found ~56
+issues; the serious ones were verified by hand (the `/api/V1/` gate bypass reproduced on production with one
+unauthenticated GET). Security group fixed and tested (D-145): 10 new tests, 8 of which fail on the old code. Still open
+from the review, by priority: error results commit partial writes (rollback/restore/request-changes); restore via the
+generic transition skips eligibility; DB pool has no error handler (worker/API/dispatcher crash on a dropped
+connection); dispatcher double-sends and has no SIGTERM handler or poison-message backoff; delivery events overwrite
+bounces/complaints; audit appends race; DST and UTC-day bugs in agenda import; XLSX empty-cell parse; duplicate-event
+role; MFA attempt cap per challenge; UI items (sign-out failure shown as success, role-gated buttons, stale tables).
+Note: verifying the tests against the old code really merged a seeded speaker locally (the old code allowed it) —
+reset with demo:reset.

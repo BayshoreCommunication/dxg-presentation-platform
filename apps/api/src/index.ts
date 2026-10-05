@@ -2,6 +2,7 @@ import express from "express";
 import { assertProductionConfig, rateLimiter } from "./config.ts";
 import { withScope, withSystemScope, getPool, verifyAuditChain, appendAudit as appendAuditRecord } from "@pmp/db";
 import type { Actor, DomainError, EventRole, Result, ReviewAction } from "@pmp/domain";
+import { atLeast, hasAnyRole } from "@pmp/domain";
 import { listTalks } from "./services/talks.ts";
 import { ASSET_KINDS, putAsset, removeAsset, assetOf, readAsset } from "./services/brandAssets.ts";
 import type { AssetKind, AssetRecord } from "./services/brandAssets.ts";
@@ -133,6 +134,56 @@ assertProductionConfig();
 
 const app = express();
 app.disable("x-powered-by");
+/*
+ * Paths are matched exactly as written. Express matched routes case-insensitively while
+ * the staff gate, the event resolver and the rate limiter compare strings, so
+ * `/api/V1/…` reached every handler with none of them applied — the authenticator step,
+ * the staff-only rule, event scoping and the archived guard all skipped. Set before any
+ * route exists: the router reads it when it is created.
+ */
+app.set("case sensitive routing", true);
+
+/** Any form Postgres reads as a UUID — dashless, braced, hyphen after any group of four. */
+const POSTGRES_UUID = /^\{?[0-9a-f]{4}(-?[0-9a-f]{4}){7}\}?$/i;
+const CANONICAL_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/*
+ * Two ways a path could mean something other than it looks, refused before anything else
+ * reads it.
+ *
+ * An id Postgres accepts but the event resolver does not recognise as one — no dashes,
+ * or in braces — was passed to the handler unresolved, with the actor's roles from every
+ * event and an unscoped transaction: a staff member on one event could read or approve
+ * another's talks. Only the standard dashed form is an id here.
+ *
+ * Express decodes `%2F` inside a route parameter, so an upload id of `..%2F..%2Flibrary`
+ * reached the file system as a path; a bare `..` segment does the same. Neither is ever
+ * a real address.
+ */
+app.use((req, res, next) => {
+  if (!/^\/(api|ops)\//i.test(req.path)) return next();
+  if (/%(2f|5c|00)/i.test(req.path)) {
+    return res.status(400).json({ code: "request.invalid", message: "That address isn't one this service uses." });
+  }
+  for (const segment of req.path.split("/")) {
+    let decoded: string;
+    try {
+      decoded = decodeURIComponent(segment);
+    } catch {
+      return res.status(400).json({ code: "request.invalid", message: "That address isn't one this service uses." });
+    }
+    if (decoded === "." || decoded === "..") {
+      return res.status(400).json({ code: "request.invalid", message: "That address isn't one this service uses." });
+    }
+    const colon = decoded.lastIndexOf(":");
+    const id = colon < 0 ? decoded : decoded.slice(0, colon);
+    if (POSTGRES_UUID.test(id) && !CANONICAL_UUID.test(id)) {
+      return res.status(404).json({ code: "request.not_found", message: "That item couldn't be found. Refresh the page." });
+    }
+  }
+  return next();
+});
+
 app.use(express.json());
 
 /** Headers for every API response: nothing here is meant to be framed, sniffed or cached by a proxy. */
@@ -160,7 +211,10 @@ const throttled: { prefix: string; check: ReturnType<typeof rateLimiter> }[] =
     : [];
 app.use((req, res, next) => {
   if (req.method !== "POST") return next();
-  const rule = throttled.find((entry) => req.path === entry.prefix);
+  // Compared without case or a trailing slash: `/api/v1/auth/login/` reaches the same
+  // handler, and must not reach it without the limit.
+  const path = req.path.replace(/\/+$/, "").toLowerCase();
+  const rule = throttled.find((entry) => path === entry.prefix);
   if (!rule) return next();
   const verdict = rule.check(clientIp(req) ?? "unknown");
   if (verdict.allowed) return next();
@@ -1355,6 +1409,14 @@ async function withPortalSession(
 app.post("/api/v1/speakers/:speakerId/invite", async (req, res) => {
   const actor = actorFrom(req);
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  // A link signs in as the speaker, so it needs the same role as an access code does
+  // (`issuePresenterCredential`): any staff role on the event could mint one before.
+  if (!hasAnyRole(actor, atLeast("srr_technician"))) {
+    return res.status(403).json({
+      code: "auth.forbidden",
+      message: "Only Speaker Ready Room staff and above can issue a speaker's link.",
+    });
+  }
   const speakerId = String(req.params.speakerId);
   const token = randomUUID();
   const issued = await withScope(scopeFor(req), async (tx) => {
@@ -1865,6 +1927,14 @@ app.post("/api/v1/speakers/:speakerId/merge", async (req, res) => {
   if (survivor === merged) {
     return res.status(422).json({ code: "speakers.same", message: "A speaker cannot be merged into itself." });
   }
+  // Merging moves talks between people, so it is a speaker edit: presentation manager and
+  // above, as adding, removing and re-addressing a speaker are (agendaEdit EDITORS).
+  if (!hasAnyRole(actor, atLeast("presentation_manager"))) {
+    return res.status(403).json({ code: "auth.forbidden", message: "Only a presentation manager can merge speakers." });
+  }
+  if (!CANONICAL_UUID.test(survivor)) {
+    return res.status(404).json({ code: "speakers.not_found", message: "The speaker to keep couldn't be found. Refresh the page." });
+  }
 
   const result = await withScope(scopeFor(req), async (tx) => {
     const { rows } = await tx.query<{ event_id: string; client_id: string }>(
@@ -1872,6 +1942,15 @@ app.post("/api/v1/speakers/:speakerId/merge", async (req, res) => {
       [merged],
     );
     if (!rows[0]) return null;
+
+    // The speaker kept must be a live speaker on the same event. Any id was accepted, so
+    // an event's talks could be handed to a speaker on another event, whose portal then
+    // listed them and took uploads for them.
+    const { rows: keep } = await tx.query(
+      `SELECT 1 FROM pmp.speakers WHERE id = $1 AND event_id = $2 AND merged_into IS NULL AND removed_at IS NULL`,
+      [survivor, rows[0].event_id],
+    );
+    if (!keep[0]) return null;
 
     // Assignments move to the survivor; both file histories stay reachable
     // because files hang off slots, not speakers.

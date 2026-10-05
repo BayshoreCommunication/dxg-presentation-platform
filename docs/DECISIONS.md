@@ -2608,3 +2608,23 @@ away otherwise. Wording: the portal intro, the default invitation and the defaul
 presentation once it's approved"; **migration 031** rewrites stored invitations/reminders still word for word the 030
 default (unformatted only; edited ones untouched; re-running changes nothing). Tests: co-presenter-uploads (refused
 before approval with 403; downloadable byte for byte after approval).
+
+## D-145 (2026-10-05): Security hardening from the whole-system review — Status: ACCEPTED (Travis: "fix the security bugs first and deploy")
+A five-part review found access-control holes; these are closed, each with a regression test that fails on the old
+code (`tests/invariants/security-hardening.test.ts`, `packages/files/src/storage.test.ts`):
+- **Paths are case-sensitive** (`app.set("case sensitive routing", true)`). `/api/V1/…` reached handlers with the staff
+  gate, event resolver, archived guard and rate limits all skipped — confirmed live on production before the fix.
+- **An id is only an id in its dashed form.** Any path segment Postgres reads as a UUID (dashless, braced) but that is not
+  canonical is 404; the event resolver used to pass such ids through unresolved and unscoped.
+- **No encoded slash, backslash, NUL or `.`/`..` segment** in an API path (400), and `LocalStorage` refuses any upload id
+  that is not a UUID — an upload id of `..%2F..` reached `assemble`'s recursive delete.
+- **Rate limits** compare the path without case or a trailing slash.
+- **Finishing an upload re-checks the talk** (`refuseSlot`, shared with the start): the speaker's own, current
+  (`replaced_by IS NULL`) assignment on their event, not final-locked. The talk came from the request body unchecked.
+- **Speaker links need SRR technician or above** (as access codes do); **merging needs presentation manager and above,
+  into a live speaker on the same event.**
+- **PDF previews are queued only for stored (scanned-clean) versions.**
+- **Sign-in `next` stays on this site** (`safePath`): `https://…`, `//host`, `/\host` are dropped.
+Not changed, by design and noted for a decision: the emailed access code alone works as a portal Bearer credential
+(a comment calls it "the same credential, arriving by a different door"), though the sign-in page also asks for the
+email. The review's integrity, reliability, agenda and UI findings are tracked separately.

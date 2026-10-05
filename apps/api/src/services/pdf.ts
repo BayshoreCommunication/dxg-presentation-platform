@@ -150,7 +150,8 @@ export async function queuePdfs(fileVersionIds: string[], retry = false): Promis
       `INSERT INTO pmp.pdf_conversions (file_version_id, event_id, client_id)
        SELECT fv.id, fv.event_id, fv.client_id
          FROM pmp.file_versions fv
-        WHERE fv.id = ANY($1::uuid[])
+        -- Only a stored file has passed its virus scan; a quarantined one is never opened.
+        WHERE fv.id = ANY($1::uuid[]) AND fv.processing_state = 'stored'
        ON CONFLICT (file_version_id) DO UPDATE
           SET state = 'queued', error = NULL, updated_at = now()
         WHERE $2 AND pmp.pdf_conversions.state = 'failed'`,

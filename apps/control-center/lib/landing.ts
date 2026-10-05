@@ -11,8 +11,18 @@ import type { Principal } from "./api";
  * someone to the wrong client's event would be worse than asking. `/client` lists
  * them.
  */
-export function landingFor(principal: Principal, requested?: string): string {
+/**
+ * A `next` that stays on this site: a path, never `https://…`, `//host` or `/\\host`,
+ * which the router would follow off-site straight after a real sign-in.
+ */
+export function safePath(requested?: string): string | undefined {
+  if (!requested || !requested.startsWith("/") || requested.startsWith("//") || requested.startsWith("/\\")) return undefined;
+  return requested;
+}
+
+export function landingFor(principal: Principal, nextPath?: string): string {
   if (principal.must_change_password) return "/account/password?first=1";
+  const requested = safePath(nextPath);
 
   const events = principal.client_events;
   if (events.length === 0) return requested && requested !== "/" ? requested : "/";
