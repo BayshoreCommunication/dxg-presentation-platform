@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { agendaApi, ApiError } from "@/lib/api";
 import type { PresentationInput, PresenterInput, SessionInput } from "@/lib/api";
 import { DateField, TimeField } from "@/components/DateTimeField";
 import { ConfirmInline } from "@/components/ConfirmInline";
+import { FloatingMenu, useFloatingMenu } from "@/components/FloatingMenu";
 
 /**
  * The forms behind the Agenda tab's edit controls (D-064). Each one saves a single
@@ -444,28 +445,18 @@ export type MenuItem = { label: string; onSelect: () => void; danger?: boolean }
  * the titles and statuses the tab exists to show.
  */
 export function ActionMenu({ label, items }: { label: string; items: MenuItem[] }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLSpanElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const outside = (event: MouseEvent) => {
-      if (!ref.current?.contains(event.target as Node)) setOpen(false);
-    };
-    const escape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("mousedown", outside);
-    document.addEventListener("keydown", escape);
-    return () => {
-      document.removeEventListener("mousedown", outside);
-      document.removeEventListener("keydown", escape);
-    };
-  }, [open]);
-
+  /*
+   * On <body>, through the shared floating menu (D-107), not inside the row. Drawn in
+   * place it was an absolutely positioned box inside the session's card, and every card
+   * after it — "Rooms ready" on the command center — painted over it: "Delete session",
+   * the last item, sat underneath the next card. The floating menu also flips above its
+   * button when there is no room below, and follows scrolling.
+   */
+  const { open, setOpen, trigger, menu } = useFloatingMenu();
   return (
-    <span ref={ref} style={{ position: "relative", display: "inline-block" }}>
+    <span style={{ display: "inline-block" }}>
       <button
+        ref={trigger}
         type="button"
         className="btn"
         aria-label={label}
@@ -477,52 +468,23 @@ export function ActionMenu({ label, items }: { label: string; items: MenuItem[] 
       >
         ⋯
       </button>
-      {open && (
-        <div
-          role="menu"
-          style={{
-            position: "absolute",
-            right: 0,
-            top: "calc(100% + 4px)",
-            zIndex: 20,
-            minWidth: 170,
-            background: "var(--white)",
-            border: "1px solid var(--line)",
-            borderRadius: 6,
-            boxShadow: "0 6px 20px rgba(20, 24, 27, .12)",
-            padding: 4,
-            textAlign: "left",
-          }}
-        >
-          {items.map((item) => (
-            <button
-              key={item.label}
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                setOpen(false);
-                item.onSelect();
-              }}
-              style={{
-                display: "block",
-                width: "100%",
-                textAlign: "left",
-                border: "none",
-                background: "none",
-                padding: "7px 10px",
-                borderRadius: 4,
-                fontSize: 13,
-                cursor: "pointer",
-                color: item.danger ? "var(--block)" : "var(--ink)",
-              }}
-              onMouseEnter={(event) => (event.currentTarget.style.background = "var(--mist)")}
-              onMouseLeave={(event) => (event.currentTarget.style.background = "none")}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
-      )}
+      <FloatingMenu open={open} trigger={trigger} menu={menu} width={190}>
+        {items.map((item) => (
+          <button
+            key={item.label}
+            type="button"
+            role="menuitem"
+            className="item"
+            onClick={() => {
+              setOpen(false);
+              item.onSelect();
+            }}
+            style={item.danger ? { color: "var(--block)" } : undefined}
+          >
+            {item.label}
+          </button>
+        ))}
+      </FloatingMenu>
     </span>
   );
 }

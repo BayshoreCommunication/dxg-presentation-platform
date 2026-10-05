@@ -3414,3 +3414,10 @@ dispatcher untouched); all services up, api/worker healthy, both sites 200, `/op
 `/portal/talks` refused (401), no errors in the logs. **Disk reached 80 %**: `docker system df` showed 55 GB of build
 cache (54 GB reclaimable) against 70 MB of database; `docker builder prune -f --filter until=24h` brought the disk to
 34 % (52 GB free) with every service still healthy. Runbook §6 step 8 and §8 now include the build-cache prune.
+
+## 2026-10-05 — Agenda "⋯" menu no longer hidden under the next card
+The session/presentation action menu was an absolutely positioned box inside its card, so the cards after it (the
+command center's KPI row, "Rooms ready") painted over it and "Delete session" was unreachable. `ActionMenu` now uses
+the shared `FloatingMenu` (D-107): on `<body>`, fixed, flips above when there is no room, follows scrolling. Walked on
+the seeded agenda: all four items topmost over the KPI cards, Delete still red, Edit session opens the editor. Not
+deployed.
