@@ -5,6 +5,7 @@ import { readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { signInStaff, cookieFrom } from "../helpers/signIn.ts";
 import { removeTestAccounts } from "../helpers/cleanup.ts";
+import { withSystemScope } from "@pmp/db";
 
 /**
  * Speaker accounts (D-146): a persistent sign-in on the staff site that reaches only the
@@ -42,6 +43,8 @@ before(async () => {
     body: JSON.stringify({ email: SPEAKER, password: PASSWORD }),
   });
   speaker = cookieFrom(signedIn);
+  // Osei starts without a sign-in whatever an earlier run, or a hand test, left behind.
+  await removeTestAccounts(["k.osei@example.invalid"]);
 });
 
 after(async () => {
@@ -194,12 +197,20 @@ describe("staff give a speaker a sign-in from the Speakers screen", () => {
     assert.equal(((await json(created)) as { outcome: string }).outcome, "created");
 
     const again = await fetch(`${API}/events/${EVENT}/speakers/${osei.id}/account`, { method: "POST", headers: headers(admin) });
-    assert.equal(again.status, 200, "a second press finds the account rather than failing");
-    assert.equal(((await json(again)) as { outcome: string }).outcome, "existing");
+    assert.equal(again.status, 201, "a second press reissues the unused temporary password (D-147)");
+    assert.equal(((await json(again)) as { outcome: string }).outcome, "reissued");
+
+    // Once the speaker has chosen a password there is nothing to issue.
+    await withSystemScope((tx) =>
+      tx.query(`UPDATE pmp.users SET must_change_password = false WHERE lower(email::text) = 'k.osei@example.invalid'`),
+    );
+    const settled = await fetch(`${API}/events/${EVENT}/speakers/${osei.id}/account`, { method: "POST", headers: headers(admin) });
+    assert.equal(settled.status, 200);
+    assert.equal(((await json(settled)) as { outcome: string }).outcome, "existing");
 
     const listed = (await json(await fetch(`${API}/events/${EVENT}/speakers`, { headers: { cookie: admin } }))) as {
       items: { id: string; account: string | null }[];
     };
-    assert.equal(listed.items.find((row) => row.id === osei.id)!.account, "invited");
+    assert.equal(listed.items.find((row) => row.id === osei.id)!.account, "active");
   });
 });

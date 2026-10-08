@@ -1,10 +1,8 @@
-import { randomUUID } from "node:crypto";
 import type pg from "pg";
 import type { Actor } from "@pmp/domain";
-import { hashToken, SPEAKER_LINK_EXPIRES_SQL } from "./portal.ts";
+import { SIGN_IN_URL } from "./comms.ts";
 import { lookFor } from "./emailLook.ts";
 
-const PORTAL_BASE = process.env.PORTAL_BASE ?? "http://localhost:3001";
 
 export type DecisionNoticeResult = {
   /** Speakers an email was queued for. */
@@ -71,18 +69,12 @@ export async function noticeToSpeakers(
       result.without_email.push(speaker.full_name);
       continue;
     }
-    const token = randomUUID();
-    await tx.query(
-      `INSERT INTO pmp.speaker_tokens (speaker_id, event_id, client_id, kind, token_hash, expires_at)
-       VALUES ($1, $2, $3, 'magic_link', $4, ${SPEAKER_LINK_EXPIRES_SQL})`,
-      [speaker.id, talk.event_id, talk.client_id, hashToken(token)],
-    );
-
     const changes = input.outcome === "changes_requested";
     const subject = changes
       ? `${talk.event_name}: changes needed to “${talk.title}”`
       : `${talk.event_name}: “${talk.title}” was not accepted`;
-    const link = `${PORTAL_BASE}/t/${token}`;
+    // Their sign-in (D-147): no personal link, the same page every email points at.
+    const link = SIGN_IN_URL;
     const body = [
       `Hi ${speaker.full_name},`,
       "",
@@ -93,8 +85,8 @@ export async function noticeToSpeakers(
       input.message,
       "",
       changes
-        ? `Please upload a corrected version using your personal link: ${link}`
-        : `You can upload a new version, or see the details, using your personal link: ${link}`,
+        ? `Please sign in and upload a corrected version under Manage presentations: ${link}`
+        : `You can sign in to upload a new version, or see the details, under Manage presentations: ${link}`,
       "",
       "Reply to this email if anything is unclear.",
     ].join("\n");
@@ -102,7 +94,7 @@ export async function noticeToSpeakers(
     const { rows: comm } = await tx.query<{ id: string }>(
       `INSERT INTO pmp.communications (event_id, client_id, speaker_id, to_address, subject, body, status)
        VALUES ($1, $2, $3, $4::citext, $5, $6, 'queued') RETURNING id`,
-      [talk.event_id, talk.client_id, speaker.id, speaker.email, subject, body.replaceAll(token, "[personal link removed]")],
+      [talk.event_id, talk.client_id, speaker.id, speaker.email, subject, body],
     );
     await tx.query(`INSERT INTO pmp.outbox (topic, payload) VALUES ('email.send', $1)`, [
       JSON.stringify({

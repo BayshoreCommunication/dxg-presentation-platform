@@ -587,16 +587,91 @@ export async function createStaffUser(
 export type SpeakerAccountResult = {
   user_id: string;
   email: string;
-  /** `created` with the temporary password emailed; `existing` when the address already had one. */
-  outcome: "created" | "existing";
+  /**
+   * `created` with the temporary password emailed; `reissued` when an unused sign-in got a
+   * fresh temporary password; `existing` when the speaker has already chosen a password.
+   */
+  outcome: "created" | "reissued" | "existing";
+};
+
+export type SpeakerSignIn = {
+  user_id: string;
+  email: string;
+  /**
+   * `created`: a new account with a temporary password. `reissued`: the account exists but
+   * its temporary password was never changed, so a fresh one replaces it. `active`: the
+   * speaker has chosen a password — nothing to issue. `staff`: the address is a staff
+   * member's; they sign in as they always do.
+   */
+  outcome: "created" | "reissued" | "active" | "staff";
+  temporary_password: string | null;
 };
 
 /**
- * Gives a speaker a persistent sign-in (D-146): one `users` row of kind `speaker` for
- * their email address, which then reaches every event on which a speaker row carries
- * that address — this client's or another's. A temporary password goes to the address
- * itself, exactly as a staff account's does, and must be changed at first sign-in; no
- * authenticator is asked of a speaker.
+ * The speaker's sign-in behind every invitation (D-147): makes the account for an email
+ * address if there is none, or reissues the temporary password of one never used, and
+ * hands the password back so the email that carries it can be written by the caller.
+ * Nothing is emailed here. The password lives only in that email: the caller stores a
+ * redacted copy and marks the outbox row sensitive.
+ */
+export async function ensureSpeakerSignIn(
+  tx: pg.PoolClient,
+  input: { email: string; displayName: string; eventId: string; clientId: string; actorUserId?: string | undefined },
+): Promise<SpeakerSignIn> {
+  const email = input.email.trim().toLowerCase();
+  const { rows: existing } = await tx.query<{ id: string; account_kind: string; must_change_password: boolean }>(
+    `SELECT id, account_kind, must_change_password FROM pmp.users
+      WHERE lower(email::text) = $1 AND is_active AND deleted_at IS NULL`,
+    [email],
+  );
+  const found = existing[0];
+  if (found && found.account_kind !== "speaker") return { user_id: found.id, email, outcome: "staff", temporary_password: null };
+  if (found && !found.must_change_password) return { user_id: found.id, email, outcome: "active", temporary_password: null };
+
+  const temporary = `${generateAccessCode(4, 4)}`;
+  const hash = await hashPassword(temporary);
+  if (found) {
+    // A temporary password never used is replaced, and any session on it ends.
+    await tx.query(
+      `UPDATE pmp.users SET password_hash = $1, password_set_at = now(), must_change_password = true,
+              failed_logins = 0, locked_until = NULL WHERE id = $2`,
+      [hash, found.id],
+    );
+    await tx.query(`UPDATE pmp.auth_sessions SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL`, [found.id]);
+    await appendAudit(tx, {
+      partitionId: input.eventId,
+      clientId: input.clientId,
+      ...(input.actorUserId ? { actorUserId: input.actorUserId } : {}),
+      action: "auth.speaker_sign_in_reissued",
+      subjectType: "user",
+      subjectId: found.id,
+      detail: { email },
+    });
+    return { user_id: found.id, email, outcome: "reissued", temporary_password: temporary };
+  }
+
+  const { rows: created } = await tx.query<{ id: string }>(
+    `INSERT INTO pmp.users (email, display_name, password_hash, password_set_at, must_change_password, account_kind)
+     VALUES ($1::citext, $2, $3, now(), true, 'speaker') RETURNING id`,
+    [email, input.displayName.trim() || email, hash],
+  );
+  const userId = created[0]!.id;
+  await appendAudit(tx, {
+    partitionId: input.eventId,
+    clientId: input.clientId,
+    ...(input.actorUserId ? { actorUserId: input.actorUserId } : {}),
+    action: "auth.speaker_account_created",
+    subjectType: "user",
+    subjectId: userId,
+    detail: { email },
+  });
+  return { user_id: userId, email, outcome: "created", temporary_password: temporary };
+}
+
+/**
+ * Gives a speaker a persistent sign-in (D-146) on its own, with the bare sign-in email —
+ * the invitation (`sendUploadLink`, D-147) is the usual way, since it names their talks
+ * too. Kept for a speaker who is not on a presentation yet.
  *
  * The same role as issuing an access code: a sign-in is a credential, and anyone who can
  * mint one can mint the other.
@@ -624,40 +699,21 @@ export async function createSpeakerAccount(
     return err({ code: "auth.bad_email", message: "Add the speaker's email address first — the sign-in is sent there." });
   }
 
-  const { rows: existing } = await tx.query<{ id: string; account_kind: string; is_active: boolean }>(
-    `SELECT id, account_kind, is_active FROM pmp.users WHERE lower(email::text) = $1`,
-    [email],
-  );
-  if (existing[0]) {
-    // A staff address is never turned into a speaker's: the person already signs in.
-    if (existing[0].account_kind !== "speaker") {
-      return err({ code: "auth.email_taken", message: "That address already belongs to a DXG staff account." });
-    }
-    return ok({ user_id: existing[0].id, email, outcome: "existing" });
-  }
-
-  const temporary = `${generateAccessCode(4, 4)}`;
-  const problem = checkPassword(temporary);
-  if (problem) return err({ code: `auth.${problem.code}`, message: problem.message });
-
-  const { rows: created } = await tx.query<{ id: string }>(
-    `INSERT INTO pmp.users (email, display_name, password_hash, password_set_at, must_change_password, account_kind)
-     VALUES ($1::citext, $2, $3, now(), true, 'speaker') RETURNING id`,
-    [email, speaker.full_name, await hashPassword(temporary)],
-  );
-  const userId = created[0]!.id;
-
-  await queueSpeakerSignInEmail(tx, { to: email, displayName: speaker.full_name, temporaryPassword: temporary });
-  await appendAudit(tx, {
-    partitionId: input.eventId,
+  const signIn = await ensureSpeakerSignIn(tx, {
+    email,
+    displayName: speaker.full_name,
+    eventId: input.eventId,
     clientId: speaker.client_id,
     actorUserId: actor.id,
-    action: "auth.speaker_account_created",
-    subjectType: "speaker",
-    subjectId: speaker.id,
-    detail: { user_id: userId, emailed: true },
   });
-  return ok({ user_id: userId, email, outcome: "created" });
+  // A staff address is never turned into a speaker's: the person already signs in.
+  if (signIn.outcome === "staff") {
+    return err({ code: "auth.email_taken", message: "That address already belongs to a DXG staff account." });
+  }
+  if (signIn.temporary_password) {
+    await queueSpeakerSignInEmail(tx, { to: email, displayName: speaker.full_name, temporaryPassword: signIn.temporary_password });
+  }
+  return ok({ user_id: signIn.user_id, email, outcome: signIn.outcome === "active" ? "existing" : signIn.outcome });
 }
 
 export async function changeOwnPassword(

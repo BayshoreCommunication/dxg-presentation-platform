@@ -3458,3 +3458,14 @@ the speaker-worded "Choose your own password" step (no sign-in app), landing on 
 "Give a speaker a sign-in" guide); no new colour tokens — the presenter card is drawn in the control centre's
 black-and-white.
 
+
+## 2026-10-08 — Invitations carry the sign-in; speaker portal unlinked (D-147)
+Travis: the speaker's sign-in goes in the email we already send, Manage presentations does everything, the separate
+speaker-upload site is no longer needed; on the Speakers screen Email link / Copy link / Edit email go, Remove stays,
+the sign-in option stays. Built: `ensureSpeakerSignIn` + `{{sign_in}}` in every invitation and reminder (temporary
+password in the email only — stored copy redacted, outbox wiped after send, HTML too), review-decision emails and the
+email button point at `/login`, migration 033 for the stored defaults, Comms Insert menu, Speakers screen reworked
+(Send sign-in / Invited + Resend / Active, Remove only), portal out of `npm run dev` but code and routes kept. Lint,
+type-check, unit 319/319; invariants speakers-add-and-send, email-look, comms-cadence, automatic-reminders,
+speaker-accounts, event-owned-data, security-hardening, practice-event all green together. Not deployed.
+**Before deploying:** migration 033 runs with the others; production emails will carry temporary passwords from then on.

@@ -640,7 +640,7 @@ export const removeSpeaker = (eventId: string, speakerId: string) =>
 
 /** Gives a speaker a persistent sign-in (D-146); the temporary password is emailed to them. */
 export const createSpeakerAccount = (eventId: string, speakerId: string) =>
-  request<{ user_id: string; email: string; outcome: "created" | "existing" }>(
+  request<{ user_id: string; email: string; outcome: "created" | "reissued" | "existing" }>(
     `/events/${eventId}/speakers/${speakerId}/account`,
     { method: "POST" },
   );

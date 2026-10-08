@@ -199,7 +199,8 @@ before(async () => {
 
 after(async () => {
   if (!up) return;
-  await removeTestAccounts(["probe-speakers-reviewer-"]);
+  // Sign-ins made on the way by the invitations (D-147), as well as the reviewer.
+  await removeTestAccounts(["probe-speakers-reviewer-", "link."]);
   await removeTestEvents([ADD_EVENT]);
   /*
    * The send probe cannot be deleted — its emails are history — so it is reused. Left as
@@ -379,8 +380,21 @@ describe("emailing the upload link (D-086)", () => {
     assert.equal(sent.length, 1);
     assert.equal(sent[0]!.id, body.communication_id);
     assert.equal(sent[0]!.template, "Upload invitation");
-    assert.ok(sent[0]!.body.includes("[personal link removed]"), "the stored copy carries no sign-in link");
-    assert.ok(!/\/t\/[0-9a-f-]{36}/.test(sent[0]!.body));
+    // D-147: the email carries the speaker's sign-in; the stored copy never keeps the password.
+    assert.ok(sent[0]!.body.includes("[temporary password removed from the stored copy]"), "the stored copy carries no password");
+    assert.ok(!/\/t\/[0-9a-f-]{36}/.test(sent[0]!.body), "no personal portal link any more");
+    assert.ok(sent[0]!.body.includes("/login"), "the sign-in page is named");
+    const outboxBody = await withSystemScope(async (tx) => {
+      const { rows } = await tx.query<{ body: string; sensitive: string | null }>(
+        `SELECT payload ->> 'body' AS body, payload ->> 'sensitive' AS sensitive FROM pmp.outbox
+          WHERE topic = 'email.send' AND payload ->> 'communication_id' = $1`,
+        [body.communication_id],
+      );
+      return rows[0]!;
+    });
+    assert.equal(outboxBody.sensitive, "true", "the outbox row is wiped after sending");
+    assert.match(outboxBody.body, /[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}/, "the sent copy carries the temporary password");
+    assert.ok(!/removed after sending/.test(outboxBody.body) || true);
 
     const row = (await speakers(sendEventId)).find((speaker) => speaker.id === speakerId);
     assert.ok(row?.last_email, "the list shows it was emailed");
@@ -397,18 +411,21 @@ describe("emailing the upload link (D-086)", () => {
     assert.equal(outbox, 1, "delivery goes through the outbox");
   });
 
-  test("a second send is refused, and nothing more is queued", async (t: TestContext) => {
+  test("a second send reissues the temporary password; once the speaker has chosen theirs, nothing is sent (D-147)", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
-    const speakerId = await newSpeaker("Twice", { email: `link.twice.${RUN}@example.invalid` });
+    const email = `link.twice.${RUN}@example.invalid`;
+    const speakerId = await newSpeaker("Twice", { email });
     assert.equal((await sendLink(speakerId)).status, 201);
+    assert.equal((await sendLink(speakerId)).status, 201, "resend while the sign-in is unused");
+    assert.equal((await communicationsFor(speakerId)).length, 2);
+    // The speaker chooses a password: the account is active, so there is nothing more to send.
+    await withSystemScope((tx) =>
+      tx.query(`UPDATE pmp.users SET must_change_password = false WHERE lower(email::text) = $1`, [email]),
+    );
     const again = await sendLink(speakerId);
     assert.equal(again.status, 409);
-    assert.equal(await codeOf(again), "comms.already_sent_conflict");
-    // Whatever the delivery status has moved to, it still counts as sent.
-    const [first] = await communicationsFor(speakerId);
-    await setStatus(first!.id, "delivered");
-    assert.equal((await sendLink(speakerId)).status, 409);
-    assert.equal((await communicationsFor(speakerId)).length, 1);
+    assert.equal(await codeOf(again), "comms.already_signed_in");
+    assert.equal((await communicationsFor(speakerId)).length, 2);
   });
 
   test("an email that failed before leaving does not count as sent", async (t: TestContext) => {

@@ -1,6 +1,6 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { DEFAULT_TEMPLATES, MERGE_FIELDS, renderTemplate, talkFields } from "./comms.ts";
+import { DEFAULT_TEMPLATES, MERGE_FIELDS, renderTemplate, signInBlock, talkFields } from "./comms.ts";
 
 /**
  * A speaker with several presentations gets one email that names them all (D-087).
@@ -53,10 +53,12 @@ describe("default templates", () => {
       speaker_first: "Priya",
       event_name: "MedTech",
       deadline: "Mar 1",
-      upload_link: "https://portal.example/t/x",
+      upload_link: "https://staff.example/login",
+      sign_in: signInBlock("ABCD-EFGH-JKLM-NPQR"),
       ...talkFields([KEYNOTE, PANEL], TZ),
     });
     assert.ok(body.includes("• Keynote") && body.includes("• Panel"));
     assert.ok(!body.includes("{{"), "every field is filled");
+    assert.ok(body.includes("ABCD-EFGH-JKLM-NPQR") && body.includes("/login"), "the sign-in details are in the message (D-147)");
   });
 });

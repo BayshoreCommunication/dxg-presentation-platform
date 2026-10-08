@@ -1,18 +1,43 @@
-import { createHash, randomUUID } from "node:crypto";
 import type pg from "pg";
 import { appendAudit } from "@pmp/db";
 import { deriveTalkStatus } from "@pmp/domain";
 import type { Actor, DomainError, Result } from "@pmp/domain";
 import { atLeast, err, hasAnyRole, ok } from "@pmp/domain";
-import { EMAIL_STATUS, formatDateRange, formatDeadline, formatSessionTime, wordsFor } from "@pmp/format";
+import { formatDateRange, formatDeadline, formatSessionTime } from "@pmp/format";
 import { firstName } from "./firstName.ts";
 import { lookFor } from "./emailLook.ts";
-import { SPEAKER_LINK_EXPIRES_SQL } from "./portal.ts";
+import { ensureSpeakerSignIn } from "./auth.ts";
 import { checkAddress, fillHtml, htmlToText, MESSAGE_MAX_CHARS, sanitizeEmailHtml } from "@pmp/email";
 
-const hashToken = (token: string): Buffer => createHash("sha256").update(token).digest();
+/**
+ * Where speakers sign in (D-147): the staff site's own sign-in page. Every invitation and
+ * reminder points here; there is no per-speaker link any more, because the speaker's
+ * credential is their password, not a token in a URL.
+ */
+const STAFF_BASE = process.env.STAFF_BASE ?? "http://localhost:3000";
+export const SIGN_IN_URL = `${STAFF_BASE}/login`;
+export const SIGN_IN_BUTTON = "Sign in to manage your presentations";
+const PASSWORD_REDACTED = "[temporary password removed from the stored copy]";
 
-const PORTAL_BASE = process.env.PORTAL_BASE ?? "http://localhost:3001";
+/**
+ * The `{{sign_in}}` block (D-147), worded for what the speaker has: a temporary password
+ * when one was just issued, otherwise their own.
+ */
+export function signInBlock(temporaryPassword: string | null): string {
+  if (temporaryPassword) {
+    return [
+      `Sign in at ${SIGN_IN_URL} with this email address and your temporary password:`,
+      "",
+      `    ${temporaryPassword}`,
+      "",
+      "You'll be asked to choose your own password straight away.",
+    ].join("\n");
+  }
+  return [
+    `Sign in at ${SIGN_IN_URL} with this email address and your password.`,
+    "Forgotten it? Use \"Forgotten your password?\" on the sign-in page.",
+  ].join("\n");
+}
 
 export type TemplateRow = {
   id: string;
@@ -45,11 +70,11 @@ export const DEFAULT_TEMPLATES = [
       "",
       "{{presentations}}",
       "",
-      "Please upload your presentation by {{deadline}} using your personal secure link. No account is needed.",
+      "Please upload your presentation by {{deadline}}. Your sign-in details are below — the same sign-in works for every event you speak at.",
       "",
-      "{{upload_link}}",
+      "{{sign_in}}",
       "",
-      "Keep this email. The same link works right up to and on the day of your presentation: come back any time to see your files, replace one with a new version, or download your presentation once it's approved.",
+      "Once signed in, Manage presentations is where you upload, replace a file with a new version, and download your presentation once it's approved — right up to and on the day you present.",
       "",
       "Requirements: 16:9 widescreen, PowerPoint (.pptx) preferred, PDF accepted. Embed all fonts and use H.264 .mp4 for video.",
       "",
@@ -68,9 +93,9 @@ export const DEFAULT_TEMPLATES = [
       "",
       "The deadline is {{deadline}}.",
       "",
-      "{{upload_link}}",
+      "{{sign_in}}",
       "",
-      "The same link lets you manage your files, and download your presentation once it's approved, up to and on the day of your presentation.",
+      "Once signed in, Manage presentations is where you upload your file, and later download it once it's approved — up to and on the day of your presentation.",
       "",
       "If you've already sent it another way, reply to this email and we'll check.",
       "",
@@ -95,6 +120,7 @@ export const MERGE_FIELDS = [
   "session_time",
   "deadline",
   "upload_link",
+  "sign_in",
   "presentations",
 ] as const;
 
@@ -134,11 +160,11 @@ function checkTemplateText(input: {
       message: `${unknown.map((field) => `{{${field}}}`).join(", ")} ${unknown.length === 1 ? "isn't a detail" : "aren't details"} we can fill in. Remove ${unknown.length === 1 ? "it" : "them"} and use the Insert buttons instead.`,
     });
   }
-  // The link is the point of every one of these emails: without it the speaker can do nothing.
-  if (!used.includes("upload_link")) {
+  // The way in is the point of every one of these emails: without it the speaker can do nothing.
+  if (!used.includes("sign_in") && !used.includes("upload_link")) {
     return err({
       code: "comms.template_invalid",
-      message: "Keep the Upload link in the message — it is each speaker's personal way to upload. Add it back with the Insert buttons.",
+      message: "Keep the Sign-in details (or at least the Sign-in link) in the message — it is how each speaker reaches their presentations. Add it back with the Insert buttons.",
     });
   }
   return ok({ subject, body, body_html });
@@ -277,13 +303,14 @@ export async function sendTestEmail(
   const talks = sample?.talks.length
     ? sample.talks
     : [{ title: "Sample presentation", room: "Main Hall", starts_at: `${event.starts_on}T14:00:00Z` }];
-  const signIn = `${PORTAL_BASE}/login`;
   const values = {
     ...personFields(sample?.name ?? "Alex Morgan"),
     ...eventFields(event),
     ...talkFields(talks, event.timezone),
     deadline: event.deadline ? formatDeadline(event.deadline, event.timezone) : "the published deadline",
-    upload_link: signIn,
+    upload_link: SIGN_IN_URL,
+    // A test carries a sample password, never a real one.
+    sign_in: signInBlock("XXXX-XXXX-XXXX-XXXX"),
   };
   const rendered = renderTemplate({ subject: checked.value.subject, body: checked.value.body }, values);
   await tx.query(`INSERT INTO pmp.outbox (topic, payload) VALUES ('email.send', $1)`, [
@@ -292,7 +319,7 @@ export async function sendTestEmail(
       subject: `[Test] ${rendered.subject}`,
       body: rendered.body,
       ...(checked.value.body_html ? { html_body: fillHtml(checked.value.body_html, values) } : {}),
-      look: await lookFor(tx, eventId, { label: "Upload and manage your files", url: signIn }),
+      look: await lookFor(tx, eventId, { label: SIGN_IN_BUTTON, url: SIGN_IN_URL }),
     }),
   ]);
   await appendAudit(tx, {
@@ -491,6 +518,8 @@ export async function recipientsFor(
 
 export type EventFacts = {
   client_id: string;
+  /** A practice event's speakers are made up (D-116): no sign-in is ever created for them. */
+  is_practice?: boolean;
   name: string;
   deadline: string | null;
   timezone: string;
@@ -503,6 +532,8 @@ type QueueInput = {
   eventId: string;
   event: EventFacts;
   template: TemplateRow;
+  /** Who sent it, for the audit of a sign-in made on the way; absent for the automatic reminders. */
+  actorUserId?: string | undefined;
   recipient: {
     speaker_id: string;
     name: string;
@@ -555,15 +586,21 @@ export function talkFields(
  * entry the dispatcher delivers. Shared by the batch and the single send (D-086).
  */
 async function queueInvitation(tx: pg.PoolClient, input: QueueInput): Promise<string> {
-  // Each recipient gets their own link; a batch never contains a shared URL.
-  const token = randomUUID();
-  await tx.query(
-    `INSERT INTO pmp.speaker_tokens (speaker_id, event_id, client_id, kind, token_hash, expires_at)
-     VALUES ($1,$2,$3,'magic_link',$4, ${SPEAKER_LINK_EXPIRES_SQL})`,
-    [input.recipient.speaker_id, input.eventId, input.event.client_id, hashToken(token)],
-  );
-
-  const uploadLink = `${PORTAL_BASE}/t/${token}`;
+  /*
+   * The speaker's sign-in (D-147) is what the email carries: made now if there is none, or
+   * its temporary password reissued if it was never used. A practice event's speakers are
+   * made up and get no account — the email, never sent (D-116), shows a sample password.
+   */
+  const signIn = input.event.is_practice
+    ? null
+    : await ensureSpeakerSignIn(tx, {
+        email: input.recipient.email,
+        displayName: input.recipient.name,
+        eventId: input.eventId,
+        clientId: input.event.client_id,
+        actorUserId: input.actorUserId,
+      });
+  const temporaryPassword = input.event.is_practice ? "XXXX-XXXX-XXXX-XXXX" : (signIn?.temporary_password ?? null);
   const values = {
     ...personFields(input.recipient.name),
     ...eventFields(input.event),
@@ -572,13 +609,13 @@ async function queueInvitation(tx: pg.PoolClient, input: QueueInput): Promise<st
     ...talkFields(input.recipient.talks, input.event.timezone),
     // Worded exactly as the speaker portal shows it, not a raw "2027-03-01".
     deadline: input.event.deadline ? formatDeadline(input.event.deadline, input.event.timezone) : "the published deadline",
-    // Where speakers actually reach the portal (D-080) — it was hard-coded to localhost,
-    // so every production email would have carried a link that goes nowhere.
-    upload_link: uploadLink,
+    upload_link: SIGN_IN_URL,
+    sign_in: signInBlock(temporaryPassword),
   };
   const rendered = renderTemplate(input.template, values);
   // A formatted template (D-139) is sent as formatted HTML; `rendered.body` is its text twin.
   const htmlBody = input.template.body_html ? fillHtml(input.template.body_html, values) : null;
+  const sensitive = Boolean(temporaryPassword) && !input.event.is_practice;
 
   const { rows: comm } = await tx.query<{ id: string }>(
     `INSERT INTO pmp.communications (event_id, client_id, speaker_id, template_id, to_address, subject, body, status)
@@ -590,9 +627,9 @@ async function queueInvitation(tx: pg.PoolClient, input: QueueInput): Promise<st
       input.template.id,
       input.recipient.email,
       rendered.subject,
-      // Kept for the archive (D-069) without the sign-in link: the token in it logs the
-      // speaker in for 30 days, and the stored copy ends up in the client's package.
-      rendered.body.replaceAll(token, "[personal link removed]"),
+      // Kept for the archive (D-069) without the password: the stored copy ends up in the
+      // client's package, and a password belongs in exactly one place — the speaker's inbox.
+      sensitive && temporaryPassword ? rendered.body.replaceAll(temporaryPassword, PASSWORD_REDACTED) : rendered.body,
     ],
   );
 
@@ -604,8 +641,10 @@ async function queueInvitation(tx: pg.PoolClient, input: QueueInput): Promise<st
       subject: rendered.subject,
       body: rendered.body,
       ...(htmlBody ? { html_body: htmlBody } : {}),
-      // Banner, button to their own upload page, sender name and reply-to (D-138).
-      look: await lookFor(tx, input.eventId, { label: "Upload and manage your files", url: uploadLink }),
+      // The dispatcher strips the body from the outbox row once it has gone (D-100).
+      ...(sensitive ? { sensitive: true } : {}),
+      // Banner, button to the sign-in page, sender name and reply-to (D-138).
+      look: await lookFor(tx, input.eventId, { label: SIGN_IN_BUTTON, url: SIGN_IN_URL }),
     }),
   ]);
   return comm[0]!.id;
@@ -662,6 +701,7 @@ export async function sendBatch(
     rooms: string;
     days: string;
     client_id: string;
+    is_practice: boolean;
     name: string;
     deadline: string | null;
     timezone: string;
@@ -671,7 +711,7 @@ export async function sendBatch(
   }>(
     `SELECT (SELECT count(*)::text FROM pmp.rooms WHERE event_id = e.id) AS rooms,
             (SELECT count(*)::text FROM pmp.event_days WHERE event_id = e.id) AS days,
-            e.client_id, e.name, (e.settings ->> 'upload_deadline') AS deadline, e.timezone,
+            e.client_id, e.is_practice, e.name, (e.settings ->> 'upload_deadline') AS deadline, e.timezone,
             v.name AS venue, e.starts_on::text AS starts_on, e.ends_on::text AS ends_on
        FROM pmp.events e LEFT JOIN pmp.venues v ON v.id = e.venue_id WHERE e.id = $1`,
     [input.eventId],
@@ -685,7 +725,7 @@ export async function sendBatch(
     return err({
       code: "comms.event_incomplete",
       message:
-        "Invitations can't be sent until the event has at least one day and one room — a speaker link would point at nothing.",
+        "Invitations can't be sent until the event has at least one day and one room — there would be nothing to upload for.",
     });
   }
 
@@ -738,6 +778,7 @@ export async function sendBatch(
       eventId: input.eventId,
       event,
       template,
+      actorUserId: actor.isMachine ? undefined : actor.id,
       recipient: { speaker_id: recipient.speaker_id, name: recipient.name, email: recipient.email, talks: recipient.talks },
     });
     queued += 1;
@@ -762,9 +803,6 @@ export async function sendBatch(
 /** What the Speakers screen shows about the last email a speaker was sent (D-086). */
 export type LastEmail = { status: string; at: string; to: string; count: number };
 
-/** The statuses that mean the email did not reach the speaker, so sending again is not a repeat. */
-const UNDELIVERED = ["bounced", "complained", "failed"];
-
 /**
  * Emails one speaker their upload link, with the event's invitation template (D-086).
  *
@@ -787,6 +825,7 @@ export async function sendUploadLink(
     rooms: string;
     days: string;
     client_id: string;
+    is_practice: boolean;
     name: string;
     deadline: string | null;
     timezone: string;
@@ -796,7 +835,7 @@ export async function sendUploadLink(
   }>(
     `SELECT (SELECT count(*)::text FROM pmp.rooms WHERE event_id = e.id) AS rooms,
             (SELECT count(*)::text FROM pmp.event_days WHERE event_id = e.id) AS days,
-            e.client_id, e.name, (e.settings ->> 'upload_deadline') AS deadline, e.timezone,
+            e.client_id, e.is_practice, e.name, (e.settings ->> 'upload_deadline') AS deadline, e.timezone,
             v.name AS venue, e.starts_on::text AS starts_on, e.ends_on::text AS ends_on
        FROM pmp.events e LEFT JOIN pmp.venues v ON v.id = e.venue_id WHERE e.id = $1`,
     [input.eventId],
@@ -806,7 +845,7 @@ export async function sendUploadLink(
   if (Number(event.rooms) === 0 || Number(event.days) === 0) {
     return err({
       code: "comms.event_incomplete",
-      message: "Upload links can't be sent until the event has at least one day and one room.",
+      message: "Sign-in emails can't be sent until the event has at least one day and one room.",
     });
   }
 
@@ -842,9 +881,8 @@ export async function sendUploadLink(
     });
   }
 
-  const { rows: history } = await tx.query<{ status: string; at: string; to_address: string; upload_link: boolean }>(
-    `SELECT status, COALESCE(sent_at, created_at)::text AS at, to_address::text,
-            template_id IS NOT NULL AS upload_link
+  const { rows: history } = await tx.query<{ status: string; to_address: string }>(
+    `SELECT status, to_address::text
        FROM pmp.communications
       WHERE speaker_id = $1
          -- A bounce or complaint on this address anywhere counts too (D-097).
@@ -852,7 +890,7 @@ export async function sendUploadLink(
       ORDER BY created_at DESC`,
     [input.speakerId, speaker.email],
   );
-  // Only a bounce on the address on file now blocks: once corrected, the link can go (D-108).
+  // Only a bounce on the address on file now blocks: once corrected, the email can go (D-108).
   if (
     history.some(
       (row) =>
@@ -862,16 +900,23 @@ export async function sendUploadLink(
   ) {
     return err({
       code: "comms.bounced_conflict",
-      message: `An earlier email to ${speaker.email} bounced. Correct the address with "Edit email", then send the link again.`,
+      message: `An earlier email to ${speaker.email} bounced. Correct the address on the Agenda, then send the sign-in again.`,
     });
   }
-  // Only an upload-link email counts as "sent" (D-090) — a review decision's email is
-  // not one — while a bounce on any email to them counts: the address is the problem.
-  const reached = history.find((row) => row.upload_link && !UNDELIVERED.includes(row.status));
-  if (reached) {
+  /*
+   * Sent again freely while the sign-in is unused (D-147): each send reissues the temporary
+   * password, which is what "Resend" is for. Once the speaker has chosen a password there is
+   * nothing to send — they sign in with it, and the page offers "Forgotten your password?".
+   */
+  const { rows: account } = await tx.query<{ must_change_password: boolean; account_kind: string }>(
+    `SELECT must_change_password, account_kind FROM pmp.users
+      WHERE lower(email::text) = lower($1) AND is_active AND deleted_at IS NULL`,
+    [speaker.email],
+  );
+  if (account[0] && account[0].account_kind === "speaker" && !account[0].must_change_password) {
     return err({
-      code: "comms.already_sent_conflict",
-      message: `${speaker.name} was already emailed an upload link (${wordsFor(EMAIL_STATUS, reached.status).label.toLowerCase()}, to ${reached.to_address}). Their link still works, so there is no need to send another.`,
+      code: "comms.already_signed_in",
+      message: `${speaker.name} already has a sign-in and has chosen their password, so there is nothing to send. They can use "Forgotten your password?" on the sign-in page.`,
     });
   }
 
@@ -883,6 +928,7 @@ export async function sendUploadLink(
     eventId: input.eventId,
     event,
     template,
+    actorUserId: actor.id,
     recipient: {
       speaker_id: input.speakerId,
       name: speaker.name,

@@ -34,7 +34,7 @@ async function drain(): Promise<number> {
           `UPDATE pmp.outbox
               SET dispatched_at = now(),
                   payload = CASE WHEN payload->>'sensitive' = 'true'
-                                 THEN payload || '{"body":"[removed after sending: contained a temporary password]"}'::jsonb
+                                 THEN (payload - 'html_body') || '{"body":"[removed after sending: contained a temporary password]"}'::jsonb
                                  ELSE payload END
             WHERE id = $1`,
           [row.id],

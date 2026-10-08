@@ -1,21 +1,16 @@
 "use client";
 
-import { copyText } from "@/lib/copy";
-import { CopyFallback } from "@/components/CopyFallback";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { DuplicatePair, ReleasePermission, SpeakerRow } from "@/lib/api";
 import {
   getSpeakers,
   mergeSpeakers,
-  inviteSpeaker,
   remindSpeakersWithoutFiles,
   addSpeaker,
   sendUploadLink,
   setReleasePermission,
   removeSpeaker,
-  updateSpeakerEmail,
-  createSpeakerAccount,
   ApiError,
 } from "@/lib/api";
 import { Chip } from "@/components/Chip";
@@ -53,10 +48,8 @@ export function SpeakersView({
   const [mergeAsk, setMergeAsk] = useState<string | null>(null);
   // D-113: emailing asks first — the reminder batch, and a speaker's once-only link.
   const [askRemind, setAskRemind] = useState(false);
-  const [askLink, setAskLink] = useState<string | null>(null);
-  // A link the browser wouldn't let us copy, shown under its row to copy by hand (D-117).
-  const [linkFor, setLinkFor] = useState<{ id: string; url: string } | null>(null);
-  const [editingEmail, setEditingEmail] = useState<{ row: SpeakerRow; value: string } | null>(null);
+  // D-147: sending a sign-in asks first, as every email does.
+  const [askSignIn, setAskSignIn] = useState<string | null>(null);
 
   // The server component re-renders on refresh; the list here is client state, so a
   // new speaker is fetched rather than waiting on a prop that `useState` would ignore.
@@ -114,49 +107,31 @@ export function SpeakersView({
   }
 
   /**
-   * A persistent sign-in for the speaker (D-146): one account for their address, on this
-   * site, reaching every event they speak at. The temporary password is emailed to them.
+   * The speaker's sign-in (D-146, D-147): the invitation email with their talks, the
+   * sign-in link and a temporary password. "Resend" issues a fresh temporary password
+   * while the first was never used; once the speaker has chosen their own, there is
+   * nothing to send.
    */
-  async function createSignIn(row: SpeakerRow) {
-    setPending(`${row.id}:account`);
-    setError(null);
-    setToast(null);
-    try {
-      const result = await createSpeakerAccount(eventId, row.id);
-      setRows((current) => current.map((item) => (item.id === row.id ? { ...item, account: item.account ?? "invited" } : item)));
-      setToast(
-        result.outcome === "created"
-          ? `Sign-in created — a temporary password was emailed to ${result.email}.`
-          : `${row.full_name} already has a sign-in for ${result.email}; it works on this event too.`,
-      );
-      router.refresh();
-    } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : "The sign-in could not be created.");
-    } finally {
-      setPending(null);
-    }
-  }
-
-  async function emailLink(row: SpeakerRow) {
+  async function sendSignIn(row: SpeakerRow) {
     setPending(`${row.id}:send`);
     setError(null);
     setToast(null);
     try {
       const sent = await sendUploadLink(eventId, row.id);
-      setToast(`Upload link emailed to ${sent.to}`);
+      setRows((current) =>
+        current.map((item) => (item.id === row.id ? { ...item, account: item.account === "active" ? "active" : "invited" } : item)),
+      );
+      setToast(`Sign-in emailed to ${sent.to} — their talks, the sign-in link and a temporary password.`);
       await reload();
       // The dispatcher picks it up within a second or two; show "sent" when it has.
       setTimeout(() => void reload().catch(() => undefined), 2500);
     } catch (caught) {
-      setError(
-        caught instanceof ApiError
-          ? caught.message
-          : "The email could not be sent.",
-      );
+      setError(caught instanceof ApiError ? caught.message : "The email could not be sent.");
     } finally {
       setPending(null);
     }
   }
+
 
   function statusOf(row: SpeakerRow): { status: string; label: string } {
     if (row.talks === 0)
@@ -238,7 +213,7 @@ export function SpeakersView({
       {askRemind && (
         <ConfirmInline
           question={`Email a reminder to ${missing.length} speaker${missing.length === 1 ? "" : "s"} missing files now?`}
-          detail="Each one gets the reminder email with their personal upload link. Anyone emailed about this event in the last day, or without a working address, is skipped."
+          detail="Each one gets the reminder email with their sign-in details. Anyone emailed about this event in the last day, or without a working address, is skipped."
           confirmLabel="Send reminders"
           busyLabel="Sending…"
           onConfirm={async () => {
@@ -376,13 +351,14 @@ export function SpeakersView({
                       talk the strictest speaker&rsquo;s choice applies.
                     </InfoTip>
                   </th>
-                  <th>Upload link</th>
+                  <th>Last email</th>
                   <th>
                     Sign-in{" "}
                     <InfoTip label="Sign-in" align="right">
                       A speaker&rsquo;s own account on this site: one password for their email
                       address, which opens Manage presentations for every event they speak at.
-                      The emailed upload link still works without it.
+                      Send sign-in emails them their talks, the sign-in link and a temporary
+                      password; Resend issues a new one while the first is unused.
                     </InfoTip>
                   </th>
                   <th style={{ textAlign: "right", width: 1 }}>Action</th>
@@ -438,145 +414,75 @@ export function SpeakersView({
                         <EmailStatus email={row.last_email} />
                       </td>
                       <td style={{ whiteSpace: "nowrap" }}>
-                        {row.account === "active" ? (
-                          <Chip status="ok" label="Active" hint="Has signed in and chosen a password." />
-                        ) : row.account === "invited" ? (
-                          <Chip status="info" label="Invited" hint="Emailed a temporary password; not yet changed." />
-                        ) : (
-                          <HoverTip label={row.email ? "Create a sign-in and email them the password" : "Add an email address first"}>
-                            <button
-                              className="btn"
-                              style={ICON_BUTTON}
-                              disabled={pending === `${row.id}:account` || !row.email}
-                              aria-label={`Create sign-in for ${row.full_name}`}
-                              onClick={() => void createSignIn(row)}
-                            >
-                              <Icon name="key" /> {pending === `${row.id}:account` ? "Creating…" : "Create sign-in"}
-                            </button>
-                          </HoverTip>
-                        )}
-                      </td>
-                      {/*
-                        The actions stack. Side by side they were the widest thing in
-                        the row — wider than the card at the widths the table is actually
-                        shown at — and the last of them was cut off at the edge. One
-                        under another they take a column the width of the longest label,
-                        every one visible, and the row grows down instead of out.
-                      */}
-                      <td style={{ width: 1, whiteSpace: "nowrap" }}>
-                        <span
-                          style={{
-                            display: "flex",
-                            flexDirection: "column",
-                            alignItems: "stretch",
-                            gap: 6,
-                          }}
-                        >
-                          {/* Emailed once, never again (D-086): once sent, the send action is gone. */}
-                          {!emailedAlready(row) &&
-                            (() => {
-                              const label = !row.email
-                                ? "Add an email address first"
-                                : row.talks === 0
-                                  ? "Add them to a session first"
-                                  : "Email upload link";
-                              return (
-                                <HoverTip label={label}>
-                                  <button
-                                    className="btn"
-                                    style={ICON_BUTTON}
-                                    disabled={
-                                      pending === `${row.id}:send` ||
-                                      !row.email ||
-                                      row.talks === 0
-                                    }
-                                    aria-label={label}
-                                    onClick={() => setAskLink(row.id)}
-                                  >
-                                    <Icon name="send" /> Email link
-                                  </button>
-                                </HoverTip>
-                              );
-                            })()}
-                          <HoverTip label="Copy upload link">
-                            <button
-                              className="btn"
-                              style={ICON_BUTTON}
-                              disabled={pending === `${row.id}:copy`}
-                              aria-label={`Copy upload link for ${row.full_name}`}
-                              onClick={() => {
-                                setPending(`${row.id}:copy`);
-                                setLinkFor(null);
-                                // The copy starts inside this click, before the link arrives (D-117).
-                                const url = inviteSpeaker(row.id).then((invite) => invite.url);
-                                void copyText(url)
-                                  .then(async (copied) => {
-                                    if (copied) setToast(`Link copied for ${row.full_name}`);
-                                    // Refused: show the link to copy or open by hand, not a passing toast.
-                                    else setLinkFor({ id: row.id, url: await url });
-                                  })
-                                  .catch(() => setError("Could not issue a link."))
-                                  .finally(() => setPending(null));
-                              }}
-                            >
-                              <Icon name="clipboard" /> Copy link
-                            </button>
-                          </HoverTip>
-                          <HoverTip label="Edit email">
-                            <button
-                              className="btn"
-                              style={ICON_BUTTON}
-                              aria-label={`Edit email for ${row.full_name}`}
-                              onClick={() => setEditingEmail({ row, value: row.email ?? "" })}
-                            >
-                              <Icon name="mail" /> Edit email
-                            </button>
-                          </HoverTip>
-                          <HoverTip label="Remove speaker">
-                            <button
-                              className="btn"
-                              style={ICON_BUTTON}
-                              disabled={pending === `${row.id}:remove`}
-                              aria-label={`Remove ${row.full_name} from this event`}
-                              onClick={() => setRemoving(row)}
-                            >
-                              <Icon name="trash" /> Remove
-                            </button>
-                          </HoverTip>
+                        <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 6 }}>
+                          {row.account === "active" ? (
+                            <Chip status="ok" label="Active" hint="Has signed in and chosen a password." />
+                          ) : (
+                            <>
+                              {row.account === "invited" && (
+                                <Chip status="info" label="Invited" hint="Emailed a temporary password; not yet changed." />
+                              )}
+                              {(() => {
+                                const label = !row.email
+                                  ? "Add an email address first"
+                                  : row.talks === 0
+                                    ? "Add them to a session first"
+                                    : row.account === "invited"
+                                      ? "Resend the sign-in with a new temporary password"
+                                      : "Email their sign-in";
+                                return (
+                                  <HoverTip label={label}>
+                                    <button
+                                      className="btn"
+                                      style={ICON_BUTTON}
+                                      disabled={pending === `${row.id}:send` || !row.email || row.talks === 0}
+                                      aria-label={`${row.account === "invited" ? "Resend" : "Send"} sign-in for ${row.full_name}`}
+                                      onClick={() => setAskSignIn(row.id)}
+                                    >
+                                      <Icon name="key" /> {row.account === "invited" ? "Resend sign-in" : "Send sign-in"}
+                                    </button>
+                                  </HoverTip>
+                                );
+                              })()}
+                            </>
+                          )}
                         </span>
-                        {linkFor?.id === row.id && (
-                          <CopyFallback
-                            label={`${row.full_name}'s upload link`}
-                            text={linkFor.url}
-                            onCopied={() => {
-                              setLinkFor(null);
-                              setToast(`Link copied for ${row.full_name}`);
-                            }}
-                            onClose={() => setLinkFor(null)}
-                          />
-                        )}
-                        {askLink === row.id && (
+                        {askSignIn === row.id && (
                           <ConfirmInline
-                            question={`Email ${row.full_name} their upload link?`}
-                            detail={`It goes to ${row.email ?? "their address"}. The link is emailed once — after that, use Copy link to share it again.`}
-                            confirmLabel="Email link"
+                            question={`Email ${row.full_name} their sign-in?`}
+                            detail={`It goes to ${row.email ?? "their address"}: their talks, the sign-in link and a ${row.account === "invited" ? "new " : ""}temporary password.`}
+                            confirmLabel={row.account === "invited" ? "Resend sign-in" : "Send sign-in"}
                             busyLabel="Sending…"
-                            onConfirm={() => emailLink(row)}
-                            onClose={() => setAskLink(null)}
+                            onConfirm={() => sendSignIn(row)}
+                            onClose={() => setAskSignIn(null)}
                           />
                         )}
-                        {/* D-111: why "Email link" is greyed, on the page and with the way round it. */}
-                        {!emailedAlready(row) && (
+                        {/* D-111: why the button is greyed, on the page and with the way round it. */}
+                        {row.account !== "active" && (
                           <WhyNot
                             reason={
                               !row.email
-                                ? "No email address yet — use Edit email to add one."
+                                ? "No email address yet — add one on the event's Agenda tab."
                                 : row.talks === 0
                                   ? "Not in a session yet — add them to one on the event's Agenda tab first."
                                   : null
                             }
                           />
                         )}
+                      </td>
+                      {/* One action (D-147): everything else a speaker needs is on the Agenda or in their sign-in. */}
+                      <td style={{ width: 1, whiteSpace: "nowrap", textAlign: "right" }}>
+                        <HoverTip label="Remove speaker">
+                          <button
+                            className="btn"
+                            style={ICON_BUTTON}
+                            disabled={pending === `${row.id}:remove`}
+                            aria-label={`Remove ${row.full_name} from this event`}
+                            onClick={() => setRemoving(row)}
+                          >
+                            <Icon name="trash" /> Remove
+                          </button>
+                        </HoverTip>
                       </td>
                     </tr>
                   );
@@ -586,57 +492,6 @@ export function SpeakersView({
           )}
         </div>
       </div>
-
-      {/* Correcting an address (D-108): a bounced email was a dead end before. */}
-      {editingEmail && (
-        <div className="card" style={{ maxWidth: 560 }}>
-          <div className="chd">
-            <h3>Email address for {editingEmail.row.full_name}</h3>
-          </div>
-          <form
-            className="cbd"
-            onSubmit={(event) => {
-              event.preventDefault();
-              const who = editingEmail.row;
-              setPending(`${who.id}:email`);
-              setError(null);
-              void updateSpeakerEmail(eventId, who.id, editingEmail.value)
-                .then(({ email }) => {
-                  setRows((current) => current.map((row) => (row.id === who.id ? { ...row, email } : row)));
-                  setEditingEmail(null);
-                  setToast(`Saved. You can now email ${who.full_name} their upload link.`);
-                  router.refresh();
-                })
-                .catch((caught) => setError(caught instanceof ApiError ? caught.message : "Could not save the address."))
-                .finally(() => setPending(null));
-            }}
-          >
-            {editingEmail.row.last_email?.status === "bounced" && (
-              <div className="note" style={{ marginBottom: 8 }}>
-                The last email to {editingEmail.row.email} bounced — it couldn&rsquo;t be delivered. Check the
-                spelling with the speaker.
-              </div>
-            )}
-            <input
-              type="email"
-              aria-label="Email address"
-              style={{ width: "100%" }}
-              value={editingEmail.value}
-              onChange={(event) => setEditingEmail({ ...editingEmail, value: event.target.value })}
-              autoFocus
-            />
-            <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-              <button className="btn pri" disabled={pending === `${editingEmail.row.id}:email` || !editingEmail.value.trim()}>
-                Save address
-              </button>
-              <button type="button" className="btn" onClick={() => setEditingEmail(null)}>
-                Cancel
-              </button>
-            </div>
-            <WhyNot reason={!editingEmail.value.trim() ? "Enter an email address to save." : null} />
-          </form>
-        </div>
-      )}
 
       {removing && (
         <RemoveSpeakerDialog
@@ -814,7 +669,7 @@ function AddSpeakerDialog({
               style={{ width: "100%" }}
               value={email}
               onChange={(event) => setEmail(event.target.value)}
-              placeholder="Needed to send an upload link"
+              placeholder="Needed to send their sign-in"
             />
           </div>
           <div className="field">
@@ -903,14 +758,6 @@ function AddSpeakerDialog({
     </div>
   );
 }
-
-/**
- * The upload link is emailed once per speaker (D-086). Only an email that failed before
- * leaving leaves the button live; the server enforces the same rule.
- */
-const emailedAlready = (row: SpeakerRow) =>
-  // A bounced link can be sent again once the address is corrected (D-108).
-  row.last_email && !["failed", "bounced"].includes(row.last_email.status) ? row.last_email : null;
 
 /** What the archive may share (FR-SPK-003); "Not set" leaves the speaker's talks out. */
 const RELEASE_OPTIONS: [ReleasePermission, string][] = [

@@ -2,7 +2,7 @@ import { test, describe, before, after } from "node:test";
 import assert from "node:assert/strict";
 import type { TestContext } from "node:test";
 import { signInStaff } from "../helpers/signIn.ts";
-import { removeTestEvents } from "../helpers/cleanup.ts";
+import { removeTestAccounts, removeTestEvents } from "../helpers/cleanup.ts";
 import { withSystemScope } from "@pmp/db";
 import { runDueReminders } from "../../apps/api/src/services/reminders.ts";
 
@@ -134,6 +134,8 @@ after(async () => {
   if (!up) return;
   if (speakerId) await call("DELETE", `/events/${eventId}/speakers/${speakerId}`);
   if (eventId) await call("POST", `/events/${eventId}/archive`);
+  // Sign-ins made on the way by the reminders (D-147).
+  await removeTestAccounts(["reminder."]);
   await removeTestEvents([DRAFT_NAME]);
 });
 

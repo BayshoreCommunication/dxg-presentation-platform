@@ -3116,7 +3116,8 @@ app.post("/api/v1/events/:eventId/speakers/:speakerId/send-link", async (req, re
   );
   if (!result.ok) {
     const code = result.error.code;
-    const status = code === "comms.no_email" || code === "comms.no_talk" ? 422 : statusFor(result.error);
+    const status =
+      code === "comms.no_email" || code === "comms.no_talk" ? 422 : code === "comms.already_signed_in" ? 409 : statusFor(result.error);
     return res.status(status).json(result.error);
   }
   return res.status(201).json(result.value);
@@ -3134,7 +3135,7 @@ app.post("/api/v1/events/:eventId/speakers/:speakerId/account", async (req, res)
     const status = result.error.code === "auth.bad_email" ? 422 : statusFor(result.error);
     return res.status(status).json(result.error);
   }
-  return res.status(result.value.outcome === "created" ? 201 : 200).json(result.value);
+  return res.status(result.value.outcome === "existing" ? 200 : 201).json(result.value);
 });
 
 app.post("/api/v1/events/:eventId/comms/send", async (req, res) => {

@@ -48,7 +48,8 @@ const FIELD_LABEL: Record<string, string> = {
   session_end: "Session end time",
   session_time: "Session day and time",
   deadline: "Deadline",
-  upload_link: "Upload link",
+  upload_link: "Sign-in link",
+  sign_in: "Sign-in details (link and temporary password)",
   presentations: "List of their presentations",
 };
 
@@ -105,7 +106,8 @@ function previewValues(
       session_time: listed(talks.map(when)),
       presentations: talks.map((talk) => `• ${talk.title} — ${talk.room ?? "Room TBC"}, ${when(talk)}`).join("\n"),
       deadline: deadline ? formatDeadline(deadline, event.timezone) : "the published deadline",
-      upload_link: `[${firstName(name)}'s personal upload link]`,
+      upload_link: "https://…/login",
+      sign_in: `Sign in at https://…/login with this email address and your temporary password:\n\n    XXXX-XXXX-XXXX-XXXX\n\nYou'll be asked to choose your own password straight away.`,
     },
   };
 }
@@ -531,7 +533,7 @@ export function CommsView({
                 </div>
                 <div>
                   <div className="kl">Each speaker gets</div>
-                  <div className="note">Their own copy, with their own details and personal upload link.</div>
+                  <div className="note">Their own copy, with their own details and sign-in.</div>
                 </div>
                 <TestSend
                   to={testTo}
@@ -801,7 +803,7 @@ const FIELD_GROUPS: { title: string; fields: string[] }[] = [
     title: "Session",
     fields: ["talk_title", "room", "session_date", "session_start", "session_end", "session_time", "presentations"],
   },
-  { title: "Link", fields: ["upload_link"] },
+  { title: "Sign-in", fields: ["sign_in", "upload_link"] },
 ];
 
 /** One "Insert detail" menu instead of fifteen buttons; the detail goes where the cursor is. */

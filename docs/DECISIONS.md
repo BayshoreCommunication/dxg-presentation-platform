@@ -2657,3 +2657,30 @@ and updates their presentation; Files, Communications and Archive builder are hi
 CSV; Room sync "Download All" + technician room scope + Room Agent removal; the four-role model (Admin, Support Staff,
 Technician, Client Admin) and the Speaker Support Staff role; SRR on/off switch and Preview Slides opening PowerPoint
 locally.
+
+## D-147 (2026-10-08): Invitations carry the speaker's sign-in; the access-code portal is unlinked — Status: ACCEPTED (Travis: "speaker upload section tahole ar lagteche na")
+The speaker's credential is their password (D-146), so every email now points at the staff site's sign-in page and
+carries the sign-in itself; no personal portal link is minted any more.
+- **One email**: `queueInvitation` calls `ensureSpeakerSignIn` (new in `auth.ts`): makes the speaker's account for the
+  address if there is none, or reissues the temporary password of one never used, and the `{{sign_in}}` merge field
+  renders the sign-in page, the address and that password (or, for an active account, "your password / Forgotten your
+  password?"). `{{upload_link}}` is now the sign-in URL. The `communications` copy stores the body with the password
+  replaced; the outbox row is `sensitive` and the dispatcher wipes `body` **and `html_body`** after sending. Practice
+  events make no account and show a sample password in the never-sent email. Review-decision emails point at the
+  sign-in page too. **Migration 033** rewrites the stored default invitation and reminder still word for word the 031
+  default (unformatted; edited ones untouched); `DEFAULT_TEMPLATES` match.
+- **Templates** must keep `{{sign_in}}` (or at least `{{upload_link}}`); the Comms editor's Insert menu has "Sign-in"
+  → Sign-in details / Sign-in link.
+- **Speakers screen**: the Action column keeps **Remove** only (Email link, Copy link and Edit email are gone — the
+  address is edited on the Agenda). The **Sign-in** column does the sending: **Send sign-in** (none yet), **Invited +
+  Resend sign-in** (reissues a new temporary password while the first is unused), **Active** (nothing to send; the API
+  refuses with 409 `comms.already_signed_in`). The "Last email" column follows delivery as before. The once-only rule
+  (D-086) is retired: resending is how a lost temporary password is replaced. A bounce still blocks until the address
+  is corrected.
+- **Speaker portal (`apps/speaker-portal`, :3001)**: unlinked, not deleted. Nothing sends or shows its links; `npm run
+  dev` no longer starts it; its API routes (`/portal/*`, `/invite`, access codes) stay so links already in inboxes keep
+  working through their expiry. Deletion is a later round, after production has moved over.
+- Tests: speakers-add-and-send (stored copy redacted, outbox sensitive, resend then 409 once active), email-look (button
+  and formatted link are `/login`; the invitation mints no token), event-owned-data (sign-in is a merge field), the
+  comms unit test, speaker-accounts (second press reissues). Suites that send invitations now remove the accounts they
+  make on the way.

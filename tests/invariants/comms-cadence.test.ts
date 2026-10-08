@@ -2,6 +2,7 @@ import { test, describe, before, after } from "node:test";
 import assert from "node:assert/strict";
 import type { TestContext } from "node:test";
 import { signInStaff } from "../helpers/signIn.ts";
+import { removeTestAccounts } from "../helpers/cleanup.ts";
 import { withSystemScope } from "@pmp/db";
 
 /**
@@ -146,6 +147,8 @@ before(async () => {
 
 after(async () => {
   if (!up) return;
+  // Sign-ins made on the way by the invitations (D-147).
+  await removeTestAccounts(["cadence@"]);
   /*
    * The event stays, archived. See the note in `before`: it has sent mail, the
    * dispatcher recorded delivery against it, and `communication_events` is append-only

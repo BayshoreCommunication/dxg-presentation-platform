@@ -4,7 +4,7 @@ import type { TestContext } from "node:test";
 import { crc32, deflateSync } from "node:zlib";
 import { withSystemScope } from "@pmp/db";
 import { signInStaff } from "../helpers/signIn.ts";
-import { removeTestEvents } from "../helpers/cleanup.ts";
+import { removeTestAccounts, removeTestEvents } from "../helpers/cleanup.ts";
 
 /**
  * Branded speaker emails (D-138), after Preseria's "Customize Email Template": a banner of
@@ -106,7 +106,10 @@ before(async () => {
 });
 
 after(async () => {
-  if (up) await removeTestEvents([NAME]);
+  if (!up) return;
+  // Sign-ins made on the way by the invitations (D-147).
+  await removeTestAccounts(["ana.look.", "ana.formatted."]);
+  await removeTestEvents([NAME]);
 });
 
 describe("email settings (D-138)", () => {
@@ -212,7 +215,7 @@ describe("a real invitation carries the look (D-138)", () => {
     assert.equal(response.status, 201);
     const queued = await outboxFor(`ana.look.${RUN}@example.invalid`);
     assert.ok(queued?.look, "queued with a look");
-    assert.match(queued.look.button?.url ?? "", /\/t\/[0-9a-f-]{36}$/, "the button is their personal upload link");
+    assert.match(queued.look.button?.url ?? "", /\/login$/, "the button is the sign-in page (D-147)");
     assert.ok(queued.body.includes(queued.look.button!.url), "the same link is in the text");
     assert.equal(queued.look.from_name, "Probe Organisers");
     assert.match(queued.look.banner_url ?? "", /email-banner/);
@@ -270,7 +273,7 @@ describe("formatted messages (D-139)", () => {
     const queued = (await outboxFor(email)) as { body: string; html_body?: string } | undefined;
     assert.ok(queued?.html_body, "sent formatted");
     assert.match(queued.html_body, /<strong>Bo<\/strong>/, "first name filled inside the bold");
-    assert.match(queued.html_body, /<a href="https?:\/\/[^"]+\/t\/[0-9a-f-]{36}">/, "the upload link is a link");
+    assert.match(queued.html_body, /<a href="https?:\/\/[^"]+\/login">/, "the sign-in link is a link");
     assert.match(queued.body, /^Hi Bo,/, "and the plain-text twin goes too");
   });
 
@@ -305,11 +308,16 @@ describe("a speaker's link lasts through the event (D-141)", () => {
       return rows[0];
     });
 
-  test("an emailed invitation's link works until a week after the event", async (t: TestContext) => {
+  test("an emailed invitation carries the speaker's sign-in, not a personal link (D-147)", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
+    // The invitation sent earlier in this file minted no token: the credential is a password.
     const link = await lastsTheEvent(speakerId);
-    assert.ok(link, "fixture: the invitation sent earlier in this file");
-    assert.ok(link.ok, `expires ${link.expires_at}`);
+    assert.equal(link, undefined, "no magic link for an invitation any more");
+    const queued = (await outboxFor(`ana.look.${RUN}@example.invalid`)) as { body: string; sensitive?: boolean; look?: { button?: { url: string } } } | undefined;
+    assert.ok(queued, "fixture: the invitation");
+    // The dispatcher may already have sent it and wiped the password from the row (D-100).
+    assert.equal(queued.sensitive, true, "it carried a temporary password");
+    assert.match(queued.look?.button?.url ?? "", /\/login$/);
   });
 
   test("a copied link does too", async (t: TestContext) => {

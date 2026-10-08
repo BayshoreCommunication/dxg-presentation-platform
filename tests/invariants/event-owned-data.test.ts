@@ -123,15 +123,16 @@ describe("email templates are editable, within what sending can fill in", () => 
     };
     const template = comms.templates[0]!;
     assert.ok(comms.merge_fields.includes("upload_link"));
+    assert.ok(comms.merge_fields.includes("sign_in"), "the sign-in details are a merge field (D-147)");
 
     const patch = (body: { subject: string; body: string }) =>
       call(`/events/${probeId}/comms/templates/${template.id}`, { method: "PATCH", body: JSON.stringify(body) });
 
     assert.equal((await patch({ subject: template.subject, body: `${template.body}\n{{shoe_size}}` })).status, 422);
     assert.equal(
-      (await patch({ subject: template.subject, body: template.body.replace("{{upload_link}}", "") })).status,
+      (await patch({ subject: template.subject, body: template.body.replace("{{sign_in}}", "").replace("{{upload_link}}", "") })).status,
       422,
-      "without the link the speaker cannot upload",
+      "without the sign-in the speaker cannot reach their presentations",
     );
 
     const saved = await patch({ subject: "Your slides for {{event_name}}", body: "Hello {{speaker_name}}\n\n{{upload_link}}" });
