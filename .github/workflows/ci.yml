@@ -2,11 +2,15 @@
 #   checks     — lint, type-check every app, unit tests
 #   invariants — the API against a real Postgres (migrated + seeded), then the invariant suite
 #   images     — the four production images build (nothing is pushed)
+#   publish    — on the `production` branch only, once the three above pass: the same images (from
+#                the build cache) are pushed to ECR tagged with the 7-character commit, for deploy.sh
+#                (D-149). Releasing = merging main into production.
+# Pushes to main and production both run the checks; pull requests run everything but publish.
 name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, production]
   pull_request:
 
 # The Room Agent's tests use the fake driver; no job needs Electron's binary.
@@ -81,3 +85,42 @@ jobs:
           push: false
           cache-from: type=gha,scope=${{ matrix.target }}
           cache-to: type=gha,mode=max,scope=${{ matrix.target }}
+
+  # Production images (D-149). Only on a push to `production`, only after every check passed. The
+  # build is the `images` job's again, so mostly cache hits; GitHub signs in to AWS with OIDC (role
+  # pmp-github-image-push, which trusts this repository's production branch only — no stored keys).
+  # The tags are immutable in ECR: a commit is built once.
+  publish:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/production'
+    needs: [checks, invariants, images]
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    strategy:
+      matrix:
+        target: [api, dispatcher, staff, portal]
+    steps:
+      - uses: actions/checkout@v4
+      - id: tag
+        run: echo "tag=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::295229565954:role/pmp-github-image-push
+          aws-region: us-east-2
+      - id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/server/Dockerfile
+          target: ${{ matrix.target }}
+          platforms: linux/amd64
+          push: true
+          provenance: false
+          tags: ${{ steps.ecr.outputs.registry }}/pmp-${{ matrix.target }}:${{ steps.tag.outputs.tag }}
+          cache-from: type=gha,scope=${{ matrix.target }}
+      - run: |
+          echo "pmp-${{ matrix.target }}:${{ steps.tag.outputs.tag }} pushed." >> "$GITHUB_STEP_SUMMARY"
+          echo "Deploy on the server: \`cd /opt/pmp/deploy/server && ./deploy.sh ${{ steps.tag.outputs.tag }}\`" >> "$GITHUB_STEP_SUMMARY"

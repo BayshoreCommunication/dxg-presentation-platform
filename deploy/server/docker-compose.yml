@@ -6,6 +6,11 @@
 #   docker compose up -d
 #
 # Public: Caddy on 80/443 only. Everything else talks on the private compose network.
+#
+# Images (D-149): production pulls the four app images CI built and pushed to ECR —
+# PMP_IMAGE_PREFIX (the registry) and PMP_TAG (the release commit) in .env; `./deploy.sh <commit>`
+# sets the tag. Unset, the names are the local `pmp-api:latest` etc. that `docker compose build`
+# makes, so a build on the server still works as the fallback.
 name: pmp
 
 x-app-env: &app-env
@@ -54,7 +59,7 @@ services:
 
   api:
     build: { context: ../.., dockerfile: deploy/server/Dockerfile, target: api }
-    image: pmp-api
+    image: ${PMP_IMAGE_PREFIX:-}pmp-api:${PMP_TAG:-latest}
     restart: unless-stopped
     environment: *app-env
     volumes:
@@ -67,7 +72,7 @@ services:
   # Background jobs (D-103): PDF previews (LibreOffice, which the api image carries) and
   # automatic reminders. Same image as the API, its own process; answers no requests.
   worker:
-    image: pmp-api
+    image: ${PMP_IMAGE_PREFIX:-}pmp-api:${PMP_TAG:-latest}
     restart: unless-stopped
     command: ["node", "apps/api/src/worker.ts"]
     environment:
@@ -88,7 +93,7 @@ services:
 
   dispatcher:
     build: { context: ../.., dockerfile: deploy/server/Dockerfile, target: dispatcher }
-    image: pmp-dispatcher
+    image: ${PMP_IMAGE_PREFIX:-}pmp-dispatcher:${PMP_TAG:-latest}
     restart: unless-stopped
     environment: *app-env
     depends_on:
@@ -96,7 +101,7 @@ services:
 
   staff:
     build: { context: ../.., dockerfile: deploy/server/Dockerfile, target: staff }
-    image: pmp-staff
+    image: ${PMP_IMAGE_PREFIX:-}pmp-staff:${PMP_TAG:-latest}
     restart: unless-stopped
     environment:
       API_INTERNAL_ORIGIN: http://api:4000
@@ -104,7 +109,7 @@ services:
 
   portal:
     build: { context: ../.., dockerfile: deploy/server/Dockerfile, target: portal }
-    image: pmp-portal
+    image: ${PMP_IMAGE_PREFIX:-}pmp-portal:${PMP_TAG:-latest}
     restart: unless-stopped
     environment:
       API_INTERNAL_ORIGIN: http://api:4000
@@ -140,7 +145,7 @@ services:
 
   # One-shot: applies migrations as the schema owner and (re)sets the app role's password.
   migrate:
-    image: pmp-api
+    image: ${PMP_IMAGE_PREFIX:-}pmp-api:${PMP_TAG:-latest}
     profiles: ["ops"]
     environment:
       <<: *app-env
