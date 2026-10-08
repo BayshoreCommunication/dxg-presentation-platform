@@ -3449,3 +3449,12 @@ Speakers screen creates the sign-in (temporary password emailed) and shows Invit
 the seeded speaker (sign-in lands on the screen, one talk, approved download, pending v3 after an API upload) and over
 the API (cross-speaker upload refused, pending download 403, staff refused `/me`, reviewer refused account creation).
 `speaker-accounts` 10/10. Not deployed. Deferred items from the review are listed under D-146.
+
+**Same day, follow-up:** the whole first-login path walked in the browser — Create sign-in on the Speakers screen
+(toast, Invited badge; Raman shows Active), the temporary password read from `.data/mail/`, sign-in as the new speaker,
+the speaker-worded "Choose your own password" step (no sign-in app), landing on Manage presentations, a browser upload
+(v2 stored, 3 slides, "Thanks — we've received your presentation"). A speaker typing a staff address is sent to
+`/presentations` instead of the "add you on Event assignments" page; Help shows a speaker's own guide (and staff a
+"Give a speaker a sign-in" guide); no new colour tokens — the presenter card is drawn in the control centre's
+black-and-white.
+
