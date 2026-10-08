@@ -15,6 +15,7 @@ import {
   setReleasePermission,
   removeSpeaker,
   updateSpeakerEmail,
+  createSpeakerAccount,
   ApiError,
 } from "@/lib/api";
 import { Chip } from "@/components/Chip";
@@ -107,6 +108,30 @@ export function SpeakersView({
           ? caught.message
           : "The release permission could not be saved.",
       );
+    } finally {
+      setPending(null);
+    }
+  }
+
+  /**
+   * A persistent sign-in for the speaker (D-146): one account for their address, on this
+   * site, reaching every event they speak at. The temporary password is emailed to them.
+   */
+  async function createSignIn(row: SpeakerRow) {
+    setPending(`${row.id}:account`);
+    setError(null);
+    setToast(null);
+    try {
+      const result = await createSpeakerAccount(eventId, row.id);
+      setRows((current) => current.map((item) => (item.id === row.id ? { ...item, account: item.account ?? "invited" } : item)));
+      setToast(
+        result.outcome === "created"
+          ? `Sign-in created — a temporary password was emailed to ${result.email}.`
+          : `${row.full_name} already has a sign-in for ${result.email}; it works on this event too.`,
+      );
+      router.refresh();
+    } catch (caught) {
+      setError(caught instanceof ApiError ? caught.message : "The sign-in could not be created.");
     } finally {
       setPending(null);
     }
@@ -352,6 +377,14 @@ export function SpeakersView({
                     </InfoTip>
                   </th>
                   <th>Upload link</th>
+                  <th>
+                    Sign-in{" "}
+                    <InfoTip label="Sign-in" align="right">
+                      A speaker&rsquo;s own account on this site: one password for their email
+                      address, which opens Manage presentations for every event they speak at.
+                      The emailed upload link still works without it.
+                    </InfoTip>
+                  </th>
                   <th style={{ textAlign: "right", width: 1 }}>Action</th>
                 </tr>
               </thead>
@@ -403,6 +436,25 @@ export function SpeakersView({
                       </td>
                       <td style={{ whiteSpace: "nowrap" }}>
                         <EmailStatus email={row.last_email} />
+                      </td>
+                      <td style={{ whiteSpace: "nowrap" }}>
+                        {row.account === "active" ? (
+                          <Chip status="ok" label="Active" hint="Has signed in and chosen a password." />
+                        ) : row.account === "invited" ? (
+                          <Chip status="info" label="Invited" hint="Emailed a temporary password; not yet changed." />
+                        ) : (
+                          <HoverTip label={row.email ? "Create a sign-in and email them the password" : "Add an email address first"}>
+                            <button
+                              className="btn"
+                              style={ICON_BUTTON}
+                              disabled={pending === `${row.id}:account` || !row.email}
+                              aria-label={`Create sign-in for ${row.full_name}`}
+                              onClick={() => void createSignIn(row)}
+                            >
+                              <Icon name="key" /> {pending === `${row.id}:account` ? "Creating…" : "Create sign-in"}
+                            </button>
+                          </HoverTip>
+                        )}
                       </td>
                       {/*
                         The actions stack. Side by side they were the widest thing in

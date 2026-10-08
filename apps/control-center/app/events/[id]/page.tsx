@@ -144,7 +144,7 @@ export default async function CommandCenterPage({
       value: summary.approved,
       caption: "latest file approved",
       tone: summary.approved > 0 ? "ok" : undefined,
-      help: "Presentations whose latest file a reviewer has approved. Uploaded files wait in Review presentations until then.",
+      help: "Presentations whose latest file a reviewer has approved. Uploaded files wait in Manage presentations until then.",
     },
     {
       label: "Warnings", // S28 (D-113): "Warnings open" was cut off in the tile
@@ -152,7 +152,7 @@ export default async function CommandCenterPage({
       value: summary.warnings_open,
       caption: summary.warnings_open > 0 ? "not fixed or waived" : "none open",
       tone: summary.warnings_open > 0 ? "warn" : undefined,
-      help: "Problems the automatic inspection found in uploaded files — a missing font, an oversized video — that nobody has fixed or waived yet. Resolve them from Review presentations.",
+      help: "Problems the automatic inspection found in uploaded files — a missing font, an oversized video — that nobody has fixed or waived yet. Resolve them from Manage presentations.",
     },
     {
       label: "Missing",
@@ -203,8 +203,8 @@ export default async function CommandCenterPage({
           */}
           <Link href={`/events/${id}/review`} className="btn pri">
             {review.items.length > 0
-              ? `Review presentations (${review.items.length}) →`
-              : "Review presentations · none waiting"}
+              ? `Manage presentations (${review.items.length}) →`
+              : "Manage presentations · none waiting"}
           </Link>
         </div>
       </div>

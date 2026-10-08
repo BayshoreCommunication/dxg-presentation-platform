@@ -33,7 +33,9 @@ import {
   changeOwnPassword,
   issuePresenterCredential,
   revokePresenterCredential,
+  createSpeakerAccount,
 } from "./services/auth.ts";
+import { myPresentations, sessionForSlot, sessionForUpload, sessionForVersion } from "./services/speakerAccount.ts";
 import type { Principal } from "./services/auth.ts";
 import { startEnrolment, confirmEnrolment, disableMfa, answerChallenge } from "./services/mfa.ts";
 import { requestReset, completeReset } from "./services/passwordReset.ts";
@@ -684,6 +686,8 @@ const NON_STAFF_PATHS = [
   "/api/v1/auth/session",
   "/api/v1/auth/password",
   "/api/v1/portal/",
+  // A speaker account's own presentations (D-146): a signed-in account, never a staff one.
+  "/api/v1/me/",
   "/api/v1/client/",
   "/api/v1/webhooks/",
   "/api/v1/agent/",
@@ -709,7 +713,9 @@ app.use((req, res, next) => {
   // a new account used to be told "not open to your account" first, and only reached its
   // sign-in app setup after an administrator had assigned it an event (D-108).
   const principal = (req as express.Request & { principal?: Principal }).principal;
-  if (principal?.kind === "staff" && !principal.mfa_enrolled) {
+  // A speaker account (D-146) is never asked for a second factor: it is refused below as
+  // not staff, which is the true answer, rather than sent to set up a sign-in app.
+  if (principal?.kind === "staff" && principal.account_kind !== "speaker" && !principal.mfa_enrolled) {
     return res.status(403).json({
       code: "auth.mfa_required",
       message: "Set up your sign-in app before using the platform.",
@@ -718,7 +724,10 @@ app.use((req, res, next) => {
   if (!actor.roles.some((role) => STAFF_ROLES.includes(role))) {
     return res.status(403).json({
       code: "auth.not_staff",
-      message: "You haven't been added to an event yet.",
+      message:
+        principal?.kind === "staff" && principal.account_kind === "speaker"
+          ? "This part of the platform is for DXG staff. Your presentations are under Manage presentations."
+          : "You haven't been added to an event yet.",
     });
   }
   return next();
@@ -1321,6 +1330,13 @@ app.get("/api/v1/events/:eventId/speakers", async (req, res) => {
                                                    WHERE x.speaker_id = sp.id AND x.template_id IS NOT NULL))
                  FROM pmp.communications c WHERE c.speaker_id = sp.id AND c.template_id IS NOT NULL
                 ORDER BY c.created_at DESC LIMIT 1) AS last_email,
+              -- The speaker's persistent sign-in (D-146), found by email: none, invited (the
+              -- temporary password not yet changed) or active.
+              (SELECT CASE WHEN u.must_change_password THEN 'invited' ELSE 'active' END
+                 FROM pmp.users u
+                WHERE u.account_kind = 'speaker' AND u.is_active AND u.deleted_at IS NULL
+                  AND lower(u.email::text) = lower(sp.email::text)
+                LIMIT 1) AS account,
               -- Presentations whose newest version was sent back — changes requested, rejected,
               -- or failed inspection — so the list says "Needs revision" as the portal does (D-090).
               (SELECT count(*)::int
@@ -1553,6 +1569,128 @@ app.post("/api/v1/portal/uploads/:uploadId/complete", (req, res) =>
     return res.json(result.value);
   }),
 );
+
+/* ── a speaker account's own presentations (D-146) ────────────────────────── */
+
+/**
+ * The signed-in speaker *account*, or a refusal. Staff accounts are refused too: these
+ * routes are the speaker's, and a staff member looks at a speaker's files from the
+ * staff screens, as staff.
+ */
+function speakerAccountOf(req: express.Request, res: express.Response): { email: string; name: string } | null {
+  const principal = (req as express.Request & { principal?: Principal }).principal;
+  if (principal?.kind !== "staff") {
+    res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+    return null;
+  }
+  if (principal.account_kind !== "speaker") {
+    res.status(403).json({ code: "auth.not_speaker", message: "This is a speaker's own view. Staff see presentations on the event's screens." });
+    return null;
+  }
+  return { email: principal.email, name: principal.display_name };
+}
+
+app.get("/api/v1/me/presentations", async (req, res) => {
+  const me = speakerAccountOf(req, res);
+  if (!me) return;
+  const events = await withSystemScope((tx) => myPresentations(tx, me.email));
+  return res.json({ speaker: { name: me.name, email: me.email }, events });
+});
+
+app.post("/api/v1/me/uploads", async (req, res) => {
+  const me = speakerAccountOf(req, res);
+  if (!me) return;
+  const body = req.body as { slot_id?: string; file_name?: string; total_bytes?: number };
+  if (!body.slot_id || !body.file_name || typeof body.total_bytes !== "number") {
+    return res.status(400).json({ code: "request.invalid", message: "Choose your presentation file and try the upload again." });
+  }
+  const slotId = body.slot_id;
+  return withSystemScope(async (tx) => {
+    const session = await sessionForSlot(tx, me.email, slotId);
+    if (!session) return res.status(422).json({ code: "portal.not_your_talk", message: "That talk is not assigned to you." });
+    if (await writesToArchived(req, session.event_id)) return res.status(409).json(ARCHIVED_REFUSAL);
+    const result = await beginUpload(tx, session, {
+      slotId,
+      fileName: body.file_name as string,
+      totalBytes: body.total_bytes as number,
+    });
+    if (!result.ok) return res.status(422).json({ code: result.code, message: result.message });
+    return res.status(201).json(result.value);
+  });
+});
+
+app.get("/api/v1/me/uploads/:uploadId", async (req, res) => {
+  const me = speakerAccountOf(req, res);
+  if (!me) return;
+  const uploadId = String(req.params.uploadId);
+  return withSystemScope(async (tx) => {
+    const owned = await sessionForUpload(tx, me.email, uploadId);
+    if (!owned) return res.status(404).json({ code: "upload.not_found", message: "That upload isn't one of yours." });
+    return res.json(await uploadState(uploadId));
+  });
+});
+
+app.put("/api/v1/me/uploads/:uploadId/parts/:partNumber", async (req, res) => {
+  const me = speakerAccountOf(req, res);
+  if (!me) return;
+  const uploadId = String(req.params.uploadId);
+  const part = Number(req.params.partNumber);
+  const body = req.body as Buffer;
+  if (!Buffer.isBuffer(body) || body.length === 0) {
+    return res.status(400).json({ code: "request.invalid", message: "Part of the file didn't arrive. Try the upload again." });
+  }
+  return withSystemScope(async (tx) => {
+    const owned = await sessionForUpload(tx, me.email, uploadId);
+    if (!owned) return res.status(404).json({ code: "upload.not_found", message: "That upload isn't one of yours." });
+    const { sha256 } = await storage.putPart(uploadId, part, body);
+    return res.json({ part_number: part, size: body.length, sha256 });
+  });
+});
+
+app.post("/api/v1/me/uploads/:uploadId/complete", async (req, res) => {
+  const me = speakerAccountOf(req, res);
+  if (!me) return;
+  const uploadId = String(req.params.uploadId);
+  const body = req.body as { slot_id?: string; file_name?: string; sha256?: string };
+  if (!body.slot_id || !body.file_name) {
+    return res.status(400).json({ code: "request.invalid", message: "The upload couldn't be finished. Try the upload again." });
+  }
+  return withSystemScope(async (tx) => {
+    // The talk is the one the upload was begun for; the body's must agree with it.
+    const owned = await sessionForUpload(tx, me.email, uploadId);
+    if (!owned || owned.slotId !== body.slot_id) {
+      return res.status(422).json({ code: "portal.not_your_talk", message: "That talk is not assigned to you." });
+    }
+    if (await writesToArchived(req, owned.session.event_id)) return res.status(409).json(ARCHIVED_REFUSAL);
+    const result = await completeUpload(tx, owned.session, {
+      uploadId,
+      slotId: owned.slotId,
+      fileName: body.file_name as string,
+      ...(body.sha256 ? { expectedSha256: body.sha256 } : {}),
+    });
+    if (!result.ok) return res.status(422).json({ code: result.code, message: result.message });
+    return res.json(result.value);
+  });
+});
+
+app.get("/api/v1/me/file-versions/:versionId/download", async (req, res) => {
+  const me = speakerAccountOf(req, res);
+  if (!me) return;
+  const versionId = String(req.params.versionId);
+  return withSystemScope(async (tx) => {
+    const session = await sessionForVersion(tx, me.email, versionId);
+    if (!session) return res.status(404).json({ code: "file_version.not_found", message: "That file isn't one of yours." });
+    const result = await portalDownload(tx, session, versionId);
+    if (!result.ok) return res.status(result.status).json({ code: result.code, message: result.message });
+    res.setHeader("content-type", "application/octet-stream");
+    res.setHeader(
+      "content-disposition",
+      `attachment; filename="${result.filename.replace(/["\\\r\n]/g, "_")}"; filename*=UTF-8''${encodeURIComponent(result.filename)}`,
+    );
+    res.setHeader("cache-control", "private, no-store");
+    return res.send(result.body);
+  });
+});
 
 /* ── Speaker Ready Room (screens 11–13) ───────────────────────────────────── */
 
@@ -2982,6 +3120,21 @@ app.post("/api/v1/events/:eventId/speakers/:speakerId/send-link", async (req, re
     return res.status(status).json(result.error);
   }
   return res.status(201).json(result.value);
+});
+
+/** Gives a speaker a persistent sign-in on this site (D-146); the password goes to their address. */
+app.post("/api/v1/events/:eventId/speakers/:speakerId/account", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  const eventId = String(req.params.eventId);
+  const result = await withScope(scopeFor(req, eventId), (tx) =>
+    createSpeakerAccount(tx, actor, { eventId, speakerId: String(req.params.speakerId) }),
+  );
+  if (!result.ok) {
+    const status = result.error.code === "auth.bad_email" ? 422 : statusFor(result.error);
+    return res.status(status).json(result.error);
+  }
+  return res.status(result.value.outcome === "created" ? 201 : 200).json(result.value);
 });
 
 app.post("/api/v1/events/:eventId/comms/send", async (req, res) => {

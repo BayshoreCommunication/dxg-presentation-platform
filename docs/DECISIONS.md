@@ -2628,3 +2628,32 @@ code (`tests/invariants/security-hardening.test.ts`, `packages/files/src/storage
 Not changed, by design and noted for a decision: the emailed access code alone works as a portal Bearer credential
 (a comment calls it "the same credential, arriving by a different door"), though the sign-in page also asks for the
 email. The review's integrity, reliability, agenda and UI findings are tracked separately.
+
+## D-146 (2026-10-08): Speaker accounts and "Manage presentations" — Status: ACCEPTED (Travis, from Ace Johnson's review)
+From the client review ("Speaker Experience and Presentation Flow"): speakers get **persistent accounts, not
+event-scoped**, and "Review presentations" is renamed **Manage presentations**, from which a speaker uploads, downloads
+and updates their presentation; Files, Communications and Archive builder are hidden from a speaker's view.
+- **Account**: a `users` row with `account_kind = 'speaker'` (**migration 032**; existing rows are staff). It signs in on
+  the staff site with a password — same `/login`, same temporary-password-then-change flow as staff (the password is
+  emailed, `queueSpeakerSignInEmail`), **no authenticator asked** (the staff gate's MFA step skips speaker accounts, which
+  it then refuses as not staff). It holds no role anywhere; `principalFor` reads none for it.
+- **Reach**: the account is joined to `speakers` rows **by email**, on every event of every client (`speakerSessionsFor`;
+  practice events left out). Each match is the speaker portal's own `PortalSession`, so every portal rule applies as is:
+  own talks only, resumable upload, scan-then-store, approved file the only download (D-144), final-locked and archived
+  read-only. Routes under `/api/v1/me/` (non-staff path): presentations, uploads (begin/state/part/complete — an upload
+  is tied to the talk it began for, via its idempotency key), download. Staff accounts are refused these; speaker
+  accounts are refused every staff route (403, with a message that names Manage presentations).
+- **Screen**: `/presentations` in the control centre — every presentation grouped by event, newest event first, the
+  portal's presenter card (journey, talk at a glance, approved file set apart, pending upload, earlier uploads, team
+  notes) in the control centre's own black-and-white: no new colour tokens, no event accent.
+- **Sidebar**: a speaker sees the product's shape with one door open — Manage presentations — the rest greyed "For DXG
+  staff"; Files, Communications, Archive builder and ADMIN are not shown. Account badge says "Speaker"; crumbs start at
+  their screen; the portfolio sends them to `/presentations`; `landingFor` keeps them there.
+- **Staff**: the Speakers screen gains a **Sign-in** column (none / Invited / Active) and **Create sign-in**
+  (`POST /events/:id/speakers/:id/account`, SRR technician or above; a second press finds the existing account; a staff
+  address is never turned into a speaker's, 409). The emailed access-code portal keeps working unchanged.
+- Tests: `tests/invariants/speaker-accounts.test.ts` (10). Seed: `p.raman@example.invalid` has a speaker sign-in.
+**Deferred from the same review, in order:** SRR "Local intake" rename + staff/speaker upload from SRR + check-in/out
+CSV; Room sync "Download All" + technician room scope + Room Agent removal; the four-role model (Admin, Support Staff,
+Technician, Client Admin) and the Speaker Support Staff role; SRR on/off switch and Preview Slides opening PowerPoint
+locally.

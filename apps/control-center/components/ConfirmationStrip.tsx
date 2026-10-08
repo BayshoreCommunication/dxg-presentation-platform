@@ -32,7 +32,7 @@ const WAITING_FOR_FILE: Record<string, { detail: string; next: string }> = {
     next: "Waiting for the speaker to upload — or take the file by USB when they check in.",
   },
   processing: { detail: "File checks running", next: "Nothing to do — the checks take about a minute." },
-  submitted: { detail: "Waiting for a reviewer", next: "A reviewer approves it in Review presentations." },
+  submitted: { detail: "Waiting for a reviewer", next: "A reviewer approves it in Manage presentations." },
   needs_revision: { detail: "Sent back for changes", next: "Waiting for the speaker's new version." },
   attention: { detail: "Failed the virus check", next: "Ask the speaker for a clean copy." },
 };
@@ -54,7 +54,7 @@ export function confirmationSteps(facts: ConfirmationFacts): Step[] {
           short: "Approved",
           state: "done",
           detail: `v${approved.version}${by(approved.by)}${at(approved.at)}${newer ? ` · v${newer} not approved yet` : ""}`,
-          ...(newer && facts.status === "submitted" ? { next: `v${newer} is waiting for a reviewer in Review presentations.` } : {}),
+          ...(newer && facts.status === "submitted" ? { next: `v${newer} is waiting for a reviewer in Manage presentations.` } : {}),
         }
       : {
           title: "Approved by a reviewer",

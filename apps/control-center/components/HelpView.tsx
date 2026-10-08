@@ -108,7 +108,7 @@ export const GUIDES: Section[] = [
         title: "Review and approve a presentation",
         who: "Reviewer or above",
         steps: [
-          "Review presentations lists every file waiting, oldest first.",
+          "Manage presentations lists every file waiting, oldest first.",
           "Pick one. Its slides, file checks and comments are on the right.",
           "Approve when it is right. Approve stays greyed while checks run or while a problem that must be fixed is open, and says why.",
           "Request revision sends the speaker your message and waits for a new version. Reject tells the speaker this file won't be used.",
@@ -309,7 +309,7 @@ export function HelpView() {
           A presentation is ready when three separate things have happened, and each screen shows them in this order:
           <ol style={{ margin: "6px 0 0", paddingLeft: 20 }}>
             <li>
-              <b>Approved by a reviewer</b> — in Review presentations. This is what puts the file on its room&rsquo;s list.
+              <b>Approved by a reviewer</b> — in Manage presentations. This is what puts the file on its room&rsquo;s list.
             </li>
             <li>
               <b>Signed off by the speaker</b> — in the Speaker Ready Room, onsite. The speaker confirms the version they

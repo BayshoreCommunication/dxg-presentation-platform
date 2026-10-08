@@ -84,6 +84,8 @@ export type Principal = {
   client_events: { id: string; name: string }[];
   must_change_password: boolean;
   mfa_enrolled: boolean;
+  /** Staff, or a speaker with a persistent sign-in (D-146) who reaches only their own presentations. */
+  account_kind: "staff" | "speaker";
 };
 
 export const getSession = () => request<{ principal: Principal }>("/auth/session");
@@ -606,6 +608,8 @@ export type SpeakerRow = {
   talks_needing_revision: number;
   /** The last email this speaker was sent (D-086); null when never emailed. */
   last_email: { status: string; at: string; to: string; count: number } | null;
+  /** The speaker's persistent sign-in (D-146): none, invited (temporary password unchanged) or active. */
+  account: "invited" | "active" | null;
 };
 
 export type DuplicatePair = {
@@ -633,6 +637,13 @@ export const updateSpeakerEmail = (eventId: string, speakerId: string, email: st
 
 export const removeSpeaker = (eventId: string, speakerId: string) =>
   request<{ removed: true; presentations: number }>(`/events/${eventId}/speakers/${speakerId}`, { method: "DELETE" });
+
+/** Gives a speaker a persistent sign-in (D-146); the temporary password is emailed to them. */
+export const createSpeakerAccount = (eventId: string, speakerId: string) =>
+  request<{ user_id: string; email: string; outcome: "created" | "existing" }>(
+    `/events/${eventId}/speakers/${speakerId}/account`,
+    { method: "POST" },
+  );
 
 export const addSpeaker = (eventId: string, input: NewSpeakerInput) =>
   request<{ speaker_id: string; created: boolean; slot_id: string }>(`/events/${eventId}/speakers`, {
@@ -1465,3 +1476,93 @@ export async function uploadAsset(eventId: string, kind: AssetKind, file: File):
 
 export const removeAsset = (eventId: string, kind: AssetKind) =>
   request<{ removed: true }>(`/events/${eventId}/assets/${kind}`, { method: "DELETE" });
+
+/* ── a speaker account's own presentations (D-146) ─────────────────────── */
+
+/** One of the speaker's uploads, as the portal shows it (D-140). */
+export type MyVersion = {
+  id: string;
+  version_number: number;
+  file_name: string;
+  size_bytes: string;
+  created_at: string;
+  state: string;
+  review_state: string;
+  downloadable: boolean;
+};
+
+export type MyTalk = {
+  slot_id: string;
+  title: string;
+  session_title: string;
+  room: string | null;
+  starts_at: string;
+  ends_at: string | null;
+  final_locked: boolean;
+  status: string;
+  status_label: string;
+  versions: MyVersion[];
+  room_copy: { version_number: number; loaded: boolean } | null;
+  findings: Finding[];
+  feedback: { body: string; created_at: string; version_number: number }[];
+};
+
+export type MyEvent = {
+  id: string;
+  name: string;
+  timezone: string;
+  starts_on: string;
+  ends_on: string;
+  status: string;
+  upload_deadline: string | null;
+  accent: string | null;
+  speaker_id: string;
+  talks: MyTalk[];
+};
+
+export const getMyPresentations = () =>
+  request<{ speaker: { name: string; email: string }; events: MyEvent[] }>("/me/presentations");
+
+export type UploadSession = {
+  upload_id: string;
+  slot_id: string;
+  file_name: string;
+  total_bytes: number;
+  part_size: number;
+};
+
+export type UploadResult = {
+  file_version_id: string;
+  version_number: number;
+  sha256: string;
+  processing_state: string;
+  inspection_state: string;
+  findings: Finding[];
+};
+
+export const beginMyUpload = (body: { slot_id: string; file_name: string; total_bytes: number }) =>
+  request<UploadSession>("/me/uploads", { method: "POST", body: JSON.stringify(body) });
+
+export const getMyUploadState = (uploadId: string) =>
+  request<{ received: number[]; bytes: number }>(`/me/uploads/${uploadId}`);
+
+export const putMyPart = (uploadId: string, partNumber: number, chunk: ArrayBuffer) =>
+  request<{ part_number: number; size: number; sha256: string }>(`/me/uploads/${uploadId}/parts/${partNumber}`, {
+    method: "PUT",
+    body: chunk,
+    headers: { "content-type": "application/octet-stream" },
+  });
+
+export const completeMyUpload = (uploadId: string, body: { slot_id: string; file_name: string; sha256?: string }) =>
+  request<UploadResult>(`/me/uploads/${uploadId}/complete`, { method: "POST", body: JSON.stringify(body) });
+
+/** The browser's path (it goes in an `href`), never the server's internal origin. */
+export const myDownloadUrl = (versionId: string) => `${BROWSER_BASE}/me/file-versions/${versionId}/download`;
+
+/** Whole-file SHA-256 in the browser, so the server can verify what arrived (I-3). */
+export async function sha256Hex(file: File): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}

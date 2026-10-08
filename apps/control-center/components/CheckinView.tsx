@@ -295,7 +295,7 @@ export function CheckinView({
               body:
                 approvedNumber === detail.receipt.version_number
                   ? `Give them the receipt, then check them out to free ${detail.checkin.station ?? "the station"}.`
-                  : `Give them the receipt, then check them out to free ${detail.checkin.station ?? "the station"}. A reviewer still needs to approve v${detail.receipt.version_number} in Review presentations before it plays in ${detail.talk.room ?? "the room"}.`,
+                  : `Give them the receipt, then check them out to free ${detail.checkin.station ?? "the station"}. A reviewer still needs to approve v${detail.receipt.version_number} in Manage presentations before it plays in ${detail.talk.room ?? "the room"}.`,
               actions: (
                 <>
                   {printReceipt}

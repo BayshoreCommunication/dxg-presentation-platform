@@ -325,6 +325,23 @@ async function seed(): Promise<void> {
       issued.push(`  ${speaker.full_name.padEnd(20)} ${speaker.email.padEnd(30)} ${code}`);
     }
 
+    // One speaker with a persistent sign-in (D-146), so Manage presentations can be opened
+    // as a speaker straight after seeding: the same development password, no authenticator.
+    const { rows: speakerAccount } = await client.query<{ full_name: string; email: string }>(
+      `SELECT full_name, email::text FROM speakers WHERE event_id = $1 AND email = 'p.raman@example.invalid'`,
+      [IDS.event],
+    );
+    for (const account of speakerAccount) {
+      await client.query(
+        `INSERT INTO users (email, display_name, password_hash, password_set_at, must_change_password, account_kind)
+         VALUES ($1, $2, $3, now(), false, 'speaker')
+         ON CONFLICT (email) DO UPDATE
+           SET display_name = EXCLUDED.display_name, password_hash = EXCLUDED.password_hash,
+               must_change_password = false, account_kind = 'speaker'`,
+        [account.email, account.full_name, devHash],
+      );
+    }
+
     await client.query("COMMIT");
     console.log("\nstaff sign-in (development only):");
     for (const [, email, name] of staff) console.log(`  ${name.padEnd(20)} ${email.padEnd(30)} ${DEV_PASSWORD}`);
@@ -334,6 +351,8 @@ async function seed(): Promise<void> {
     console.log(`  recovery codes        ${recoveryCodes.join("  ")}`);
     console.log("\npresenter access codes (issued by DXG, shown once):");
     for (const line of issued) console.log(line);
+    console.log("\nspeaker sign-in on the staff site (D-146, no authenticator):");
+    for (const account of speakerAccount) console.log(`  ${account.full_name.padEnd(20)} ${account.email.padEnd(30)} ${DEV_PASSWORD}`);
     console.log("");
     console.log(`seeded event ${IDS.event}: 3 rooms, 3 talks, 4 file versions, 4 staff users`);
   } catch (error) {

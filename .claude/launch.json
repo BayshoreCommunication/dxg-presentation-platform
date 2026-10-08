@@ -2,9 +2,15 @@
   "version": "0.0.1",
   "configurations": [
     {
+      "name": "dev",
+      "runtimeExecutable": "/bin/zsh",
+      "runtimeArgs": ["-lc", "export PATH=\"$HOME/.nvm/versions/node/v24.16.0/bin:$PATH\" && npm run dev"],
+      "port": 3000
+    },
+    {
       "name": "control-center",
       "runtimeExecutable": "/bin/zsh",
-      "runtimeArgs": ["-lc", "export PATH=\"$HOME/.nvm/versions/node/v24.4.1/bin:$PATH\" && npm run dev -w @pmp/control-center"],
+      "runtimeArgs": ["-lc", "export PATH=\"$HOME/.nvm/versions/node/v24.16.0/bin:$PATH\" && npm run dev -w @pmp/control-center"],
       "port": 3000
     }
   ]

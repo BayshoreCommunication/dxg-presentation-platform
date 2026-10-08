@@ -24,6 +24,12 @@ export function landingFor(principal: Principal, nextPath?: string): string {
   if (principal.must_change_password) return "/account/password?first=1";
   const requested = safePath(nextPath);
 
+  // A speaker account (D-146) has one place: its presentations. A staff page it was sent
+  // to sign in for would only refuse it.
+  if (principal.account_kind === "speaker") {
+    return requested?.startsWith("/presentations") || requested?.startsWith("/account/") ? requested : "/presentations";
+  }
+
   const events = principal.client_events;
   if (events.length === 0) return requested && requested !== "/" ? requested : "/";
 

@@ -3439,3 +3439,13 @@ Backup `backups/pmp-2026-10-05T071950Z.dump` first; no migrations; api and staff
 dispatcher untouched); all services up, api/worker healthy, both sites 200, no errors in the logs; build cache pruned,
 disk 31 %. Re-tested on production with unauthenticated reads: `/api/v1/timezones` 401, `/api/V1/timezones` 404 (was
 200), a dashless id 404, an encoded-slash upload path 400.
+
+## 2026-10-08 — Speaker accounts and Manage presentations (D-146)
+Built locally from Ace Johnson's review: speakers get a persistent sign-in on the staff site (migration 032, password
+only, no authenticator), reaching their presentations on every event by email; `/presentations` ("Manage
+presentations") shows them with upload/update/download exactly as the portal does; "Review presentations" is renamed
+Manage presentations for staff; a speaker's sidebar has one open door and no Files/Communications/Archive builder; the
+Speakers screen creates the sign-in (temporary password emailed) and shows Invited/Active. Verified in the browser as
+the seeded speaker (sign-in lands on the screen, one talk, approved download, pending v3 after an API upload) and over
+the API (cross-speaker upload refused, pending download 403, staff refused `/me`, reviewer refused account creation).
+`speaker-accounts` 10/10. Not deployed. Deferred items from the review are listed under D-146.

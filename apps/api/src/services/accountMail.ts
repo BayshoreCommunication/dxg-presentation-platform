@@ -55,3 +55,41 @@ export async function queueTemporaryPasswordEmail(
     }),
   ]);
 }
+
+/**
+ * Emails a speaker the temporary password for their new sign-in (D-146). Same shape as
+ * the staff mail above and marked `sensitive` for the same reason; it differs in what it
+ * promises — a speaker is asked to choose a password and nothing more, since no
+ * authenticator is required of them.
+ */
+export async function queueSpeakerSignInEmail(
+  tx: pg.PoolClient,
+  input: { to: string; displayName: string; temporaryPassword: string },
+): Promise<void> {
+  const signIn = `${process.env.STAFF_BASE ?? "http://localhost:3000"}/login`;
+  await tx.query(`INSERT INTO pmp.outbox (topic, payload) VALUES ('email.send', $1)`, [
+    JSON.stringify({
+      to: input.to,
+      subject: "Your DXG·PM speaker sign-in",
+      sensitive: true,
+      body: [
+        `Hi ${input.displayName},`,
+        "",
+        "The DXG presentation team has set up a sign-in for you on DXG·PM, where you can",
+        "upload, update and download your presentations for every event you speak at.",
+        "",
+        "Sign in with this email address and the temporary password below:",
+        "",
+        `    ${input.temporaryPassword}`,
+        "",
+        signIn,
+        "",
+        "You will be asked to choose your own password straight away.",
+        "",
+        "If you were not expecting this email, tell the DXG presentation team.",
+        "",
+        "The DXG presentation team",
+      ].join("\n"),
+    }),
+  ]);
+}

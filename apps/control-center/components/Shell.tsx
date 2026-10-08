@@ -66,7 +66,9 @@ export function Shell({
     );
   }
 
-  const crumbs = breadcrumb(pathname, events);
+  // A speaker's crumbs start at their own screen (D-146), not a portfolio they cannot open.
+  const crumbs =
+    principal?.account_kind === "speaker" ? [{ label: "Manage presentations", href: "/presentations" }] : breadcrumb(pathname, events);
 
   return (
     <StaffFrame crumbs={crumbs} principal={principal} events={events}>
@@ -321,7 +323,8 @@ const SCREENS: [RegExp, string][] = [
   [/^\/events\/[^/]+\/details$/, "Event details"],
   [/^\/events\/[^/]+\/import$/, "Schedule import"],
   [/^\/events\/[^/]+\/speakers$/, "Speakers"],
-  [/^\/events\/[^/]+\/review$/, "Review presentations"],
+  [/^\/events\/[^/]+\/review$/, "Manage presentations"],
+  [/^\/presentations$/, "Manage presentations"],
   [/^\/events\/[^/]+\/files$/, "Files"],
   [/^\/events\/[^/]+\/comms$/, "Communications"],
   [/^\/events\/[^/]+\/archive$/, "Archive builder"],

@@ -15,7 +15,7 @@ import { changePassword, getSession, logout, ApiError } from "@/lib/api";
  * you to this same screen. Signing out is the honest escape, and the one someone
  * handed the wrong temporary password actually needs.
  */
-export function ChangePasswordForm({ firstUse }: { firstUse: boolean }) {
+export function ChangePasswordForm({ firstUse, speaker = false }: { firstUse: boolean; speaker?: boolean }) {
   const router = useRouter();
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
@@ -37,6 +37,8 @@ export function ChangePasswordForm({ firstUse }: { firstUse: boolean }) {
       // instead of back to the sign-in page for one more round trip.
       const session = await getSession().catch(() => null);
       if (!session) router.replace("/login?reason=password_changed");
+      // A speaker (D-146) is not asked for a sign-in app; they go straight to their presentations.
+      else if (session.principal.account_kind === "speaker") router.replace("/presentations");
       else router.replace(session.principal.mfa_enrolled ? "/" : "/account/mfa");
       router.refresh();
     } catch (caught) {
@@ -50,13 +52,13 @@ export function ChangePasswordForm({ firstUse }: { firstUse: boolean }) {
       <form className="box" onSubmit={submit}>
         <b>DXG·PM</b>
         <div style={{ fontSize: 13, margin: "4px 0 18px" }}>
-          {firstUse ? "Step 1 of 2 · Choose your own password" : "Change your password"}
+          {firstUse ? (speaker ? "Choose your own password" : "Step 1 of 2 · Choose your own password") : "Change your password"}
         </div>
 
         {firstUse && (
           <div className="note" style={{ color: "var(--blue)", marginBottom: 12 }}>
-            You signed in with the temporary password DXG emailed you. Choose your own now; next
-            you&rsquo;ll set up a sign-in app on your phone.
+            You signed in with the temporary password DXG emailed you. Choose your own now
+            {speaker ? "." : "; next you’ll set up a sign-in app on your phone."}
           </div>
         )}
         {error && (

@@ -52,6 +52,12 @@ before it can reach anything. The same screen resets a forgotten password, hands
 whose authenticator is lost (with a reason, because that is an account-takeover path), unlocks a
 locked-out account, and grants or removes event roles.
 
+A speaker can also have a **persistent sign-in** on the staff site (D-146): the seed gives
+`p.raman@example.invalid` one with the development password, no authenticator. Signing in there
+opens Manage presentations (`/presentations`) — every talk on every event carrying that email.
+Staff create one for a speaker on the Speakers screen (**Create sign-in**); the temporary
+password is written to `.data/mail/` like every other development email.
+
 To issue a presenter credential the way DXG does, use the Speakers screen (or
 `POST /speakers/:id/credentials`). The code is shown **once** — afterwards only its last
 four characters are stored, so it cannot be recovered, only replaced.

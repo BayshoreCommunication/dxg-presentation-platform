@@ -27,7 +27,7 @@ const STATE_TONE: Record<string, string> = {
  * "restricted from distribution" that page is the only place to look.
  */
 const EXCLUSION_FIX: Record<string, { path: string; label: string }> = {
-  "no approved version": { path: "review", label: "Review presentations" },
+  "no approved version": { path: "review", label: "Manage presentations" },
   "speaker withheld permission": { path: "speakers", label: "Release permission on Speakers" },
   "release permission not set": { path: "speakers", label: "Set release permission on Speakers" },
 };

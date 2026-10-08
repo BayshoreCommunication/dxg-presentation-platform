@@ -12,7 +12,7 @@ import {
   lockoutState,
 } from "@pmp/auth";
 import { openChallenge, isEnrolled } from "./mfa.ts";
-import { queueTemporaryPasswordEmail } from "./accountMail.ts";
+import { queueTemporaryPasswordEmail, queueSpeakerSignInEmail } from "./accountMail.ts";
 import type { Actor, DomainError, EventRole, Result } from "@pmp/domain";
 import { err, ok, atLeast, hasAnyRole } from "@pmp/domain";
 import { agoWords, SECURITY } from "@pmp/format";
@@ -57,6 +57,12 @@ export type Principal =
       client_events: { id: string; name: string }[];
       must_change_password: boolean;
       mfa_enrolled: boolean;
+      /**
+       * Staff, or a speaker (D-146). A speaker account signs in on the same site with a
+       * password, holds no event role — so the deny-by-default staff gate refuses it every
+       * staff route — and reaches only its own presentations, matched by email on every event.
+       */
+      account_kind: "staff" | "speaker";
     }
   | { kind: "presenter"; speaker_id: string; email: string | null; display_name: string; event_id: string; client_id: string };
 
@@ -229,14 +235,17 @@ export async function principalFor(tx: pg.PoolClient, userId: string): Promise<P
     must_change_password: boolean;
     mfa_enrolled: boolean;
     is_root_admin: boolean;
+    account_kind: "staff" | "speaker";
   }>(
     `SELECT id, email::text, display_name, must_change_password,
-            (mfa_enrolled_at IS NOT NULL) AS mfa_enrolled, is_root_admin
+            (mfa_enrolled_at IS NOT NULL) AS mfa_enrolled, is_root_admin, account_kind
        FROM pmp.users WHERE id = $1`,
     [userId],
   );
   const user = rows[0]!;
-  const roles = await rolesFor(tx, user.id);
+  // A speaker account holds no role anywhere (D-146): it is not staff, whatever the
+  // event_roles table might one day say, so nothing is read for it.
+  const roles = user.account_kind === "speaker" ? [] : await rolesFor(tx, user.id);
   // Root admin is a property of the account (D-100); `platform_admin` in `roles` is how
   // the rest of the API — which already treats that role as platform-wide — sees it.
   if (user.is_root_admin && !roles.includes("platform_admin")) roles.push("platform_admin");
@@ -251,11 +260,12 @@ export async function principalFor(tx: pg.PoolClient, userId: string): Promise<P
     display_name: user.display_name,
     roles,
     is_root_admin: user.is_root_admin,
-    event_roles: await eventRolesFor(tx, user.id),
-    client_ids: await clientsFor(tx, user.id),
+    event_roles: user.account_kind === "speaker" ? [] : await eventRolesFor(tx, user.id),
+    client_ids: user.account_kind === "speaker" ? [] : await clientsFor(tx, user.id),
     client_events: clientOnly ? await clientEventsFor(tx, user.id) : [],
     must_change_password: user.must_change_password,
     mfa_enrolled: user.mfa_enrolled,
+    account_kind: user.account_kind,
   };
 }
 
@@ -572,6 +582,82 @@ export async function createStaffUser(
   });
 
   return ok({ user_id: userId, account_type: accountType, emailed_to: input.password ? null : email });
+}
+
+export type SpeakerAccountResult = {
+  user_id: string;
+  email: string;
+  /** `created` with the temporary password emailed; `existing` when the address already had one. */
+  outcome: "created" | "existing";
+};
+
+/**
+ * Gives a speaker a persistent sign-in (D-146): one `users` row of kind `speaker` for
+ * their email address, which then reaches every event on which a speaker row carries
+ * that address — this client's or another's. A temporary password goes to the address
+ * itself, exactly as a staff account's does, and must be changed at first sign-in; no
+ * authenticator is asked of a speaker.
+ *
+ * The same role as issuing an access code: a sign-in is a credential, and anyone who can
+ * mint one can mint the other.
+ */
+export async function createSpeakerAccount(
+  tx: pg.PoolClient,
+  actor: Actor,
+  input: { speakerId: string; eventId: string },
+): Promise<Result<SpeakerAccountResult, DomainError>> {
+  if (!hasAnyRole(actor, atLeast("srr_technician"))) {
+    return err({
+      code: "auth.forbidden",
+      message: "Only a Speaker Ready Room technician, a manager or a DXG administrator can create a speaker's sign-in.",
+    });
+  }
+  const { rows } = await tx.query<{ id: string; full_name: string; email: string | null; client_id: string }>(
+    `SELECT id, full_name, email::text, client_id FROM pmp.speakers
+      WHERE id = $1 AND event_id = $2 AND merged_into IS NULL AND removed_at IS NULL`,
+    [input.speakerId, input.eventId],
+  );
+  const speaker = rows[0];
+  if (!speaker) return err({ code: "speakers.not_found", message: "This speaker no longer exists — it may have been removed. Refresh the page." });
+  const email = (speaker.email ?? "").trim().toLowerCase();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+    return err({ code: "auth.bad_email", message: "Add the speaker's email address first — the sign-in is sent there." });
+  }
+
+  const { rows: existing } = await tx.query<{ id: string; account_kind: string; is_active: boolean }>(
+    `SELECT id, account_kind, is_active FROM pmp.users WHERE lower(email::text) = $1`,
+    [email],
+  );
+  if (existing[0]) {
+    // A staff address is never turned into a speaker's: the person already signs in.
+    if (existing[0].account_kind !== "speaker") {
+      return err({ code: "auth.email_taken", message: "That address already belongs to a DXG staff account." });
+    }
+    return ok({ user_id: existing[0].id, email, outcome: "existing" });
+  }
+
+  const temporary = `${generateAccessCode(4, 4)}`;
+  const problem = checkPassword(temporary);
+  if (problem) return err({ code: `auth.${problem.code}`, message: problem.message });
+
+  const { rows: created } = await tx.query<{ id: string }>(
+    `INSERT INTO pmp.users (email, display_name, password_hash, password_set_at, must_change_password, account_kind)
+     VALUES ($1::citext, $2, $3, now(), true, 'speaker') RETURNING id`,
+    [email, speaker.full_name, await hashPassword(temporary)],
+  );
+  const userId = created[0]!.id;
+
+  await queueSpeakerSignInEmail(tx, { to: email, displayName: speaker.full_name, temporaryPassword: temporary });
+  await appendAudit(tx, {
+    partitionId: input.eventId,
+    clientId: speaker.client_id,
+    actorUserId: actor.id,
+    action: "auth.speaker_account_created",
+    subjectType: "speaker",
+    subjectId: speaker.id,
+    detail: { user_id: userId, emailed: true },
+  });
+  return ok({ user_id: userId, email, outcome: "created" });
 }
 
 export async function changeOwnPassword(

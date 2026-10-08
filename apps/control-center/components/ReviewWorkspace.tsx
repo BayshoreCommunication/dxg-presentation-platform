@@ -193,7 +193,7 @@ export function ReviewWorkspace({
 
   return (
     <>
-      <h1 className="htitle">Review presentations</h1>
+      <h1 className="htitle">Manage presentations</h1>
 
       {error && <div className="err">{error}</div>}
 
