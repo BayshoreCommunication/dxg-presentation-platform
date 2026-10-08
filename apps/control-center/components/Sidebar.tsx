@@ -120,7 +120,11 @@ export const GROUPS: {
       { label: "Room sync", href: "/events/:id/sync", icon: "sync" },
     ],
   },
-  { group: "DEVICE", roles: STAFF_ROLES, items: [{ label: "Room Agent", href: "/events/:id/agent", icon: "monitor" }] },
+  /*
+   * No DEVICE group (Travis, 2026-10-08, from the client's review): Room sync covers the
+   * technician's job, and the Room Agent is to go. Its screen is still reachable by address
+   * until it is removed with the rest.
+   */
   {
     group: "ADMIN",
     items: [
