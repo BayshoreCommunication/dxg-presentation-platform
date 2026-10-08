@@ -18,8 +18,13 @@ import type { ThemeChoice } from "@/lib/theme";
  * Presentation only: the API serves a speaker nothing but their own routes whatever is
  * drawn here.
  */
+/*
+ * What a speaker's sidebar lists (Travis, 2026-10-08): Create event, Room sync and the DEVICE
+ * group are gone — they are DXG's tools. Portfolio, Agenda and the Speaker Ready Room stay
+ * and are to become the speaker's own views of them; until each is built it is drawn greyed.
+ */
 const GROUPS: { group: string; items: { label: string; href?: string; icon: string }[] }[] = [
-  { group: "EVENTS", items: [{ label: "Portfolio", icon: "grid" }, { label: "Create event", icon: "plus" }] },
+  { group: "EVENTS", items: [{ label: "Portfolio", icon: "grid" }] },
   {
     group: "CONTROL CENTER",
     items: [
@@ -27,8 +32,7 @@ const GROUPS: { group: string; items: { label: string; href?: string; icon: stri
       { label: "Manage presentations", href: "/", icon: "review" },
     ],
   },
-  { group: "ONSITE", items: [{ label: "Speaker Ready Room", icon: "users" }, { label: "Room sync", icon: "sync" }] },
-  { group: "DEVICE", items: [{ label: "Room Agent", icon: "monitor" }] },
+  { group: "ONSITE", items: [{ label: "Speaker Ready Room", icon: "users" }] },
 ];
 
 const BARE = ["/login", "/forgot-password", "/reset-password", "/account/password", "/t/"];
@@ -161,7 +165,7 @@ function Frame({ principal, children }: { principal: Principal; children: React.
                 {item.label}
               </Link>
             ) : (
-              <a key={item.label} aria-disabled="true" title="For DXG staff">
+              <a key={item.label} aria-disabled="true" title="Coming soon">
                 <span className="ico"><Icon name={item.icon} /></span>
                 {item.label}
               </a>
