@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { useParams, usePathname, useRouter } from "next/navigation";
 import { Glyph, Icon } from "@/components/Icon";
 import { logout } from "@/lib/api";
-import type { Principal } from "@/lib/api";
+import type { MyEventSummary, Principal } from "@/lib/api";
 import { applyTheme, readThemeChoice, saveThemeChoice } from "@/lib/theme";
 import type { ThemeChoice } from "@/lib/theme";
+import { formatDateRange } from "@pmp/format";
 
 /**
  * The speaker site's chrome (D-148, Travis: "sidebar topbar ager site er sathe thakbe"):
@@ -20,33 +21,51 @@ import type { ThemeChoice } from "@/lib/theme";
  */
 /*
  * What a speaker's sidebar lists (Travis, 2026-10-08): Create event, Room sync and the DEVICE
- * group are gone — they are DXG's tools. Portfolio, Agenda and the Speaker Ready Room stay
- * and are to become the speaker's own views of them; until each is built it is drawn greyed.
+ * group are gone — they are DXG's tools. Portfolio, Agenda and the Speaker Ready Room are the
+ * speaker's own views of them; Agenda and the Speaker Ready Room belong to one event, chosen
+ * in the switcher (the newest event when none is chosen).
  */
-const GROUPS: { group: string; items: { label: string; href?: string; icon: string }[] }[] = [
-  { group: "EVENTS", items: [{ label: "Portfolio", icon: "grid" }] },
+const GROUPS: { group: string; items: { label: string; href: string; icon: string }[] }[] = [
+  { group: "EVENTS", items: [{ label: "Portfolio", href: "/portfolio", icon: "grid" }] },
   {
     group: "CONTROL CENTER",
     items: [
-      { label: "Agenda", icon: "calendar" },
+      { label: "Agenda", href: "/events/:id/agenda", icon: "calendar" },
       { label: "Manage presentations", href: "/", icon: "review" },
     ],
   },
-  { group: "ONSITE", items: [{ label: "Speaker Ready Room", icon: "users" }] },
+  { group: "ONSITE", items: [{ label: "Speaker Ready Room", href: "/events/:id/srr", icon: "users" }] },
 ];
 
 const BARE = ["/login", "/forgot-password", "/reset-password", "/account/password", "/t/"];
 
-export function Shell({ principal, children }: { principal: Principal | null; children: React.ReactNode }) {
+export function Shell({
+  principal,
+  events,
+  children,
+}: {
+  principal: Principal | null;
+  events: MyEventSummary[];
+  children: React.ReactNode;
+}) {
   const pathname = usePathname() ?? "";
   if (BARE.some((path) => pathname.startsWith(path)) || !principal) return <>{children}</>;
-  return <Frame principal={principal}>{children}</Frame>;
+  return (
+    <Frame principal={principal} events={events}>
+      {children}
+    </Frame>
+  );
 }
 
 const SIDEBAR_KEY = "dxg.sidebar";
 
-function Frame({ principal, children }: { principal: Principal; children: React.ReactNode }) {
+function Frame({ principal, events, children }: { principal: Principal; events: MyEventSummary[]; children: React.ReactNode }) {
   const pathname = usePathname() ?? "";
+  const router = useRouter();
+  const params = useParams<{ id?: string }>();
+  // The event the event-scoped screens are about: the URL's, else the newest the speaker is on.
+  const eventId = params?.id ?? events[0]?.id;
+  const current = events.find((event) => event.id === eventId);
   const [collapsed, setCollapsed] = useState(false);
   const [narrow, setNarrow] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -81,7 +100,15 @@ function Frame({ principal, children }: { principal: Principal; children: React.
     }
   };
 
-  const crumb = pathname.startsWith("/help") ? "Help" : "Manage presentations";
+  const crumb = pathname.startsWith("/help")
+    ? "Help"
+    : pathname.startsWith("/portfolio")
+      ? "Portfolio"
+      : /\/agenda$/.test(pathname)
+        ? "Agenda"
+        : /\/srr$/.test(pathname)
+          ? "Speaker Ready Room"
+          : "Manage presentations";
 
   return (
     <div className={`shell${collapsed && !narrow ? " sidebar-collapsed" : ""}${menuOpen ? " menu-open" : ""}`}>
@@ -105,7 +132,27 @@ function Frame({ principal, children }: { principal: Principal; children: React.
             {GROUPS.filter((entry) => entry.group === "EVENTS").map(renderGroup)}
           </nav>
           <div className="evtctx">
-            <span className="note">Your presentations, on every event you speak at.</span>
+            {events.length === 0 ? (
+              <span className="note">No events yet — the organisers add you to an agenda.</span>
+            ) : (
+              <>
+                <select
+                  aria-label="Switch event"
+                  value={eventId ?? ""}
+                  onChange={(event) => {
+                    const chosen = event.target.value;
+                    if (chosen) router.push(`/events/${chosen}/agenda`);
+                  }}
+                >
+                  {events.map((event) => (
+                    <option key={event.id} value={event.id}>
+                      {event.name}
+                    </option>
+                  ))}
+                </select>
+                {current && <div className="note">{dayLabel(current)}</div>}
+              </>
+            )}
           </div>
           <nav aria-label="This site">{GROUPS.filter((entry) => entry.group !== "EVENTS").map(renderGroup)}</nav>
           <AccountMenu principal={principal} />
@@ -158,23 +205,38 @@ function Frame({ principal, children }: { principal: Principal; children: React.
       <div key={group} className="navgroup">
         <div className="grp">{group}</div>
         <div className="navitems">
-          {items.map((item) =>
-            item.href ? (
-              <Link key={item.label} href={item.href} className={pathname === item.href ? "on" : ""}>
+          {items.map((item) => {
+            const needsEvent = item.href.includes(":id");
+            const href = needsEvent && !eventId ? undefined : item.href.replace(":id", eventId ?? "");
+            if (!href) {
+              return (
+                <a key={item.label} aria-disabled="true" title="You are not on an event yet">
+                  <span className="ico"><Icon name={item.icon} /></span>
+                  {item.label}
+                </a>
+              );
+            }
+            return (
+              <Link key={item.label} href={href} className={pathname === href ? "on" : ""}>
                 <span className="ico"><Icon name={item.icon} /></span>
                 {item.label}
               </Link>
-            ) : (
-              <a key={item.label} aria-disabled="true" title="Coming soon">
-                <span className="ico"><Icon name={item.icon} /></span>
-                {item.label}
-              </a>
-            ),
-          )}
+            );
+          })}
         </div>
       </div>
     );
   }
+}
+
+/** "Day 2" while the event runs; its dates otherwise (as the control centre says it). */
+function dayLabel(event: MyEventSummary): string {
+  const day = 86_400_000;
+  const startsAt = new Date(`${event.starts_on}T00:00:00`).getTime();
+  const endsAt = new Date(`${event.ends_on}T00:00:00`).getTime();
+  const today = new Date(new Date().toDateString()).getTime();
+  if (today < startsAt || today > endsAt) return formatDateRange(event.starts_on, event.ends_on);
+  return `Day ${Math.round((today - startsAt) / day) + 1}`;
 }
 
 function initials(name: string): string {

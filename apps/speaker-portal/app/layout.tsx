@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { Shell } from "@/components/Shell";
 import { THEME_BOOT } from "@/lib/theme";
-import { getSession } from "@/lib/api";
-import type { Principal } from "@/lib/api";
+import { getMyEvents, getSession } from "@/lib/api";
+import type { MyEventSummary, Principal } from "@/lib/api";
 
 export const metadata: Metadata = {
   title: "DXG·PM — Manage presentations",
@@ -19,6 +19,14 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   } catch {
     principal = null;
   }
+  let events: MyEventSummary[] = [];
+  if (principal && !principal.must_change_password) {
+    try {
+      events = (await getMyEvents()).items;
+    } catch {
+      events = [];
+    }
+  }
   return (
     // `data-theme` is set by THEME_BOOT before React hydrates (D-084), so the server's
     // markup and the browser's differ here on purpose.
@@ -27,7 +35,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOT }} />
       </head>
       <body>
-        <Shell principal={principal}>{children}</Shell>
+        <Shell principal={principal} events={events}>
+          {children}
+        </Shell>
       </body>
     </html>
   );

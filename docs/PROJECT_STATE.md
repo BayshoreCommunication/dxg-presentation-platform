@@ -3484,4 +3484,8 @@ staff and portal.
 Help page with the speaker's guide), so it looks exactly as the :3000 speaker view did — just on its own port. Walked
 on :3001 as Raman: sidebar with Manage presentations open and the rest greyed (Travis will prune these later), Help,
 settings, approved download, pending v11. Lint and type-check clean.
+**Same day, later:** speaker sidebar pruned (no Create event, Room sync, Room Agent) and the remaining items made
+real: Portfolio, Agenda (programme with own-talk status only) and Speaker Ready Room (desks, check-ins, sign-offs,
+own talks with upload), with an event switcher. Walked on :3001 as Raman; speaker-accounts suite covers the three
+routes and refuses another event with 404.
 

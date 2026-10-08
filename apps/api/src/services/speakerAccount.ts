@@ -120,3 +120,156 @@ export async function sessionForUpload(tx: pg.PoolClient, email: string, uploadI
   const session = await sessionForSlot(tx, email, slotId);
   return session ? { session, slotId } : null;
 }
+
+/* ── the speaker's other views (Travis, 2026-10-08): events, agenda, Speaker Ready Room ── */
+
+export type MyEventSummary = {
+  id: string;
+  name: string;
+  timezone: string;
+  starts_on: string;
+  ends_on: string;
+  status: string;
+  venue: string | null;
+};
+
+/** The events this account speaks at, newest first — for the sidebar's switcher and the portfolio. */
+export async function myEvents(tx: pg.PoolClient, email: string): Promise<MyEventSummary[]> {
+  const sessions = await speakerSessionsFor(tx, email);
+  if (sessions.length === 0) return [];
+  const { rows } = await tx.query<MyEventSummary>(
+    `SELECT e.id, e.name, e.timezone, e.starts_on::text, e.ends_on::text, e.status, v.name AS venue
+       FROM pmp.events e LEFT JOIN pmp.venues v ON v.id = e.venue_id
+      WHERE e.id = ANY($1::uuid[])
+      ORDER BY e.starts_on DESC, e.name`,
+    [sessions.map((session) => session.event_id)],
+  );
+  return rows;
+}
+
+/** This account's session on one event, or null when it does not speak there. */
+export async function sessionForEvent(tx: pg.PoolClient, email: string, eventId: string): Promise<PortalSession | null> {
+  if (!UUID.test(eventId)) return null;
+  return (await speakerSessionsFor(tx, email)).find((session) => session.event_id === eventId) ?? null;
+}
+
+export type MyAgendaPresentation = {
+  slot_id: string;
+  title: string;
+  starts_at: string | null;
+  ends_at: string | null;
+  speakers: { name: string; organization: string | null; role: string }[];
+  /** One of this speaker's own; only then is its status shown. */
+  mine: boolean;
+  status: string | null;
+  status_label: string | null;
+};
+
+export type MyAgendaSession = {
+  id: string;
+  title: string;
+  kind: string;
+  state: string;
+  day: string | null;
+  room: string | null;
+  track: string | null;
+  starts_at: string;
+  ends_at: string;
+  presentations: MyAgendaPresentation[];
+};
+
+/**
+ * The event's programme as a speaker may see it: every session, presentation and presenter
+ * name (the public programme), with the status of the speaker's own talks only — no file
+ * counts, no state of anyone else's presentation.
+ */
+export async function myAgenda(tx: pg.PoolClient, session: PortalSession): Promise<MyAgendaSession[]> {
+  const { eventAgenda } = await import("./agenda.ts");
+  const { rows: mine } = await tx.query<{ slot_id: string }>(
+    `SELECT slot_id FROM pmp.speaker_assignments WHERE speaker_id = $1 AND replaced_by IS NULL`,
+    [session.speaker_id],
+  );
+  const own = new Set(mine.map((row) => row.slot_id));
+  const agenda = await eventAgenda(tx, session.event_id);
+  return agenda.map((item) => ({
+    id: item.id,
+    title: item.title,
+    kind: item.kind,
+    state: item.state,
+    day: item.day,
+    room: item.room,
+    track: item.track,
+    starts_at: item.starts_at,
+    ends_at: item.ends_at,
+    presentations: item.presentations.map((presentation) => ({
+      slot_id: presentation.slot_id,
+      title: presentation.title,
+      starts_at: presentation.starts_at,
+      ends_at: presentation.ends_at,
+      speakers: presentation.speakers.map((who) => ({ name: who.name, organization: who.organization, role: who.role })),
+      mine: own.has(presentation.slot_id),
+      status: own.has(presentation.slot_id) ? presentation.status : null,
+      status_label: own.has(presentation.slot_id) ? presentation.status_label : null,
+    })),
+  }));
+}
+
+export type MySrr = {
+  event: { id: string; name: string; timezone: string; starts_on: string; ends_on: string; venue: string | null };
+  /** The desks the team has set up; a speaker checks in at one of them. */
+  stations: { name: string; busy: boolean }[];
+  /** This speaker's visits, newest first. */
+  checkins: { id: string; station: string | null; checked_in_at: string; departed_at: string | null; technician: string }[];
+  /** What they confirmed as final, newest first. */
+  sign_offs: { signed_at: string; version_number: number; file_name: string; talk: string; receipt_emailed_to: string | null }[];
+  talks: PortalTalk[];
+};
+
+/**
+ * The Speaker Ready Room as the speaker sees it: where to go, whether they have checked in
+ * and what they signed off — and their own presentations for the event, to look over or
+ * replace before they do (a speaker may update from here; the client's review asked for it).
+ */
+export async function mySrr(tx: pg.PoolClient, session: PortalSession): Promise<MySrr> {
+  const { rows: eventRows } = await tx.query<MySrr["event"]>(
+    `SELECT e.id, e.name, e.timezone, e.starts_on::text, e.ends_on::text, v.name AS venue
+       FROM pmp.events e LEFT JOIN pmp.venues v ON v.id = e.venue_id WHERE e.id = $1`,
+    [session.event_id],
+  );
+  const { rows: stations } = await tx.query<{ name: string; busy: boolean }>(
+    `SELECT st.name,
+            EXISTS (SELECT 1 FROM pmp.srr_checkins c WHERE c.station_id = st.id AND c.departed_at IS NULL) AS busy
+       FROM pmp.srr_stations st WHERE st.event_id = $1 AND st.retired_at IS NULL
+      ORDER BY st.position, st.created_at`,
+    [session.event_id],
+  );
+  const { rows: checkins } = await tx.query<MySrr["checkins"][number]>(
+    `SELECT c.id, COALESCE(st.name, c.station) AS station, c.checked_in_at::text, c.departed_at::text,
+            u.display_name AS technician
+       FROM pmp.srr_checkins c
+       LEFT JOIN pmp.srr_stations st ON st.id = c.station_id
+       JOIN pmp.users u ON u.id = c.technician_id
+      WHERE c.speaker_id = $1 AND c.event_id = $2
+      ORDER BY c.checked_in_at DESC`,
+    [session.speaker_id, session.event_id],
+  );
+  const { rows: signOffs } = await tx.query<MySrr["sign_offs"][number]>(
+    `SELECT so.signed_at::text, fv.version_number, fv.original_filename AS file_name, s.title AS talk,
+            r.emailed_to::text AS receipt_emailed_to
+       FROM pmp.sign_offs so
+       JOIN pmp.file_versions fv ON fv.id = so.file_version_id
+       JOIN pmp.files f ON f.id = fv.file_id
+       JOIN pmp.slots s ON s.id = f.slot_id
+       LEFT JOIN pmp.receipts r ON r.id = so.receipt_id
+      WHERE so.speaker_id = $1 AND so.event_id = $2
+      ORDER BY so.signed_at DESC`,
+    [session.speaker_id, session.event_id],
+  );
+  return {
+    event: eventRows[0]!,
+    stations,
+    checkins,
+    sign_offs: signOffs,
+    talks: await portalTalks(tx, session),
+  };
+}

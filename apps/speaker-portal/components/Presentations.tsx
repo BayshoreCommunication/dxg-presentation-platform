@@ -162,7 +162,7 @@ function deadlineText(deadline: string, timeZone: string): { label: string; pass
   return { label: formatDeadline(deadline, timeZone), passed: todayThere > deadline };
 }
 
-function TalkCard({
+export function TalkCard({
   talk,
   eventName,
   timezone,

@@ -189,3 +189,54 @@ export async function sha256Hex(file: File): Promise<string> {
     .map((byte) => byte.toString(16).padStart(2, "0"))
     .join("");
 }
+
+/* ── the speaker's other views: events, agenda, Speaker Ready Room ─────────── */
+
+export type MyEventSummary = {
+  id: string;
+  name: string;
+  timezone: string;
+  starts_on: string;
+  ends_on: string;
+  status: string;
+  venue: string | null;
+};
+
+export const getMyEvents = () => request<{ items: MyEventSummary[] }>("/me/events");
+
+export type MyAgendaPresentation = {
+  slot_id: string;
+  title: string;
+  starts_at: string | null;
+  ends_at: string | null;
+  speakers: { name: string; organization: string | null; role: string }[];
+  mine: boolean;
+  status: string | null;
+  status_label: string | null;
+};
+
+export type MyAgendaSession = {
+  id: string;
+  title: string;
+  kind: string;
+  state: string;
+  day: string | null;
+  room: string | null;
+  track: string | null;
+  starts_at: string;
+  ends_at: string;
+  presentations: MyAgendaPresentation[];
+};
+
+export const getMyAgenda = (eventId: string) =>
+  request<{ event: { id: string; name: string; timezone: string }; items: MyAgendaSession[] }>(`/me/events/${eventId}/agenda`);
+
+export type MySrr = {
+  event: { id: string; name: string; timezone: string; starts_on: string; ends_on: string; venue: string | null };
+  stations: { name: string; busy: boolean }[];
+  checkins: { id: string; station: string | null; checked_in_at: string; departed_at: string | null; technician: string }[];
+  sign_offs: { signed_at: string; version_number: number; file_name: string; talk: string; receipt_emailed_to: string | null }[];
+  talks: PortalTalk[];
+};
+
+export const getMySrr = (eventId: string) => request<MySrr>(`/me/events/${eventId}/srr`);

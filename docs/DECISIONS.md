@@ -2710,3 +2710,12 @@ speakers.av-rfpilot.com in production), which keeps D-088's rule that no staff c
 - Tests: speaker-accounts (speaker cookie, `/me/session`, 401 on `/auth/session` and on `/me` with a staff cookie,
   temporary-password gate), auth-separation, password-reset, speakers-add-and-send, email-look. `npm run dev` starts the
   speaker site again.
+- **Sidebar, pruned and made real** (Travis, same day): Create event, Room sync and DEVICE/Room Agent are gone from the
+  speaker's sidebar; Portfolio, Agenda and Speaker Ready Room are the speaker's own views, with an event switcher
+  (newest event by default): **Portfolio** (`/portfolio`) — their events as cards with uploaded/approved counts;
+  **Agenda** (`/events/:id/agenda`, `GET /me/events/:id/agenda`) — the whole programme by day with presenter names
+  and the status of their own talks only (nothing of anyone else's files); **Speaker Ready Room** (`/events/:id/srr`,
+  `GET /me/events/:id/srr`) — where it is, the desks and whether each is busy, their check-ins and sign-offs (receipt
+  address), and their presentations for the event with the same upload card, so a speaker may update from there as
+  the client's review asked. `GET /me/events` feeds the switcher. An event they do not speak at is 404.
+

@@ -76,6 +76,37 @@ describe("a speaker signs in without a second factor and lands on their own pres
   });
 });
 
+describe("a speaker's own views of the event (portfolio, agenda, Speaker Ready Room)", () => {
+  test("their events, the programme with only their own status, and the ready room — never another event", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const events = (await json(await fetch(`${API}/me/events`, { headers: { cookie: speaker } }))) as { items: { id: string }[] };
+    assert.equal(events.items.length, 1);
+    assert.equal(events.items[0]!.id, EVENT);
+
+    const agenda = (await json(await fetch(`${API}/me/events/${EVENT}/agenda`, { headers: { cookie: speaker } }))) as {
+      items: { presentations: { mine: boolean; status: string | null; speakers: { name: string }[] }[] }[];
+    };
+    const presentations = agenda.items.flatMap((session) => session.presentations);
+    assert.ok(presentations.length >= 3, "the whole programme");
+    assert.equal(presentations.filter((row) => row.mine).length, 1, "one talk is Raman's");
+    assert.ok(presentations.every((row) => row.mine || row.status === null), "no status of anyone else's talk");
+    assert.ok(presentations.every((row) => row.speakers.every((who) => !("id" in who))), "names only, no ids");
+
+    const srr = (await json(await fetch(`${API}/me/events/${EVENT}/srr`, { headers: { cookie: speaker } }))) as {
+      stations: { name: string; busy: boolean }[];
+      checkins: unknown[];
+      sign_offs: unknown[];
+      talks: unknown[];
+    };
+    assert.ok(Array.isArray(srr.stations) && Array.isArray(srr.checkins) && Array.isArray(srr.sign_offs));
+    assert.equal(srr.talks.length, 1);
+
+    const other = "33333333-3333-4333-8333-333333333333";
+    assert.equal((await fetch(`${API}/me/events/${other}/agenda`, { headers: { cookie: speaker } })).status, 404);
+    assert.equal((await fetch(`${API}/me/events/${other}/srr`, { headers: { cookie: speaker } })).status, 404);
+  });
+});
+
 describe("a speaker account is refused everything that is the staff's", () => {
   // Event-scoped paths are refused by the event resolver (no role on the event) and the
   // rest by the staff gate; either way a speaker is told no, never asked for a second factor.

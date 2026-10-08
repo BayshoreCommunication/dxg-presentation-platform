@@ -36,7 +36,16 @@ import {
   revokePresenterCredential,
   createSpeakerAccount,
 } from "./services/auth.ts";
-import { myPresentations, sessionForSlot, sessionForUpload, sessionForVersion } from "./services/speakerAccount.ts";
+import {
+  myPresentations,
+  myEvents,
+  myAgenda,
+  mySrr,
+  sessionForEvent,
+  sessionForSlot,
+  sessionForUpload,
+  sessionForVersion,
+} from "./services/speakerAccount.ts";
 import type { Principal } from "./services/auth.ts";
 import { startEnrolment, confirmEnrolment, disableMfa, answerChallenge } from "./services/mfa.ts";
 import { requestReset, completeReset } from "./services/passwordReset.ts";
@@ -1651,6 +1660,35 @@ app.get("/api/v1/me/presentations", async (req, res) => {
   if (!me) return;
   const events = await withSystemScope((tx) => myPresentations(tx, me.email));
   return res.json({ speaker: { name: me.name, email: me.email }, events });
+});
+
+/** The speaker's events, for the sidebar's switcher and the portfolio. */
+app.get("/api/v1/me/events", async (req, res) => {
+  const me = speakerAccountOf(req, res);
+  if (!me) return;
+  return res.json({ items: await withSystemScope((tx) => myEvents(tx, me.email)) });
+});
+
+/** The event's programme, as a speaker may see it (own talks' status only). */
+app.get("/api/v1/me/events/:eventId/agenda", async (req, res) => {
+  const me = speakerAccountOf(req, res);
+  if (!me) return;
+  return withSystemScope(async (tx) => {
+    const session = await sessionForEvent(tx, me.email, String(req.params.eventId));
+    if (!session) return res.status(404).json({ code: "events.not_found", message: "You don't speak at that event." });
+    return res.json({ event: { id: session.event_id, name: session.event_name, timezone: session.timezone }, items: await myAgenda(tx, session) });
+  });
+});
+
+/** The Speaker Ready Room as the speaker sees it: desks, their check-ins and sign-offs, their talks. */
+app.get("/api/v1/me/events/:eventId/srr", async (req, res) => {
+  const me = speakerAccountOf(req, res);
+  if (!me) return;
+  return withSystemScope(async (tx) => {
+    const session = await sessionForEvent(tx, me.email, String(req.params.eventId));
+    if (!session) return res.status(404).json({ code: "events.not_found", message: "You don't speak at that event." });
+    return res.json(await mySrr(tx, session));
+  });
 });
 
 app.post("/api/v1/me/uploads", async (req, res) => {
