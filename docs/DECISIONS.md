@@ -2719,6 +2719,26 @@ speakers.av-rfpilot.com in production), which keeps D-088's rule that no staff c
   address), and their presentations for the event with the same upload card, so a speaker may update from there as
   the client's review asked. `GET /me/events` feeds the switcher. An event they do not speak at is 404.
 
+## D-149 (2026-10-08): Production images are built by CI and pulled from ECR; releases go through `production` — Status: ACCEPTED (Travis: "set up the CI image build"; "the deployment will be from production")
+Until now every deploy copied a `git archive` to the server and built the four images there, one at a time, on the
+4 GB box — slow, and the source of most deploy incidents (stale files tar never deletes, a build failure hidden by a
+pipe, a background build that never ran, 55 GB of build cache).
+- **Build**: the CI workflow's new `publish` job runs only on a push to the **`production`** branch and only after
+  `checks`, `invariants` and `images` pass; it rebuilds from the `images` job's cache and pushes
+  `pmp-{api,dispatcher,staff,portal}:<7-char commit>` (linux/amd64, no provenance) to ECR in 295229565954/us-east-2.
+  Tags are immutable; lifecycle keeps 10 releases. `main` and pull requests never publish.
+- **Credentials**: GitHub assumes IAM role `pmp-github-image-push` by OIDC — no keys in GitHub. The trust is the
+  `production` branch only, in GitHub's immutable-subject form (owner and repository IDs, see PRODUCTION.md §3.6). The
+  server pulls with its existing `pmp-server` key, now also allowed ECR login + pull on `repository/pmp-*`; it signs
+  in through the `backup` container's aws cli, so no new software or second copy of the key on the host.
+- **Deploy**: `deploy/server/deploy.sh <commit>` — pull all four first, backup, `PMP_TAG` in `.env`, migrate,
+  `up -d --no-build`, image/health checks, prune. Rollback = the same with the previous commit. Compose names the
+  images `${PMP_IMAGE_PREFIX}pmp-x:${PMP_TAG}`; with both unset they are the old local `pmp-x:latest`, which keeps
+  building on the server as the fallback. The `backup` image is still built on the server.
+- Releasing = pull request `main` → `production`, merge, wait for the green `production` run, `./deploy.sh <commit>`.
+- First release this way: `2fb67b5` (D-146..D-148 + this), 2026-10-08.
+- Open: ECR's scan finds 7–8 critical / ~40 high CVEs in every image, all in the `node:24.4.1-bookworm-slim` base
+  (gnutls, perl, libtiff) — the same base the server-built images had. Fix = newer base tag + `apt-get upgrade`.
 
 ## D-150 (2026-10-11): Review decisions reach the speaker inside the site; one toast everywhere — Status: ACCEPTED (Travis)
 - **Speaker notifications** (`speaker_notifications`, **migration 034**): a revision request or rejection

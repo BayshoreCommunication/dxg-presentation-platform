@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Deploy a release that CI built and pushed to ECR (D-149). Run on the server:
-#   cd /opt/pmp/deploy/server && ./deploy.sh <commit>      # the 7-character commit on main
+#   cd /opt/pmp/deploy/server && ./deploy.sh <commit>      # the 7-character commit CI published from production
 # Pulls all four images first (nothing changes if one is missing) -> backup -> PMP_TAG in .env
 # -> migrate -> recreate services -> checks. Roll back with ./deploy.sh <previous commit>.
 set -euo pipefail
