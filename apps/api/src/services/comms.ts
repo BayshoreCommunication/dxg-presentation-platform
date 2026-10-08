@@ -762,6 +762,10 @@ export async function sendBatch(
       note("previous email bounced");
       continue;
     }
+    if (await isStaffAddress(tx, recipient.email)) {
+      note("address belongs to a DXG staff account");
+      continue;
+    }
     if (recipient.already_sent) {
       // Named by what it is, so an operator can tell "I already did this" from
       // "this address is dead" — the two reasons a chase list comes back empty.
@@ -799,6 +803,15 @@ export async function sendBatch(
     queued,
     skipped: [...skipped.entries()].map(([reason, count]) => ({ reason, count })),
   });
+}
+
+/** A staff member's address can never carry a speaker's sign-in (D-146, D-147). */
+async function isStaffAddress(tx: pg.PoolClient, email: string): Promise<boolean> {
+  const { rows } = await tx.query<{ account_kind: string }>(
+    `SELECT account_kind FROM pmp.users WHERE lower(email::text) = lower($1) AND is_active AND deleted_at IS NULL`,
+    [email],
+  );
+  return rows[0] !== undefined && rows[0].account_kind !== "speaker";
 }
 
 /** What the Speakers screen shows about the last email a speaker was sent (D-086). */
@@ -914,6 +927,14 @@ export async function sendUploadLink(
       WHERE lower(email::text) = lower($1) AND is_active AND deleted_at IS NULL`,
     [speaker.email],
   );
+  // A staff member's address is never a speaker's sign-in (D-146): say so here rather than
+  // mailing them an invitation whose "your password" opens nothing on the speaker site.
+  if (account[0] && account[0].account_kind !== "speaker") {
+    return err({
+      code: "comms.staff_address",
+      message: `${speaker.email} belongs to a DXG staff account, so it can't be a speaker's sign-in. Give ${speaker.name} a different email address on the Agenda, then send the sign-in.`,
+    });
+  }
   if (account[0] && account[0].account_kind === "speaker" && !account[0].must_change_password) {
     return err({
       code: "comms.already_signed_in",

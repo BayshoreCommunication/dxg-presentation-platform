@@ -229,6 +229,33 @@ describe("uploads and downloads stay within the speaker's own talks", () => {
   });
 });
 
+describe("a staff member's address never becomes a speaker's sign-in", () => {
+  test("Send sign-in refuses it with a message, and no email goes", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const agenda = (await json(await fetch(`${API}/events/${EVENT}/agenda`, { headers: { cookie: admin } }))) as {
+      items: { presentations: { slot_id: string }[] }[];
+    };
+    const slot = agenda.items.flatMap((session) => session.presentations)[0]!.slot_id;
+    const added = (await json(
+      await fetch(`${API}/events/${EVENT}/speakers`, {
+        method: "POST",
+        headers: headers(admin),
+        body: JSON.stringify({ name: "Probe Staffmail", email: "m.vega@example.invalid", organization: "", slot_id: slot }),
+      }),
+    )) as { speaker_id?: string; code?: string };
+    if (!added.speaker_id) return t.skip(`could not add a probe speaker: ${added.code}`);
+    try {
+      const refused = await fetch(`${API}/events/${EVENT}/speakers/${added.speaker_id}/send-link`, { method: "POST", headers: headers(admin) });
+      assert.equal(refused.status, 409);
+      assert.equal(((await json(refused)) as { code: string }).code, "comms.staff_address");
+      const account = await fetch(`${API}/events/${EVENT}/speakers/${added.speaker_id}/account`, { method: "POST", headers: headers(admin) });
+      assert.equal(account.status, 409);
+    } finally {
+      await fetch(`${API}/events/${EVENT}/speakers/${added.speaker_id}`, { method: "DELETE", headers: headers(admin) });
+    }
+  });
+});
+
 describe("staff give a speaker a sign-in from the Speakers screen", () => {
   test("a content reviewer cannot; a root admin can, and the account is emailed a temporary password", async (t: TestContext) => {
     if (!up) return t.skip("API not running");

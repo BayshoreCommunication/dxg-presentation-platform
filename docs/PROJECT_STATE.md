@@ -3489,3 +3489,17 @@ real: Portfolio, Agenda (programme with own-talk status only) and Speaker Ready 
 own talks with upload), with an event switcher. Walked on :3001 as Raman; speaker-accounts suite covers the three
 routes and refuses another event with 404.
 
+## 2026-10-08 — Deployed 3356551 to production (D-146–D-148), from Travis's other machine
+Travis ran the runbook from the machine that holds the Lightsail key (this Mac has none). Confirmed from outside:
+an invitation arrived from noreply@av-rfpilot.com with the "Sign in to manage your presentations" button pointing at
+https://speakers.av-rfpilot.com/login. First finding: the test address was a **staff** account, so the email said
+"your password" and the speaker site (rightly) refused the staff password. Fixed the same day (below).
+
+## 2026-10-08 — Send sign-in refuses a staff member's address
+A speaker whose email is a DXG staff account's got an invitation saying "sign in with your password", which opens
+nothing on the speaker site (a staff address is never turned into a speaker's, D-146). `sendUploadLink` now refuses
+with 409 `comms.staff_address` and a message naming the fix (a different address on the Agenda), the account route
+refuses the same way, and a batch or automatic reminder skips such an address ("address belongs to a DXG staff
+account"). Test in speaker-accounts (54/54 with speakers-add-and-send and security-hardening). **Not deployed: api
+only needs rebuilding.**
+

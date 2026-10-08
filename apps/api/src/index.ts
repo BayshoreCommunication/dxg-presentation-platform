@@ -3211,7 +3211,11 @@ app.post("/api/v1/events/:eventId/speakers/:speakerId/send-link", async (req, re
   if (!result.ok) {
     const code = result.error.code;
     const status =
-      code === "comms.no_email" || code === "comms.no_talk" ? 422 : code === "comms.already_signed_in" ? 409 : statusFor(result.error);
+      code === "comms.no_email" || code === "comms.no_talk"
+        ? 422
+        : code === "comms.already_signed_in" || code === "comms.staff_address"
+          ? 409
+          : statusFor(result.error);
     return res.status(status).json(result.error);
   }
   return res.status(201).json(result.value);
