@@ -3469,3 +3469,19 @@ email button point at `/login`, migration 033 for the stored defaults, Comms Ins
 type-check, unit 319/319; invariants speakers-add-and-send, email-look, comms-cadence, automatic-reminders,
 speaker-accounts, event-owned-data, security-hardening, practice-event all green together. Not deployed.
 **Before deploying:** migration 033 runs with the others; production emails will carry temporary passwords from then on.
+
+## 2026-10-08 — Speaker site is its own origin (D-148)
+Travis asked for speakers on their own port; agreed and built: the speaker site (:3001) now signs speakers in with
+email + password under its own cookie (`pmp_speaker`), has first-sign-in password change, forgotten/reset password and
+Manage presentations at `/` (the presenter card, upload/update/download through `/api/v1/me/`); old `/t/<token>` links
+explain and point at sign-in. The staff app lost the speaker mode and tells a speaker who signs in there where to go.
+All emails point at the speaker site. Walked locally: speaker sign-in on :3001 → Manage presentations (approved
+download, pending v11), a speaker's password on :3000 sets only `pmp_speaker` and answers `speaker_site`. Lint,
+type-check, unit 319; speaker-accounts, auth-separation, password-reset, speakers-add-and-send, email-look 85/85.
+Not deployed. **Deploy note:** `PORTAL_BASE` must be the speaker site's public address (it already is); rebuild api,
+staff and portal.
+**Same day:** the speaker site wears the control centre's sidebar and top bar (same stylesheet, Icon set, account menu,
+Help page with the speaker's guide), so it looks exactly as the :3000 speaker view did — just on its own port. Walked
+on :3001 as Raman: sidebar with Manage presentations open and the rest greyed (Travis will prune these later), Help,
+settings, approved download, pending v11. Lint and type-check clean.
+

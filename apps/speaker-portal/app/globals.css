@@ -84,6 +84,9 @@ aside{width:250px;flex-shrink:0;background:transparent;color:var(--foreground);d
 .evtctx .note{font-size:12px;color:var(--subtle-foreground);padding-left:2px}
 aside nav{display:flex;flex-direction:column;gap:20px;flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;scrollbar-width:none}
 aside nav::-webkit-scrollbar{display:none}
+/* The Events group sits above the switcher and takes only its own height (D-133). */
+aside nav.topnav{flex:none;overflow:visible}
+.topnav + .evtctx{border-top:.8px solid var(--border);padding-top:14px}
 .navgroup{display:flex;flex-direction:column;gap:12px}
 .navitems{display:flex;flex-direction:column;gap:2px}
 .grp{padding:0;font-size:12px;line-height:1.6;letter-spacing:0;text-transform:uppercase;color:var(--muted-foreground);white-space:nowrap}
@@ -106,12 +109,40 @@ aside nav a[aria-disabled="true"]{opacity:.45;cursor:default}
 .avatar .dot{position:absolute;right:-1px;bottom:-1px;width:9px;height:9px;border-radius:50%;background:var(--success);box-shadow:0 0 0 2px #fff}
 
 main{flex:1;min-width:0;min-height:100vh;background:var(--card);box-shadow:inset 0 0 0 .8px var(--border);padding:0 12px 24px}
+/* Top bar, measured from Kravio: 52 px, 14/12 padding, crumbs 16 apart, 16 px glyph + 10 gap on the
+   first crumb, a 7×11 slanted stroke between them, 24 px icon buttons 12 apart on the right. */
 .topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;height:52px;padding:14px 12px}
-.crumbs{display:flex;align-items:center;gap:12px;min-width:0;font-size:14px;line-height:1;white-space:nowrap}
-.crumbs a,.crumbs span{color:var(--muted-foreground);transition:color .15s;overflow:hidden;text-overflow:ellipsis}
+.topbar .left{display:flex;align-items:center;gap:16px;min-width:0}
+.topbar .right{display:flex;align-items:center;gap:12px}
+.crumbs{display:flex;align-items:center;gap:16px;min-width:0;font-size:14px;line-height:1;white-space:nowrap}
+.crumbs .crumb{display:flex;align-items:center;gap:16px;min-width:0}
+.crumbs a,.crumbs .here{display:flex;align-items:center;gap:10px;min-width:0;border-radius:6px;color:var(--muted-foreground);transition:color .15s}
+.crumbs a span,.crumbs .here span{overflow:hidden;text-overflow:ellipsis}
+.crumbs a svg,.crumbs .here svg{flex-shrink:0}
 .crumbs a:hover{color:var(--foreground)}
-.crumbs .sep{color:var(--subtle-foreground);flex-shrink:0}
+.crumbs .sep{display:flex;width:6px;height:10px;flex-shrink:0}
+.crumbs .sep svg{width:7px;height:11px;margin:-.5px -.5px}
 .crumbs [aria-current="page"]{font-weight:500;color:var(--foreground)}
+.ibtn{position:relative;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;width:24px;height:24px;margin:-4px;padding:4px;border:0;border-radius:6px;background:transparent;color:var(--secondary-foreground);transition:background-color .15s ease-out,transform .15s ease-out}
+.ibtn:hover{background:rgba(0,0,0,.04)}
+.ibtn[data-state="open"]{background:rgba(0,0,0,.05)}
+.ibtn:active{transform:scale(.97)}
+.ibtn.toggle:hover{background:rgba(0,0,0,.05)}
+.ibtn.toggle.open svg{transform:rotate(180deg)}
+.logo .ibtn.toggle{margin:-4px}
+.ibtn.bell svg{transform-origin:top}
+.ibtn.bell:hover svg{animation:ring .6s ease-in-out}
+.ibtn.gear svg{transition:transform .5s var(--ease-out-expo)}
+.ibtn.gear:hover svg{transform:rotate(90deg)}
+@keyframes ring{0%,to{transform:rotate(0)}20%{transform:rotate(14deg)}40%{transform:rotate(-12deg)}60%{transform:rotate(8deg)}80%{transform:rotate(-4deg)}}
+.hmenu{position:relative;display:flex}
+.hmenu .menu{position:absolute;right:-4px;top:calc(100% + 10px);z-index:50;width:220px}
+.hmenu .empty-note{padding:10px 8px 12px;font-size:13px;color:var(--muted-foreground)}
+
+/* Sidebar collapse: the rail slides shut; its contents keep their width so nothing reflows mid-animation. */
+aside{overflow:hidden;transition:width .3s var(--ease-out-expo),opacity .2s}
+aside .logo,aside .sidebody{width:250px;flex-shrink:0}
+.sidebar-collapsed aside{width:0;opacity:0;pointer-events:none}
 .content{padding:16px 4px}
 .htitle{font-size:24px;font-weight:500;line-height:1.15;color:var(--foreground);margin-bottom:16px;letter-spacing:0}
 .note{font-size:13px;color:var(--secondary-foreground)}
@@ -130,19 +161,34 @@ main{flex:1;min-width:0;min-height:100vh;background:var(--card);box-shadow:inset
 .card>.chd:last-child{padding-bottom:8px}
 .cbd{padding:16px 14px 14px}
 
-/* ── KPI tiles: tray, label row, white value panel ── */
-.krow{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:16px;margin-bottom:16px}
-.kpi{position:relative;background:var(--muted);border:0;border-radius:12px;padding:4px;box-shadow:inset 0 0 0 .8px var(--border);display:flex;flex-direction:column;animation:rise-in .52s var(--ease-out-expo) both}
+/* ── KPI tiles: Kravio's, measured — 140 px tray, 8 px header row with a 16 px glyph that
+      tilts on hover, a white 10 px-radius panel with the number at its foot that lifts 1 px. ── */
+.krow{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:16px}
+.kpi{position:relative;display:flex;flex-direction:column;height:140px;min-width:0;border-radius:12px;background:var(--muted);padding:4px;box-shadow:inset 0 0 0 .8px var(--border);animation:rise-in .52s var(--ease-out-expo) both}
 .kpi::before{content:"";position:absolute;inset:0;border-radius:inherit;background-image:var(--hatch);pointer-events:none}
 .kpi>*{position:relative}
-.kpi .kl{padding:8px;font-size:14px;font-weight:500;line-height:1.2;letter-spacing:0;text-transform:none;color:var(--secondary-foreground)}
-.kpi>:not(.kl){background:var(--card);border:0 solid var(--border);border-left-width:.8px;border-right-width:.8px;padding:0 12px;margin:0}
-.kpi>.kl+*{border-top-width:.8px;border-top-left-radius:10px;border-top-right-radius:10px;padding-top:16px;flex:1}
-.kpi>:last-child:not(.kl){border-bottom-width:.8px;border-bottom-left-radius:10px;border-bottom-right-radius:10px;padding-bottom:12px}
-.kpi>.kv+*{padding-top:10px}
-.kpi .kv{font-family:inherit;font-weight:500;font-size:24px;line-height:1;margin-top:0;color:var(--foreground)}
-.kpi .note{font-size:12px;color:var(--muted-foreground)}
-.kpi:hover>.kl+*{box-shadow:none}
+.kpi-head{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-shrink:0;padding:8px}
+.kpi-head h3{display:flex;align-items:center;gap:4px;min-width:0;margin:0;font-size:14px;font-weight:500;line-height:1;color:var(--secondary-foreground)}
+.kpi-label{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kpi-ico{display:flex;flex-shrink:0;transition:transform .3s var(--ease-out-expo)}
+.kpi:hover .kpi-ico{transform:rotate(-12deg) scale(1.1)}
+.kpi-body{display:flex;flex:1;min-height:1px;align-items:flex-end;justify-content:space-between;gap:8px;border-radius:10px;border:.8px solid var(--border);background:var(--card);padding:0 12px 12px;transition:box-shadow .3s var(--ease-out-expo),transform .3s var(--ease-out-expo)}
+.kpi:hover .kpi-body{transform:translateY(-1px);box-shadow:var(--shadow-lift)}
+.kpi-stat{display:flex;flex-direction:column;align-items:flex-start;gap:12px;min-width:0;line-height:1}
+.kpi .kv{margin:0;font-family:inherit;font-size:24px;font-weight:500;line-height:1;color:var(--foreground)}
+.kpi-sub{margin:0;max-width:100%;font-size:13px;line-height:1;color:var(--muted-foreground);letter-spacing:-.13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kpi-sub[class*="tone-"]{font-size:12px;font-weight:500;letter-spacing:0}
+.kpi-sub.tone-ok{color:var(--success)}
+.kpi-sub.tone-warn{color:var(--amber-text)}
+.kpi-sub.tone-bad{color:var(--destructive)}
+.kpi-ring{flex-shrink:0;transform-origin:right bottom;transition:transform .3s}
+.kpi:hover .kpi-ring{transform:scale(1.04)}
+.kpi-ring circle{fill:none;stroke-width:3.5}
+.kpi-ring .track{stroke:var(--accent)}
+.kpi-ring .fill{stroke:var(--primary);stroke-linecap:round;transition:stroke-dasharray .7s var(--ease-out-expo)}
+.kpi-ring.tone-ok .fill{stroke:var(--success)}
+.kpi-ring.tone-warn .fill{stroke:var(--amber)}
+.kpi-ring.tone-bad .fill{stroke:var(--destructive)}
 
 /* ── tables ── */
 table{width:100%;border-collapse:separate;border-spacing:0;font-size:13px}
@@ -220,6 +266,7 @@ label{display:block;margin-bottom:6px;font-size:12px;font-weight:500;color:var(-
    against them stay legible without knowing which surface they sit on. */
 .darkpane{--dim:#9ca3af;--line:#37475d;--slate:#d1d5db}
 .darkpane .note{color:var(--paneink)}
+.darkpane .why-not{color:var(--dim)}
 .demo-bar{flex-shrink:0;display:flex;align-items:center;gap:12px;background:var(--card);color:var(--secondary-foreground);padding:10px 16px;font-size:13px;box-shadow:inset 0 .8px 0 var(--border)}
 .demo-bar b{color:var(--foreground);font-weight:500}
 .demo-btn{margin:12px;height:32px;border:.8px solid var(--primary);border-radius:8px;background:var(--gradient-primary);color:#fff;font-weight:500;font-size:12px}
@@ -252,32 +299,541 @@ label{display:block;margin-bottom:6px;font-size:12px;font-weight:500;color:var(-
 .live i{width:7px;height:7px;border-radius:50%;background:var(--success);display:inline-block;box-shadow:0 0 0 3px rgba(5,150,105,.15)}
 
 @media (max-width:760px){
-  .shell{flex-direction:column}
-  aside{position:static;width:100%;height:auto}
-  aside nav{max-height:none}
-  .account{display:none}
   .grid2{grid-template-columns:1fr}
 }
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+
+/* A time or date outside the range its field allows — a presentation dragged outside
+   its session, say — is otherwise indistinguishable from a good one until the server
+   refuses it on save. Scoped to these two types: they are the only inputs carrying
+   min/max, and a blanket :invalid rule would light up anything merely left empty. */
+input[type=time]:invalid,input[type=date]:invalid{border-color:var(--block)}
+
+/* ── date and time picker (control center only) ── */
+/* The picker's own input keeps this app's field look; only the popup below is
+   the dashboard's. react-datepicker wraps its input in a div that is inline-block
+   by default, which collapsed the three-up Presentation row and clipped the box
+   beside it. */
+/* react-datepicker always renders the whole day in the time column: includeTimes,
+   filterTime and minTime/maxTime all feed isDisabledTime only, adding a --disabled
+   class and refusing the click, with no prop that shortens the list (checked in
+   dist/index.js). Ninety-six rows to reach the twenty minutes a session allows is
+   offered-but-refused, which is what D-043 set out to stop, so the list is trimmed
+   here. The selected one survives even when disabled — otherwise a time the file
+   supplied would vanish from the field that exists to correct it. Disabled *dates*
+   stay visible and struck through, as the dashboard shows them. */
+.dxg-datepicker .react-datepicker__time-list-item--disabled:not(.react-datepicker__time-list-item--selected){display:none}
+
+.dxg-field-wrap{display:block;width:100%}
+.dxg-field{width:100%}
+.dxg-field--invalid{border-color:var(--block)}
+
+/* ── date and time picker ─────────────────────────────────────────────────────
+   The DXG dashboard's picker theme (dxg-rfp-tool-dashboard/app/globals.css),
+   ported so the two products look like one (D-044). Travis's call.
+
+   Every colour is re-tinted to this app's tokens rather than copied: the
+   dashboard's accent is teal #1DBFD3, and since D-078 this product has no
+   accent at all — the baseline names (--blue, --info-soft …) resolve to
+   Kravio's near-black primary and grey accent, so selection reads as the
+   dark gradient like every other chosen thing in the app. Shape, spacing and behaviour are the dashboard's; the
+   palette is ours, so no screen gains a second accent.
+
+   The dashboard's `.dark` variant is left out — this app has no dark scheme.
+   Selectors are react-datepicker's own, so this block only makes sense
+   alongside that dependency.
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.dxg-datepicker.react-datepicker {
+  overflow: hidden;
+  border: 0;
+  border-radius: 12px;
+  background: var(--white);
+  box-shadow: var(--shadow-popover);
+  font-family: var(--font-sans);
+}
+
+.dxg-datepicker .react-datepicker__header {
+  border-bottom: 1px solid var(--line);
+  background: var(--info-soft);
+  padding: 15px 10px 9px;
+}
+
+.dxg-datepicker .react-datepicker__current-month,
+.dxg-datepicker .react-datepicker-time__header,
+.dxg-datepicker .react-datepicker-year-header {
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+/* Shared MUI-style year browsing, retaining the app's existing calendar theme. */
+.dxg-datepicker .react-datepicker__header--custom {
+  padding: 8px;
+}
+
+.dxg-datepicker__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  min-width: 252px;
+}
+
+.dxg-datepicker__view-toggle,
+.dxg-datepicker__month-arrow,
+.dxg-datepicker__year-option {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  cursor: pointer;
+  color: var(--ink);
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+.dxg-datepicker__view-toggle {
+  gap: 6px;
+  min-height: 40px;
+  padding: 0 8px;
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.dxg-datepicker__month-navigation { display: flex; }
+
+.dxg-datepicker__month-arrow { width: 36px; height: 40px; color: var(--blueDark); }
+
+.dxg-datepicker__month-arrow:disabled { opacity: .35; cursor: not-allowed; }
+
+.dxg-datepicker__view-toggle:hover,
+.dxg-datepicker__month-arrow:not(:disabled):hover,
+.dxg-datepicker__year-option:hover { background: var(--info-soft); }
+
+.dxg-datepicker__view-toggle:focus-visible,
+.dxg-datepicker__month-arrow:focus-visible,
+.dxg-datepicker__year-option:focus-visible {
+  outline: 2px solid var(--blueDark);
+  outline-offset: -2px;
+}
+
+.dxg-datepicker__years {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-content: start;
+  gap: 6px 2px;
+  height: 260px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--blue) transparent;
+  padding: 8px 4px;
+  background: var(--white);
+  border-radius: 10px;
+}
+
+.dxg-datepicker__year-option {
+  min-height: 44px;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 999px;
+}
+
+.dxg-datepicker__year-option[aria-pressed="true"] {
+  background: var(--blueDark);
+  color: var(--white);
+  font-weight: 500;
+}
+
+.dxg-datepicker__year-option[aria-pressed="true"]:is(:hover, :focus-visible) {
+  background: var(--blueDark);
+  color: var(--white);
+}
+
+.dxg-datepicker--choosing-year .react-datepicker__month,
+.dxg-datepicker--choosing-year .react-datepicker__day-names,
+.dxg-datepicker--choosing-year .react-datepicker__today-button { display: none; }
+
+.dxg-datepicker .react-datepicker__day-name {
+  margin-top: 8px;
+  color: var(--slate);
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+.dxg-datepicker .react-datepicker__month {
+  margin: 10px 12px 12px;
+}
+
+.dxg-datepicker .react-datepicker__day,
+.dxg-datepicker .react-datepicker__time-list-item {
+  border-radius: 8px;
+  color: var(--ink);
+  font-weight: 500;
+  transition:
+    background-color 150ms ease,
+    box-shadow 150ms ease,
+    color 150ms ease,
+    transform 150ms ease;
+}
+
+.dxg-datepicker .react-datepicker__day:hover,
+.dxg-datepicker .react-datepicker__time-list-item:hover {
+  background: var(--info-soft) !important;
+  color: var(--blueDark);
+  transform: translateY(-1px);
+}
+
+.dxg-datepicker .react-datepicker__day--selected,
+.dxg-datepicker .react-datepicker__time-list-item--selected {
+  background: var(--blueDark) !important;
+  color: var(--white) !important;
+  font-weight: 500 !important;
+  background-image: var(--gradient-primary) !important;
+  box-shadow: var(--shadow-dark);
+}
+
+/* Outlined, not filled (Travis's call, deviating from the dashboard here).
+
+   react-datepicker marks a day `--keyboard-selected` to say "this is where the
+   keyboard is", and with an empty field that is today. The dashboard's theme
+   fills it exactly like `--selected`, so an untouched End date showed today's
+   cell looking chosen — the screen stating a value the field does not hold,
+   which is the defect this project keeps removing. An outline says "here" and
+   a fill says "chosen", and now only one of them says either.
+
+   `:not(--selected)` because a day can carry both classes, and a real selection
+   must keep its fill. */
+.dxg-datepicker .react-datepicker__day--keyboard-selected:not(.react-datepicker__day--selected) {
+  background: transparent !important;
+  color: var(--ink) !important;
+  font-weight: 600 !important;
+  box-shadow: inset 0 0 0 1.5px var(--blue);
+}
+
+/* Selected text stays white, so selection must win over the pale hover rule.
+   This also covers today's keyboard preselection and selected time options. */
+.dxg-datepicker .react-datepicker__day--selected:is(:hover, :focus-visible),
+.dxg-datepicker .react-datepicker__time-list-item--selected:is(:hover, :focus-visible) {
+  background: var(--blueDark) !important;
+  color: var(--white) !important;
+}
+
+/* Hovering where the keyboard is should read as "you could pick this", not as a
+   selection already made, so it takes the ordinary hover tint inside its outline. */
+.dxg-datepicker .react-datepicker__day--keyboard-selected:not(.react-datepicker__day--selected):is(:hover, :focus-visible) {
+  background: var(--info-soft) !important;
+  color: var(--ink) !important;
+}
+
+.dxg-datepicker .react-datepicker__day:not(.react-datepicker__day--disabled):focus-visible,
+.dxg-datepicker .react-datepicker__time-list-item:not(.react-datepicker__time-list-item--disabled):focus-visible {
+  outline: 2px solid var(--blueDark);
+  outline-offset: 2px;
+}
+
+.dxg-datepicker .react-datepicker__day--today:not(.react-datepicker__day--selected) {
+  background: var(--info-soft);
+  box-shadow: inset 0 0 0 1.5px var(--blue);
+  color: var(--foreground);
+  font-weight: 600;
+}
+
+.dxg-datepicker .react-datepicker__day--outside-month {
+  color: var(--slate);
+  font-weight: 500;
+}
+
+.dxg-datepicker .react-datepicker__day--disabled,
+.dxg-datepicker .react-datepicker__day--disabled.react-datepicker__day--selected,
+.dxg-datepicker .react-datepicker__day--disabled.react-datepicker__day--keyboard-selected {
+  color: var(--dim) !important;
+  background: var(--mist) !important;
+  cursor: not-allowed;
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+  box-shadow: none;
+}
+
+.dxg-datepicker .react-datepicker__day--disabled:hover,
+.dxg-datepicker .react-datepicker__day--disabled.react-datepicker__day--selected:hover,
+.dxg-datepicker .react-datepicker__day--disabled.react-datepicker__day--keyboard-selected:hover {
+  color: var(--dim) !important;
+  background: var(--mist) !important;
+  transform: none;
+}
+
+.dxg-datepicker .react-datepicker__today-button {
+  border-top: 1px solid var(--line);
+  background: var(--info-soft);
+  padding: 10px 12px;
+  color: var(--blueDark);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.dxg-datepicker .react-datepicker__today-button:hover {
+  background: var(--info-soft);
+}
+
+/*
+ * No horizontal scrollbar under the times.
+ *
+ * Two things produced one: the library sets `overflow-y: scroll` on the list and says
+ * nothing about the other axis, and CSS then computes `overflow-x` to `auto` rather
+ * than leaving it `visible` — an axis cannot stay visible while the one across from it
+ * scrolls. That alone is harmless until something overflows, and something did: the
+ * time-only column is the library's 85px, less a 15px scrollbar and the items' 10px
+ * padding either side, which leaves 50px for a label like "02:00 AM" that measures 51.
+ * One pixel, on sixteen of the ninety-six rows, under every time field.
+ *
+ * So the column is widened to fit its widest label with room to spare rather than the
+ * pixel being clipped — a label that does not fit is the actual fault, and hiding the
+ * overflow would leave it clipped on any platform whose font renders a shade wider.
+ * `overflow-x: hidden` stays as the guard: it costs nothing, and it keeps a sub-pixel
+ * rounding anywhere in this column from putting the bar back.
+ *
+ * Scoped to `--time-only`, the class the field already carries, rather than left
+ * unqualified: every picker in the app is date-only or time-only, and a width meant
+ * for a narrow time column should not reach a date-and-time picker the day one
+ * appears.
+ */
+.dxg-datepicker--time-only .react-datepicker__time-container,
+.dxg-datepicker--time-only .react-datepicker__time,
+/*
+ * The long selector is the library's own, matched rather than out-specified by an
+ * `!important`: it sets the box's 85px through
+ * `__time-container __time __time-box`, which outranks a two-class rule.
+ */
+.dxg-datepicker--time-only
+  .react-datepicker__time-container
+  .react-datepicker__time
+  .react-datepicker__time-box {
+  width: 92px;
+}
+
+.dxg-datepicker .react-datepicker__time-list {
+  overflow-x: hidden;
+}
+
+.dxg-datepicker .react-datepicker__navigation {
+  top: 9px;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  transition: background-color 150ms ease;
+}
+
+.dxg-datepicker .react-datepicker__navigation:hover {
+  background: var(--info-soft);
+}
+
+.dxg-datepicker .react-datepicker__navigation-icon::before {
+  border-color: var(--blue);
+  border-width: 2px 2px 0 0;
+}
+
+.dxg-datepicker-popper {
+  z-index: 60 !important;
+  animation: dxg-datepicker-in 120ms ease-out;
+  will-change: opacity;
+}
+
+.dxg-datepicker-popper--contained .dxg-datepicker.react-datepicker {
+  max-height: min(
+    var(--dxg-datepicker-available-height, calc(100dvh - 16px)),
+    calc(100dvh - 16px)
+  );
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+@keyframes dxg-datepicker-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Selected calendar values must win over the later dark hover treatment. */
+.dark .dxg-datepicker :is(
+  .react-datepicker__day--keyboard-selected,
+  .react-datepicker__day--selected,
+  .react-datepicker__time-list-item--selected
+):not(.react-datepicker__day--disabled):not(.react-datepicker__time-list-item--disabled) {
+  background: var(--blueDark) !important;
+  color: var(--white) !important;
+}
+/* Event details tabs (D-063), drawn as Kravio's segmented toggle: white pills on the
+   tray colour, the chosen one filled with the primary gradient. */
+.tabs{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;padding:4px;border-radius:12px;background:var(--muted);box-shadow:inset 0 0 0 .8px var(--border);width:fit-content;max-width:100%}
+.tabs button{display:inline-flex;align-items:center;height:28px;padding:0 10px;border:.8px solid var(--border);border-radius:8px;background:var(--card);font-weight:500;font-size:12px;line-height:1;color:var(--secondary-foreground);cursor:pointer;transition:color .2s,background-color .2s,border-color .2s,transform .2s}
+.tabs button:hover{background:var(--hover-row);color:var(--foreground)}
+.tabs button:active{transform:scale(.97)}
+.tabs button[aria-selected="true"]{border-color:var(--primary);background:var(--gradient-primary);color:var(--primary-foreground);box-shadow:var(--shadow-dark)}
+.tabs button:focus-visible{outline:none;box-shadow:var(--focus-ring)}
+.tabs .count{font-size:11px;color:var(--subtle-foreground);margin-left:6px;font-weight:500;font-variant-numeric:tabular-nums}
+.tabs button[aria-selected="true"] .count{color:#d1d5db}
 
 /* Links set in running text. With no accent colour they need an underline to read as links. */
 .login .box a,.note a,.err a{text-decoration:underline;text-underline-offset:2px;text-decoration-color:var(--hover-border)}
 .login .box a:hover,.note a:hover{text-decoration-color:currentColor}
 
-/* ── speaker portal additions (D-084) ── */
-/* A field label outside a KPI tile ("Upload deadline", "Requirements"). */
-.kl{margin-bottom:6px;font-size:12px;font-weight:500;line-height:1.2;color:var(--muted-foreground)}
-.menu .tick{margin-left:auto;font-size:12px;color:var(--foreground)}
-/* The portal has no settings menu, so the theme switch is pinned bottom-left on every page. */
-.theme-bar{position:fixed;left:16px;bottom:16px;z-index:60}
-.theme-switch{position:relative;display:inline-flex}
-.theme-switch>button{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 10px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--secondary-foreground);font-size:12px;font-weight:500;line-height:1}
-.theme-switch>button:hover{border-color:var(--hover-border)}
-.theme-switch .menu{position:absolute;left:0;bottom:calc(100% + 6px);z-index:50;width:180px}
+/* ── Event files (FR-FILE-005, D-079): laid out like the reference "Project Files" screen,
+      drawn in the Kravio tokens. ── */
+.files-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:20px}
+.files-head .btn .ico,.files-head .btn svg{flex-shrink:0}
+.files-section{margin:24px 0 12px;font-size:14px;font-weight:500;line-height:1;color:var(--foreground)}
 
-/* Copied from apps/control-center/app/globals.css so the portal and the control center
-   wear the same theme (D-084). Keep the two in step: the dark colours and the shared
-   geometry below are the control center's, verbatim. */
+.folders{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px}
+.folder{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:6px;padding:14px 14px 16px;border-radius:12px;border:.8px solid var(--border);background:var(--card);text-align:left;cursor:pointer;transition:box-shadow .2s var(--ease-out-expo),transform .2s var(--ease-out-expo),border-color .15s;animation:rise-in .52s var(--ease-out-expo) both}
+.folder:hover{transform:translateY(-1px);box-shadow:var(--shadow-lift)}
+.folder.on{border-color:var(--primary);box-shadow:inset 0 0 0 .5px var(--primary)}
+.folder-art{display:flex;margin-bottom:8px}
+.folder-name{font-size:14px;font-weight:500;line-height:1.2;color:var(--foreground)}
+.folder-meta{font-size:12px;line-height:1;color:var(--muted-foreground)}
+
+.recent{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px}
+.recent-card{display:flex;align-items:center;gap:12px;min-width:0;padding:12px;border-radius:12px;border:.8px solid var(--border);background:var(--card);text-align:left;cursor:pointer;transition:box-shadow .2s var(--ease-out-expo),transform .2s var(--ease-out-expo)}
+.recent-card:hover{transform:translateY(-1px);box-shadow:var(--shadow-lift)}
+.recent-text{display:flex;flex-direction:column;gap:6px;min-width:0}
+.recent-text b{font-size:13px;font-weight:500;line-height:1.2;color:var(--foreground);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.recent-text small{font-size:12px;line-height:1;color:var(--muted-foreground)}
+
+/* file-type tile, tinted by kind */
+.ftype{position:relative;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;width:36px;height:36px;border-radius:8px;background:var(--muted);box-shadow:inset 0 0 0 .8px var(--border)}
+.ftype svg{width:20px;height:20px}
+.ftype .sheet{fill:#fff;stroke:#9ca3af;stroke-width:1}
+.ftype .fold{stroke:#9ca3af;stroke-width:1;stroke-linejoin:round}
+.ftype .ext{position:absolute;left:50%;bottom:6px;transform:translateX(-50%);padding:1px 3px;border-radius:3px;font-size:7px;font-weight:600;line-height:1;letter-spacing:.02em;color:#fff;background:#6b7280}
+.ftype.small{width:28px;height:28px;border-radius:7px}
+.ftype.small svg{width:16px;height:16px}
+.ftype.small .ext{bottom:4px;font-size:6px}
+.ftype.large{width:48px;height:48px;border-radius:10px}
+.ftype.large svg{width:26px;height:26px}
+.ftype.large .ext{bottom:8px;font-size:8px}
+.ftype.ppt{background:#fdf0ec}.ftype.ppt .ext{background:#d24726}.ftype.ppt .sheet{stroke:#e07a5f}.ftype.ppt .fold{stroke:#e07a5f}
+.ftype.pdf{background:#fdeeee}.ftype.pdf .ext{background:#e5484d}.ftype.pdf .sheet{stroke:#ef8a8d}.ftype.pdf .fold{stroke:#ef8a8d}
+.ftype.key{background:#eef4ff}.ftype.key .ext{background:#2563eb}.ftype.key .sheet{stroke:#7aa2f7}.ftype.key .fold{stroke:#7aa2f7}
+.ftype.vid{background:#f3efff}.ftype.vid .ext{background:#7c3aed}.ftype.vid .sheet{stroke:#a78bfa}.ftype.vid .fold{stroke:#a78bfa}
+
+/* toolbar */
+.files-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.seg-tabs{display:flex;flex-wrap:wrap;gap:4px;padding:4px;border-radius:10px;background:var(--muted);box-shadow:inset 0 0 0 .8px var(--border)}
+.seg-tabs button{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border:.8px solid transparent;border-radius:7px;background:transparent;font-size:12px;font-weight:500;line-height:1;color:var(--secondary-foreground);transition:background-color .15s,color .15s,border-color .15s}
+.seg-tabs button:hover{color:var(--foreground)}
+.seg-tabs button[aria-selected="true"]{background:var(--card);border-color:var(--border);color:var(--foreground);box-shadow:var(--shadow-nav-active)}
+.seg-tabs .count{font-size:11px;color:var(--subtle-foreground);font-variant-numeric:tabular-nums}
+.files-tools{display:flex;align-items:center;gap:8px}
+.search{display:flex;align-items:center;gap:8px;width:260px;height:32px;margin:0;padding:0 10px;border-radius:8px;border:.8px solid var(--border);background:var(--card);box-shadow:var(--shadow-input);color:var(--subtle-foreground);cursor:text;transition:border-color .15s,box-shadow .15s}
+.search:hover{border-color:var(--hover-border)}
+.search:focus-within{border-color:#9ca3af;box-shadow:var(--focus-input)}
+.search input{flex:1;min-width:0;height:auto;padding:0;border:0;background:transparent;box-shadow:none!important;font-size:13px}
+.search input::-webkit-search-cancel-button{display:none}
+.ibtn.bordered{width:32px;height:32px;margin:0;border-radius:8px;border:.8px solid var(--border);background:var(--card)}
+.ibtn.bordered:hover{border-color:var(--hover-border);background:var(--hover-bg);box-shadow:var(--shadow-lift)}
+.ibtn.bordered.on{border-color:var(--primary);color:var(--foreground)}
+.viewtoggle{display:flex;padding:3px;gap:2px;border-radius:8px;border:.8px solid var(--border);background:var(--card)}
+.viewtoggle button{display:flex;align-items:center;justify-content:center;width:26px;height:24px;border:0;border-radius:6px;background:transparent;color:var(--muted-foreground)}
+.viewtoggle button[aria-pressed="true"]{background:var(--accent);color:var(--foreground)}
+.linkish{border:0;background:none;padding:0;font:inherit;color:var(--foreground);text-decoration:underline;text-underline-offset:2px;text-decoration-color:var(--hover-border);cursor:pointer}
+
+/* the list, in a Kravio well */
+.files-panel{position:relative;border-radius:12px;background:var(--muted);padding:4px;box-shadow:inset 0 0 0 .8px var(--border);transition:opacity .15s}
+.files-panel.loading{opacity:.6}
+.files-scroll{overflow-x:auto;border-radius:10px;background:var(--card);box-shadow:inset 0 0 0 .8px var(--input);padding:6px}
+.files-table{min-width:760px}
+.files-table td{padding:10px 12px;height:48px}
+.files-table td.muted{color:var(--muted-foreground);font-weight:400;white-space:nowrap}
+.files-table tr.sel td{background:var(--accent)}
+.sorthead{display:inline-flex;align-items:center;gap:8px;border:0;background:none;padding:0;font:inherit;color:inherit;cursor:pointer}
+.sorthead svg{color:var(--subtle-foreground);transition:opacity .2s}
+.sorthead:hover{color:var(--foreground)}
+.sorthead.on{color:var(--foreground)}
+.sorthead.on svg{color:var(--foreground)}
+.fname{display:flex;align-items:center;gap:10px;min-width:0;max-width:240px;border:0;background:none;padding:0;text-align:left;cursor:pointer}
+.fname span{display:flex;flex-direction:column;gap:4px;min-width:0}
+.fname b{font-size:13px;font-weight:500;color:var(--foreground);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fname small{font-size:11px;color:var(--muted-foreground);font-weight:400}
+.fname:hover b{text-decoration:underline;text-underline-offset:2px}
+.owner{display:flex;align-items:center;gap:8px;min-width:0;max-width:150px}
+.avatar.sm{width:22px;height:22px;font-size:9px}
+.ellipsis{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.loc{display:inline-block;max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle;color:var(--cell-foreground);text-decoration:underline;text-underline-offset:3px;text-decoration-color:var(--hover-border)}
+.loc:hover{color:var(--foreground);text-decoration-color:currentColor}
+.status-cell{display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap}
+.findings{font-size:11px;font-weight:500;color:var(--amber-text)}
+.rowmenu{position:relative;display:inline-flex}
+.rowmenu .ibtn{margin:0}
+.rowmenu .menu{position:absolute;right:0;top:calc(100% + 6px);z-index:40;width:190px}
+.menu.floating{z-index:70}
+.rowmenu .menu .item svg{flex-shrink:0}
+.menu .tick{margin-left:auto;font-size:12px;color:var(--foreground)}
+.files-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:10px 10px 6px;font-size:12px;color:var(--muted-foreground)}
+.pager{display:flex;align-items:center;gap:6px}
+.pager>span{margin-right:6px}
+.pagerbtn{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:7px;border:.8px solid var(--border);background:var(--card);font-size:14px;line-height:1;color:var(--secondary-foreground);transition:background-color .15s,box-shadow .15s}
+.pagerbtn:hover:not(:disabled){background:var(--hover-bg);box-shadow:var(--shadow-lift)}
+.pagerbtn:disabled{opacity:.4;cursor:default}
+
+/* grid view */
+.files-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;padding:6px;border-radius:10px;background:var(--card);box-shadow:inset 0 0 0 .8px var(--input)}
+.fcard{display:flex;flex-direction:column;gap:10px;padding:10px 12px 12px;border-radius:10px;border:.8px solid var(--border);background:var(--card);transition:box-shadow .2s var(--ease-out-expo)}
+.fcard:hover{box-shadow:var(--shadow-lift)}
+.fcard.sel{border-color:var(--primary)}
+.fcard-top{display:flex;align-items:center;justify-content:space-between}
+.fcard-body{display:flex;flex-direction:column;align-items:flex-start;gap:6px;min-width:0;border:0;background:none;padding:0;text-align:left;cursor:pointer}
+.fcard-body b{max-width:100%;font-size:13px;font-weight:500;color:var(--foreground);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:4px}
+.fcard-body small{max-width:100%;font-size:11px;color:var(--muted-foreground);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* Kravio checkbox */
+.cb{position:relative;display:inline-block;width:16px;height:16px;margin:0;flex-shrink:0;border-radius:4px;vertical-align:middle}
+.cb input{position:absolute;inset:0;width:16px;height:16px;margin:0;opacity:0;cursor:pointer}
+.cb .track{position:absolute;left:50%;top:50%;width:14px;height:14px;transform:translate(-50%,-50%);border-radius:4px;background:#e1e4ea;transition:background-color .15s;pointer-events:none}
+.cb:hover .track{background:#d4d8e0}
+.cb .knob{position:absolute;left:2px;top:2px;width:12px;height:12px;border-radius:3px;background:#fff;box-shadow:var(--shadow-knob);overflow:clip;transition:background-color .15s;pointer-events:none;color:#fff}
+.cb .knob svg{position:absolute;left:1px;top:1px;width:10px;height:10px;opacity:0}
+.cb input:checked~.track{background:rgba(75,85,99,.1)}
+.cb input:checked~.knob{background:var(--primary)}
+.cb input:checked~.knob svg{opacity:1;animation:pop .26s var(--ease-out-expo) both}
+.cb input:focus-visible~.track{box-shadow:var(--focus-ring)}
+.cb.disabled{opacity:.4}
+.cb.disabled input{cursor:not-allowed}
+
+/* detail drawer: the reference's right-hand panel */
+@keyframes drawer-in{0%{transform:translateX(24px);opacity:0}to{transform:none;opacity:1}}
+.drawer-layer{position:fixed;inset:0;z-index:70}
+.drawer-backdrop{position:absolute;inset:0;border:0;background:rgba(17,24,39,.12);cursor:default}
+.drawer{position:absolute;top:0;right:0;bottom:0;width:min(400px,100vw);overflow-y:auto;display:flex;flex-direction:column;gap:16px;padding:18px 18px 24px;background:var(--card);box-shadow:-1px 0 0 var(--border),var(--shadow-popover);animation:drawer-in .28s var(--ease-out-expo) both}
+.drawer-head{display:flex;align-items:center;justify-content:space-between}
+.drawer-head h2{font-size:18px;font-weight:500;color:var(--foreground)}
+.drawer-head .ibtn{margin:0}
+.drawer-file{display:flex;align-items:flex-start;gap:12px;padding:12px;border-radius:12px;background:var(--muted);box-shadow:inset 0 0 0 .8px var(--border)}
+.drawer-file>div{display:flex;flex-direction:column;align-items:flex-start;gap:6px;min-width:0}
+.drawer-file b{max-width:100%;font-size:14px;font-weight:500;color:var(--foreground);overflow-wrap:anywhere}
+.drawer-file small{font-size:12px;color:var(--muted-foreground)}
+.drawer-actions{display:flex;gap:8px;flex-wrap:wrap}
+.drawer-facts{margin:0;display:flex;flex-direction:column;border-top:1px solid rgba(0,0,0,.06)}
+.drawer-facts>div{display:grid;grid-template-columns:110px 1fr;gap:12px;padding:9px 0;border-bottom:1px solid rgba(0,0,0,.06)}
+.drawer-facts dt{font-size:12px;color:var(--muted-foreground)}
+.drawer-facts dd{margin:0;font-size:13px;color:var(--foreground);overflow-wrap:anywhere}
+.drawer-sub{font-size:14px;font-weight:500;color:var(--foreground)}
+.versions{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:12px}
+.versions li{display:flex;align-items:flex-start;gap:12px}
+.vtext{display:flex;flex-direction:column;align-items:flex-start;gap:4px;flex:1;min-width:0}
+.vtext b{max-width:100%;font-size:13px;font-weight:500;color:var(--foreground);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vtext small{max-width:100%;font-size:11px;color:var(--muted-foreground);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.versions .ibtn{margin:0}
+@media (max-width:760px){.search{width:100%}.files-tools{width:100%}}
+
 /* ════════════════════════════════════════════════════════════════════════════
    Dark theme (D-082), after the reference "Modulix" dashboard: a black canvas, a
    near-black sidebar, flat #1a1a1a cards edged in #2a2a2a, white line icons, white
@@ -522,25 +1078,208 @@ th{font-weight:500}
 input,select,textarea{border-width:1px}
 .search{border-width:1px}
 
-/* ── Presenter dashboard card (D-140, after Preseria's) ─────────────────── */
-.room-copy{display:flex;flex-direction:column;gap:2px;margin:0 0 14px;padding:10px 14px;border-left:3px solid var(--success,#16a34a);border-radius:0 8px 8px 0;background:var(--muted)}
-/* The four-step journey above a talk's status line: done ✓, the current step ringed, the rest faint. */
-.journey{display:flex;align-items:flex-start;gap:0;margin:0 0 14px;padding:0;list-style:none;counter-reset:none}
+/* Accent picker swatches (D-092): a small lift on hover and keyboard focus. */
+.cp-swatch{transition:transform .15s var(--ease-out-expo)}
+.cp-swatch:hover,.cp-swatch:focus-visible{transform:scale(1.1);outline:none}
+
+/* ── Narrow screens: the sidebar is a slide-out menu ──────────────────────────
+   Last in the file so the shared geometry above cannot undo it. It used to stack the
+   whole sidebar above the page. Hidden by CSS alone, so it never flashes open before
+   the page's script runs; Shell.tsx adds .menu-open and the scrim. */
+@media (max-width:760px){
+  aside,.sidebar-collapsed aside{position:fixed;top:0;left:0;bottom:0;z-index:60;width:min(280px,86vw);height:100%;opacity:1;pointer-events:auto;background:var(--background);box-shadow:0 12px 40px rgba(0,0,0,.18);transform:translateX(-100%);visibility:hidden;transition:transform .25s var(--ease-out-expo),visibility 0s linear .25s}
+  aside .logo,aside .sidebody{width:auto}
+  .menu-open aside{transform:none;visibility:visible;transition:transform .25s var(--ease-out-expo)}
+  .menu-scrim{position:fixed;inset:0;z-index:59;background:rgba(0,0,0,.35)}
+  main{min-width:0;width:100%}
+  /* A table wider than the screen scrolls inside its card instead of being cut off (Staff
+     accounts' action buttons were). Row menus are drawn on <body> (FloatingMenu, D-107),
+     so a scrolling card cannot clip them. */
+  .cbd:has(> table){overflow-x:auto}
+}
+@media (max-width:760px) and (prefers-reduced-motion:reduce){aside,.menu-open aside{transition:none}}
+
+/* ── Presentation receipt (D-106): a page made for paper ─────────────────────── */
+.receipt-page{max-width:640px}
+.receipt{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:28px 32px}
+.receipt header{margin-bottom:18px}
+.receipt .brand{font-weight:600;letter-spacing:.02em;color:var(--muted-foreground);font-size:13px}
+.receipt h1{font-size:22px;margin:4px 0 2px}
+.receipt table{width:100%;border-collapse:collapse;margin:8px 0 16px}
+.receipt th{width:120px;text-align:left;font-weight:500;color:var(--muted-foreground);vertical-align:top;background:transparent}
+.receipt th,.receipt td{padding:9px 0;border-bottom:1px solid var(--border);font-size:14px}
+.receipt .signatures{display:grid;grid-template-columns:1fr 1fr;gap:32px;margin-top:40px}
+.receipt .signatures div{border-top:1px solid var(--foreground);padding-top:6px;font-size:12px;color:var(--muted-foreground)}
+@media print{
+  aside,.topbar,.menu-scrim,.no-print,nextjs-portal{display:none!important}
+  body,.shell,main{background:#fff!important}
+  .receipt-page{max-width:none}
+  .receipt{border:none;padding:0;background:#fff;color:#000}
+  .receipt th,.receipt td{border-bottom-color:#ccc;color:#000}
+}
+
+/* Why a control is greyed out (D-111): visible, quiet, right under the control. */
+.why-not{margin:6px 0 0;font-size:12.5px;line-height:1.4;color:var(--secondary-foreground)}
+.why-not::before{content:"ⓘ ";opacity:.7}
+
+/* "Are you sure?" on the page, not window.confirm (D-113). */
+.confirm-inline{margin:8px 0;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--card, #fff);font-size:13px;text-align:left}
+.confirm-inline.danger{border-color:var(--destructive)}
+.confirm-inline .note{margin-top:4px}
+.confirm-inline-actions{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+
+/* Help (D-115): the top-bar button and a guide scrolled to from it. */
+.topbar .help-link{padding:4px 10px;font-size:13px}
+.help-guide{scroll-margin-top:72px}
+.help-guide:target h4{background:var(--muted);border-radius:6px;padding:2px 6px;margin-left:-6px}
+
+/* Practice event (D-116): a thin, always-visible line on every screen of one. */
+.practice-banner{margin:0 0 12px;padding:6px 12px;border:1px solid var(--amber);border-radius:8px;background:var(--warn-soft);color:var(--amber-text);font-size:12.5px;line-height:1.4}
+[data-theme="dark"] .practice-banner{color:#f59e0b;border-color:rgba(245,158,11,.45)}
+
+/* Check-in's "What to do now" (D-120): the one action, first. */
+.next-step{box-shadow:inset 0 0 0 1.5px var(--foreground)}
+.next-step-label{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted-foreground);margin-bottom:4px}
+.next-step-title{font-size:18px;line-height:1.35;margin:0 0 6px;font-weight:600}
+.next-step-body{margin:0 0 10px;font-size:14px;line-height:1.5;color:var(--secondary-foreground)}
+
+/* Speaker Ready Room desks (D-121). */
+.desk-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px}
+.desk{border:1px solid var(--border);border-radius:10px;padding:10px 12px;background:var(--card)}
+.desk.busy{border-color:var(--foreground)}
+.desk-name{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted-foreground)}
+.desk-who{font-weight:600;margin:2px 0}
+
+/* Room Agent's "Now" (D-124). */
+.room-now{background:#0F2A36;border:1px solid #2A5566;border-radius:8px;padding:12px 16px;margin-bottom:14px}
+.room-now-label{font-family:var(--font-mono, ui-monospace, monospace);font-size:11px;letter-spacing:.1em;color:var(--dim);margin-bottom:4px}
+.room-now-text{color:var(--white);font-size:15px;line-height:1.45}
+.room-now-note{color:var(--dim);font-size:11.5px;margin-top:8px}
+
+/* ── Agenda tab: session cards (D-131) ─────────────────────────────────── */
+.ag-sess{border:1px solid var(--line);border-radius:8px;margin-bottom:10px;background:var(--card)}
+.ag-sess.canceled{opacity:.7}
+.ag-sess.canceled .ag-title{text-decoration:line-through}
+.ag-head,.ag-talk{display:grid;grid-template-columns:64px minmax(0,1fr) auto;gap:4px 14px;align-items:start;padding:10px 12px}
+.ag-head{background:var(--mist);border-radius:8px 8px 0 0}
+.ag-talk{border-top:1px solid var(--line)}
+.ag-time{display:flex;flex-direction:column;gap:2px;font-size:13px;line-height:1.35}
+.ag-time span:last-child:not(:first-child){color:var(--muted-foreground)}
+.ag-what{min-width:0}
+.ag-title{font-size:14px;line-height:1.35}
+.ag-talk-title{display:inline-block;font-weight:600;margin-bottom:6px}
+.ag-actions{display:flex;gap:6px;align-items:center;justify-content:flex-end;flex-wrap:wrap}
+.ag-status{text-decoration:none}
+.ag-spks{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
+.ag-spk{display:flex;align-items:center;gap:10px;min-height:30px;padding:2px 6px;margin:0 -6px;border-radius:6px}
+.ag-spk:hover{background:var(--mist)}
+.ag-name{flex-shrink:0;max-width:100%;font-weight:500;color:var(--cell-foreground);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ag-org{flex:0 1 auto;font-size:13px;color:var(--muted-foreground);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.ag-role{height:20px;font-size:11px}
+.ag-remove{margin-left:auto;opacity:.55}
+.ag-spk:hover .ag-remove,.ag-remove:focus-within{opacity:1}
+.ag-add{margin-left:auto;padding:2px 10px}
+.ag-editor{margin-top:8px}
+@media (max-width:640px){
+  .ag-head{grid-template-columns:minmax(0,1fr) auto}
+  /* A presentation's status and menu go under its speakers, so names keep the width. */
+  .ag-talk{grid-template-columns:minmax(0,1fr)}
+  .ag-talk .ag-actions{justify-content:flex-start}
+  .ag-time{grid-column:1/-1;flex-direction:row;gap:6px}
+  .ag-time span:last-child:not(:first-child)::before{content:"– "}
+  .ag-time:empty{display:none}
+}
+
+/* ── Communications: the email preview (D-138) ─────────────────────────── */
+/* An email is white in every mail client, so the sheet stays white in the dark theme too. */
+.mail-preview{border:1px solid var(--line);border-radius:10px;background:#f3f4f6;padding:12px;margin-bottom:12px}
+.mail-meta{display:flex;flex-direction:column;gap:2px;font-size:12px;color:#4b5563;padding:0 4px 10px}
+.mail-meta b{display:inline-block;min-width:58px;font-weight:600;color:#111827}
+.mail-sheet{max-width:600px;margin:0 auto;background:#fff;border-radius:10px;overflow:hidden;color:#1f2937}
+.mail-banner{display:block;width:100%;height:auto}
+.mail-head{padding:18px 24px;background:#111827;color:#fff;font-size:16px;font-weight:600}
+.mail-cta{display:flex;justify-content:center;padding:22px 24px 4px}
+.mail-cta span{display:inline-block;padding:11px 22px;border-radius:8px;background:#111827;color:#fff;font-size:14px;font-weight:600}
+.mail-body{white-space:pre-wrap;font:inherit;font-size:14px;line-height:1.6;margin:0;padding:18px 24px 14px;color:#1f2937}
+.mail-foot{padding:10px 24px 16px;border-top:1px solid #e5e7eb;font-size:12px;color:#6b7280}
+
+/* ── Communications: the formatted message editor (D-139) ─────────────── */
+/* White like the email it writes, in both themes. */
+.rich-editor{border:1px solid var(--line);border-radius:8px;background:#fff;color:#1f2937;overflow:hidden}
+.rich-editor .ql-toolbar.ql-snow{border:0;border-bottom:1px solid #e5e7eb;background:#fafafa}
+.rich-editor .ql-container.ql-snow{border:0;font-family:inherit;font-size:14px}
+.rich-editor .ql-editor{min-height:280px;max-height:520px;overflow-y:auto;line-height:1.6;color:#1f2937}
+.rich-editor .ql-editor img{max-width:100%}
+.rich-editor .ql-snow .ql-picker.ql-size .ql-picker-label[data-value="12px"]::before,
+.rich-editor .ql-snow .ql-picker.ql-size .ql-picker-item[data-value="12px"]::before{content:"Small"}
+.rich-editor .ql-snow .ql-picker.ql-size .ql-picker-label[data-value="18px"]::before,
+.rich-editor .ql-snow .ql-picker.ql-size .ql-picker-item[data-value="18px"]::before{content:"Large"}
+.rich-editor .ql-snow .ql-picker.ql-size .ql-picker-label[data-value="24px"]::before,
+.rich-editor .ql-snow .ql-picker.ql-size .ql-picker-item[data-value="24px"]::before{content:"Huge"}
+.rich-editor .ql-snow .ql-picker.ql-size .ql-picker-item[data-value="12px"]{font-size:12px}
+.rich-editor .ql-snow .ql-picker.ql-size .ql-picker-item[data-value="18px"]{font-size:18px}
+.rich-editor .ql-snow .ql-picker.ql-size .ql-picker-item[data-value="24px"]{font-size:24px}
+.rich-foot{display:flex;justify-content:space-between;gap:12px;padding:6px 12px;border-top:1px solid #e5e7eb;background:#fafafa}
+.rich-count{font-size:12px;color:#6b7280;font-variant-numeric:tabular-nums}
+.rich-count.over{color:#b91c1c;font-weight:600}
+.mail-body.formatted{white-space:normal}
+.mail-body.formatted p{margin:0}
+.mail-body.formatted img{max-width:100%;height:auto}
+
+/* ── Communications layout (D-139 polish) ──────────────────────────────── */
+.look-grid,.tpl-facts,.test-send{--kl:var(--muted-foreground)}
+.look-grid .kl,.tpl-facts .kl,.test-send .kl{display:block;margin-bottom:6px;font-size:12px;font-weight:500;color:var(--kl)}
+/* Banner beside the sender fields; the banner is a thumbnail, not the full 1200 px. */
+.look-grid{display:grid;grid-template-columns:minmax(0,380px) minmax(0,1fr);gap:20px 28px;align-items:start}
+.look-banner img{max-height:140px;object-fit:cover}
+.look-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 16px}
+.look-fields input{width:100%}
+.look-actions{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.look-actions .why-not{flex:1 1 220px;margin:0}
+.tpl-head{display:flex;gap:8px;align-items:center}
+.tpl-head select{min-width:220px}
+/* Editor left, the email right; the preview stays in view while the message is written. */
+.tpl-grid{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:24px;align-items:start}
+.tpl-grid.view{grid-template-columns:minmax(0,1fr) 300px}
+.tpl-main input#tpl-subject{width:100%}
+.tpl-side{position:sticky;top:16px}
+.tpl-grid.view .tpl-side{position:static}
+.tpl-msg-head{display:flex;justify-content:space-between;align-items:flex-end;gap:8px;margin-bottom:6px}
+.tpl-msg-head label{margin:0}
+.tpl-bar{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:12px 24px;margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}
+.tpl-bar-actions{display:flex;flex-wrap:wrap;gap:8px}
+.tpl-bar .test-send{flex:0 1 380px}
+.tpl-new{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-top:12px}
+.tpl-new input{width:100%}
+.tpl-facts{display:flex;flex-direction:column;gap:16px;padding:14px;border:1px solid var(--line);border-radius:10px;background:var(--mist)}
+.test-send-row{display:flex;gap:8px}
+.test-send-row input{flex:1 1 auto;min-width:0}
+.test-send .why-not{margin-top:6px}
+.mail-preview{margin-bottom:0}
+@media (max-width:1100px){
+  .tpl-grid,.tpl-grid.view{grid-template-columns:minmax(0,1fr)}
+  .tpl-side{position:static}
+}
+@media (max-width:720px){
+  .look-grid,.look-fields{grid-template-columns:minmax(0,1fr)}
+  .tpl-head{flex-wrap:wrap}
+  .tpl-head select{min-width:0;flex:1 1 auto}
+}
+/* ── Manage presentations, a speaker account's view (D-146): the portal's presenter card, in the
+   control centre's own black-and-white — no colour beyond the tokens already here ── */
+.journey{display:flex;align-items:flex-start;gap:0;margin:0 0 14px;padding:0;list-style:none}
 .journey-step{position:relative;display:flex;flex:1 1 0;min-width:0;flex-direction:column;align-items:center;gap:6px;padding:0 4px;text-align:center}
-.journey-step::before{content:"";position:absolute;top:11px;left:-50%;width:100%;height:2px;background:var(--line)}
+.journey-step::before{content:"";position:absolute;top:11px;left:-50%;width:100%;height:2px;background:var(--border)}
 .journey-step:first-child::before{display:none}
-.journey-step.done::before{background:var(--success)}
-.journey-step.now::before{background:var(--success)}
-.journey-step.warn::before{background:var(--success)}
-.journey-mark{position:relative;z-index:1;display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;border:2px solid var(--line);background:var(--card);font-size:12px;font-weight:600;line-height:1;color:var(--muted-foreground)}
-.journey-step.done .journey-mark{border-color:var(--success);background:var(--success);color:#fff}
-.journey-step.now .journey-mark{border-color:var(--primary);color:var(--primary);box-shadow:0 0 0 4px var(--accent)}
-.journey-step.warn .journey-mark{border-color:var(--amber);background:var(--amber);color:#fff}
+.journey-step.done::before,.journey-step.now::before,.journey-step.warn::before{background:var(--foreground)}
+.journey-mark{position:relative;z-index:1;display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;border:2px solid var(--border);background:var(--card);font-size:12px;font-weight:600;line-height:1;color:var(--muted-foreground)}
+.journey-step.done .journey-mark{border-color:var(--foreground);background:var(--foreground);color:var(--card)}
+.journey-step.now .journey-mark{border-color:var(--foreground);color:var(--foreground);box-shadow:0 0 0 4px var(--muted)}
+.journey-step.warn .journey-mark{border-color:var(--foreground);background:var(--card);color:var(--foreground)}
 .journey-text{display:flex;flex-direction:column;gap:2px;min-width:0}
 .journey-label{font-size:13px;font-weight:500;line-height:1.2;color:var(--muted-foreground)}
 .journey-step.done .journey-label,.journey-step.now .journey-label,.journey-step.warn .journey-label{color:var(--foreground)}
 .journey-note{font-size:12px;line-height:1.3;color:var(--muted-foreground)}
-.journey-step.warn .journey-note{color:var(--amber-text)}
 @media (max-width:520px){
   .journey{flex-direction:column;gap:10px}
   .journey-step{flex-direction:row;align-items:flex-start;text-align:left;padding:0}
@@ -548,31 +1287,27 @@ input,select,textarea{border-width:1px}
   .journey-text{padding-top:3px}
 }
 .my-files{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
-.my-file{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 14px;border:1px solid var(--line);border-radius:10px}
+.my-file{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 14px;border:.8px solid var(--border);border-radius:10px}
 .my-file-name{display:flex;flex-direction:column;align-items:flex-start;gap:4px;min-width:0}
 .my-file-name b{overflow-wrap:anywhere}
 .my-file .btn{flex-shrink:0}
-/* The talk at a glance: icon rows (When / Where / During / Deadline), tinted green once approved or final. */
-.talk-info{list-style:none;margin:0 0 14px;padding:12px 14px;display:flex;flex-direction:column;gap:10px;border:1px solid var(--line);border-radius:10px;background:var(--muted);font-size:14px;line-height:1.45;color:var(--foreground)}
-.talk-info.done{background:var(--ok-soft);border-color:color-mix(in srgb,var(--success) 30%,transparent)}
+.talk-info{list-style:none;margin:0 0 14px;padding:12px 14px;display:flex;flex-direction:column;gap:10px;border:.8px solid var(--border);border-radius:10px;background:var(--muted);font-size:14px;line-height:1.45;color:var(--foreground)}
 .talk-info li{display:flex;align-items:flex-start;gap:12px;min-width:0}
 .talk-info li>span{min-width:0;overflow-wrap:anywhere}
 .talk-info b{font-weight:600}
 .talk-info .nowrap{white-space:nowrap}
 .talk-info .tz{font-size:12px;color:var(--muted-foreground);white-space:nowrap}
 .info-icon{flex-shrink:0;margin-top:1px;color:var(--foreground)}
-/* The file section (D-144): the approved file set apart, a pending one under it, older ones folded away. */
 .files-head{font-size:13px;margin:4px 0 8px}
 .file-block{display:flex;flex-direction:column;gap:6px;margin-bottom:8px}
 .my-file.compact{padding:10px 12px}
-.file-approved{border:1px solid var(--success);border-radius:10px;background:var(--ok-soft);overflow:hidden}
+.file-approved{border:.8px solid var(--foreground);border-radius:10px;background:var(--card);overflow:hidden}
 .file-approved-head{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;padding:10px 14px 0}
 .file-approved-body{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 14px 12px}
 .file-approved-body .btn{flex-shrink:0}
 .file-notes{border-left:2px solid var(--border);background:var(--muted);border-radius:0 8px 8px 0;padding:8px 12px;font-size:13px}
-.file-notes.urgent{border-left-color:var(--amber);background:var(--warn-soft)}
+.file-notes.urgent{border-left-color:var(--foreground)}
 .file-notes-head{font-size:12px;font-weight:500;color:var(--foreground);margin-bottom:4px}
-.file-notes.urgent .file-notes-head{color:var(--amber-text)}
 .file-note+.file-note{margin-top:6px}
 .earlier{margin:6px 0 4px;font-size:13px}
 .earlier>summary,.req>summary{cursor:pointer;color:var(--secondary-foreground);font-size:13px;width:fit-content}
@@ -583,6 +1318,4 @@ input,select,textarea{border-width:1px}
 .req{margin-bottom:10px}
 .req-list{margin:4px 0 0;padding-left:18px;font-size:13px;color:var(--secondary-foreground)}
 .req-list li{margin:2px 0}
-@media (max-width:520px){.file-approved-body{flex-direction:column;align-items:stretch}.file-approved-body .btn{text-align:center}}
-@media (max-width:520px){.my-file{flex-direction:column;align-items:stretch}.my-file .btn{text-align:center}}
-
+@media (max-width:520px){.file-approved-body,.my-file{flex-direction:column;align-items:stretch}.file-approved-body .btn,.my-file .btn{text-align:center}}

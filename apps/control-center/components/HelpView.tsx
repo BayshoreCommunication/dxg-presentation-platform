@@ -92,7 +92,7 @@ export const GUIDES: Section[] = [
         steps: [
           "Open Speakers. The Sign-in column says whether the speaker has one: nothing yet, Invited (emailed, not yet used) or Active.",
           "Press Send sign-in on their row. They are emailed their talks, the sign-in link and a temporary password; the column shows Invited and the Last email column follows the delivery.",
-          "The speaker signs in on this site with that address, chooses their own password, and lands on Manage presentations — every event they speak at, in one place. No sign-in app is needed.",
+          "The speaker signs in on the speaker site with that address, chooses their own password, and lands on Manage presentations — every event they speak at, in one place. No sign-in app is needed.",
           "Resend sign-in issues a new temporary password while the first is unused. Once the speaker is Active there is nothing to send: they sign in with their own password, and the sign-in page offers Forgotten your password?.",
           "A speaker who already has a sign-in from another event needs nothing new: the same account reaches this event as soon as their address is on its agenda.",
         ],
@@ -243,7 +243,6 @@ export function guideForPath(pathname: string): string | null {
     [/^\/events\/[^/]+\/archive/, "archive"],
     [/^\/admin\//, "staff"],
     [/^\/account\//, "sign-in"],
-    [/^\/presentations/, "your-presentations"],
   ];
   return map.find(([pattern]) => pattern.test(pathname))?.[1] ?? null;
 }
@@ -276,70 +275,45 @@ const GLOSSARY: Term[] = [
   { term: "Release permission", group: "Client archive", meaning: "What the client's archive may include from a speaker: full, PDF only, or nothing." },
 ].sort((a, b) => a.term.localeCompare(b.term));
 
-/** What a speaker account sees under Help (D-146): their one screen, in their words. */
-export const SPEAKER_GUIDES: Section[] = [
-  {
-    title: "Your presentations",
-    guides: [
-      {
-        id: "your-presentations",
-        title: "Upload, update and download your presentation",
-        who: "Speakers",
-        steps: [
-          "Manage presentations lists every talk you give, grouped by event. Each card shows when and where you present, and where your file is on the way to the room: Upload, Checks, Review, Ready in your room.",
-          "To send your slides, drag the file onto the card or press Choose file, check the name and size, then press Submit presentation. PowerPoint (.pptx) is preferred; PDF is accepted; up to 10 GB.",
-          "The file is checked automatically in about a minute. If something needs fixing — the slide size, a video format, a file that will not open — the card says what, and you upload a corrected version.",
-          "The DXG team reviews it. If they ask for changes, their note appears under your upload; send a new version the same way.",
-          "Once approved, the file is set apart on the card with a Download button. Only the approved version can be downloaded — it is exactly what the room will show.",
-          "Need to change your slides after approval? Press Upload a new version. Your approved version stays in use until the new one is approved too. After you have signed off onsite in the Speaker Ready Room, the presentation is final and can no longer be replaced here.",
-        ],
-        tip: "If your connection drops during an upload, press Resume — it carries on from where it stopped, never from zero.",
-      },
-    ],
-  },
-];
-
-export function HelpView({ speaker = false }: { speaker?: boolean }) {
+export function HelpView() {
   const [query, setQuery] = useState("");
   const needle = query.trim().toLowerCase();
 
   const sections = useMemo(
     () =>
-      (speaker ? SPEAKER_GUIDES : GUIDES).map((section) => ({
+      GUIDES.map((section) => ({
         ...section,
         guides: section.guides.filter(
           (guide) =>
             !needle || [guide.title, guide.who, ...guide.steps, guide.tip ?? ""].join(" ").toLowerCase().includes(needle),
         ),
       })).filter((section) => section.guides.length > 0),
-    [needle, speaker],
+    [needle],
   );
   const terms = useMemo(
     () =>
       GLOSSARY.filter(
         (entry) => !needle || [entry.term, entry.group, entry.meaning, entry.next ?? ""].join(" ").toLowerCase().includes(needle),
       ),
-    [needle, speaker],
+    [needle],
   );
 
   return (
     <>
       <h1 className="htitle">Help</h1>
       <p className="note" style={{ marginTop: 0 }}>
-        {speaker
-          ? "How to send, update and download your presentation, step by step."
-          : "How to do each job, step by step, and what every word on the screens means. The Help button at the top of any screen opens the guide for that screen."}
+        How to do each job, step by step, and what every word on the screens means. The Help button at the top of any
+        screen opens the guide for that screen.
       </p>
       <input
         type="search"
-        placeholder={speaker ? "Search help — e.g. upload, download, deadline" : "Search help — e.g. bounced, USB, archive, sign-in app"}
+        placeholder="Search help — e.g. bounced, USB, archive, sign-in app"
         value={query}
         onChange={(event) => setQuery(event.target.value)}
         aria-label="Search help"
         style={{ width: "100%", maxWidth: 520, margin: "8px 0 16px" }}
       />
 
-      {!speaker && (
       <div className="card">
         <div className="chd">
           <h3>The three confirmations</h3>
@@ -364,7 +338,6 @@ export function HelpView({ speaker = false }: { speaker?: boolean }) {
           loaded).
         </div>
       </div>
-      )}
 
       {sections.map((section) => (
         <div key={section.title} className="card">
@@ -392,7 +365,6 @@ export function HelpView({ speaker = false }: { speaker?: boolean }) {
         </div>
       ))}
 
-      {!speaker && (
       <div className="card" id="glossary">
         <div className="chd">
           <h3>Glossary · {terms.length}</h3>
@@ -420,18 +392,9 @@ export function HelpView({ speaker = false }: { speaker?: boolean }) {
           )}
         </div>
       </div>
-      )}
 
       <p className="note">
-        {speaker ? (
-          <>
-            Still stuck? Ask the DXG team who invited you. Back to <Link href="/presentations">Manage presentations</Link>.
-          </>
-        ) : (
-          <>
-            Still stuck? Ask your DXG administrator. Back to the <Link href="/">portfolio</Link>.
-          </>
-        )}
+        Still stuck? Ask your DXG administrator. Back to the <Link href="/">portfolio</Link>.
       </p>
     </>
   );

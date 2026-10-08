@@ -10,12 +10,13 @@ import { ensureSpeakerSignIn } from "./auth.ts";
 import { checkAddress, fillHtml, htmlToText, MESSAGE_MAX_CHARS, sanitizeEmailHtml } from "@pmp/email";
 
 /**
- * Where speakers sign in (D-147): the staff site's own sign-in page. Every invitation and
- * reminder points here; there is no per-speaker link any more, because the speaker's
- * credential is their password, not a token in a URL.
+ * Where speakers sign in (D-147, D-148): the speaker site's sign-in page — its own origin,
+ * apart from the staff site. Every invitation and reminder points here; there is no
+ * per-speaker link any more, because the speaker's credential is their password, not a
+ * token in a URL.
  */
-const STAFF_BASE = process.env.STAFF_BASE ?? "http://localhost:3000";
-export const SIGN_IN_URL = `${STAFF_BASE}/login`;
+const PORTAL_BASE = process.env.PORTAL_BASE ?? "http://localhost:3001";
+export const SIGN_IN_URL = `${PORTAL_BASE}/login`;
 export const SIGN_IN_BUTTON = "Sign in to manage your presentations";
 const PASSWORD_REDACTED = "[temporary password removed from the stored copy]";
 

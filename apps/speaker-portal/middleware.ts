@@ -1,12 +1,17 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-/** No session cookie means the presenter needs to sign in first. */
+const PUBLIC = ["/login", "/forgot-password", "/reset-password", "/t/"];
+
+/**
+ * First gate only: no speaker session cookie (D-148) means the speaker needs to sign in.
+ * Whether the cookie is *valid* is decided by the API; a 401 there sends them to sign in
+ * from the page itself.
+ */
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  if (pathname.startsWith("/login") || pathname.startsWith("/t/")) return NextResponse.next();
-  // The presenter's own cookie (D-088) — a staff session in the same browser is not one.
-  if (request.cookies.has("pmp_presenter")) return NextResponse.next();
+  if (PUBLIC.some((path) => pathname.startsWith(path))) return NextResponse.next();
+  if (request.cookies.has("pmp_speaker")) return NextResponse.next();
   return NextResponse.redirect(new URL("/login?reason=required", request.url));
 }
 

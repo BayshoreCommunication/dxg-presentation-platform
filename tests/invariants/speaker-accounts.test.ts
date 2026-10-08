@@ -52,14 +52,18 @@ after(async () => {
 });
 
 describe("a speaker signs in without a second factor and lands on their own presentations", () => {
-  test("the password alone opens the session, and the principal says it is a speaker", async (t: TestContext) => {
+  test("the password alone opens a session on the speaker site, under its own cookie (D-148)", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
-    const session = (await json(await fetch(`${API}/auth/session`, { headers: { cookie: speaker } }))) as {
+    assert.match(speaker, /pmp_speaker=/, "a speaker's cookie, never the staff one");
+    assert.doesNotMatch(speaker, /pmp_session=/);
+    const session = (await json(await fetch(`${API}/me/session`, { headers: { cookie: speaker } }))) as {
       principal: { account_kind: string; roles: string[]; mfa_enrolled: boolean };
     };
     assert.equal(session.principal.account_kind, "speaker");
     assert.deepEqual(session.principal.roles, []);
     assert.equal(session.principal.mfa_enrolled, false);
+    // The staff site's "who am I" does not know the speaker: the cookie is not its own.
+    assert.equal((await fetch(`${API}/auth/session`, { headers: { cookie: speaker } })).status, 401);
   });
 
   test("their presentations are only their own, on every event carrying their address", async (t: TestContext) => {
@@ -75,20 +79,34 @@ describe("a speaker signs in without a second factor and lands on their own pres
 describe("a speaker account is refused everything that is the staff's", () => {
   // Event-scoped paths are refused by the event resolver (no role on the event) and the
   // rest by the staff gate; either way a speaker is told no, never asked for a second factor.
+  // The speaker's cookie is not read on staff paths at all (D-148): no session, 401.
   for (const path of ["/events", `/events/${EVENT}/speakers`, `/events/${EVENT}/review-queue`, "/admin/users"]) {
-    test(`${path} is 403`, async (t: TestContext) => {
+    test(`${path} is refused`, async (t: TestContext) => {
       if (!up) return t.skip("API not running");
       const response = await fetch(`${API}${path}`, { headers: { cookie: speaker } });
-      assert.equal(response.status, 403);
-      const code = ((await json(response)) as { code: string }).code;
-      assert.ok(["auth.not_staff", "auth.not_on_this_event"].includes(code), code);
+      assert.ok([401, 403].includes(response.status), String(response.status));
     });
   }
 
   test("and staff are refused the speaker's own routes", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
     const response = await fetch(`${API}/me/presentations`, { headers: { cookie: admin } });
-    assert.equal(response.status, 403);
+    assert.equal(response.status, 401, "a staff cookie is not a speaker session");
+  });
+
+  test("a temporary password opens only the page that replaces it", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    await withSystemScope((tx) =>
+      tx.query(`UPDATE pmp.users SET must_change_password = true WHERE lower(email::text) = $1`, [SPEAKER]),
+    );
+    try {
+      assert.equal((await fetch(`${API}/me/presentations`, { headers: { cookie: speaker } })).status, 403);
+      assert.equal((await fetch(`${API}/me/session`, { headers: { cookie: speaker } })).status, 200);
+    } finally {
+      await withSystemScope((tx) =>
+        tx.query(`UPDATE pmp.users SET must_change_password = false WHERE lower(email::text) = $1`, [SPEAKER]),
+      );
+    }
   });
 });
 

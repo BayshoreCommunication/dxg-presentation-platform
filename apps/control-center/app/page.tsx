@@ -23,8 +23,6 @@ export default async function PortfolioPage({
   // A client account is refused on every staff route, so the portfolio is not its
   // front door. Send it where it belongs before it is bounced off this one.
   const { principal } = await getSession().catch(() => ({ principal: null }));
-  // A speaker account's front door is its presentations (D-146).
-  if (principal?.account_kind === "speaker") redirect("/presentations");
   if (principal && principal.client_events.length > 0) {
     redirect(principal.client_events.length === 1 ? `/client/${principal.client_events[0]!.id}` : "/client");
   }

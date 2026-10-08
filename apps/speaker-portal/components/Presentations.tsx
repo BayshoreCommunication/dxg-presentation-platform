@@ -2,27 +2,34 @@
 
 import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
-import { myDownloadUrl } from "@/lib/api";
-import type { MyEvent, MyTalk, MyVersion, UploadResult } from "@/lib/api";
-import { AccountUploadPanel } from "./AccountUploadPanel";
-import { Chip } from "./Chip";
-import { eventStatusChip } from "@/lib/eventStatus";
-import { formatBytes, formatDateRange, formatDeadline, SPEAKER_TALK_STATUS } from "@pmp/format";
+import { downloadUrl } from "@/lib/api";
+import type { MyEvent, PortalTalk as MyTalk, PortalVersion as MyVersion, CompleteResult as UploadResult } from "@/lib/api";
+import { UploadPanel } from "./UploadPanel";
+import { formatBytes, formatDateRange, formatDeadline, humanize, SPEAKER_TALK_STATUS } from "@pmp/format";
+
+/** How an event's stored status reads to a speaker; an active one follows its dates (D-108). */
+function eventWords(event: { status: string; starts_on: string; ends_on: string; timezone: string }): { tone: string; label: string } {
+  if (event.status === "active") {
+    const today = new Date().toLocaleDateString("en-CA", { timeZone: event.timezone });
+    if (today < event.starts_on) return { tone: "c-info", label: "Upcoming" };
+    if (today > event.ends_on) return { tone: "", label: "Event over" };
+    return { tone: "c-ok", label: "Onsite now" };
+  }
+  if (event.status === "archived") return { tone: "", label: "Archived" };
+  return { tone: "", label: humanize(event.status) };
+}
 
 /**
- * Manage presentations, as a speaker account sees it (D-146): every presentation they
- * speak on, grouped by event, newest event first. Each talk is the speaker portal's
- * presenter card — the four-step journey, the talk at a glance, the approved file set
- * apart with the only Download button, a newer upload under it, older ones folded away,
- * the team's notes beside the upload they are about — so a speaker who has used the
- * emailed link finds the same thing here, with every event in one place.
+ * Manage presentations (D-146, D-148): every presentation the speaker gives, grouped by
+ * event, newest event first — the presenter card with the four-step journey, the talk at a
+ * glance, the approved file set apart with the only Download button, a newer upload under
+ * it, older ones folded away, and the team's notes beside the upload they are about.
  */
-export function MyPresentations({ speaker, events }: { speaker: { name: string; email: string }; events: MyEvent[] }) {
+export function Presentations({ speaker, events }: { speaker: { name: string; email: string }; events: MyEvent[] }) {
   const router = useRouter();
   const reload = useCallback(async () => {
     router.refresh();
   }, [router]);
-  const talks = events.reduce((sum, event) => sum + event.talks.length, 0);
 
   return (
     <>
@@ -48,7 +55,7 @@ export function MyPresentations({ speaker, events }: { speaker: { name: string; 
       )}
 
       {events.map((event) => {
-        const chip = eventStatusChip(event.status, event);
+        const words = eventWords(event);
         return (
           <section key={event.id} style={{ marginBottom: 22 }}>
             <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap", margin: "0 0 10px" }}>
@@ -56,7 +63,7 @@ export function MyPresentations({ speaker, events }: { speaker: { name: string; 
                 {event.name}
               </h2>
               <span className="note">{formatDateRange(event.starts_on, event.ends_on)}</span>
-              <Chip status={chip.status} label={chip.label} />
+              <span className={`chip ${words.tone}`}>{words.label}</span>
             </div>
             {event.status === "archived" && (
               <p className="note" style={{ margin: "0 0 10px" }}>
@@ -83,7 +90,6 @@ export function MyPresentations({ speaker, events }: { speaker: { name: string; 
           </section>
         );
       })}
-      {talks === 0 && events.length > 0 && null}
     </>
   );
 }
@@ -322,7 +328,7 @@ function TalkCard({
               </div>
             )}
             <Requirements open />
-            <AccountUploadPanel
+            <UploadPanel
               slotId={talk.slot_id}
               onComplete={async (completed) => {
                 setResult(completed);
@@ -497,7 +503,7 @@ function ApprovedFile({ version, timezone, room, loaded }: { version: MyVersion;
             Version {version.version_number} · {formatBytes(Number(version.size_bytes))} · uploaded {uploadedAt(version.created_at, timezone)}
           </span>
         </div>
-        <a className="btn pri" href={myDownloadUrl(version.id)} download>
+        <a className="btn pri" href={downloadUrl(version.id)} download>
           Download
         </a>
       </div>

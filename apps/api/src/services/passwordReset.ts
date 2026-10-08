@@ -14,12 +14,12 @@ const MAX_REQUESTS_PER_HOUR = 5;
  */
 export async function requestReset(
   tx: pg.PoolClient,
-  input: { email: string; resetBase: string; ip?: string | undefined },
+  input: { email: string; resetBase: string; speakerResetBase?: string | undefined; ip?: string | undefined },
 ): Promise<{ queued: boolean }> {
   const email = input.email.trim().toLowerCase();
 
-  const { rows } = await tx.query<{ id: string; display_name: string; is_active: boolean }>(
-    `SELECT id, display_name, is_active FROM pmp.users WHERE lower(email::text) = $1`,
+  const { rows } = await tx.query<{ id: string; display_name: string; is_active: boolean; account_kind: string }>(
+    `SELECT id, display_name, is_active, account_kind FROM pmp.users WHERE lower(email::text) = $1`,
     [email],
   );
   const user = rows[0];
@@ -53,7 +53,9 @@ export async function requestReset(
     [user.id, hashSecret(token), String(TOKEN_MINUTES), input.ip ?? null],
   );
 
-  const link = `${input.resetBase}/reset-password?token=${encodeURIComponent(token)}`;
+  // A speaker's link opens on the speaker site (D-148); staff's on the staff site.
+  const base = user.account_kind === "speaker" ? (input.speakerResetBase ?? input.resetBase) : input.resetBase;
+  const link = `${base}/reset-password?token=${encodeURIComponent(token)}`;
   await tx.query(`INSERT INTO pmp.outbox (topic, payload) VALUES ('email.send', $1)`, [
     JSON.stringify({
       to: email,

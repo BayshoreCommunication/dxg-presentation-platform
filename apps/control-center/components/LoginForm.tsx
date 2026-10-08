@@ -23,6 +23,7 @@ export function LoginForm({ next, reason }: { next: string; reason: string | nul
   const [error, setError] = useState<string | null>(null);
   const [step, setStep] = useState<"password" | "code">("password");
   const [code, setCode] = useState("");
+  const [speakerSite, setSpeakerSite] = useState<string | null>(null);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -33,6 +34,12 @@ export function LoginForm({ next, reason }: { next: string; reason: string | nul
         const result = await login(email, password);
         if (result.step === "mfa_required") {
           setStep("code");
+          setBusy(false);
+          return;
+        }
+        // A speaker's sign-in (D-148) opened a session on the speaker site, not this one.
+        if (result.principal.account_kind === "speaker") {
+          setSpeakerSite(result.speaker_site ?? null);
           setBusy(false);
           return;
         }
@@ -64,6 +71,12 @@ export function LoginForm({ next, reason }: { next: string; reason: string | nul
         {error && (
           <div className="err" style={{ marginBottom: 12 }} role="alert">
             {error}
+          </div>
+        )}
+        {speakerSite && (
+          <div className="note" style={{ color: "var(--blue)", marginBottom: 12 }} role="status">
+            That is a speaker sign-in. Speakers manage their presentations on the speaker site:{" "}
+            <a href={speakerSite}>{speakerSite}</a>
           </div>
         )}
 

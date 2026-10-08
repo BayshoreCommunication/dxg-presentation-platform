@@ -28,6 +28,13 @@ export const SESSION_COOKIE = "pmp_session";
  * Each cookie now carries only its own kind of session.
  */
 export const PRESENTER_COOKIE = "pmp_presenter";
+/**
+ * Speaker accounts' own cookie (D-148). The speaker site and the staff site are different
+ * origins in production and different ports in development — where cookies are shared
+ * across ports — so a speaker's session travels under its own name and can never be read
+ * as a staff one, nor a staff session as a speaker's.
+ */
+export const SPEAKER_COOKIE = "pmp_speaker";
 
 export type Principal =
   | {

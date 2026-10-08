@@ -21,7 +21,7 @@ npm run db:up          # postgres :5434, redis :6380
 npm run db:migrate     # applies db/migrations in order (idempotent)
 npm run db:seed        # synthetic MedTech Forward 2026 fixture — no real content
 npm run db:heartbeat   # marks room agents as freshly online
-npm run dev            # api :4000 · control center :3000 · mail dispatcher · worker
+npm run dev            # api :4000 · control center :3000 · speaker site :3001 · mail dispatcher · worker
 ```
 
 Open http://localhost:3000 for staff. For the speaker portal, mint a link:
@@ -52,13 +52,14 @@ before it can reach anything. The same screen resets a forgotten password, hands
 whose authenticator is lost (with a reason, because that is an account-takeover path), unlocks a
 locked-out account, and grants or removes event roles.
 
-Speakers have a **persistent sign-in** on the staff site (D-146, D-147): the seed gives
-`p.raman@example.invalid` one with the development password, no authenticator. Signing in there
-opens Manage presentations (`/presentations`) — every talk on every event carrying that email.
+Speakers have a **persistent sign-in** on the **speaker site** (http://localhost:3001; D-146–D-148):
+the seed gives `p.raman@example.invalid` one with the development password, no authenticator.
+Signing in there opens Manage presentations — every talk on every event carrying that email.
 Staff send it from the Speakers screen (**Send sign-in**): the invitation email carries the sign-in
 link and a temporary password, and in development is written to `.data/mail/` like every other
-email. The access-code speaker portal (:3001) is no longer started by `npm run dev` or linked from
-anywhere; `npm run dev:portal` still runs it for the links already sent.
+email. A speaker's password does nothing on the staff site (:3000), and a staff password nothing on
+the speaker site; the two keep separate cookies (`pmp_session`, `pmp_speaker`). Access codes and the
+old `/t/<token>` links are retired: such a link now explains and points at the sign-in page.
 
 To issue a presenter credential the way DXG does, use the Speakers screen (or
 `POST /speakers/:id/credentials`). The code is shown **once** — afterwards only its last

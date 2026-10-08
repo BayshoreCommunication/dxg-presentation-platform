@@ -45,8 +45,6 @@ const STAFF_ROLES = [
 ];
 // Root admins only (D-100); `platform_admin` in the session roles is how a root admin shows.
 const ADMIN_ROLES = ["platform_admin"];
-/** Screens a speaker account never sees (D-146): the team's tools for every speaker's files. */
-const SPEAKER_HIDDEN = ["Files", "Communications", "Archive builder"];
 export const GROUPS: {
   group: string;
   roles?: string[];
@@ -57,8 +55,6 @@ export const GROUPS: {
     href?: string;
     roles?: string[];
     icon: string;
-    /** Where a speaker account (D-146) goes for this item; every item without one is theirs to see, not to open. */
-    speakerHref?: string;
   }[];
 }[] = [
   {
@@ -101,10 +97,10 @@ export const GROUPS: {
       { label: "Agenda", href: "/events/:id?tab=agenda", icon: "calendar" },
       /*
        * "Manage presentations" (D-146, Ace Johnson's review): staff review, upload and
-       * update presentations here; a speaker account opens its own presentations — every
-       * event's — under the same name, so the two sides of the product call it one thing.
+       * update presentations here; speakers manage their own under the same name on the
+       * speaker site (D-148), so the two sides of the product call it one thing.
        */
-      { label: "Manage presentations", href: "/events/:id/review", speakerHref: "/presentations", icon: "review" },
+      { label: "Manage presentations", href: "/events/:id/review", icon: "review" },
       // Every file of the event in one list (FR-FILE-005, D-079).
       { label: "Files", href: "/events/:id/files", icon: "folder" },
       { label: "Communications", href: "/events/:id/comms", icon: "mail" },
@@ -184,41 +180,7 @@ export function Sidebar({
    */
   const eventId = params?.id;
   const current = events.find((event) => event.id === eventId);
-  /*
-   * A speaker account (D-146) sees the control centre's shape, with one door open: Manage
-   * presentations. The rest is drawn greyed and says why — the speaker should recognise
-   * the product their DXG contact describes, and never be offered a screen that refuses.
-   */
-  const speaker = principal?.account_kind === "speaker";
-
   const renderGroup = ({ group, roles, items }: (typeof GROUPS)[number]) => {
-            if (speaker) {
-              if (group === "ADMIN") return null;
-              // Files, Communications and Archive builder are hidden from a speaker's view
-              // (Ace Johnson's review): they are the team's tools for every speaker's files.
-              const shown = items.filter((item) => !SPEAKER_HIDDEN.includes(item.label));
-              if (shown.length === 0) return null;
-              return (
-                <div key={group} className="navgroup">
-                  <div className="grp">{group}</div>
-                  <div className="navitems">
-                    {shown.map((item) =>
-                      item.speakerHref ? (
-                        <Link key={item.label} href={item.speakerHref} className={pathname.startsWith(item.speakerHref) ? "on" : ""}>
-                          <span className="ico"><Icon name={item.icon} /></span>
-                          {item.label}
-                        </Link>
-                      ) : (
-                        <a key={item.label} aria-disabled="true" title="For DXG staff">
-                          <span className="ico"><Icon name={item.icon} /></span>
-                          {item.label}
-                        </a>
-                      ),
-                    )}
-                  </div>
-                </div>
-              );
-            }
             // Roles held anywhere, plus those on this event — a practice event's roles
             // count only inside it (D-116).
             const held = [
@@ -302,9 +264,7 @@ export function Sidebar({
           back to the portfolio each time.
         */}
         <div className="evtctx">
-          {speaker ? (
-            <span className="note">Your presentations, on every event you speak at.</span>
-          ) : events.length === 0 ? (
+          {events.length === 0 ? (
             <>
               <span className="note">No events yet</span>
               {/* A21 (D-111): the greyed links below need an event; say how to get one. */}
@@ -439,8 +399,8 @@ function AccountMenu({ principal }: { principal: Principal }) {
         </span>
         <span className="who">
           <b>{principal.display_name}</b>
-          {/* DXG administrator, staff or speaker (D-100, D-110, D-146); raw role codes read like a stack trace. */}
-          <small>{principal.account_kind === "speaker" ? "Speaker" : principal.is_root_admin ? "DXG administrator" : "Staff"}</small>
+          {/* DXG administrator or staff (D-100, D-110); raw role codes read like a stack trace. */}
+          <small>{principal.is_root_admin ? "DXG administrator" : "Staff"}</small>
         </span>
         <span style={{ color: "var(--subtle-foreground)", display: "flex" }}>
           <Icon name="chevrons" size={12} />

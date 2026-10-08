@@ -66,7 +66,8 @@ export async function queueSpeakerSignInEmail(
   tx: pg.PoolClient,
   input: { to: string; displayName: string; temporaryPassword: string },
 ): Promise<void> {
-  const signIn = `${process.env.STAFF_BASE ?? "http://localhost:3000"}/login`;
+  // The speaker site (D-148), not the staff one.
+  const signIn = `${process.env.PORTAL_BASE ?? "http://localhost:3001"}/login`;
   await tx.query(`INSERT INTO pmp.outbox (topic, payload) VALUES ('email.send', $1)`, [
     JSON.stringify({
       to: input.to,

@@ -24,6 +24,7 @@ import { randomUUID } from "node:crypto";
 import {
   SESSION_COOKIE,
   PRESENTER_COOKIE,
+  SPEAKER_COOKIE,
   staffLogin,
   completeMfaLogin,
   presenterLogin,
@@ -53,6 +54,8 @@ import {
 
 /** Carries the half-finished sign-in between the password and the code. */
 const MFA_COOKIE = "pmp_mfa";
+/** The speaker site's sign-in page (D-148). */
+const SPEAKER_SITE = `${process.env.PORTAL_BASE ?? "http://localhost:3001"}/login`;
 import { agentView, syncRoom, acknowledge, launch, markLoaded, unmarkLoaded } from "./services/agent.ts";
 import { srrDashboard, checkIn, checkinDetail, usbIngest, signOff, depart, emailReceipt, addStation, renameStation, retireStation } from "./services/srr.ts";
 import {
@@ -445,14 +448,24 @@ function scopeFor(req: express.Request, eventId?: string): {
  * hold both at once, and a presenter token can never stand in for a staff one.
  */
 app.use(async (req, _res, next) => {
+  // Three surfaces, three cookies (D-088, D-148): the access-code portal, the speaker site's
+  // own routes under /me/, and everything else — the staff's.
   const portal = req.path.startsWith("/api/v1/portal/");
-  const token = readCookie(req, portal ? PRESENTER_COOKIE : SESSION_COOKIE);
+  const speakerSite = req.path.startsWith("/api/v1/me/");
+  const token = readCookie(req, portal ? PRESENTER_COOKIE : speakerSite ? SPEAKER_COOKIE : SESSION_COOKIE);
   if (!token) return next();
   try {
     const principal = await withSystemScope((tx) =>
       resolveSession(tx, token),
     );
-    if (principal && (principal.kind === "presenter") === portal) {
+    const fits =
+      principal &&
+      (portal
+        ? principal.kind === "presenter"
+        : speakerSite
+          ? principal.kind === "staff" && principal.account_kind === "speaker"
+          : principal.kind === "staff" && principal.account_kind !== "speaker");
+    if (fits) {
       (req as express.Request & { principal?: Principal }).principal = principal;
     }
   } catch (error) {
@@ -1577,7 +1590,11 @@ app.post("/api/v1/portal/uploads/:uploadId/complete", (req, res) =>
  * routes are the speaker's, and a staff member looks at a speaker's files from the
  * staff screens, as staff.
  */
-function speakerAccountOf(req: express.Request, res: express.Response): { email: string; name: string } | null {
+function speakerAccountOf(
+  req: express.Request,
+  res: express.Response,
+  options: { allowUnchangedPassword?: boolean } = {},
+): { user_id: string; email: string; name: string; must_change_password: boolean } | null {
   const principal = (req as express.Request & { principal?: Principal }).principal;
   if (principal?.kind !== "staff") {
     res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
@@ -1587,8 +1604,47 @@ function speakerAccountOf(req: express.Request, res: express.Response): { email:
     res.status(403).json({ code: "auth.not_speaker", message: "This is a speaker's own view. Staff see presentations on the event's screens." });
     return null;
   }
-  return { email: principal.email, name: principal.display_name };
+  // A temporary password opens nothing but the page that replaces it (as for staff, D-100).
+  if (principal.must_change_password && !options.allowUnchangedPassword) {
+    res.status(403).json({ code: "auth.password_change_required", message: "Choose your own password before continuing." });
+    return null;
+  }
+  return { user_id: principal.user_id, email: principal.email, name: principal.display_name, must_change_password: principal.must_change_password };
 }
+
+/** Who is signed in on the speaker site (D-148). */
+app.get("/api/v1/me/session", (req, res) => {
+  const me = speakerAccountOf(req, res, { allowUnchangedPassword: true });
+  if (!me) return;
+  const principal = (req as express.Request & { principal?: Principal }).principal;
+  return res.json({ principal });
+});
+
+app.post("/api/v1/me/logout", async (req, res) => {
+  const token = readCookie(req, SPEAKER_COOKIE);
+  if (token) await withSystemScope((tx) => endSession(tx, token));
+  res.clearCookie(SPEAKER_COOKIE, { path: "/" });
+  return res.status(204).end();
+});
+
+app.post("/api/v1/me/password", async (req, res) => {
+  const me = speakerAccountOf(req, res, { allowUnchangedPassword: true });
+  if (!me) return;
+  const body = req.body as { current_password?: string; new_password?: string };
+  if (!body.current_password || !body.new_password) {
+    return res.status(400).json({ code: "request.invalid", message: "Both the current and new password are required." });
+  }
+  const result = await withSystemScope((tx) =>
+    changeOwnPassword(
+      tx,
+      me.user_id,
+      { currentPassword: body.current_password as string, newPassword: body.new_password as string },
+      readCookie(req, SPEAKER_COOKIE) ?? undefined,
+    ),
+  );
+  if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+  return res.json(result.value);
+});
 
 app.get("/api/v1/me/presentations", async (req, res) => {
   const me = speakerAccountOf(req, res);
@@ -3298,6 +3354,12 @@ app.post("/api/v1/auth/login", async (req, res) => {
     return res.json({ step: "mfa_required" });
   }
 
+  // A speaker's session lives on the speaker site (D-148): its own cookie, and the address
+  // of that site for a staff sign-in page that has just been handed a speaker's password.
+  if (result.value.principal.kind === "staff" && result.value.principal.account_kind === "speaker") {
+    res.cookie(SPEAKER_COOKIE, result.value.token, cookieOptions(24 * 60));
+    return res.json({ step: "signed_in", principal: result.value.principal, speaker_site: SPEAKER_SITE });
+  }
   res.cookie(SESSION_COOKIE, result.value.token, cookieOptions(24 * 60));
   return res.json({ step: "signed_in", principal: result.value.principal });
 });
@@ -3604,7 +3666,12 @@ app.post("/api/v1/auth/password-reset/request", async (req, res) => {
     return res.status(400).json({ code: "request.invalid", message: "Enter your email address." });
   }
   await withSystemScope((tx) =>
-    requestReset(tx, { email: body.email as string, resetBase: STAFF_APP_BASE, ip: clientIp(req) }),
+    requestReset(tx, {
+      email: body.email as string,
+      resetBase: STAFF_APP_BASE,
+      speakerResetBase: process.env.PORTAL_BASE ?? "http://localhost:3001",
+      ip: clientIp(req),
+    }),
   );
   // Always the same answer: whether an account exists is not something this
   // endpoint will tell you.
@@ -3627,6 +3694,7 @@ app.post("/api/v1/auth/password-reset/confirm", async (req, res) => {
   );
   if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
   res.clearCookie(SESSION_COOKIE, { path: "/" });
+  res.clearCookie(SPEAKER_COOKIE, { path: "/" });
   return res.json(result.value);
 });
 

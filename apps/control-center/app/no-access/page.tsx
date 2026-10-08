@@ -1,6 +1,4 @@
-import { redirect } from "next/navigation";
 import { SignOutButton } from "@/components/SignOutButton";
-import { getSession } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
 
@@ -14,10 +12,6 @@ export const dynamic = "force-dynamic";
 export default async function NoAccessPage({ searchParams }: { searchParams: Promise<{ for?: string }> }) {
   // The API's refusal text is not shown: it named an event the person never picked, and
   // sent them to the wrong admin screen (D-108). The page says the one thing that is true.
-  // A speaker account (D-146) that typed a staff address is not missing a role: its one
-  // screen is Manage presentations, so it goes there instead of reading about Event assignments.
-  const { principal } = await getSession().catch(() => ({ principal: null }));
-  if (principal?.account_kind === "speaker") redirect("/presentations");
   const client = (await searchParams).for === "client";
   if (client) {
     return (

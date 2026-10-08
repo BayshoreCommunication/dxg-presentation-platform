@@ -2684,3 +2684,29 @@ carries the sign-in itself; no personal portal link is minted any more.
   and formatted link are `/login`; the invitation mints no token), event-owned-data (sign-in is a merge field), the
   comms unit test, speaker-accounts (second press reissues). Suites that send invitations now remove the accounts they
   make on the way.
+
+## D-148 (2026-10-08): The speaker site is its own origin again — Status: ACCEPTED (Travis: "speaker alada port e thakbe sob kichu")
+D-146 put the speaker's screen inside the staff app; that showed speakers a greyed staff sidebar and shipped them the
+staff bundle. Speakers now live entirely on the **speaker site** (`apps/speaker-portal`, :3001 in development,
+speakers.av-rfpilot.com in production), which keeps D-088's rule that no staff code reaches a speaker.
+- **Sign-in**: email + password on the speaker site's `/login` (`POST /auth/login`, the same route; the API sets the
+  speaker's **own cookie `pmp_speaker`** for a speaker account and answers with `speaker_site`). Cookies are shared
+  across ports on localhost, so the cookie name — not the origin — is what keeps a speaker's session from ever being
+  read as staff and a staff session as a speaker's: the session middleware reads `pmp_speaker` only under `/api/v1/me/`
+  and accepts a speaker principal only there; `/api/v1/auth/session` returns 401 to a speaker cookie. The staff
+  sign-in page, handed a speaker's password, says so and links to the speaker site.
+- **Speaker site routes**: `GET /me/session`, `POST /me/logout`, `POST /me/password`; a temporary password
+  (`must_change_password`) opens only those three (403 `auth.password_change_required` elsewhere), so the site's
+  first sign-in goes to Choose your own password, then Manage presentations at `/`. Forgotten password works there
+  (the reset link of a speaker account opens on the speaker site). Access codes and `/t/<token>` are retired: such a
+  link now explains and points at sign-in; `/portal` redirects to `/`.
+- **Look**: the speaker site wears the control centre's chrome (Travis: "sidebar topbar ager site er sathe thakbe"):
+  the same stylesheet, sidebar (one door open — Manage presentations — the rest greyed "For DXG staff", to be pruned
+  later at Travis's call), account menu (Password, Sign out), top bar (Help, settings with Change password and
+  Appearance). Sign-in and password pages render bare. The presenter card keeps the black-and-white of D-146.
+- **Staff app**: the speaker mode (sidebar greying, `/presentations`, speaker help, redirects) is removed; "Manage
+  presentations" stays as the staff screen's name; Speakers screen unchanged from D-147. Every speaker link in email
+  (invitations, reminders, review decisions, the bare sign-in mail, the HTML button) is `PORTAL_BASE/login`.
+- Tests: speaker-accounts (speaker cookie, `/me/session`, 401 on `/auth/session` and on `/me` with a staff cookie,
+  temporary-password gate), auth-separation, password-reset, speakers-add-and-send, email-look. `npm run dev` starts the
+  speaker site again.

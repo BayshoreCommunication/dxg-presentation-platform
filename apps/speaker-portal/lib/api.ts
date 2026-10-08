@@ -58,6 +58,44 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return body as T;
 }
 
+/* ── the speaker's account (D-146, D-148) ─────────────────────────────────── */
+
+export type Principal = {
+  kind: "staff";
+  user_id: string;
+  email: string;
+  display_name: string;
+  account_kind: "staff" | "speaker";
+  must_change_password: boolean;
+};
+
+/** Sign in with email and password; a staff member's password opens nothing here. */
+export const login = (email: string, password: string) =>
+  request<{ step: "signed_in" | "mfa_required"; principal?: Principal }>("/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ email, password }),
+  });
+
+export const getSession = () => request<{ principal: Principal }>("/me/session");
+export const logout = () => request<void>("/me/logout", { method: "POST" });
+
+export const changePassword = (currentPassword: string, newPassword: string) =>
+  request<{ changed: true }>("/me/password", {
+    method: "POST",
+    body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+  });
+
+export const requestPasswordReset = (email: string) =>
+  request<{ message: string }>("/auth/password-reset/request", { method: "POST", body: JSON.stringify({ email }) });
+
+export const confirmPasswordReset = (token: string, newPassword: string) =>
+  request<{ reset: true }>("/auth/password-reset/confirm", {
+    method: "POST",
+    body: JSON.stringify({ token, new_password: newPassword }),
+  });
+
+/* ── the speaker's presentations ─────────────────────────────────────────── */
+
 export type Finding = { check_code: string; severity: string; detail: Record<string, unknown> };
 
 /** One of the speaker's uploads (D-140). */
@@ -91,35 +129,22 @@ export type PortalTalk = {
   feedback: { body: string; created_at: string; version_number: number }[];
 };
 
-export type PortalAsset = { file_name: string; size_bytes: number; uploaded_at: string };
-
-/** An event asset for the signed-in speaker's event; `version` busts the cache after a replace. */
-/**
- * One of the speaker's own uploads, to download (D-140). The browser's path, like the
- * asset URL below: this goes into an `href`, and `BASE` is the API's internal origin
- * when the page is rendered on the server — so the server wrote one address and the
- * browser another, and React reported the mismatch on every talk with a file.
- */
-export const portalDownloadUrl = (versionId: string) => `${BROWSER_BASE}/portal/file-versions/${versionId}/download`;
-
-export const portalAssetUrl = (kind: "header" | "template", version: string) =>
-  `${BROWSER_BASE}/portal/assets/${kind}?v=${encodeURIComponent(version)}`;
-
-export type PortalSession = {
-  speaker: { id: string; name: string };
-  /** `upload_deadline` is the event's own `YYYY-MM-DD`, or null when none is set (D-071). */
-  event: {
-    id: string;
-    name: string;
-    timezone: string;
-    upload_deadline: string | null;
-    /** The event's accent colour, `#RRGGBB`, or null when none is set (D-092). */
-    accent: string | null;
-    /** The header banner and the slide template, when the team has uploaded them (D-093). */
-    header: PortalAsset | null;
-    template: PortalAsset | null;
-  };
+/** One event the speaker is on, with their talks on it. */
+export type MyEvent = {
+  id: string;
+  name: string;
+  timezone: string;
+  starts_on: string;
+  ends_on: string;
+  status: string;
+  upload_deadline: string | null;
+  accent: string | null;
+  speaker_id: string;
+  talks: PortalTalk[];
 };
+
+export const getMyPresentations = () =>
+  request<{ speaker: { name: string; email: string }; events: MyEvent[] }>("/me/presentations");
 
 export type UploadSession = {
   upload_id: string;
@@ -138,34 +163,24 @@ export type CompleteResult = {
   findings: Finding[];
 };
 
-export const presenterLogin = (email: string, code: string) =>
-  request<{ principal: { display_name: string } }>("/portal/login", {
-    method: "POST",
-    body: JSON.stringify({ email, code }),
-  });
-
-export const presenterLogout = () => request<void>("/portal/logout", { method: "POST" });
-
-export const getSession = () => request<PortalSession>("/portal/session");
-export const getTalks = () => request<{ items: PortalTalk[] }>("/portal/talks");
-
 export const beginUpload = (body: { slot_id: string; file_name: string; total_bytes: number }) =>
-  request<UploadSession>("/portal/uploads", { method: "POST", body: JSON.stringify(body) });
+  request<UploadSession>("/me/uploads", { method: "POST", body: JSON.stringify(body) });
 
 export const getUploadState = (uploadId: string) =>
-  request<{ received: number[]; bytes: number }>(`/portal/uploads/${uploadId}`);
+  request<{ received: number[]; bytes: number }>(`/me/uploads/${uploadId}`);
 
 export const putPart = (uploadId: string, partNumber: number, chunk: ArrayBuffer) =>
-  request<{ part_number: number; size: number; sha256: string }>(
-    `/portal/uploads/${uploadId}/parts/${partNumber}`,
-    { method: "PUT", body: chunk, headers: { "content-type": "application/octet-stream" } },
-  );
+  request<{ part_number: number; size: number; sha256: string }>(`/me/uploads/${uploadId}/parts/${partNumber}`, {
+    method: "PUT",
+    body: chunk,
+    headers: { "content-type": "application/octet-stream" },
+  });
 
 export const completeUpload = (uploadId: string, body: { slot_id: string; file_name: string; sha256?: string }) =>
-  request<CompleteResult>(`/portal/uploads/${uploadId}/complete`, {
-    method: "POST",
-    body: JSON.stringify(body),
-  });
+  request<CompleteResult>(`/me/uploads/${uploadId}/complete`, { method: "POST", body: JSON.stringify(body) });
+
+/** The browser's path (it goes in an `href`), never the server's internal origin. */
+export const downloadUrl = (versionId: string) => `${BROWSER_BASE}/me/file-versions/${versionId}/download`;
 
 /** Whole-file SHA-256 in the browser, so the server can verify what arrived (I-3). */
 export async function sha256Hex(file: File): Promise<string> {
