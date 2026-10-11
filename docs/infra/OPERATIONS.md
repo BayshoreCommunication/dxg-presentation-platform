@@ -144,8 +144,9 @@ When a release is broken and you want the previous one back:
 cd /opt/pmp/deploy/server && ./deploy.sh <previous commit>
 ```
 
-**Finding the previous commit:** the last line of the deploy you're undoing; or `docs/PROJECT_STATE.md`;
-or `grep PMP_TAG .env` *before* you deploy. The previous release's images stay on the server for a
+**Finding the previous commit:** the last line of the deploy you're undoing; or
+`docker images --format "{{.Repository}}:{{.Tag}}" | grep pmp-api` (every release from the last week is
+listed); or `docs/PROJECT_STATE.md`. The previous release's images stay on the server for a
 week, so a rollback doesn't need to download anything and takes ~1 minute.
 
 *Why this is safe:* migrations only ever **add** tables and columns, so older code runs fine on the
@@ -161,7 +162,15 @@ cd /opt/pmp/deploy/server
 docker compose logs --since 30m api            # the last 30 minutes of one service
 docker compose logs -f --tail 50 api worker    # follow live (Ctrl-C to stop)
 docker compose logs --since 1h api worker dispatcher staff portal | grep -iE "error|fatal|refusing"
+docker compose logs -t --since 3h api worker  # -t adds the time to every line
 ```
+
+A quiet log is good news: after a deploy the api normally prints just `api listening on http://localhost:4000`.
+
+**What did the last deploy do?** Line up three timestamps — the backup's name (`aws s3 ls …/backups/`,
+§6.2), the migrations' `applied_at` (`select filename, applied_at from pmp.schema_migrations order by 1 desc
+limit 3`), and the containers' start (`docker compose ps`). In a good deploy they run in that order within
+about 20 seconds: backup → migrations → containers.
 
 | Service | Look here for |
 |---|---|
