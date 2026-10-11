@@ -3543,3 +3543,12 @@ now read-only talk detail; client accounts labelled support staff — Client adm
 technician, support staff and admin (Staff accounts, Event assignments). Invariants 376/377 (1 skipped), unit 315,
 lint and type-check clean. Not deployed.
 
+## 2026-10-11 — Base images patched: Node 24.21.0 on Debian 13 (D-152)
+Every production image was on `node:24.4.1-bookworm-slim` with 7–8 critical OS CVEs (ECR scan). Now
+`node:24.21.0-trixie-slim` plus a `runtime` stage that runs `apt-get upgrade`, refreshed weekly in CI via
+`SECURITY_REFRESH`. trivy on the api image: 1 critical / 78 high, none with a fix available (Debian 12 fully
+upgraded would have left 4 / 96). All four images built locally (arm64) and started: staff and portal `/login`
+200, dispatcher and api load on Node 24.21.0; LibreOffice 25.2 converts all five sample decks with the same page
+counts as 7.4 and identical slides. CI and `.nvmrc` on 24.21.0. Not deployed — goes out with the next
+`main` → `production` release; after it, compare ECR's scan of the new images with the 2026-10-08 numbers.
+
