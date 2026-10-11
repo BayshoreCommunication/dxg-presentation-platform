@@ -548,7 +548,7 @@ export async function createStaffUser(
   // "staff" is the old name for support staff (D-151), still accepted.
   const accountType = input.accountType === "staff" || !input.accountType ? "support" : input.accountType;
   if (accountType !== "support" && accountType !== "technician" && accountType !== "client" && accountType !== "root_admin") {
-    return err({ code: "auth.bad_account_type", message: "Choose an access level: DXG Admin, DXG Support staff, DXG Technician staff or Client admin." });
+    return err({ code: "auth.bad_account_type", message: "Choose an access level: DXG Admin, DXG Support staff, DXG Technician staff or Client access." });
   }
   const email = input.email.trim().toLowerCase();
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
