@@ -789,10 +789,19 @@ const TECHNICIAN_ALSO: RegExp[] = [
 /** Asking for a slide preview is a POST, and part of looking at a file in review. */
 const TECHNICIAN_ALSO_WRITES: RegExp[] = [/^\/api\/v1\/file-versions\/[^/]+\/preview$/];
 
+/**
+ * What support staff may still *read* of a presentation: its detail, findings and comments,
+ * since the Files screen, the agenda and the room list all open a talk. The decisions — approve,
+ * ask for changes, reject, comment, waive, roll back — stay refused; the screen hides them.
+ */
+const SUPPORT_READS: RegExp[] = [/^\/api\/v1\/slots\/[^/]+$/, /^\/api\/v1\/file-versions\/[^/]+\/(findings|comments)$/];
+
 function kindRefusal(kind: "support" | "technician", path: string, method: string): string | null {
   const onsiteOrReview = ONSITE_AND_REVIEW.some((pattern) => pattern.test(path));
   if (kind === "support") {
-    return onsiteOrReview ? "The Speaker Ready Room and Manage presentations are for DXG Technician staff and DXG Admins." : null;
+    if (!onsiteOrReview) return null;
+    if (method === "GET" && SUPPORT_READS.some((pattern) => pattern.test(path))) return null;
+    return "The Speaker Ready Room and Manage presentations are for DXG Technician staff and DXG Admins.";
   }
   if (onsiteOrReview) return null;
   // A technician reads the event (GET) on the way to their screens; writes elsewhere are not theirs.

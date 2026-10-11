@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { SignOutButton } from "@/components/SignOutButton";
 
 export const dynamic = "force-dynamic";
@@ -12,7 +13,29 @@ export const dynamic = "force-dynamic";
 export default async function NoAccessPage({ searchParams }: { searchParams: Promise<{ for?: string }> }) {
   // The API's refusal text is not shown: it named an event the person never picked, and
   // sent them to the wrong admin screen (D-108). The page says the one thing that is true.
-  const client = (await searchParams).for === "client";
+  const reason = (await searchParams).for;
+  const client = reason === "client";
+  if (reason === "kind") {
+    return (
+      <div className="card" style={{ maxWidth: 560, margin: "40px auto" }}>
+        <div className="cbd">
+          <h1 className="htitle" style={{ marginTop: 0 }}>
+            That screen is not part of your access level
+          </h1>
+          <p className="note" style={{ marginTop: 14, lineHeight: 1.6 }}>
+            DXG Support staff run the event — everything except the Speaker Ready Room and Manage
+            presentations. DXG Technician staff work those two screens only. A DXG Admin can change an
+            account&rsquo;s access level on Staff accounts.
+          </p>
+          <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
+            <Link href="/" className="btn pri">
+              Back to the portfolio
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
   if (client) {
     return (
       <div className="card" style={{ maxWidth: 560, margin: "40px auto" }}>

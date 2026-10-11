@@ -39,6 +39,10 @@ export async function guard<T>(work: Promise<T>, returnTo: string): Promise<T> {
       if (caught.code === "auth.mfa_required") {
         redirect("/account/mfa");
       }
+      // A screen the account's kind does not open (D-151): say which, not "no event".
+      if (caught.code === "auth.kind_forbidden") {
+        redirect("/no-access?for=kind");
+      }
       redirect("/no-access");
     }
     throw caught;

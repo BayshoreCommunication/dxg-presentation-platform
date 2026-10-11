@@ -1,4 +1,4 @@
-import { getPresentation, getComments } from "@/lib/api";
+import { getPresentation, getComments, getSession } from "@/lib/api";
 import { PresentationDetailView } from "@/components/PresentationDetail";
 import { guard } from "@/lib/guard";
 
@@ -11,10 +11,14 @@ export default async function PresentationPage({
 }) {
   const { id, slotId } = await params;
   // No room list any more: it only fed R7's room-PC freshness, dropped in D-125.
+  // Support staff (D-151) may look at a talk but not decide on it.
+  const readOnly = await getSession()
+    .then((session) => session.principal.staff_kind === "support")
+    .catch(() => false);
   const detail = await guard(getPresentation(slotId), `/events/${id}/talks/${slotId}`);
   const latest = detail.versions[0];
   const comments = latest
     ? (await guard(getComments(latest.file_version_id), `/events/${id}/talks/${slotId}`)).items
     : [];
-  return <PresentationDetailView eventId={id} initial={detail} comments={comments} />;
+  return <PresentationDetailView eventId={id} initial={detail} comments={comments} readOnly={readOnly} />;
 }

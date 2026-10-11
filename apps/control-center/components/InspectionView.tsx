@@ -99,11 +99,14 @@ export function InspectionView({
   detail,
   version,
   initialFindings,
+  readOnly = false,
 }: {
   eventId: string;
   detail: PresentationDetail;
   version: VersionRow | null;
   initialFindings: FindingRow[];
+  /** Support staff (D-151) look; waiving and sending to the speaker are not theirs. */
+  readOnly?: boolean;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -281,6 +284,8 @@ export function InspectionView({
                           }
                         />
                       </form>
+                    ) : readOnly ? (
+                      <span className="note">A technician or DXG Admin decides this in Manage presentations.</span>
                     ) : (
                       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                         <button

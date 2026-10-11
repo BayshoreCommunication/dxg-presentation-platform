@@ -410,6 +410,19 @@ describe("three kinds of DXG account (D-151)", () => {
       assert.equal(((await json(refused)) as { code: string }).code, "auth.kind_forbidden");
     }
     assert.equal((await fetch(`${API}/events/${EVENT_ID}/speakers`, { headers: { cookie: presentationManager } })).status, 200);
+    // Support staff may look at a talk (the Files screen and the agenda open one) but not decide on it.
+    const talks = (await json(await fetch(`${API}/events/${EVENT_ID}/talks`, { headers: { cookie: presentationManager } }))) as {
+      items: { slot_id: string }[];
+    };
+    const slot = talks.items[0]!.slot_id;
+    assert.equal((await fetch(`${API}/slots/${slot}`, { headers: { cookie: presentationManager } })).status, 200);
+    const decide = await fetch(`${API}/slots/${slot}/roll-back`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: presentationManager },
+      body: JSON.stringify({ target_version_id: "00000000-0000-4000-8000-000000000000", reason: "probe" }),
+    });
+    assert.equal(decide.status, 403);
+    assert.equal(((await json(decide)) as { code: string }).code, "auth.kind_forbidden");
     // c.delgado is a technician (seed): the two screens and the way to them, nothing else.
     assert.equal((await fetch(`${API}/events/${EVENT_ID}/review-queue`, { headers: { cookie: technician } })).status, 200);
     assert.equal((await fetch(`${API}/events/${EVENT_ID}/srr`, { headers: { cookie: technician } })).status, 200);
