@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
+import { Toast } from "@/components/Toast";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { FindingRow, PresentationDetail, VersionRow } from "@/lib/api";
@@ -109,6 +110,7 @@ export function InspectionView({
   const [form, setForm] = useState<{ id: string; kind: "waive" | "revision"; text: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const closeToast = useCallback(() => setToast(null), []);
 
   if (!version) {
     return (
@@ -336,7 +338,7 @@ export function InspectionView({
         </div>
       </div>
 
-      <div className={`toast ${toast ? "show" : ""}`}>{toast}</div>
+      <Toast message={toast} onClose={closeToast} />
     </>
   );
 }

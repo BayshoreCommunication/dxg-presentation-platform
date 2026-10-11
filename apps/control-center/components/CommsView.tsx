@@ -1,6 +1,7 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, useCallback } from "react";
+import { Toast } from "@/components/Toast";
 import Link from "next/link";
 
 import { useRouter } from "next/navigation";
@@ -163,6 +164,7 @@ export function CommsView({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const closeToast = useCallback(() => setToast(null), []);
   // `body` is the message as text (what is counted and checked); `html` the formatted one (D-139).
   const [editing, setEditing] = useState<{ subject: string; body: string; html: string } | null>(null);
   const editorRef = useRef<RichEditorHandle>(null);
@@ -731,7 +733,7 @@ export function CommsView({
         </div>
       </div>
 
-      <div className={`toast ${toast ? "show" : ""}`}>{toast}</div>
+      <Toast message={toast} onClose={closeToast} />
     </>
   );
 }

@@ -271,8 +271,11 @@ label{display:block;margin-bottom:6px;font-size:12px;font-weight:500;color:var(-
 .demo-bar b{color:var(--foreground);font-weight:500}
 .demo-btn{margin:12px;height:32px;border:.8px solid var(--primary);border-radius:8px;background:var(--gradient-primary);color:#fff;font-weight:500;font-size:12px}
 .demo-btn.stop{border-color:var(--border);background:var(--card);color:var(--secondary-foreground)}
-.toast{position:fixed;bottom:64px;left:50%;transform:translateX(-50%);background:var(--gradient-primary);color:#fff;padding:10px 14px;border-radius:8px;font-size:12px;font-weight:500;box-shadow:var(--shadow-popover);opacity:0;transition:opacity .25s;pointer-events:none;z-index:60}
-.toast.show{opacity:1}
+.toast{position:fixed;bottom:64px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:10px;max-width:min(80vw,560px);background:var(--gradient-primary);color:#fff;padding:10px 10px 10px 14px;border-radius:8px;font-size:12px;font-weight:500;box-shadow:var(--shadow-popover);opacity:0;transition:opacity .25s;pointer-events:none;z-index:60}
+.toast.show{opacity:1;pointer-events:auto}
+.toast-text{flex:1 1 auto;min-width:0}
+.toast-close{flex:0 0 auto;width:22px;height:22px;border:0;border-radius:6px;background:rgba(255,255,255,.15);color:#fff;font-size:16px;line-height:1;cursor:pointer;display:inline-flex;align-items:center;justify-content:center}
+.toast-close:hover{background:rgba(255,255,255,.3)}
 .hidden{display:none!important}
 
 /* ── dropdown menu (Radix-style panel) ── */

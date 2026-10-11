@@ -25,7 +25,7 @@ let speaker = "";
 const json = async (response: Response) => (await response.json()) as Record<string, unknown>;
 const headers = (cookie: string) => ({ "content-type": "application/json", cookie });
 
-type Talk = { slot_id: string; versions: { id: string; downloadable: boolean }[] };
+type Talk = { slot_id: string; title: string; versions: { id: string; downloadable: boolean }[] };
 type Mine = { speaker: { email: string }; events: { id: string; talks: Talk[] }[] };
 
 before(async () => {
@@ -104,6 +104,47 @@ describe("a speaker's own views of the event (portfolio, agenda, Speaker Ready R
     const other = "33333333-3333-4333-8333-333333333333";
     assert.equal((await fetch(`${API}/me/events/${other}/agenda`, { headers: { cookie: speaker } })).status, 404);
     assert.equal((await fetch(`${API}/me/events/${other}/srr`, { headers: { cookie: speaker } })).status, 404);
+  });
+});
+
+describe("what the team decides reaches the speaker inside the site (2026-10-11)", () => {
+  test("a revision request becomes an unread notice; opening the bell marks it read", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const before = (await json(await fetch(`${API}/me/notifications`, { headers: { cookie: speaker } }))) as { items: unknown[]; unread: number };
+    const mine = (await json(await fetch(`${API}/me/presentations`, { headers: { cookie: speaker } }))) as Mine;
+    const talk = mine.events[0]!.talks[0]!;
+    const pending = talk.versions.find((version) => !version.downloadable);
+    if (!pending) return t.skip("fixture: no version in review to send back");
+
+    const asked = await fetch(`${API}/file-versions/${pending.id}/request-revision`, {
+      method: "POST",
+      headers: headers(reviewer),
+      body: JSON.stringify({ note: "Please use the 16:9 template and embed the video." }),
+    });
+    assert.ok([200, 409].includes(asked.status), `request-revision ${asked.status}`);
+    if (asked.status !== 200) return t.skip("fixture: that version could not be sent back");
+
+    const after = (await json(await fetch(`${API}/me/notifications`, { headers: { cookie: speaker } }))) as {
+      items: { kind: string; title: string; body: string; talk: string | null; read_at: string | null }[];
+      unread: number;
+    };
+    assert.equal(after.unread, before.unread + 1);
+    const notice = after.items[0]!;
+    assert.equal(notice.kind, "changes_requested");
+    assert.match(notice.title, /Changes needed/);
+    assert.equal(notice.body, "Please use the 16:9 template and embed the video.");
+    assert.equal(notice.talk, talk.title);
+    assert.equal(notice.read_at, null);
+
+    const marked = (await json(
+      await fetch(`${API}/me/notifications/read`, { method: "POST", headers: headers(speaker), body: JSON.stringify({ all: true }) }),
+    )) as { marked: number };
+    assert.ok(marked.marked >= 1);
+    const read = (await json(await fetch(`${API}/me/notifications`, { headers: { cookie: speaker } }))) as { unread: number };
+    assert.equal(read.unread, 0);
+
+    // Staff never read a speaker's bell.
+    assert.equal((await fetch(`${API}/me/notifications`, { headers: { cookie: admin } })).status, 401);
   });
 });
 

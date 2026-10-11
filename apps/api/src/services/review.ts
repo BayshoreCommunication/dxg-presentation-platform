@@ -4,6 +4,7 @@ import { reviewLifecycle, transition, requiresAcknowledgment } from "@pmp/domain
 import type { Actor, DomainError, ReviewAction, ReviewState, Result } from "@pmp/domain";
 import { err, ok } from "@pmp/domain";
 import { noticeToSpeakers } from "./decisionNotice.ts";
+import { notifySpeakersOfVersion } from "./speakerAccount.ts";
 import type { DecisionNoticeResult } from "./decisionNotice.ts";
 
 export type DecideInput = {
@@ -114,6 +115,13 @@ export async function decide(
 
   let roomsQueued = 0;
   if (approved) {
+    // The speaker hears of it in their site (2026-10-11); the room strip on their card follows.
+    await notifySpeakersOfVersion(tx, {
+      versionId: version.id,
+      kind: "approved",
+      title: "Your presentation was approved",
+      body: "The DXG team approved it; it will be loaded on your room's PC before your session. You can download it from Manage presentations.",
+    });
     // A newer approval supersedes the previous one (WORKFLOW_STATES §3).
     await tx.query(
       `UPDATE pmp.file_versions

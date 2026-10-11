@@ -2719,3 +2719,15 @@ speakers.av-rfpilot.com in production), which keeps D-088's rule that no staff c
   address), and their presentations for the event with the same upload card, so a speaker may update from there as
   the client's review asked. `GET /me/events` feeds the switcher. An event they do not speak at is 404.
 
+
+## D-150 (2026-10-11): Review decisions reach the speaker inside the site; one toast everywhere — Status: ACCEPTED (Travis)
+- **Speaker notifications** (`speaker_notifications`, **migration 034**): a revision request or rejection
+  (`noticeToSpeakers`) and an approval (`review.ts`) write one row per current speaker on the talk, in the deciding
+  transaction. The speaker site's top bar has a **bell** with the unread count; opening it lists them (kind, title,
+  the reviewer's message, event, time) and marks what is shown read; refreshed on every page change and each minute.
+  Routes: `GET /me/notifications`, `POST /me/notifications/read` (`ids` or `all`); only the account's own rows.
+  The email still goes as well — a speaker who is not signed in still hears — and can be turned off later if Travis
+  wants it that way.
+- **One toast** (`components/Toast.tsx` in both apps): every screen that drew its own `.toast` renders the shared one —
+  a close button, and it closes itself after six seconds. `.toast` is clickable only while shown.
+- Tests: speaker-accounts (revision request → unread notice with the message; read-all; staff cookie refused).

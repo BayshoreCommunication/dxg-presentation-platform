@@ -2,6 +2,7 @@ import type pg from "pg";
 import type { Actor } from "@pmp/domain";
 import { SIGN_IN_URL } from "./comms.ts";
 import { lookFor } from "./emailLook.ts";
+import { notifySpeakersOfVersion } from "./speakerAccount.ts";
 
 
 export type DecisionNoticeResult = {
@@ -52,6 +53,16 @@ export async function noticeToSpeakers(
      VALUES ($1, $2, $3, 'speaker_visible', $4, $5)`,
     [talk.event_id, talk.client_id, input.versionId, actor.id, input.message],
   );
+  // And in the speaker site itself (2026-10-11): the bell, not only the inbox.
+  await notifySpeakersOfVersion(tx, {
+    versionId: input.versionId,
+    kind: input.outcome,
+    title:
+      input.outcome === "changes_requested"
+        ? `Changes needed to “${talk.title}” (version ${talk.version_number})`
+        : `“${talk.title}” version ${talk.version_number} was not accepted`,
+    body: input.message,
+  });
 
   const { rows: speakers } = await tx.query<{ id: string; full_name: string; email: string | null }>(
     `SELECT sp.id, sp.full_name, sp.email::text AS email

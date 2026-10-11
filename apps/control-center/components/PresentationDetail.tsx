@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
+import { Toast } from "@/components/Toast";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { CommentRow, PresentationDetail } from "@/lib/api";
@@ -67,6 +68,7 @@ export function PresentationDetailView({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const closeToast = useCallback(() => setToast(null), []);
 
   const latest = initial.versions[0];
   const approved = initial.versions.find((row) => row.review_state === "approved");
@@ -439,7 +441,7 @@ export function PresentationDetailView({
         </div>
       )}
 
-      <div className={`toast ${toast ? "show" : ""}`}>{toast}</div>
+      <Toast message={toast} onClose={closeToast} />
     </>
   );
 }

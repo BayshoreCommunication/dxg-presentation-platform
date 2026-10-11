@@ -273,3 +273,82 @@ export async function mySrr(tx: pg.PoolClient, session: PortalSession): Promise<
     talks: await portalTalks(tx, session),
   };
 }
+
+/* ── what the team tells a speaker, inside the speaker site (2026-10-11) ───── */
+
+export type SpeakerNotification = {
+  id: string;
+  kind: "changes_requested" | "rejected" | "approved";
+  title: string;
+  body: string;
+  event_id: string;
+  event_name: string;
+  slot_id: string | null;
+  talk: string | null;
+  created_at: string;
+  read_at: string | null;
+};
+
+/**
+ * Tells every current speaker on a version's talk something, in their site. Called inside
+ * the transaction that decided it, so the notice exists with the decision or not at all.
+ */
+export async function notifySpeakersOfVersion(
+  tx: pg.PoolClient,
+  input: { versionId: string; kind: SpeakerNotification["kind"]; title: string; body: string },
+): Promise<number> {
+  const { rows } = await tx.query<{ speaker_id: string; event_id: string; client_id: string; slot_id: string }>(
+    `SELECT sa.speaker_id, fv.event_id, fv.client_id, f.slot_id
+       FROM pmp.file_versions fv
+       JOIN pmp.files f ON f.id = fv.file_id
+       JOIN pmp.speaker_assignments sa ON sa.slot_id = f.slot_id AND sa.replaced_by IS NULL
+       JOIN pmp.speakers sp ON sp.id = sa.speaker_id AND sp.merged_into IS NULL AND sp.removed_at IS NULL
+      WHERE fv.id = $1`,
+    [input.versionId],
+  );
+  for (const row of rows) {
+    await tx.query(
+      `INSERT INTO pmp.speaker_notifications (speaker_id, event_id, client_id, kind, title, body, slot_id, file_version_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+      [row.speaker_id, row.event_id, row.client_id, input.kind, input.title, input.body, row.slot_id, input.versionId],
+    );
+  }
+  return rows.length;
+}
+
+/** The account's notices across every event it speaks at, newest first, with how many are unread. */
+export async function myNotifications(
+  tx: pg.PoolClient,
+  email: string,
+): Promise<{ items: SpeakerNotification[]; unread: number }> {
+  const sessions = await speakerSessionsFor(tx, email);
+  if (sessions.length === 0) return { items: [], unread: 0 };
+  const { rows } = await tx.query<SpeakerNotification>(
+    `SELECT n.id, n.kind, n.title, n.body, n.event_id, e.name AS event_name, n.slot_id, s.title AS talk,
+            n.created_at::text, n.read_at::text
+       FROM pmp.speaker_notifications n
+       JOIN pmp.events e ON e.id = n.event_id
+       LEFT JOIN pmp.slots s ON s.id = n.slot_id
+      WHERE n.speaker_id = ANY($1::uuid[])
+      ORDER BY n.created_at DESC
+      LIMIT 100`,
+    [sessions.map((session) => session.speaker_id)],
+  );
+  return { items: rows, unread: rows.filter((row) => !row.read_at).length };
+}
+
+/** Marks the given notices (or all of the account's) read; only its own rows can be touched. */
+export async function markNotificationsRead(tx: pg.PoolClient, email: string, ids: string[] | "all"): Promise<number> {
+  const sessions = await speakerSessionsFor(tx, email);
+  if (sessions.length === 0) return 0;
+  const speakers = sessions.map((session) => session.speaker_id);
+  const { rowCount } =
+    ids === "all"
+      ? await tx.query(`UPDATE pmp.speaker_notifications SET read_at = now() WHERE speaker_id = ANY($1::uuid[]) AND read_at IS NULL`, [speakers])
+      : await tx.query(
+          `UPDATE pmp.speaker_notifications SET read_at = now()
+            WHERE speaker_id = ANY($1::uuid[]) AND id = ANY($2::uuid[]) AND read_at IS NULL`,
+          [speakers, ids.filter((id) => UUID.test(id))],
+        );
+  return rowCount ?? 0;
+}

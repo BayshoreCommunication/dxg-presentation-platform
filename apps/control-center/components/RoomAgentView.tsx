@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useState } from "react";
+import { Toast } from "@/components/Toast";
 import { useRouter } from "next/navigation";
 import type { AgentView } from "@/lib/api";
 import { getAgentView, markLoaded, launchInRoom, ApiError } from "@/lib/api";
@@ -37,6 +38,7 @@ export function RoomAgentView({ initial }: { initial: AgentView }) {
   const [view, setView] = useState(initial);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const closeToast = useCallback(() => setToast(null), []);
   const [error, setError] = useState<string | null>(null);
   const [clock, setClock] = useState("");
 
@@ -305,7 +307,7 @@ export function RoomAgentView({ initial }: { initial: AgentView }) {
         </div>
       </div>
 
-      <div className={`toast ${toast ? "show" : ""}`}>{toast}</div>
+      <Toast message={toast} onClose={closeToast} />
     </div>
   );
 }

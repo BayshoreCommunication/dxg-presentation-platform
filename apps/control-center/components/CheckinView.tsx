@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
+import { Toast } from "@/components/Toast";
 import { useRouter } from "next/navigation";
 import type { CheckinDetail, UsbResult } from "@/lib/api";
 import {
@@ -67,6 +68,7 @@ export function CheckinView({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const closeToast = useCallback(() => setToast(null), []);
 
   const refresh = useCallback(async () => {
     setDetail(await getCheckin(detail.checkin.id));
@@ -526,7 +528,7 @@ export function CheckinView({
         </>
       )}
 
-      <div className={`toast ${toast ? "show" : ""}`}>{toast}</div>
+      <Toast message={toast} onClose={closeToast} />
     </>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
+import { Toast } from "@/components/Toast";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import type { ArchiveScope, PdfProgress } from "@/lib/api";
@@ -38,6 +39,7 @@ export function ArchiveView({ eventId, initial }: { eventId: string; initial: Ar
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const closeToast = useCallback(() => setToast(null), []);
   const pkg = initial.latest_package;
   // The real reason Deliver is unavailable, shown under the buttons too (D-108). It said
   // "still being built" for a package already delivered, and after a failed build (which
@@ -273,7 +275,7 @@ export function ArchiveView({ eventId, initial }: { eventId: string; initial: Ar
 
       <DownloadLog downloads={initial.downloads} />
 
-      <div className={`toast ${toast ? "show" : ""}`}>{toast}</div>
+      <Toast message={toast} onClose={closeToast} />
     </>
   );
 }

@@ -3503,3 +3503,10 @@ refuses the same way, and a batch or automatic reminder skips such an address ("
 account"). Test in speaker-accounts (54/54 with speakers-add-and-send and security-hardening). **Not deployed: api
 only needs rebuilding.**
 
+
+## 2026-10-11 — Decisions reach the speaker in their site; one toast for the whole product (D-150)
+Travis, after testing on production: a revision request should reach the speaker inside our system, not only by
+email; and the toast should close itself (6 s) with a close icon, everywhere. Built: `speaker_notifications`
+(migration 034) written on request-changes/reject/approve; the speaker site's bell lists them and marks them read;
+the shared `Toast` replaces the ten per-screen toasts in the control centre. Walked locally: a reviewer's request
+appears under the bell on :3001 with the message; speaker-accounts 14/14. Not deployed.

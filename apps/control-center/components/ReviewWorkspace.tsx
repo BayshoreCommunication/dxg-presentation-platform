@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { Toast } from "@/components/Toast";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { QueueItem } from "@/lib/api";
@@ -44,6 +45,7 @@ export function ReviewWorkspace({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const closeToast = useCallback(() => setToast(null), []);
   /*
    * Sending a file back asks, on the page, what the speaker should change (D-073). It
    * used to act at once with no reason — and "Reject" asked through window.prompt, which
@@ -394,7 +396,7 @@ export function ReviewWorkspace({
         </div>
       )}
 
-      <div className={`toast ${toast ? "show" : ""}`}>{toast}</div>
+      <Toast message={toast} onClose={closeToast} />
     </>
   );
 }

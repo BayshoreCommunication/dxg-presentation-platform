@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
+import { Toast } from "@/components/Toast";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { EventDraft } from "@/lib/api";
@@ -61,6 +62,7 @@ export function EventDetails({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const closeToast = useCallback(() => setToast(null), []);
 
   const basicsChanged = name !== setup.name || venue !== (setup.venue ?? "");
   const settingsChanged =
@@ -328,7 +330,7 @@ export function EventDetails({
         </div>
       )}
 
-      <div className={`toast ${toast ? "show" : ""}`}>{toast}</div>
+      <Toast message={toast} onClose={closeToast} />
     </>
   );
 }

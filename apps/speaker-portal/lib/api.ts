@@ -240,3 +240,26 @@ export type MySrr = {
 };
 
 export const getMySrr = (eventId: string) => request<MySrr>(`/me/events/${eventId}/srr`);
+
+/* ── what the team told the speaker, inside the site ─────────────────────── */
+
+export type SpeakerNotification = {
+  id: string;
+  kind: "changes_requested" | "rejected" | "approved";
+  title: string;
+  body: string;
+  event_id: string;
+  event_name: string;
+  slot_id: string | null;
+  talk: string | null;
+  created_at: string;
+  read_at: string | null;
+};
+
+export const getNotifications = () => request<{ items: SpeakerNotification[]; unread: number }>("/me/notifications");
+
+export const markNotificationsRead = (ids: string[] | "all") =>
+  request<{ marked: number }>("/me/notifications/read", {
+    method: "POST",
+    body: JSON.stringify(ids === "all" ? { all: true } : { ids }),
+  });

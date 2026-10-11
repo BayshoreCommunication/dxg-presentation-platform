@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
+import { Toast } from "@/components/Toast";
 import { useRouter } from "next/navigation";
 import type { DuplicatePair, ReleasePermission, SpeakerRow } from "@/lib/api";
 import {
@@ -43,6 +44,7 @@ export function SpeakersView({
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const closeToast = useCallback(() => setToast(null), []);
   const [adding, setAdding] = useState(false);
   const [removing, setRemoving] = useState<SpeakerRow | null>(null);
   const [mergeAsk, setMergeAsk] = useState<string | null>(null);
@@ -542,12 +544,7 @@ export function SpeakersView({
         />
       )}
 
-      <div
-        className={`toast ${toast ? "show" : ""}`}
-        style={{ maxWidth: "80vw" }}
-      >
-        {toast}
-      </div>
+      <Toast message={toast} onClose={closeToast} />
     </>
   );
 }

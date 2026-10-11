@@ -38,6 +38,8 @@ import {
 } from "./services/auth.ts";
 import {
   myPresentations,
+  myNotifications,
+  markNotificationsRead,
   myEvents,
   myAgenda,
   mySrr,
@@ -1660,6 +1662,22 @@ app.get("/api/v1/me/presentations", async (req, res) => {
   if (!me) return;
   const events = await withSystemScope((tx) => myPresentations(tx, me.email));
   return res.json({ speaker: { name: me.name, email: me.email }, events });
+});
+
+/** What the team told this speaker, in their site: review decisions and approvals. */
+app.get("/api/v1/me/notifications", async (req, res) => {
+  const me = speakerAccountOf(req, res);
+  if (!me) return;
+  return res.json(await withSystemScope((tx) => myNotifications(tx, me.email)));
+});
+
+app.post("/api/v1/me/notifications/read", async (req, res) => {
+  const me = speakerAccountOf(req, res);
+  if (!me) return;
+  const body = req.body as { ids?: unknown; all?: unknown };
+  const ids = body.all === true ? ("all" as const) : Array.isArray(body.ids) ? body.ids.filter((id): id is string => typeof id === "string") : [];
+  const marked = await withSystemScope((tx) => markNotificationsRead(tx, me.email, ids));
+  return res.json({ marked });
 });
 
 /** The speaker's events, for the sidebar's switcher and the portfolio. */

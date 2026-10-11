@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useParams, usePathname, useRouter } from "next/navigation";
 import { Glyph, Icon } from "@/components/Icon";
+import { NotificationBell } from "@/components/NotificationBell";
 import { logout } from "@/lib/api";
 import type { MyEventSummary, Principal } from "@/lib/api";
 import { applyTheme, readThemeChoice, saveThemeChoice } from "@/lib/theme";
@@ -182,6 +183,7 @@ function Frame({ principal, events, children }: { principal: Principal; events: 
             </nav>
           </div>
           <div className="right">
+            <NotificationBell />
             <Link href="/help" className="btn help-link" title="How this screen works">
               ? Help
             </Link>
