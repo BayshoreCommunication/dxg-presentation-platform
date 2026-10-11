@@ -7,6 +7,9 @@ commit, not a clone — the server has no GitHub access); SSH as `ubuntu@3.146.2
 deploying machine's IP. Updating (since 2026-10-08, D-149): merge `main` into `production` → CI builds and pushes the images to ECR →
 `./deploy.sh <commit>` on the server (§6). Nothing is built on the server.
 
+Day-to-day running (release, health, logs, rollback, backups, incidents) is in **[OPERATIONS.md](OPERATIONS.md)**;
+this file is the reference behind it.
+
 Target: DXG staff, their client admins and their speakers, for DXG's events. Accounts are created
 by DXG (no public sign-up).
 
