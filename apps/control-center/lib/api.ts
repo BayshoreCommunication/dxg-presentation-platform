@@ -444,7 +444,7 @@ export type CheckinDetail = {
 };
 
 export type UsbResult = {
-  ingestion_id: string;
+  ingestion_id: string | null;
   scan_result: string;
   file_version_id: string | null;
   version_number: number | null;
@@ -480,6 +480,17 @@ export const ingestUsb = (checkinId: string, body: { upload_id: string; file_nam
     `/srr/checkins/${checkinId}/usb-ingestions`,
     { method: "POST", body: JSON.stringify(body) },
   );
+
+/** Local intake without a check-in: staff upload a speaker's file from the Speaker Ready Room (D-152). */
+export const ingestForSlot = (
+  eventId: string,
+  slotId: string,
+  body: { upload_id: string; file_name: string; reason: string },
+) =>
+  request<UsbResult>(`/events/${eventId}/srr/slots/${slotId}/intake`, { method: "POST", body: JSON.stringify(body) });
+
+/** The check-in / checkout report, as a CSV download (D-152). */
+export const srrReportUrl = (eventId: string) => `${API_BASE_URL}/events/${eventId}/srr/report.csv`;
 
 export const signOffCheckin = (checkinId: string, fileVersionId: string) =>
   request<{ receipt: NonNullable<CheckinDetail["receipt"]> }>(

@@ -3,11 +3,9 @@
 import { useCallback, useState } from "react";
 import { Toast } from "@/components/Toast";
 import { useRouter } from "next/navigation";
-import type { CheckinDetail, UsbResult } from "@/lib/api";
+import type { CheckinDetail } from "@/lib/api";
 import {
   getCheckin,
-  beginSrrUpload,
-  putSrrPart,
   ingestUsb,
   signOffCheckin,
   departCheckin,
@@ -17,6 +15,7 @@ import {
 import { Chip } from "@/components/Chip";
 import { ConfirmationStrip } from "@/components/ConfirmationStrip";
 import { WhyNot } from "@/components/WhyNot";
+import { LocalIntake } from "@/components/LocalIntake";
 
 /**
  * Day and time on the event's clock — the actual date, not just a weekday, and never
@@ -34,9 +33,7 @@ const when = (iso: string, timeZone: string) =>
   });
 
 /**
- * Screens 12 and 13 — check-in and the three-step USB intake. The steps are
- * ordered by the rules, not by the layout: nothing is compared or accepted
- * before the scan, and acceptance needs a reason (FR-SRR-002/003/004).
+ * Screens 12 and 13 — check-in and the three-step local intake (`LocalIntake`, D-152).
  */
 /** "v2 · deck.pptx · 24 slides" (R34, D-112). */
 const receiptVersion = (receipt: NonNullable<CheckinDetail["receipt"]>) =>
@@ -59,12 +56,9 @@ export function CheckinView({
 }) {
   const router = useRouter();
   const [detail, setDetail] = useState(initial);
-  const [usb, setUsb] = useState<UsbResult | null>(null);
-  // USB intake opens from its own button rather than always sitting below check-in:
+  // Local intake opens from its own button rather than always sitting below check-in:
   // most speakers arrive with nothing new, and the three steps are noise until one does.
   const [intakeOpen, setIntakeOpen] = useState(false);
-  const [file, setFile] = useState<File | null>(null);
-  const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -92,60 +86,30 @@ export function CheckinView({
     [refresh],
   );
 
-  // What USB intake still needs, said before anything is uploaded (R35, D-111): the
-  // reason used to be refused only after the whole file had gone up.
-  const intakeBlocked =
-    !reason.trim() && !file
-      ? "To import, write a reason and choose the file from the USB drive."
-      : !reason.trim()
-        ? "To import, write a reason for the new version."
-        : !file
-          ? "To import, choose the file from the USB drive."
-          : null;
-
-  async function scanAndImport() {
-    if (!file || !reason.trim()) return;
-    await run(async () => {
-      const session = await beginSrrUpload();
-      const total = Math.max(1, Math.ceil(file.size / session.part_size));
-      for (let part = 1; part <= total; part += 1) {
-        const start = (part - 1) * session.part_size;
-        await putSrrPart(session.upload_id, part, await file.slice(start, start + session.part_size).arrayBuffer());
-      }
-      const result = await ingestUsb(detail.checkin.id, {
-        upload_id: session.upload_id,
-        file_name: file.name,
-        reason,
-      });
-      setUsb(result);
-      return result.message;
-    });
-  }
-
   const signable = detail.latest && detail.latest.processing_state === "stored";
   const [confirmCheckout, setConfirmCheckout] = useState(false);
   const latestNumber = detail.latest?.version_number;
   const approvedNumber = detail.approved?.version_number;
   // Why the newest file can't be signed off, in words a technician can act on (D-108).
   const blockedReason = !detail.latest
-    ? "The speaker hasn't uploaded a presentation yet. Bring their file in with USB intake below."
+    ? "The speaker hasn't uploaded a presentation yet. Bring their file in with Local intake below — from a USB drive or this computer."
     : detail.latest.processing_state === "quarantined"
-      ? `v${latestNumber} failed the virus check and can't be used. Ask the speaker for a clean copy and bring it in with USB intake below.`
+      ? `v${latestNumber} failed the virus check and can't be used. Ask the speaker for a clean copy and bring it in with Local intake below.`
       : detail.latest.processing_state !== "stored"
         ? `v${latestNumber} is still being checked. This takes a moment — refresh the page shortly.`
         : null;
 
-  // The last USB import, from the check-in itself, so a refresh doesn't lose it (R37, D-112).
+  // The last local import, from the check-in itself, so a refresh doesn't lose it (R37, D-112).
   const lastImportNumber =
     detail.usb?.file_version_id && detail.usb.file_version_id === detail.latest?.file_version_id
       ? latestNumber
       : undefined;
   const lastImport = detail.usb
     ? detail.usb.scan_result === "clean"
-      ? `Last USB import (${when(detail.usb.created_at, timezone)}) passed the virus check${
+      ? `Last local import (${when(detail.usb.created_at, timezone)}) passed the virus check${
           lastImportNumber !== undefined ? ` and was saved as v${lastImportNumber}` : ""
         }.`
-      : `Last USB import (${when(detail.usb.created_at, timezone)}) failed the virus check and was not stored.`
+      : `Last local import (${when(detail.usb.created_at, timezone)}) failed the virus check and was not stored.`
     : null;
 
   const checkoutBlocked = detail.checkin.departed_at !== null ? "This speaker is already checked out." : null;
@@ -253,7 +217,7 @@ export function CheckinView({
   );
   const openUsb = (
     <button type="button" className="btn pri" onClick={() => setIntakeOpen(true)}>
-      Take the file by USB
+      Take the file (Local intake)
     </button>
   );
   const preview = (
@@ -388,7 +352,7 @@ export function CheckinView({
         </div>
       </div>
 
-      {/* ── USB intake (screen 13), opened from check-in ─────────────────── */}
+      {/* ── Local intake (screen 13), opened from check-in ───────────────── */}
       <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "18px 0 10px" }}>
         <button
           type="button"
@@ -396,136 +360,26 @@ export function CheckinView({
           aria-expanded={intakeOpen}
           onClick={() => setIntakeOpen((open) => !open)}
         >
-          {intakeOpen ? "Close USB intake" : "USB intake"}
+          {intakeOpen ? "Close local intake" : "Local intake"}
         </button>
         <span className="note">
           {intakeOpen
             ? "Check the file for viruses, compare it with the approved version, then accept."
-            : "The speaker brought a new version on a USB drive? Bring it in here."}
+            : "The speaker brought a new version — on a USB drive or saved on this computer? Bring it in here."}
         </span>
       </div>
 
       {intakeOpen && (
-        <>
-
-      <div className="card">
-        <div className="chd">
-          {/* Plain intake words (R36, D-112). */}
-          <h3>1 · Virus check</h3>
-          {usb ? (
-            <Chip
-              status={usb.scan_result === "clean" ? "synchronized_onsite" : "attention"}
-              label={usb.scan_result === "clean" ? "Clean" : "Held back"}
-            />
-          ) : (
-            <Chip status="canceled" label="Choose the file from the USB drive" />
-          )}
-        </div>
-        <div className="cbd">
-          <p className="note" style={{ marginTop: 0 }}>
-            Nothing is stored until the file passes the virus check. A file that fails is held back, and
-            the room keeps what it already has.
-          </p>
-          {/* R37 (D-112): after a refresh the full result is gone; say what the last import did. */}
-          {!usb && lastImport && <div className="note" style={{ marginBottom: 8 }}>{lastImport}</div>}
-          <div className="field">
-            <label>Reason (required)</label>
-            <input
-              style={{ width: "100%" }}
-              placeholder="e.g. speaker added a closing slide onsite"
-              value={reason}
-              onChange={(event) => setReason(event.target.value)}
-            />
-          </div>
-          <input
-            type="file"
-            accept=".pptx,.ppt,.pdf,.key"
-            onChange={(event) => setFile(event.target.files?.[0] ?? null)}
-          />
-          <div style={{ marginTop: 10 }}>
-            <button
-              className="btn pri"
-              disabled={busy || intakeBlocked !== null}
-              title={intakeBlocked ?? undefined}
-              onClick={() => void scanAndImport()}
-            >
-              {busy ? "Checking…" : "Check & import file"}
-            </button>
-            <WhyNot reason={intakeBlocked} />
-          </div>
-          {usb && <div className={usb.scan_result === "clean" ? "lane int" : "err"}>{usb.message}</div>}
-        </div>
-      </div>
-
-      <div className="card">
-        <div className="chd">
-          <h3>
-            2 · Comparison vs the {usb?.compared_with?.basis ?? "approved"} version
-          </h3>
-          {usb?.scan_result === "clean" ? (
-            <Chip
-              status="submitted"
-              label={`v${usb.version_number} vs v${usb.compared_with?.version_number ?? "—"}`}
-            />
-          ) : (
-            <Chip status="canceled" label="After the virus check" />
-          )}
-        </div>
-        <div className="cbd" style={{ padding: usb?.comparison.length ? "0 0 4px" : undefined }}>
-          {usb?.scan_result === "clean" && usb.comparison.length > 0 ? (
-            <table>
-              <thead>
-                <tr>
-                  <th />
-                  <th>v{usb.compared_with?.version_number ?? "—"}</th>
-                  <th>v{usb.version_number}</th>
-                  <th>Change</th>
-                </tr>
-              </thead>
-              <tbody>
-                {usb.comparison.map((row) => (
-                  <tr key={row.field}>
-                    <td>{row.field}</td>
-                    <td className="num">{row.approved}</td>
-                    <td className="num">{row.incoming}</td>
-                    <td>
-                      <Chip
-                        status={row.delta === "unchanged" ? "synchronized_onsite" : "needs_revision"}
-                        label={row.delta}
-                      />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          ) : (
-            <div className="note">Shown once the file passes the virus check.</div>
-          )}
-        </div>
-      </div>
-
-      <div className="card">
-        <div className="chd">
-          <h3>3 · Outcome</h3>
-        </div>
-        <div className="cbd">
-          <p className="note" style={{ marginTop: 0 }}>
-            An accepted version goes to re-approval. The room keeps playing the approved copy until
-            the new one is approved and loaded onto the room PC by hand — it is never replaced without warning.
-          </p>
-          {usb?.scan_result === "clean" ? (
-            <div className="lane spk">
-              <b>v{usb.version_number} is in.</b> It now needs a reviewer&rsquo;s approval in Review
-              presentations
-              {approvedNumber ? `; the room keeps playing v${approvedNumber} until then` : ""}. You can
-              confirm it as the final version above.
-            </div>
-          ) : (
-            <div className="note">Nothing to accept yet.</div>
-          )}
-        </div>
-      </div>
-        </>
+        <LocalIntake
+          submit={(body) => ingestUsb(detail.checkin.id, body)}
+          approvedNumber={approvedNumber}
+          lastImport={lastImport}
+          outcomeNote="You can confirm it as the final version above."
+          onDone={async (message) => {
+            setToast(message);
+            await refresh();
+          }}
+        />
       )}
 
       <Toast message={toast} onClose={closeToast} />

@@ -112,8 +112,9 @@ export const GROUPS: {
     roles: STAFF_ROLES,
     items: [
       /*
-       * Check-in and USB intake are not separate destinations: check-in opens from a
-       * speaker in the Speaker Ready Room, and USB intake from a button on check-in.
+       * Check-in and local intake are not separate destinations: check-in opens from a
+       * speaker in the Speaker Ready Room, and local intake from a button on check-in
+       * or beside the speaker there.
        * Listing them here offered two greyed-out items that led nowhere.
        */
       { label: "Speaker Ready Room", href: "/events/:id/srr", icon: "users" },

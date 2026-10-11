@@ -3552,3 +3552,15 @@ upgraded would have left 4 / 96). All four images built locally (arm64) and star
 counts as 7.4 and identical slides. CI and `.nvmrc` on 24.21.0. Not deployed — goes out with the next
 `main` → `production` release; after it, compare ECR's scan of the new images with the 2026-10-08 numbers.
 
+
+## 2026-10-11 — Client review A1–A3: Local intake, staff upload from the SRR, check-in report (D-152)
+Remaining items from Ace Johnson's review counted with Travis: 10 items + the production check-in bug (A1–A5 SRR,
+B6–B9 Room sync/technician, C10 Speaker Support Staff). Built A1–A3 locally: "USB intake" → **Local intake** (USB
+drive or saved file) everywhere it is read; **Upload** beside each speaker on the SRR dashboard, taking a new version
+without a check-in (`POST /events/:id/srr/slots/:slotId/intake`, source `srr_manual`); **Download check-in report
+(CSV)** (`GET /events/:id/srr/report.csv`). Walked as the seeded technician (C. Delgado): Upload on Alicia Fontaine →
+v2 virus-checked, compared with v1, sent to review; the check-in's Local intake opens with the new words; the CSV lists
+Dr. Priya Raman at Station 1, "Still checked in". New suite srr-local-intake 5/5; unit 315 pass; invariants 381/382 —
+the one failure (event-files "MedTech has an approved file") fails the same without these changes (local seed data
+has drifted). Lint and type-check clean. **Not pushed, not deployed** — Travis reviews locally first.
+Note: the browser walk left a junk v2 on Alicia Fontaine's talk in the local data (`npm run db:seed` resets it).

@@ -25,8 +25,8 @@ const when = (iso: string, timeZone: string) =>
 
 const SOURCE_LABEL: Record<string, string> = {
   portal: "Speaker portal",
-  srr_usb: "USB intake",
-  srr_manual: "Speaker Ready Room",
+  srr_usb: "Local intake (check-in)",
+  srr_manual: "Local intake (Speaker Ready Room)",
   system: "System",
 };
 
@@ -239,11 +239,11 @@ export function PresentationDetailView({
             <Link className="btn" href={`/events/${eventId}/review`}>
               Review workspace
             </Link>
-            {/* R19 (D-113): USB intake lives on the speaker's check-in — go straight there
-                when they are checked in; otherwise say what to do first. */}
+            {/* R19 (D-113): local intake lives on the speaker's check-in and, since D-152, beside
+                the speaker in the Speaker Ready Room — go straight to the check-in when there is one. */}
             {initial.srr?.checkin_id ? (
               <Link className="btn" href={`/events/${eventId}/srr/${initial.srr.checkin_id}`}>
-                Replace file (USB intake)
+                Replace file (Local intake)
               </Link>
             ) : (
               initial.speaker && (
@@ -256,8 +256,8 @@ export function PresentationDetailView({
           <WhyNot reason={previewBlocked} />
           {!initial.srr?.checkin_id && initial.speaker && (
             <p className="note" style={{ margin: "6px 0 0" }}>
-              To take a new file on a USB drive, check {initial.speaker.name} in at the Speaker Ready Room first —
-              USB intake is on their check-in.
+              To take a new file — from a USB drive or this computer — open the Speaker Ready Room and press
+              Upload beside {initial.speaker.name}.
             </p>
           )}
           {previewOpen && latest?.pdf_state === "done" && (

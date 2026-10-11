@@ -550,10 +550,16 @@ export async function checkinDetail(tx: pg.PoolClient, checkinId: string): Promi
   };
 }
 
-/* ── screen 13: USB intake ───────────────────────────────────────────────── */
+/* ── screen 13: local intake (was "USB intake") ─────────────────────────── */
 
+/*
+ * "Local intake" (client review, D-152): the file comes from a USB drive or from a copy
+ * saved on the desk's computer — the browser cannot tell the two apart, and the rules are
+ * the same for both. The stored names (`srr_usb`, `usb_ingestions`, `/usb-ingestions`)
+ * keep their first spelling; only what people read changed.
+ */
 export type UsbResult = {
-  ingestion_id: string;
+  ingestion_id: string | null;
   scan_result: string;
   file_version_id: string | null;
   version_number: number | null;
@@ -564,69 +570,90 @@ export type UsbResult = {
   message: string;
 };
 
+/** The talk's approved and newest versions, read before a new one comes in. */
+async function baselineOf(tx: pg.PoolClient, slotId: string): Promise<{ approved: VersionFacts | null; latest: VersionFacts | null }> {
+  const { rows } = await tx.query<{ approved_id: string | null; latest_id: string | null }>(
+    `SELECT (SELECT fv.id FROM pmp.file_versions fv JOIN pmp.files f ON f.id = fv.file_id
+              WHERE f.slot_id = $1 AND fv.review_state = 'approved'
+              ORDER BY fv.version_number DESC LIMIT 1) AS approved_id,
+            (SELECT fv.id FROM pmp.file_versions fv JOIN pmp.files f ON f.id = fv.file_id
+              WHERE f.slot_id = $1 ORDER BY fv.version_number DESC LIMIT 1) AS latest_id`,
+    [slotId],
+  );
+  return {
+    approved: rows[0]?.approved_id ? await versionFacts(tx, rows[0].approved_id) : null,
+    latest: rows[0]?.latest_id ? await versionFacts(tx, rows[0].latest_id) : null,
+  };
+}
+
 /**
- * FR-SRR-002: a USB file is scanned before anything else, and a failed scan
+ * FR-SRR-002: a local file is scanned before anything else, and a failed scan
  * quarantines it while the approved version stays active (I-1, I-2). Acceptance
  * sends the new version to re-approval — it never becomes the room copy here.
+ * Shared by intake on a check-in and intake straight from the Speaker Ready Room.
  */
-export async function usbIngest(
+async function takeLocalFile(
   tx: pg.PoolClient,
   actor: Actor,
-  input: { checkinId: string; uploadId: string; fileName: string; reason: string },
+  input: {
+    eventId: string;
+    clientId: string;
+    slotId: string;
+    checkinId: string | null;
+    uploadId: string;
+    fileName: string;
+    reason: string;
+  },
 ): Promise<Result<UsbResult, DomainError>> {
-  if (!input.reason.trim()) {
-    return err({
-      code: "srr.reason_required",
-      message: "Accepting a USB version requires a reason — nothing was recorded.",
-    });
-  }
-
-  const detail = await checkinDetail(tx, input.checkinId);
-  if (!detail) return err({ code: "srr.checkin_not_found", message: "This check-in no longer exists — it may have been removed. Refresh the page." });
-
-  const { rows: scope } = await tx.query<{ event_id: string; client_id: string }>(
-    `SELECT event_id, client_id FROM pmp.srr_checkins WHERE id = $1`,
-    [input.checkinId],
-  );
+  const baseline = await baselineOf(tx, input.slotId);
 
   const ingested = await ingestVersion(tx, {
-    eventId: scope[0]!.event_id,
-    clientId: scope[0]!.client_id,
-    slotId: detail.talk.slot_id,
+    eventId: input.eventId,
+    clientId: input.clientId,
+    slotId: input.slotId,
     fileName: input.fileName,
     uploadId: input.uploadId,
-    source: "srr_usb",
+    source: input.checkinId ? "srr_usb" : "srr_manual",
     actorUserId: actor.id,
   });
   if (!ingested.ok) return err({ code: ingested.error.code, message: ingested.error.message });
 
-  const { rows: ingestionRows } = await tx.query<{ id: string }>(
-    `INSERT INTO pmp.usb_ingestions (checkin_id, event_id, client_id, file_version_id, scan_result, scan_detail)
-     VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
-    [
-      input.checkinId,
-      scope[0]!.event_id,
-      scope[0]!.client_id,
-      ingested.value.file_version_id,
-      ingested.value.scan_verdict,
-      JSON.stringify({ reason: input.reason, filename: input.fileName }),
-    ],
-  );
+  let ingestionId: string | null = null;
+  if (input.checkinId) {
+    const { rows } = await tx.query<{ id: string }>(
+      `INSERT INTO pmp.usb_ingestions (checkin_id, event_id, client_id, file_version_id, scan_result, scan_detail)
+       VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
+      [
+        input.checkinId,
+        input.eventId,
+        input.clientId,
+        ingested.value.file_version_id,
+        ingested.value.scan_verdict,
+        JSON.stringify({ reason: input.reason, filename: input.fileName }),
+      ],
+    );
+    ingestionId = rows[0]!.id;
+  }
 
   await appendAudit(tx, {
-    partitionId: scope[0]!.event_id,
-    clientId: scope[0]!.client_id,
+    partitionId: input.eventId,
+    clientId: input.clientId,
     actorUserId: actor.id,
-    action: "srr.usb_ingested",
-    subjectType: "usb_ingestion",
-    subjectId: ingestionRows[0]!.id,
-    detail: { verdict: ingested.value.scan_verdict, version: ingested.value.version_number },
+    action: input.checkinId ? "srr.usb_ingested" : "srr.local_intake",
+    subjectType: input.checkinId ? "usb_ingestion" : "file_version",
+    subjectId: ingestionId ?? ingested.value.file_version_id,
+    detail: {
+      verdict: ingested.value.scan_verdict,
+      version: ingested.value.version_number,
+      slot_id: input.slotId,
+      filename: input.fileName,
+    },
     reason: input.reason,
   });
 
   if (ingested.value.scan_verdict !== "clean") {
     return ok({
-      ingestion_id: ingestionRows[0]!.id,
+      ingestion_id: ingestionId,
       scan_result: ingested.value.scan_verdict,
       file_version_id: ingested.value.file_version_id,
       version_number: ingested.value.version_number,
@@ -634,8 +661,8 @@ export async function usbIngest(
       compared_with: null,
       comparison: [],
       // Only claim an approved copy is playing when there is one (D-108).
-      message: detail.approved
-        ? `This file failed the virus check and was not stored. v${detail.approved.version_number} (approved) is unchanged and stays in use. Ask the speaker for another copy — re-saved, or from a different USB drive — and check it again.`
+      message: baseline.approved
+        ? `This file failed the virus check and was not stored. v${baseline.approved.version_number} (approved) is unchanged and stays in use. Ask the speaker for another copy — re-saved, or from a different USB drive — and check it again.`
         : "This file failed the virus check and was not stored. Ask the speaker for another copy — re-saved, or from a different USB drive — and check it again.",
     });
   }
@@ -645,24 +672,87 @@ export async function usbIngest(
   // Compare against the approved version when there is one; otherwise against
   // whatever the speaker last submitted, so the technician always sees what
   // changed rather than an empty panel.
-  const baseline = detail.approved ?? detail.latest;
-  const comparedWith = baseline
+  const against = baseline.approved ?? baseline.latest;
+  const comparedWith = against
     ? {
-        version_number: baseline.version_number,
-        basis: (detail.approved ? "approved" : "previous") as "approved" | "previous",
+        version_number: against.version_number,
+        basis: (baseline.approved ? "approved" : "previous") as "approved" | "previous",
       }
     : null;
-  const comparison = compare(baseline, incoming);
 
   return ok({
-    ingestion_id: ingestionRows[0]!.id,
+    ingestion_id: ingestionId,
     scan_result: "clean",
     file_version_id: ingested.value.file_version_id,
     version_number: ingested.value.version_number,
     inspection_state: ingested.value.inspection_state,
     compared_with: comparedWith,
-    comparison,
+    comparison: compare(against, incoming),
     message: `Virus check passed. Saved as version ${ingested.value.version_number} and sent for review. The room keeps the approved version until this one is approved and loaded onto the room PC.`,
+  });
+}
+
+const REASON_REQUIRED: DomainError = {
+  code: "srr.reason_required",
+  message: "Taking in a new version needs a reason — nothing was recorded.",
+};
+
+/** Local intake on a speaker's check-in (screen 13). */
+export async function usbIngest(
+  tx: pg.PoolClient,
+  actor: Actor,
+  input: { checkinId: string; uploadId: string; fileName: string; reason: string },
+): Promise<Result<UsbResult, DomainError>> {
+  if (!input.reason.trim()) return err(REASON_REQUIRED);
+
+  const detail = await checkinDetail(tx, input.checkinId);
+  if (!detail) return err({ code: "srr.checkin_not_found", message: "This check-in no longer exists — it may have been removed. Refresh the page." });
+
+  const { rows: scope } = await tx.query<{ event_id: string; client_id: string }>(
+    `SELECT event_id, client_id FROM pmp.srr_checkins WHERE id = $1`,
+    [input.checkinId],
+  );
+  return takeLocalFile(tx, actor, {
+    eventId: scope[0]!.event_id,
+    clientId: scope[0]!.client_id,
+    slotId: detail.talk.slot_id,
+    checkinId: input.checkinId,
+    uploadId: input.uploadId,
+    fileName: input.fileName,
+    reason: input.reason,
+  });
+}
+
+/**
+ * Local intake straight from the Speaker Ready Room, without a check-in (client review,
+ * D-152): DXG staff upload or update a speaker's presentation the way the speaker can from
+ * their own Speaker Ready Room view. Same scan → store → re-approval path; the version's
+ * source is `srr_manual`.
+ */
+export async function slotIntake(
+  tx: pg.PoolClient,
+  actor: Actor,
+  input: { eventId: string; slotId: string; uploadId: string; fileName: string; reason: string },
+): Promise<Result<UsbResult, DomainError>> {
+  // Who may: whoever may open the Speaker Ready Room — the account's level and its place on
+  // the event (D-151), checked before this runs; the same as intake on a check-in.
+  if (!input.reason.trim()) return err(REASON_REQUIRED);
+
+  const { rows } = await tx.query<{ client_id: string }>(
+    `SELECT client_id FROM pmp.slots WHERE id = $1 AND event_id = $2`,
+    [input.slotId, input.eventId],
+  );
+  if (!rows[0]) {
+    return err({ code: "srr.slot_not_found", message: "This talk no longer exists at this event — it may have been removed. Refresh the page." });
+  }
+  return takeLocalFile(tx, actor, {
+    eventId: input.eventId,
+    clientId: rows[0].client_id,
+    slotId: input.slotId,
+    checkinId: null,
+    uploadId: input.uploadId,
+    fileName: input.fileName,
+    reason: input.reason,
   });
 }
 
@@ -879,4 +969,90 @@ export async function depart(
     subjectId: checkinId,
   });
   return ok({ departed: true });
+}
+
+/* ── check-in / checkout report (client review, D-152) ───────────────────── */
+
+const csvCell = (value: string): string =>
+  /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+
+/**
+ * Every check-in of the event, one row each, in the order they happened: who, at which
+ * desk, when they came and went, on the event's own clock. A UTF-8 byte-order mark leads
+ * the file so Excel opens names with accents correctly.
+ */
+export async function srrReportCsv(
+  tx: pg.PoolClient,
+  eventId: string,
+): Promise<{ csv: string; eventName: string } | null> {
+  const { rows: events } = await tx.query<{ name: string; timezone: string }>(
+    `SELECT name, timezone FROM pmp.events WHERE id = $1`,
+    [eventId],
+  );
+  const event = events[0];
+  if (!event) return null;
+
+  const { rows } = await tx.query<{
+    presenter: string;
+    email: string | null;
+    talks: string | null;
+    rooms: string | null;
+    desk: string | null;
+    checked_in: string;
+    checked_out: string | null;
+    minutes: number | null;
+    technician: string | null;
+    signed_off: number | null;
+  }>(
+    `SELECT sp.full_name AS presenter, sp.email,
+            (SELECT string_agg(s.title, '; ' ORDER BY se.starts_at)
+               FROM pmp.speaker_assignments sa JOIN pmp.slots s ON s.id = sa.slot_id
+               JOIN pmp.sessions se ON se.id = s.session_id
+              WHERE sa.speaker_id = sp.id) AS talks,
+            (SELECT string_agg(DISTINCT r.name, '; ')
+               FROM pmp.speaker_assignments sa JOIN pmp.slots s ON s.id = sa.slot_id
+               JOIN pmp.sessions se ON se.id = s.session_id JOIN pmp.rooms r ON r.id = se.room_id
+              WHERE sa.speaker_id = sp.id) AS rooms,
+            c.station AS desk,
+            to_char(c.checked_in_at AT TIME ZONE $2, 'YYYY-MM-DD HH24:MI') AS checked_in,
+            to_char(c.departed_at AT TIME ZONE $2, 'YYYY-MM-DD HH24:MI') AS checked_out,
+            CASE WHEN c.departed_at IS NULL THEN NULL
+                 ELSE round(extract(epoch FROM c.departed_at - c.checked_in_at) / 60)::int END AS minutes,
+            u.display_name AS technician,
+            (SELECT fv.version_number FROM pmp.sign_offs so
+               JOIN pmp.file_versions fv ON fv.id = so.file_version_id
+              WHERE so.checkin_id = c.id ORDER BY so.signed_at DESC LIMIT 1) AS signed_off
+       FROM pmp.srr_checkins c
+       JOIN pmp.speakers sp ON sp.id = c.speaker_id
+       LEFT JOIN pmp.users u ON u.id = c.technician_id
+      WHERE c.event_id = $1
+      ORDER BY c.checked_in_at, sp.full_name`,
+    [eventId, event.timezone],
+  );
+
+  const heading = [
+    "Presenter",
+    "Email",
+    "Talk",
+    "Room",
+    "Desk",
+    `Check-in (${event.timezone})`,
+    `Checkout (${event.timezone})`,
+    "Minutes at desk",
+    "Checked in by",
+    "Signed-off version",
+  ];
+  const lines = [heading, ...rows.map((row) => [
+    row.presenter,
+    row.email ?? "",
+    row.talks ?? "",
+    row.rooms ?? "",
+    row.desk ?? "",
+    row.checked_in,
+    row.checked_out ?? "Still checked in",
+    row.minutes === null ? "" : String(row.minutes),
+    row.technician ?? "",
+    row.signed_off === null ? "" : `v${row.signed_off}`,
+  ])];
+  return { csv: "﻿" + lines.map((line) => line.map(csvCell).join(",")).join("\r\n") + "\r\n", eventName: event.name };
 }

@@ -275,8 +275,22 @@ paths:
     parameters: [{$ref: '#/components/parameters/checkinId'}, {$ref: '#/components/parameters/idempotencyKey'}]
     post:
       tags: [srr]
-      summary: USB import with mandatory scan; quarantine on failure (FR-SRR-002)
+      summary: Local intake on a check-in (USB drive or saved file) with mandatory scan; quarantine on failure (FR-SRR-002, D-152)
       responses: {'201': {$ref: '#/components/responses/Created'}, '422': {$ref: '#/components/responses/Error'}}
+  /events/{eventId}/srr/slots/{slotId}/intake:
+    parameters:
+      - {$ref: '#/components/parameters/eventId'}
+      - {name: slotId, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      tags: [srr]
+      summary: Local intake without a check-in — staff upload/update a speaker's file from the SRR (D-152)
+      responses: {'200': {$ref: '#/components/responses/OK'}, '404': {$ref: '#/components/responses/Error'}, '422': {$ref: '#/components/responses/Error'}}
+  /events/{eventId}/srr/report.csv:
+    parameters: [{$ref: '#/components/parameters/eventId'}]
+    get:
+      tags: [srr]
+      summary: Check-in / checkout report as CSV — presenter, desk, check-in and checkout times on the event's clock (D-152)
+      responses: {'200': {description: CSV file, content: {text/csv: {schema: {type: string}}}}}
   /file-versions/{versionId}/compare/{otherVersionId}:
     parameters:
       - {$ref: '#/components/parameters/versionId'}

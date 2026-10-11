@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { ExpectedArrival, SrrDashboard, SrrStation } from "@/lib/api";
-import { addStation, renameStation, retireStation, startCheckin, ApiError } from "@/lib/api";
+import { addStation, renameStation, retireStation, startCheckin, ingestForSlot, srrReportUrl, ApiError } from "@/lib/api";
+import { LocalIntake } from "@/components/LocalIntake";
+import { Toast } from "@/components/Toast";
 import { FloatingMenu, useFloatingMenu } from "@/components/FloatingMenu";
 import { CHECK, wordsFor } from "@pmp/format";
 import { Chip, SeverityChip } from "@/components/Chip";
@@ -40,6 +42,24 @@ export function SrrDashboardView({
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Local intake without a check-in (D-152): staff upload or update a speaker's file here.
+  const [intakeFor, setIntakeFor] = useState<ExpectedArrival | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const closeToast = useCallback(() => setToast(null), []);
+  const uploadButton = (row: ExpectedArrival) => (
+    <button
+      type="button"
+      className="btn"
+      disabled={busy}
+      title="Upload or update this speaker's presentation — from a USB drive or this computer"
+      onClick={() => {
+        setIntakeFor(row);
+        if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+      }}
+    >
+      Upload
+    </button>
+  );
   // Why "Check in →" is greyed, once above the list rather than on every row (R33, D-111).
   const checkInBlocked =
     data.stations.length === 0
@@ -69,7 +89,13 @@ export function SrrDashboardView({
 
   return (
     <>
-      <h1 className="htitle">Speaker Ready Room · {eventName}</h1>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
+        <h1 className="htitle">Speaker Ready Room · {eventName}</h1>
+        {/* The check-in / checkout report (D-152): CSV, opens in Excel. */}
+        <a className="btn" href={srrReportUrl(eventId)} download>
+          Download check-in report (CSV)
+        </a>
+      </div>
       <div className="note" style={{ margin: "-8px 0 14px" }}>
         {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: timezone })}
         {" · "}
@@ -81,6 +107,34 @@ export function SrrDashboardView({
       </div>
 
       {error && <div className="err">{error}</div>}
+
+      {intakeFor && (
+        <div className="card">
+          <div className="chd">
+            <h3>
+              Local intake · {intakeFor.speaker} — {intakeFor.title}
+            </h3>
+            <button type="button" className="btn" onClick={() => setIntakeFor(null)}>
+              Close
+            </button>
+          </div>
+          <div className="cbd">
+            <p className="note" style={{ marginTop: 0 }}>
+              Upload or update this speaker&rsquo;s presentation without checking them in — from a USB drive or a
+              file saved on this computer. It goes through the same virus check and back to review.
+            </p>
+            <LocalIntake
+              key={intakeFor.slot_id}
+              submit={(body) => ingestForSlot(eventId, intakeFor.slot_id, body)}
+              approvedNumber={intakeFor.approved_version ?? undefined}
+              onDone={(message) => {
+                setToast(message);
+                router.refresh();
+              }}
+            />
+          </div>
+        </div>
+      )}
 
       {data.stations.length === 0 && (
         <StationsCard eventId={eventId} stations={data.stations} onChanged={() => router.refresh()} />
@@ -156,6 +210,7 @@ export function SrrDashboardView({
                         </td>
                         <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
                           <Chip status={row.status} label={row.status_label} />{" "}
+                          {uploadButton(row)}{" "}
                           <CheckInButton
                             stations={data.stations}
                             disabled={busy}
@@ -192,6 +247,7 @@ export function SrrDashboardView({
                       </span>
                     </td>
                     <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                      {uploadButton(row)}{" "}
                       <CheckInButton
                         stations={data.stations}
                         label="Check in again"
@@ -255,6 +311,8 @@ export function SrrDashboardView({
       {data.stations.length > 0 && (
         <StationsCard eventId={eventId} stations={data.stations} onChanged={() => router.refresh()} />
       )}
+
+      <Toast message={toast} onClose={closeToast} />
     </>
   );
 }
@@ -263,7 +321,7 @@ export function SrrDashboardView({
 function deskLine(row: ExpectedArrival): string {
   if (row.signed_off_version) return `Signed off v${row.signed_off_version} — ready to check out`;
   if (row.status === "attention") return "File held back — needs a clean copy";
-  if (row.status === "missing") return "No file yet — take it by USB";
+  if (row.status === "missing") return "No file yet — take it in with Local intake";
   if (row.status === "processing") return "File being checked";
   return "Going through the slides";
 }
@@ -272,9 +330,9 @@ function deskLine(row: ExpectedArrival): string {
 function arrivalLine(row: ExpectedArrival): string {
   switch (row.status) {
     case "missing":
-      return "No file yet — take it by USB when they arrive.";
+      return "No file yet — upload it here, or take it in with Local intake when they arrive.";
     case "attention":
-      return "Their file failed the virus check — ask for a clean copy on USB.";
+      return "Their file failed the virus check — ask for a clean copy (USB drive or saved file).";
     case "needs_revision":
       return "Changes were asked for — they may bring a new version.";
     case "processing":

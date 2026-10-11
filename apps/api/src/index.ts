@@ -69,7 +69,7 @@ const MFA_COOKIE = "pmp_mfa";
 /** The speaker site's sign-in page (D-148). */
 const SPEAKER_SITE = `${process.env.PORTAL_BASE ?? "http://localhost:3001"}/login`;
 import { agentView, syncRoom, acknowledge, launch, markLoaded, unmarkLoaded } from "./services/agent.ts";
-import { srrDashboard, checkIn, checkinDetail, usbIngest, signOff, depart, emailReceipt, addStation, renameStation, retireStation } from "./services/srr.ts";
+import { srrDashboard, srrReportCsv, checkIn, checkinDetail, usbIngest, slotIntake, signOff, depart, emailReceipt, addStation, renameStation, retireStation } from "./services/srr.ts";
 import {
   presentationDetail,
   findingsFor,
@@ -1869,6 +1869,19 @@ app.get("/api/v1/events/:eventId/srr", async (req, res) => {
   return res.json(view);
 });
 
+/** The check-in / checkout report as CSV (D-152): presenter, desk, check-in and checkout times. */
+app.get("/api/v1/events/:eventId/srr/report.csv", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  const eventId = String(req.params.eventId);
+  const report = await withScope(scopeFor(req, eventId), (tx) => srrReportCsv(tx, eventId));
+  if (!report) return res.status(404).json({ code: "event.not_found", message: "This event no longer exists." });
+  const slug = report.eventName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "event";
+  res.header("content-type", "text/csv; charset=utf-8");
+  res.header("content-disposition", `attachment; filename="${slug}-speaker-ready-room-check-ins.csv"`);
+  return res.send(report.csv);
+});
+
 app.post("/api/v1/events/:eventId/srr/checkins", async (req, res) => {
   const actor = actorFrom(req);
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
@@ -1932,7 +1945,7 @@ app.get("/api/v1/srr/checkins/:checkinId", async (req, res) => {
   return res.json(detail);
 });
 
-/** Staff-side resumable upload, used by USB intake (the portal has its own). */
+/** Staff-side resumable upload, used by local intake (the portal has its own). */
 app.post("/api/v1/srr/uploads", async (req, res) => {
   const actor = actorFrom(req);
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
@@ -1955,11 +1968,37 @@ app.post("/api/v1/srr/checkins/:checkinId/usb-ingestions", async (req, res) => {
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   const body = req.body as { upload_id?: string; file_name?: string; reason?: string };
   if (!body.upload_id || !body.file_name) {
-    return res.status(400).json({ code: "request.invalid", message: "The USB file couldn't be finished. Copy it again." });
+    return res.status(400).json({ code: "request.invalid", message: "The file couldn't be finished. Choose it again." });
   }
   const result = await withScope(scopeFor(req), (tx) =>
     usbIngest(tx, actor, {
       checkinId: String(req.params.checkinId),
+      uploadId: body.upload_id as string,
+      fileName: body.file_name as string,
+      reason: body.reason ?? "",
+    }),
+  );
+  if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+  return res.json(result.value);
+});
+
+/*
+ * Local intake straight from the Speaker Ready Room (D-152): staff upload or update a
+ * speaker's presentation without checking them in first. The file goes up through
+ * `/srr/uploads` as on a check-in.
+ */
+app.post("/api/v1/events/:eventId/srr/slots/:slotId/intake", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  const body = req.body as { upload_id?: string; file_name?: string; reason?: string };
+  if (!body.upload_id || !body.file_name) {
+    return res.status(400).json({ code: "request.invalid", message: "The file couldn't be finished. Choose it again." });
+  }
+  const eventId = String(req.params.eventId);
+  const result = await withScope(scopeFor(req, eventId), (tx) =>
+    slotIntake(tx, actor, {
+      eventId,
+      slotId: String(req.params.slotId),
       uploadId: body.upload_id as string,
       fileName: body.file_name as string,
       reason: body.reason ?? "",

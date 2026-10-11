@@ -23,7 +23,7 @@ export function wordsFor(map: Readonly<Record<string, Words>>, code: string | nu
 
 // ── talk status (labels fixed by DXG; meaning + next step are ours) ─────────────────────
 export const TALK_STATUS: Readonly<Record<string, Words>> = {
-  missing: { label: "Missing", meaning: "Nothing uploaded yet.", next: "Remind the speaker, or take a file by USB in the Speaker Ready Room." },
+  missing: { label: "Missing", meaning: "Nothing uploaded yet.", next: "Remind the speaker, or take the file in with Local intake in the Speaker Ready Room." },
   processing: { label: "Processing", meaning: "Just uploaded — the virus check and file checks are running.", next: "Nothing to do; this takes about a minute." },
   submitted: { label: "Submitted", meaning: "Passed the checks and waiting for a reviewer.", next: "Review it in Review & approval." },
   needs_revision: { label: "Needs revision", meaning: "A reviewer asked for changes, or the file failed a check.", next: "Waiting on the speaker to upload a new version." },
@@ -166,7 +166,7 @@ export const ROLE: Readonly<Record<string, Words>> = {
   project_manager: { label: "Project manager", meaning: "Runs the event: setup, speakers, rooms and archive." },
   presentation_manager: { label: "Presentation manager", meaning: "Manages speakers, files and approvals." },
   content_reviewer: { label: "Reviewer", meaning: "Reviews and approves presentations." },
-  srr_technician: { label: "Speaker Ready Room technician", meaning: "Checks speakers in and takes files by USB onsite." },
+  srr_technician: { label: "Speaker Ready Room technician", meaning: "Checks speakers in and takes their files onsite (Local intake)." },
   room_technician: { label: "Room technician", meaning: "Runs one room's presentation PC." },
   client_event_admin: { label: "Client access", meaning: "The client's view of the event and its archive." },
   scoped_reviewer: { label: "Client reviewer", meaning: "A client-side reviewer for chosen sessions only." },

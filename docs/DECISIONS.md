@@ -2794,3 +2794,26 @@ ECR's scan of the first CI-built images (D-149) found 7–8 critical and ~40 hig
 - **To keep it this way**: bump `NODE_IMAGE` when Node 24 or Debian publish security releases; check ECR's scan
   (`aws ecr describe-image-scan-findings`) after each `production` build.
 
+
+## D-152 (2026-10-11): Local intake, staff upload from the Speaker Ready Room, check-in report — Status: ACCEPTED (Travis, from the client's review, items A1–A3)
+- **Local intake**: "USB intake" is renamed **Local intake** everywhere people read it (check-in, SRR dashboard,
+  Presentation detail, Files source, Help, status vocabulary). It takes a file from a USB drive **or** one saved on the
+  desk's computer — the browser's file picker reaches both, so nothing else changed in how the file arrives. Stored
+  names keep their first spelling (`file_versions.source = 'srr_usb'`, `usb_ingestions`, `POST
+  /srr/checkins/:id/usb-ingestions`, audit `srr.usb_ingested`); no migration. The three steps (virus check →
+  comparison → outcome) are one component, `LocalIntake`, used on a check-in and from the dashboard.
+- **Staff upload from the SRR**: each speaker on the Speaker Ready Room dashboard (still to check in, checked out) has
+  **Upload**, which opens local intake for that talk without a check-in: `POST /events/:eventId/srr/slots/:slotId/intake`
+  (file sent through `/srr/uploads` as before). Same path as every intake — scan, store, inspect, back to review; the
+  room keeps the approved copy until the new one is approved. Source `srr_manual`, audit `srr.local_intake` with the
+  reason (required, 422). The talk must belong to the event (404). Who may: whoever may open the SRR (account level +
+  place on the event, D-151) — the same as intake on a check-in, so support staff are refused by kind. A speaker on a
+  desk keeps using the check-in's own Local intake.
+- **Check-in / checkout report**: **Download check-in report (CSV)** on the SRR dashboard,
+  `GET /events/:eventId/srr/report.csv`: one row per check-in, in order — Presenter, Email, Talk, Room, Desk, Check-in,
+  Checkout ("Still checked in" while at a desk), Minutes at desk, Checked in by, Signed-off version. Times on the
+  event's clock (`YYYY-MM-DD HH:MM`, the zone named in the heading); a UTF-8 byte-order mark so Excel opens accents
+  correctly. CSV rather than .xlsx: it opens in Excel as is and needs no new dependency.
+- Tests: `tests/invariants/srr-local-intake.test.ts` (upload + update without a check-in, versions and source, audit
+  with reason, reason required, talk of another event 404, support staff refused, CSV shape and times, technician
+  may download).

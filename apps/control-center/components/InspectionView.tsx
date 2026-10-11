@@ -64,7 +64,7 @@ function explain(finding: FindingRow): { title: string; body: string; fix?: stri
       };
     case "malware":
       return {
-        // Plain words, same as USB intake's "Virus check" (D-112).
+        // Plain words, same as local intake's "Virus check" (D-112).
         title: "Virus check failed",
         body: `The virus check flagged this file${detail.signature ? ` (${String(detail.signature)})` : ""}. It is held back and can't reach any room; any approved version is untouched.`,
       };
