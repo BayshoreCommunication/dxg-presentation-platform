@@ -4,7 +4,8 @@ Status: **deployed 2026-09-27** (commit `35932fa`) to account 295229565954, us-e
 `pmp-prod` (4 GB, static IP `3.146.210.9`), S3 `dxg-pmp-files-295229565954`, IAM user `pmp-server`. DNS for
 av-rfpilot.com is at **GoDaddy**, not Route 53. Code is at `/opt/pmp` on the server (a `git archive` of the
 commit, not a clone — the server has no GitHub access); SSH as `ubuntu@3.146.210.9`, allowed only from the
-deploying machine's IP. Updating: `git archive HEAD` → copy → extract over `/opt/pmp` → §6.
+deploying machine's IP. Updating (since 2026-10-08, D-149): merge `main` into `production` → CI builds and pushes the images to ECR →
+`./deploy.sh <commit>` on the server (§6). Nothing is built on the server.
 
 Target: DXG staff, their client admins and their speakers, for DXG's events. Accounts are created
 by DXG (no public sign-up).
@@ -48,6 +49,7 @@ minutes without a heartbeat.
 | Server: Lightsail 4 GB / 2 vCPU / 80 GB SSD — what `pmp-prod` is. ClamAV takes ~1.5 GB, LibreOffice and the two Next servers the rest; ~1.6 GB free in steady state | $24 |
 | S3: presentations + PDFs + archives + 30 days of backups, a few GB–tens of GB | ~$1–5 |
 | SES: $0.10 per 1,000 emails | <$1 |
+| ECR: the four app images, last 10 releases kept (~1 GB per release, compressed) | ~$1 |
 | Data transfer out beyond the Lightsail allowance | usually $0 |
 | **Total** | **≈ $30 / month** |
 
@@ -82,6 +84,16 @@ Use the `rfpilot` AWS profile (the account where SES for av-rfpilot.com lives), 
    80 and 443. Install Docker Engine + the compose plugin.
 5. **DNS** — `A` records for `pmp.av-rfpilot.com` and `speakers.av-rfpilot.com` → the static IP
    (`AAAA` too if the server has IPv6). Caddy cannot obtain certificates until these resolve.
+6. **Images (D-149)** — four private ECR repositories `pmp-api`, `pmp-dispatcher`, `pmp-staff`, `pmp-portal`
+   (us-east-2; tags immutable, scan on push, lifecycle: untagged after 1 day, keep the last 10). An IAM role
+   **`pmp-github-image-push`** that GitHub Actions assumes with OIDC (no stored keys) and that may push to
+   `repository/pmp-*` only. Its trust policy allows **only the `production` branch**, and this repository uses
+   GitHub's *immutable* OIDC subject, so the `sub` must be the ID form —
+   `repo:BayshoreCommunication@134770953/dxg-presentation-platform@1351180254:ref:refs/heads/production`; the plain
+   `repo:BayshoreCommunication/dxg-presentation-platform:…` form is refused ("Not authorized to perform
+   sts:AssumeRoleWithWebIdentity"). Check with `gh api repos/<repo>/actions/oidc/customization/sub`. The server's
+   `pmp-server` policy gains `ecr:GetAuthorizationToken` and pull-only actions (`BatchGetImage`,
+   `GetDownloadUrlForLayer`, `BatchCheckLayerAvailability`) on `repository/pmp-*`.
 
 ## 4. First deploy
 
@@ -117,66 +129,50 @@ Email banners (D-138) are fetched by speakers' mail clients from `PUBLIC_API_BAS
 only if mail should load images from another host. A change to speaker-email rendering needs the **dispatcher**
 rebuilt, not only the api.
 
+Images (D-149): `PMP_IMAGE_PREFIX=295229565954.dkr.ecr.us-east-2.amazonaws.com/` (set once, trailing slash) and
+`PMP_TAG` (the release commit — `deploy.sh` writes it; do not edit by hand). Unset, compose uses the locally built
+`pmp-api:latest` etc. (the §6 fallback).
+
 Optional: `AUTH_RATE_LIMIT` (sign-in attempts per address per 5 minutes, default 30 in production),
 `REMINDERS_DISABLED=1`, `EMAIL_DNS_CHECK=0`, `CORS_ORIGINS` (extra allowed origins).
 
 ## 6. Updating
 
-The server has no GitHub access and `/opt/pmp` is a `git archive`, not a clone, so an update is
-**archive → copy → extract → build → migrate → up**, run from the deploying machine (the only IP the
-firewall admits on port 22; key `~/.ssh/pmp-lightsail.pem`). Every production deploy since 2026-09-27
-has gone this way; the deploy records in `docs/PROJECT_STATE.md` are the log.
+Since 2026-10-08 (D-149) **nothing is built on the server**. GitHub Actions builds the four app images and pushes
+them to ECR; the server pulls them. A release is three moves:
 
-**On this machine** — from the commit that is on `main`:
+1. **Release** — on GitHub, open a pull request from `main` into **`production`** and merge it. Only the
+   `production` branch publishes images; `main` and pull requests run every check but push nothing.
+2. **Wait for CI** — the `production` run goes `checks` → `invariants` → `images` → four `publish` jobs. Its
+   summary prints the deploy command with the 7-character commit (the merge commit, if GitHub made one).
+3. **Deploy** — on the server:
+   ```bash
+   ssh -i ~/.ssh/pmp-lightsail.pem ubuntu@3.146.210.9
+   cd /opt/pmp/deploy/server && ./deploy.sh <commit>
+   ```
+
+`deploy.sh` (in this folder) does, in order, stopping at the first failure: sign in to ECR (with the server's key,
+through the `backup` container's aws cli) → **pull all four images before anything changes** → database backup
+(prints the S3 key) → write `PMP_TAG=<commit>` into `.env` → migrations → `docker compose up -d --no-build` → checks
+(each container on the new image, api healthy, `/ops/health` through the public URL) → record
+`/opt/pmp/.deployed-commit` → prune unused images older than a week and old build cache. It ends with
+`Deployed <commit>` and the rollback command.
+
+**Rollback:** `./deploy.sh <previous commit>` — the script prints it. Migrations are forward-only, so the older
+code runs on the newer schema; every migration so far only adds. Restore a backup (§7) only if the data is wrong.
+The previous release's images stay on the server for a week, so a rollback needs no download.
+
+**When `deploy/server` itself changes** (this compose file, the Caddyfile, `clamd.conf`, `deploy.sh`, `backup/`),
+copy it to the server before deploying — it never touches `.env`, which is not in git:
 
 ```bash
-cd dxg-presentation-platform
-C=$(git rev-parse --short HEAD)
-git archive --format=tar.gz -o /tmp/pmp-$C.tar.gz $C
-git ls-tree -r --name-only $C -- apps packages db scripts deploy > /tmp/tracked-$C.txt
-scp -i ~/.ssh/pmp-lightsail.pem /tmp/pmp-$C.tar.gz /tmp/tracked-$C.txt ubuntu@3.146.210.9:/tmp/
-ssh -i ~/.ssh/pmp-lightsail.pem ubuntu@3.146.210.9
+git fetch origin && git archive origin/production deploy/server \
+  | ssh -i ~/.ssh/pmp-lightsail.pem ubuntu@3.146.210.9 'sudo tar -x -C /opt/pmp && sudo chmod +x /opt/pmp/deploy/server/deploy.sh'
 ```
+If `backup/` changed, also `docker compose build backup && docker compose up -d backup` (it is the one image still
+built on the server; small, and it rarely changes). A Caddyfile change needs `docker compose restart caddy`.
 
-**On the server** — one step at a time, each checked before the next:
-
-```bash
-cd /opt/pmp/deploy/server
-docker compose exec -T backup backup.sh now            # 1. backup first — it prints the S3 key; note it
-
-C=<the commit>                                          # 2. extract over the tree (it is root-owned)
-sudo tar -xzf /tmp/pmp-$C.tar.gz -C /opt/pmp
-echo $C | sudo tee /opt/pmp/.deployed-commit
-
-(cd /opt/pmp && find apps packages db scripts deploy -type f | sort) \
-  | comm -23 - <(sort /tmp/tracked-$C.txt)              # 3. files tar left behind that git no longer has
-# Delete what it lists — EXCEPT deploy/server/.env, the live settings, which is never in git.
-# tar never removes anything; a stale .tsx once broke the staff build (2026-09-30).
-
-docker compose build api                                # 4. one image at a time, in the FOREGROUND
-docker compose build staff                              #    (the box has 4 GB; three Next/npm builds
-docker compose build portal                             #    at once starve ClamAV). dispatcher only
-                                                        #    when packages/email or apps/dispatcher changed.
-for s in api staff portal; do docker image inspect pmp-$s --format "$s {{.Created}}"; done
-                                                        #    every rebuilt image must carry today's time
-
-docker compose --profile ops run --rm migrate           # 5. forward-only and idempotent; "up to date" is fine
-docker compose up -d                                    # 6. recreates the services whose image changed;
-                                                        #    ~seconds of downtime, the API drains on SIGTERM
-docker compose ps                                       # 7. everything Up, api/worker/clamav/postgres healthy
-for s in api staff portal; do
-  [ "$(docker image inspect pmp-$s --format '{{.Id}}')" = "$(docker inspect pmp-$s-1 --format '{{.Image}}')" ] \
-    && echo "$s ok" || echo "$s STILL RUNNING THE OLD IMAGE"; done
-docker compose logs --since 5m api worker staff portal | grep -iE "error|refusing|fatal"
-docker image prune -f                                   # 8. keep the disk under 80 %. Build cache is the
-docker builder prune -f --filter until=24h              #    real consumer (55 GB by 2026-10-04 — every
-df -h /                                                 #    rebuild adds layers, image prune never
-                                                        #    touches them); keeping today's keeps builds fast
-rm -f /tmp/pmp-$C.tar.gz /tmp/tracked-$C.txt
-```
-
-**From outside**, then record the deploy in `docs/PROJECT_STATE.md` (backup key, commit, what was rebuilt,
-what the checks said) and commit that:
+**From outside**, then record the deploy in `docs/PROJECT_STATE.md` (backup key, commit) and commit that:
 
 ```bash
 curl -s https://pmp.av-rfpilot.com/ops/health        # {"status":"ok","database":"up","worker":"up"}
@@ -185,11 +181,13 @@ curl -so /dev/null -w '%{http_code}\n' https://pmp.av-rfpilot.com/login        #
 curl -so /dev/null -w '%{http_code}\n' https://speakers.av-rfpilot.com/login   # 200
 ```
 
-Things that have gone wrong, so they are checked above: a background build started through `sh -c`
-with `set -o pipefail` never ran (Ubuntu's `sh` is dash, which rejects it) and an old `/tmp/build.log`
-read as a finished build — hence foreground builds and the image-time and image-ID checks (2026-10-04);
-a build piped through `| tail` hid its failure — hence no pipes around `build` (2026-09-30). The API's
-port is not published on the host: check health through the public URL, not `127.0.0.1:4000`.
+**Fallback — building on the server** (only if ECR or GitHub Actions is unavailable): remove the `PMP_IMAGE_PREFIX`
+and `PMP_TAG` lines from `.env`; compose then names the images `pmp-api:latest` etc. again. Copy the commit up with
+`git archive <commit> | ssh … 'sudo tar -xz -C /opt/pmp'` (delete files git no longer tracks — `tar` never removes
+anything, and a stale `.tsx` once broke a build), then build **one image at a time in the foreground** (the box has
+4 GB; never pipe `build` through `tail`, it hid a failure once) — `docker compose build api`, `staff`, `portal`,
+`dispatcher` — and run the migrate / `up -d` / checks steps above by hand. Every deploy from 2026-09-27 to
+2026-10-05 went this way; the records in `docs/PROJECT_STATE.md` are the log.
 
 ## 7. Backups and restore
 
