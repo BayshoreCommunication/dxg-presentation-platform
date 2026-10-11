@@ -6,6 +6,7 @@ import type { ExpectedArrival, SrrDashboard, SrrStation } from "@/lib/api";
 import { addStation, renameStation, retireStation, startCheckin, ingestForSlot, srrReportUrl, ApiError } from "@/lib/api";
 import { LocalIntake } from "@/components/LocalIntake";
 import { Toast } from "@/components/Toast";
+import { Icon } from "@/components/Icon";
 import { FloatingMenu, useFloatingMenu } from "@/components/FloatingMenu";
 import { CHECK, wordsFor } from "@pmp/format";
 import { Chip, SeverityChip } from "@/components/Chip";
@@ -112,7 +113,7 @@ export function SrrDashboardView({
           {toCome.length} to check in · {signedOff} signed off
         </div>
         <a className="btn" href={srrReportUrl(eventId)} download style={{ whiteSpace: "nowrap" }}>
-          Download check-in report (CSV)
+          <Icon name="download" /> Download check-in report (CSV)
         </a>
       </div>
 
