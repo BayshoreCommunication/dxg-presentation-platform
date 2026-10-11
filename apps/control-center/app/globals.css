@@ -1276,3 +1276,15 @@ input,select,textarea{border-width:1px}
   .srr-row td{display:block;width:100%}
   .srr-row td.srr-actions{text-align:left;white-space:normal;padding-top:0}
 }
+
+/* Drop-downs draw their own chevron with room around it: the browser's arrow sat flush
+   against the right edge of every select (event switcher, filters, forms). */
+select:not([multiple]){
+  -webkit-appearance:none;appearance:none;padding-right:32px;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none' stroke='%236B7280' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4.667 6.333 8 9.667l3.333-3.334'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 10px center;background-size:14px 14px;
+}
+[data-theme="dark"] select:not([multiple]){
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none' stroke='%23A3A3A3' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4.667 6.333 8 9.667l3.333-3.334'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 10px center;background-size:14px 14px;
+}
