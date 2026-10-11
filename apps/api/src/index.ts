@@ -786,6 +786,8 @@ const TECHNICIAN_ALSO: RegExp[] = [
   /^\/api\/v1\/timezones$/,
   /^\/api\/v1\/clients$/,
 ];
+/** Asking for a slide preview is a POST, and part of looking at a file in review. */
+const TECHNICIAN_ALSO_WRITES: RegExp[] = [/^\/api\/v1\/file-versions\/[^/]+\/preview$/];
 
 function kindRefusal(kind: "support" | "technician", path: string, method: string): string | null {
   const onsiteOrReview = ONSITE_AND_REVIEW.some((pattern) => pattern.test(path));
@@ -795,6 +797,7 @@ function kindRefusal(kind: "support" | "technician", path: string, method: strin
   if (onsiteOrReview) return null;
   // A technician reads the event (GET) on the way to their screens; writes elsewhere are not theirs.
   if (method === "GET" && TECHNICIAN_ALSO.some((pattern) => pattern.test(path))) return null;
+  if (TECHNICIAN_ALSO_WRITES.some((pattern) => pattern.test(path))) return null;
   return "DXG Technician staff work the Speaker Ready Room and Manage presentations only. Ask a DXG Admin if you need more.";
 }
 

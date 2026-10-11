@@ -414,6 +414,14 @@ describe("three kinds of DXG account (D-151)", () => {
     assert.equal((await fetch(`${API}/events/${EVENT_ID}/review-queue`, { headers: { cookie: technician } })).status, 200);
     assert.equal((await fetch(`${API}/events/${EVENT_ID}/srr`, { headers: { cookie: technician } })).status, 200);
     assert.equal((await fetch(`${API}/events/${EVENT_ID}/summary`, { headers: { cookie: technician } })).status, 200);
+    // Looking at a file in review asks for its slide preview (a POST): that is their job too.
+    const queue = (await json(await fetch(`${API}/events/${EVENT_ID}/review-queue`, { headers: { cookie: technician } }))) as {
+      items: { file_version_id: string }[];
+    };
+    if (queue.items[0]) {
+      const preview = await fetch(`${API}/file-versions/${queue.items[0].file_version_id}/preview`, { method: "POST", headers: { cookie: technician } });
+      assert.notEqual(preview.status, 403, "a technician may ask for a preview");
+    }
     for (const path of [`/events/${EVENT_ID}/speakers`, `/events/${EVENT_ID}/comms`, `/events/${EVENT_ID}/files`, `/events/${EVENT_ID}/sync/fleet`]) {
       const refused = await fetch(`${API}${path}`, { headers: { cookie: technician } });
       assert.equal(refused.status, 403, path);
