@@ -212,7 +212,7 @@ export function EventAssignments({
                         <select
                           value={draft[event.id] ?? ""}
                           onChange={(e) => setWho(event.id, e.target.value)}
-                          style={{ fontSize: 12, padding: "3px 28px 3px 6px", backgroundPosition: "right 8px center" }}
+                          style={{ fontSize: 12, padding: "3px 28px 3px 6px", backgroundPosition: "right 6px center", backgroundSize: "16px 16px" }}
                         >
                           <option value="">assign someone…</option>
                           {initial
