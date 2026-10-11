@@ -175,6 +175,11 @@ const LINES: Record<string, string> = {
   // Download's arrow turned upward into the same tray: a file coming in (Local intake, D-152).
   intake: "M8 10.333V2.667M5 5.667l3-3 3 3M2.667 11.333v.334c0 1.1 0 1.65.341 1.991.342.342.892.342 1.992.342h6c1.1 0 1.65 0 1.992-.342.341-.341.341-.891.341-1.991v-.334",
   close: "M4.333 4.333l7.334 7.334M11.667 4.333l-7.334 7.334",
+  // The check-in's buttons (D-152): confirm as final, preview, check out, receipt.
+  check: "M3.333 8.333 6.333 11.333 12.667 4.667",
+  eye: "M1.333 8S3.667 3.333 8 3.333 14.667 8 14.667 8 12.333 12.667 8 12.667 1.333 8 1.333 8ZM8 10a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z",
+  checkout: "M6 14H3.333c-.736 0-1.333-.597-1.333-1.333V3.333C2 2.597 2.597 2 3.333 2H6M10.667 11.333 14 8l-3.333-3.333M14 8H6",
+  printer: "M4 6V1.333h8V6M4 12H2.667c-.737 0-1.334-.597-1.334-1.333V7.333C1.333 6.597 1.93 6 2.667 6h10.666c.737 0 1.334.597 1.334 1.333v3.334c0 .736-.597 1.333-1.334 1.333H12M4 9.333h8v5.334H4Z",
 };
 
 export type IconName = keyof typeof GLYPHS | keyof typeof LINES;

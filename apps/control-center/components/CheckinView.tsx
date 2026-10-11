@@ -133,6 +133,7 @@ export function CheckinView({
               })
             }
           >
+            <Icon name="checkout" />
             Yes, check out
           </button>
           <button className="btn" onClick={() => setConfirmCheckout(false)}>
@@ -146,6 +147,7 @@ export function CheckinView({
           title={checkoutBlocked ?? undefined}
           onClick={() => setConfirmCheckout(true)}
         >
+          <Icon name="checkout" />
           Check out
         </button>
       )}
@@ -163,6 +165,7 @@ export function CheckinView({
         })
       }
     >
+      <Icon name="check" />
       {label}
     </button>
   );
@@ -199,6 +202,7 @@ export function CheckinView({
   };
   const printReceipt = (
     <a className="btn" href={`/events/${eventId}/srr/${detail.checkin.id}/receipt`} target="_blank" rel="noopener">
+      <Icon name="printer" />
       Print receipt
     </a>
   );
@@ -213,16 +217,19 @@ export function CheckinView({
         })
       }
     >
+      <Icon name="send" />
       Email receipt
     </button>
   );
   const openUsb = (
     <button type="button" className="btn pri" onClick={() => setIntakeOpen(true)}>
+      <Icon name="intake" />
       Take the file (Local intake)
     </button>
   );
   const preview = (
     <a className="btn" href={`/events/${eventId}/talks/${detail.talk.slot_id}`} target="_blank" rel="noopener">
+      <Icon name="eye" />
       Preview slides
     </a>
   );
