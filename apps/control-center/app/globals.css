@@ -1268,3 +1268,11 @@ input,select,textarea{border-width:1px}
   .tpl-head{flex-wrap:wrap}
   .tpl-head select{min-width:0;flex:1 1 auto}
 }
+
+/* Speaker Ready Room rows (D-152): status, Upload and Check in sit to the right; on a phone
+   the actions move under the speaker instead of squeezing the name to one word a line. */
+.srr-actions{text-align:right;white-space:nowrap}
+@media (max-width:640px){
+  .srr-row td{display:block;width:100%}
+  .srr-row td.srr-actions{text-align:left;white-space:normal;padding-top:0}
+}

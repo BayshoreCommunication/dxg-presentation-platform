@@ -89,21 +89,31 @@ export function SrrDashboardView({
 
   return (
     <>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
-        <h1 className="htitle">Speaker Ready Room · {eventName}</h1>
-        {/* The check-in / checkout report (D-152): CSV, opens in Excel. */}
-        <a className="btn" href={srrReportUrl(eventId)} download>
+      <h1 className="htitle">Speaker Ready Room · {eventName}</h1>
+      {/* The day's line and the check-in / checkout report (D-152) share a row; on a narrow
+          screen the button drops below the line with a gap rather than touching it. */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: "8px 12px",
+          flexWrap: "wrap",
+          margin: "-8px 0 14px",
+        }}
+      >
+        <div className="note" style={{ margin: 0 }}>
+          {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: timezone })}
+          {" · "}
+          {data.stations.length === 0
+            ? "no desks set up yet"
+            : `${busyDesks} of ${data.stations.length} desk${data.stations.length === 1 ? "" : "s"} in use`}
+          {" · "}
+          {toCome.length} to check in · {signedOff} signed off
+        </div>
+        <a className="btn" href={srrReportUrl(eventId)} download style={{ whiteSpace: "nowrap" }}>
           Download check-in report (CSV)
         </a>
-      </div>
-      <div className="note" style={{ margin: "-8px 0 14px" }}>
-        {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: timezone })}
-        {" · "}
-        {data.stations.length === 0
-          ? "no desks set up yet"
-          : `${busyDesks} of ${data.stations.length} desk${data.stations.length === 1 ? "" : "s"} in use`}
-        {" · "}
-        {toCome.length} to check in · {signedOff} signed off
       </div>
 
       {error && <div className="err">{error}</div>}
@@ -197,7 +207,7 @@ export function SrrDashboardView({
                 <tbody>
                   {toCome.map((row) => {
                     return (
-                      <tr key={row.speaker_id}>
+                      <tr key={row.speaker_id} className="srr-row">
                         <td>
                           <b>{row.speaker}</b>
                           <span className="note">
@@ -208,7 +218,7 @@ export function SrrDashboardView({
                             {arrivalLine(row)}
                           </div>
                         </td>
-                        <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                        <td className="srr-actions">
                           <Chip status={row.status} label={row.status_label} />{" "}
                           {uploadButton(row)}{" "}
                           <CheckInButton
@@ -238,7 +248,7 @@ export function SrrDashboardView({
             <table>
               <tbody>
                 {left.map((row) => (
-                  <tr key={row.speaker_id}>
+                  <tr key={row.speaker_id} className="srr-row">
                     <td>
                       <b>{row.speaker}</b>
                       <span className="note">
@@ -246,7 +256,7 @@ export function SrrDashboardView({
                         · {row.signed_off_version ? `signed off v${row.signed_off_version}` : "left without signing off"}
                       </span>
                     </td>
-                    <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                    <td className="srr-actions">
                       {uploadButton(row)}{" "}
                       <CheckInButton
                         stations={data.stations}
@@ -275,7 +285,7 @@ export function SrrDashboardView({
               <tbody>
                 {/* R31 (D-113): which talk, where and when, the problem in words, and the report. */}
                 {data.warnings.map((warning, index) => (
-                  <tr key={`${warning.slot_id}-${index}`}>
+                  <tr key={`${warning.slot_id}-${index}`} className="srr-row">
                     <td>
                       <b>{warning.speaker ?? "No speaker"}</b> · {warning.title}
                       <br />
@@ -284,7 +294,7 @@ export function SrrDashboardView({
                         {wordsFor(CHECK, warning.check_code).label}
                       </span>
                     </td>
-                    <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                    <td className="srr-actions">
                       <SeverityChip severity={warning.severity} />{" "}
                       <a
                         className="btn"
@@ -465,7 +475,7 @@ function StationsCard({
           <table>
             <tbody>
               {stations.map((station) => (
-                <tr key={station.id}>
+                <tr key={station.id} className="srr-row">
                   <td>
                     {editing?.id === station.id ? (
                       <form
@@ -504,7 +514,7 @@ function StationsCard({
                       </>
                     )}
                   </td>
-                  <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                  <td className="srr-actions">
                     <Chip status={station.busy ? "submitted" : "canceled"} label={station.busy ? "In session" : "Free"} />{" "}
                     {editing?.id !== station.id &&
                       (confirming === station.id ? (
