@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Deploy a release that CI built and pushed to ECR (D-149). Run on the server:
-#   cd /opt/pmp/deploy/server && ./deploy.sh <commit>      # the 7-character commit on main
+#   cd /opt/pmp/deploy/server && ./deploy.sh <commit>      # the 7-character commit CI published from production
 # Pulls all four images first (nothing changes if one is missing) -> backup -> PMP_TAG in .env
 # -> migrate -> recreate services -> checks. Roll back with ./deploy.sh <previous commit>.
 set -euo pipefail
@@ -24,7 +24,14 @@ step "3/7 database backup"
 docker compose exec -T backup backup.sh now </dev/null
 
 step "4/7 PMP_TAG=$TAG in .env (was ${PREVIOUS:-unset})"
-if grep -q '^PMP_TAG=' .env; then sed -i "s/^PMP_TAG=.*/PMP_TAG=$TAG/" .env; else echo "PMP_TAG=$TAG" >> .env; fi
+# Rewrite .env in place, never `sed -i`: that needs a temporary file in this folder, which is root-owned
+# (extracted with sudo tar), so the second deploy failed here. `cat >` keeps .env's owner and mode (600).
+tmp=$(mktemp)
+grep -v '^PMP_TAG=' .env > "$tmp" || true
+echo "PMP_TAG=$TAG" >> "$tmp"
+cat "$tmp" > .env
+rm -f "$tmp"
+grep -qx "PMP_TAG=$TAG" .env || { echo "deploy: could not write PMP_TAG to .env"; exit 1; }
 
 step "5/7 migrations"
 docker compose --profile ops run --rm migrate </dev/null
