@@ -7,6 +7,7 @@ import type { PresentationInput, PresenterInput, SessionInput } from "@/lib/api"
 import { DateField, TimeField } from "@/components/DateTimeField";
 import { ConfirmInline } from "@/components/ConfirmInline";
 import { FloatingMenu, useFloatingMenu } from "@/components/FloatingMenu";
+import { Icon } from "@/components/Icon";
 
 /**
  * The forms behind the Agenda tab's edit controls (D-064). Each one saves a single
@@ -53,6 +54,14 @@ const formBox: React.CSSProperties = {
   background: "var(--white)",
 };
 
+/** The submit button's icon, from what it does: add, save, reinstate or cancel. */
+function actionIcon(label: string): string {
+  if (label.startsWith("Add")) return "add";
+  if (label.startsWith("Save")) return "save";
+  if (label.startsWith("Reinstate")) return "refresh";
+  return "close";
+}
+
 function Actions({
   busy,
   label,
@@ -65,6 +74,7 @@ function Actions({
   return (
     <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
       <button type="submit" className="btn pri" disabled={busy}>
+        <Icon name={actionIcon(label)} />
         {busy ? "Saving…" : label}
       </button>
       <button type="button" className="btn" disabled={busy} onClick={onCancel}>
@@ -427,6 +437,7 @@ export function ConfirmDelete({
       )}
       <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
         <button type="button" className="btn" disabled={busy} onClick={() => void run(onConfirm, onClose)}>
+          <Icon name="trash" />
           {busy ? "Deleting…" : "Delete"}
         </button>
         <button type="button" className="btn" disabled={busy} onClick={onClose}>
@@ -537,6 +548,7 @@ export function RemovePresenterConfirm({
       question={`Remove ${name} from "${title}"?`}
       detail="They can no longer upload files for this presentation. Files already uploaded are kept, and they stay on the Speakers list."
       confirmLabel="Remove presenter"
+      icon="trash"
       busyLabel="Removing…"
       danger
       onConfirm={async () => {

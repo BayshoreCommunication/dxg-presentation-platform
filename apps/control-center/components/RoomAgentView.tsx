@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import type { AgentView } from "@/lib/api";
 import { getAgentView, markLoaded, launchInRoom, ApiError } from "@/lib/api";
 import { ROOM_COPY, wordsFor } from "@pmp/format";
+import { Icon } from "@/components/Icon";
 
 /*
  * Every time on this screen is on the event's clock (D-080). It was pinned to New York,
@@ -113,7 +114,8 @@ export function RoomAgentView({ initial }: { initial: AgentView }) {
         })
       }
     >
-      ▶ Launch
+      <Icon name="play" />
+      Launch
     </button>
   );
   // D-125: was "Switch to vN" (acknowledge); now the same tick as Room sync's Mark loaded.
@@ -129,6 +131,7 @@ export function RoomAgentView({ initial }: { initial: AgentView }) {
         })
       }
     >
+      <Icon name="check" />
       Mark v{row.version_number} loaded
     </button>
   );
@@ -149,6 +152,7 @@ export function RoomAgentView({ initial }: { initial: AgentView }) {
             text: `${notLoaded} ${notLoaded === 1 ? "talk isn't" : "talks aren't"} loaded yet — load ${notLoaded === 1 ? "it" : "them"} on Room sync.`,
             action: (
               <a className="btn pri" style={{ padding: "5px 14px" }} href={`/events/${view.event.id}/sync`}>
+                <Icon name="eye" />
                 Open Room sync
               </a>
             ),

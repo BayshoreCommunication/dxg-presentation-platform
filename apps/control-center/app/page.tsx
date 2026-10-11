@@ -6,6 +6,7 @@ import { guard } from "@/lib/guard";
 import { eventStatusChip } from "@/lib/eventStatus";
 import { ArchiveEventButton } from "@/components/ArchiveEventButton";
 import { StartPracticeButton } from "@/components/StartPracticeButton";
+import { Icon } from "@/components/Icon";
 import { formatDateRange, plural } from "@pmp/format";
 import type { EventRow, Summary } from "@/lib/api";
 
@@ -79,7 +80,8 @@ export default async function PortfolioPage({
           {/* A technician neither creates events nor practises (D-151): the API would refuse both. */}
           {principal?.staff_kind !== "technician" && (
             <Link href="/events/new" className="btn pri">
-              + Create event
+              <Icon name="add" />
+              Create event
             </Link>
           )}
         </span>

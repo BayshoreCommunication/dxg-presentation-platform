@@ -716,6 +716,7 @@ function FileDrawer({
             </span>
           )}
           <Link className="btn" href={`/events/${eventId}/talks/${row.slot_id}`}>
+            <Icon name="eye" />
             Open talk
           </Link>
         </div>

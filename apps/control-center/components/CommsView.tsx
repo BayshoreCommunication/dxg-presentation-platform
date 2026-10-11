@@ -13,6 +13,7 @@ import { FloatingMenu, useFloatingMenu } from "@/components/FloatingMenu";
 import type { RichEditorHandle } from "@/components/RichEditor";
 import { Chip } from "@/components/Chip";
 import { WhyNot } from "@/components/WhyNot";
+import { Icon } from "@/components/Icon";
 import { EMAIL_STATUS, formatDateRange, formatDeadline, formatSessionTime, wordsFor } from "@pmp/format";
 
 
@@ -345,6 +346,7 @@ export function CommsView({
             </div>
             <div className="look-actions">
               <button className="btn pri" disabled={lookBusy || !lookDirty}>
+                <Icon name="save" />
                 {lookBusy ? "Saving…" : "Save"}
               </button>
               {lookDirty && (
@@ -387,6 +389,7 @@ export function CommsView({
                   })
                 }
               >
+                <Icon name="edit" />
                 Edit template
               </button>
             )}
@@ -454,6 +457,7 @@ export function CommsView({
                     className="btn pri"
                     disabled={saving || !editing.subject.trim() || !editing.body.trim() || editing.body.length > MESSAGE_MAX}
                   >
+                    <Icon name="save" />
                     {saving ? "Saving…" : "Save template"}
                   </button>
                   <button
@@ -462,6 +466,7 @@ export function CommsView({
                     disabled={saving || !editing.subject.trim() || !editing.body.trim()}
                     onClick={() => setNewName(newName === null ? "" : null)}
                   >
+                    <Icon name="save" />
                     Save as new template…
                   </button>
                   <button
@@ -498,6 +503,7 @@ export function CommsView({
                     />
                   </div>
                   <button type="button" className="btn pri" disabled={saving || !newName.trim()} onClick={() => void saveAsNew()}>
+                    <Icon name="save" />
                     Save new template
                   </button>
                 </div>
@@ -617,6 +623,7 @@ export function CommsView({
                 void send();
               }}
             >
+              <Icon name="send" />
               Send now
             </button>
             <button className="btn" onClick={() => setConfirmingSend(false)}>
@@ -625,6 +632,7 @@ export function CommsView({
           </span>
         ) : (
           <button className="btn pri" disabled={busy || sendable.length === 0} onClick={() => setConfirmingSend(true)}>
+            <Icon name="send" />
             Send to {sendable.length} speaker{sendable.length === 1 ? "" : "s"}
           </button>
         )}
@@ -828,7 +836,8 @@ function InsertMenu({ fields, onPick }: { fields: string[]; onPick: (field: stri
         onMouseDown={(event) => event.preventDefault()}
         onClick={() => setOpen((value) => !value)}
       >
-        + Insert detail ▾
+        <Icon name="add" />
+        Insert detail ▾
       </button>
       <FloatingMenu open={open} trigger={trigger} menu={menu} width={260}>
         {groups.map((group) => (
@@ -891,6 +900,7 @@ function TestSend({
           }}
         />
         <button type="button" className="btn" disabled={busy || practice || !to.trim()} onClick={onSend}>
+          <Icon name="send" />
           {busy ? "Sending…" : "Send test"}
         </button>
       </div>

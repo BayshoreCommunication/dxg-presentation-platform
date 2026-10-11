@@ -18,6 +18,7 @@ import { Chip } from "@/components/Chip";
 import { WhyNot } from "@/components/WhyNot";
 import { ConfirmInline } from "@/components/ConfirmInline";
 import { ACCOUNT_KIND, plural, SECURITY } from "@pmp/format";
+import { Icon } from "@/components/Icon";
 
 const when = (iso: string | null) =>
   iso
@@ -230,6 +231,7 @@ export function StaffAccounts({ initial, me }: { initial: StaffRow[]; me: string
               })
             }
           >
+            <Icon name="add" />
             Create account
           </button>
           <WhyNot reason={!email ? "Enter their work email to create the account." : null} />
@@ -320,6 +322,7 @@ export function StaffAccounts({ initial, me }: { initial: StaffRow[]; me: string
                             title="Emails them a new temporary password and ends their open sessions"
                             onClick={() => ask(user.id, "password")}
                           >
+                            <Icon name="key" />
                             reset password
                           </button>
                           <button
@@ -329,6 +332,7 @@ export function StaffAccounts({ initial, me }: { initial: StaffRow[]; me: string
                             title="Only after verifying who is asking — this turns a lost phone back into an open door"
                             onClick={() => ask(user.id, "mfa")}
                           >
+                            <Icon name="refresh" />
                             reset sign-in app
                           </button>
                           {locked && (
@@ -338,6 +342,7 @@ export function StaffAccounts({ initial, me }: { initial: StaffRow[]; me: string
                               disabled={busy}
                               onClick={() => void run(async () => void (await unlockStaff(user.id)))}
                             >
+                              <Icon name="unlock" />
                               unlock
                             </button>
                           )}
@@ -351,6 +356,7 @@ export function StaffAccounts({ initial, me }: { initial: StaffRow[]; me: string
                               ask(user.id, "type");
                             }}
                           >
+                            <Icon name="edit" />
                             change access level
                           </button>
                           <button
@@ -364,6 +370,7 @@ export function StaffAccounts({ initial, me }: { initial: StaffRow[]; me: string
                                 : void run(async () => void (await setStaffActive(user.id, true)))
                             }
                           >
+                            <Icon name={user.is_active ? "pause" : "play"} />
                             {user.is_active ? "deactivate" : "reactivate"}
                           </button>
                           <button
@@ -373,6 +380,7 @@ export function StaffAccounts({ initial, me }: { initial: StaffRow[]; me: string
                             title="Removes the account and its event access; the record of what they did is kept"
                             onClick={() => ask(user.id, "delete")}
                           >
+                            <Icon name="trash" />
                             delete
                           </button>
                         </div>
@@ -398,6 +406,7 @@ export function StaffAccounts({ initial, me }: { initial: StaffRow[]; me: string
                               question={`Email ${user.display_name} a new temporary password?`}
                               detail="Their open sessions end at once, and they must choose a new password when they next sign in. Their sign-in app stays as it is."
                               confirmLabel="Send new password"
+                              icon="key"
                               busyLabel="Sending…"
                               onConfirm={confirmed(async () => {
                                 const result = await resetStaffPassword(user.id);
@@ -428,6 +437,7 @@ export function StaffAccounts({ initial, me }: { initial: StaffRow[]; me: string
                                 question={`Reset ${user.display_name}'s sign-in app?`}
                                 detail="Only do this after checking it really is them — until they set up a new one, their password alone gets them in. Their open sessions end and their backup codes stop working."
                                 confirmLabel="Reset sign-in app"
+                                icon="refresh"
                                 busyLabel="Resetting…"
                                 danger
                                 onConfirm={confirmed(async () => {
@@ -471,6 +481,7 @@ export function StaffAccounts({ initial, me }: { initial: StaffRow[]; me: string
                                     : `They keep the events they are assigned to, as ${kindLabel(newType)}. The change applies at their next sign-in.`
                                 }
                                 confirmLabel={`Make ${kindLabel(newType)}`}
+                                icon="edit"
                                 busyLabel="Saving…"
                                 danger={user.account_type === "root_admin"}
                                 onConfirm={confirmed(async () => {
@@ -485,6 +496,7 @@ export function StaffAccounts({ initial, me }: { initial: StaffRow[]; me: string
                               question={`Deactivate ${user.display_name}?`}
                               detail="They are signed out and can't sign in until reactivated; their history and event assignments are kept."
                               confirmLabel="Deactivate"
+                              icon="pause"
                               busyLabel="Deactivating…"
                               danger
                               onConfirm={confirmed(async () => void (await setStaffActive(user.id, false)))}
@@ -496,6 +508,7 @@ export function StaffAccounts({ initial, me }: { initial: StaffRow[]; me: string
                               question={`Delete ${user.display_name} (${user.email})?`}
                               detail="They are signed out and lose access to every event. This can't be undone, but the record of what they did is kept and the email address can be invited again later."
                               confirmLabel="Delete account"
+                              icon="trash"
                               busyLabel="Deleting…"
                               danger
                               onConfirm={confirmed(async () => {

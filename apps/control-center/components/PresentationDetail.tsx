@@ -11,6 +11,7 @@ import { ConfirmationStrip } from "@/components/ConfirmationStrip";
 import { SlideViewer } from "@/components/SlideViewer";
 import { WhyNot } from "@/components/WhyNot";
 import { COMMENT_LANE, formatBytes, SEVERITY, VERSION_STATE, wordsFor } from "@pmp/format";
+import { Icon } from "@/components/Icon";
 
 /** On the event's clock (D-080) — it was pinned to New York for every event. */
 const when = (iso: string, timeZone: string) =>
@@ -226,6 +227,7 @@ export function PresentationDetailView({
               aria-expanded={previewOpen}
               onClick={() => void preview()}
             >
+              <Icon name={previewOpen ? "close" : "eye"} />
               {previewOpen ? "Hide slides" : "Preview slides"}
             </button>
             {latest && (
@@ -233,16 +235,19 @@ export function PresentationDetailView({
                 className="btn"
                 href={`/events/${eventId}/talks/${initial.talk.slot_id}/inspection?v=${latest.file_version_id}`}
               >
+                <Icon name="eye" />
                 Open inspection report
               </Link>
             )}
             <Link className="btn" href={`/events/${eventId}/review`}>
+              <Icon name="eye" />
               Review workspace
             </Link>
             {/* R19 (D-113): local intake lives on the speaker's check-in and, since D-152, beside
                 the speaker in the Speaker Ready Room — go straight to the check-in when there is one. */}
             {initial.srr?.checkin_id ? (
               <Link className="btn" href={`/events/${eventId}/srr/${initial.srr.checkin_id}`}>
+                <Icon name="intake" />
                 Replace file (Local intake)
               </Link>
             ) : (
@@ -359,6 +364,7 @@ export function PresentationDetailView({
                               disabled={busy}
                               onClick={() => void retryPdf(row.file_version_id, row.version_number)}
                             >
+                              <Icon name="refresh" />
                               Try the PDF again
                             </button>
                           </>
@@ -375,6 +381,7 @@ export function PresentationDetailView({
                         disabled={busy}
                         onClick={() => setRollTarget({ id: row.file_version_id, n: row.version_number, reason: "" })}
                       >
+                        <Icon name="undo" />
                         Roll back to this
                       </button>
                     )}
@@ -409,6 +416,7 @@ export function PresentationDetailView({
               </div>
               <div style={{ display: "flex", gap: 8 }}>
                 <button className="btn warnb" disabled={busy || !rollTarget.reason.trim()}>
+                  <Icon name="undo" />
                   Go back to v{rollTarget.n}
                 </button>
                 <button type="button" className="btn" onClick={() => setRollTarget(null)}>

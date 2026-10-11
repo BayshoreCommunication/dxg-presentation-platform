@@ -194,6 +194,7 @@ export function SpeakersView({
                 setAskRemind(true);
               }}
             >
+              <Icon name="send" />
               Remind speakers missing files ({missing.length})
             </button>
             <button
@@ -201,7 +202,8 @@ export function SpeakersView({
               disabled={busy}
               onClick={() => setAdding(true)}
             >
-              + Add speaker
+              <Icon name="add" />
+              Add speaker
             </button>
           </span>
           <WhyNot
@@ -217,6 +219,7 @@ export function SpeakersView({
           question={`Email a reminder to ${missing.length} speaker${missing.length === 1 ? "" : "s"} missing files now?`}
           detail="Each one gets the reminder email with their sign-in details. Anyone emailed about this event in the last day, or without a working address, is skipped."
           confirmLabel="Send reminders"
+          icon="send"
           busyLabel="Sending…"
           onConfirm={async () => {
             try {
@@ -304,6 +307,7 @@ export function SpeakersView({
                         </span>
                       ) : (
                         <button className="btn" disabled={busy} onClick={() => setMergeAsk(`${pair.a_id}-${pair.b_id}`)}>
+                          <Icon name="merge" />
                           Merge…
                         </button>
                       )}
@@ -454,6 +458,7 @@ export function SpeakersView({
                             question={`Email ${row.full_name} their sign-in?`}
                             detail={`It goes to ${row.email ?? "their address"}: their talks, the sign-in link and a ${row.account === "invited" ? "new " : ""}temporary password.`}
                             confirmLabel={row.account === "invited" ? "Resend sign-in" : "Send sign-in"}
+                            icon="send"
                             busyLabel="Sending…"
                             onConfirm={() => sendSignIn(row)}
                             onClose={() => setAskSignIn(null)}
@@ -743,6 +748,7 @@ function AddSpeakerDialog({
               className="btn pri"
               disabled={saving || !slotId}
             >
+              <Icon name="add" />
               {saving ? "Adding…" : "Add speaker"}
             </button>
           </div>
@@ -883,6 +889,7 @@ function RemoveSpeakerDialog({
               disabled={busy}
               onClick={() => void onConfirm()}
             >
+              <Icon name="trash" />
               {busy ? "Removing…" : "Remove speaker"}
             </button>
           </div>

@@ -6,7 +6,7 @@ import { guideForPath } from "@/components/HelpView";
 import { usePathname } from "next/navigation";
 import { Sidebar } from "@/components/Sidebar";
 import { SignOutButton } from "@/components/SignOutButton";
-import { Glyph } from "@/components/Icon";
+import { Glyph, Icon } from "@/components/Icon";
 import { applyTheme, readThemeChoice, saveThemeChoice } from "@/lib/theme";
 import type { ThemeChoice } from "@/lib/theme";
 import type { Principal, EventRow } from "@/lib/api";
@@ -55,6 +55,7 @@ export function Shell({
                 </Link>
               )}
               <Link href="/account/password" className="btn">
+                <Icon name="key" />
                 Change password
               </Link>
               <SignOutButton />

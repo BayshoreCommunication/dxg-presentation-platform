@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 import { mediaUrl, versionMedia, type SlideMedia } from "@/lib/api";
+import { Icon } from "@/components/Icon";
 
 /**
  * A slide deck laid out the way presenters know it (D-075): numbered thumbnails down
@@ -187,6 +188,7 @@ export function SlideViewer({ url, title, versionId }: { url: string; title: str
           aria-pressed={expanded}
           onClick={() => (expanded ? leave() : enter())}
         >
+          <Icon name={expanded ? "shrink" : "expand"} />
           {expanded ? "Exit full screen" : "Full screen"}
         </button>
       </div>

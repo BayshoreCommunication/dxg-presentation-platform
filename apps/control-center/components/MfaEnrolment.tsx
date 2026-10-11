@@ -7,6 +7,7 @@ import { startMfaEnrolment, confirmMfaEnrolment, ApiError } from "@/lib/api";
 import type { Enrolment } from "@/lib/api";
 import { SECURITY } from "@pmp/format";
 import { QrCode } from "./QrCode";
+import { Icon } from "@/components/Icon";
 
 /** A24: backup codes as a plain-text file, so they can be kept somewhere other than this screen. */
 function downloadCodes(codes: string[], account: string | undefined) {
@@ -101,12 +102,15 @@ export function MfaEnrolment() {
                 void copyText(codes.join("\n")).then(setCopied)
               }
             >
+              <Icon name="copy" />
               {copied ? "Copied" : "Copy"}
             </button>
             <button type="button" className="btn" onClick={() => downloadCodes(codes, enrolment?.account)}>
+              <Icon name="download" />
               Download
             </button>
             <button type="button" className="btn" onClick={() => window.print()}>
+              <Icon name="printer" />
               Print
             </button>
           </div>
@@ -122,6 +126,7 @@ export function MfaEnrolment() {
               router.refresh();
             }}
           >
+            <Icon name="check" />
             I have saved them — continue
           </button>
         </div>
@@ -167,6 +172,7 @@ export function MfaEnrolment() {
             disabled={busy || errorCode === "mfa.already_enrolled"}
             onClick={() => void begin()}
           >
+            <Icon name="play" />
             {busy ? "Preparing…" : "Start setup"}
           </button>
         ) : (
@@ -225,6 +231,7 @@ export function MfaEnrolment() {
             </div>
 
             <button className="btn pri" style={{ width: "100%", padding: 9 }} disabled={busy} type="submit">
+              <Icon name="check" />
               {busy ? "Checking…" : "Turn on sign-in app"}
             </button>
           </form>

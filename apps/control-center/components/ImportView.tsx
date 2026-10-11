@@ -25,6 +25,7 @@ import { formatBytes, IMPORT_ROW, timeZoneLabel, wordsFor } from "@pmp/format";
 import { Chip } from "@/components/Chip";
 import { DateField, TimeField, stepAfter, stepBefore } from "@/components/DateTimeField";
 import { WhyNot } from "@/components/WhyNot";
+import { Icon } from "@/components/Icon";
 
 /**
  * The headings DXG's own agenda sheet uses (D-029), so a field in this dialog and a
@@ -560,6 +561,7 @@ function RowEditor({
                         setDraft({ ...draft, [problem.suggestion!.field]: problem.suggestion!.value })
                       }
                     >
+                      <Icon name="check" />
                       Use &ldquo;{problem.suggestion.value}&rdquo;
                     </button>
                   )}
@@ -601,6 +603,7 @@ function RowEditor({
                         setPresenterCount(Math.max(1, presenterCount - 1));
                       }}
                     >
+                      <Icon name="trash" />
                       Remove
                     </button>
                   )}
@@ -615,7 +618,8 @@ function RowEditor({
                 style={{ marginTop: 12 }}
                 onClick={() => setPresenterCount(presenterCount + 1)}
               >
-                + Add another presenter
+                <Icon name="add" />
+                Add another presenter
               </button>
             )}
           </Section>
@@ -636,6 +640,7 @@ function RowEditor({
             <div style={{ display: "flex", gap: 8, marginTop: 14, alignItems: "center", flexWrap: "wrap" }}>
               <b>Discard what you have typed?</b>
               <button className="btn" disabled={busy} onClick={onCancel}>
+                <Icon name="trash" />
                 Discard
               </button>
               <button className="btn pri" disabled={busy} onClick={() => setConfirmingDiscard(false)}>
@@ -651,6 +656,7 @@ function RowEditor({
                   title={saveBlocked ?? undefined}
                   onClick={() => onSave(changed)}
                 >
+                  <Icon name="save" />
                   Save row
                 </button>
                 <button className="btn" disabled={busy} onClick={leave}>
@@ -979,6 +985,7 @@ export function ImportView({
                       disabled={busy}
                       onClick={() => inputRef.current?.click()}
                     >
+                      <Icon name="intake" />
                       choose a file
                     </button>
                   </div>
@@ -1009,6 +1016,7 @@ export function ImportView({
                   })
                 }
               >
+                <Icon name="edit" />
                 Enter it manually
               </button>{" "}
               or{" "}
@@ -1018,7 +1026,8 @@ export function ImportView({
                 disabled={busy}
                 onClick={() => void run(async () => downloadAgendaTemplate(eventId))}
               >
-                ↓ Download the template
+                <Icon name="download" />
+                Download the template
               </button>
             </div>
           </div>
@@ -1260,6 +1269,7 @@ export function ImportView({
                               }
                               onClick={() => setEditing(row.row)}
                             >
+                              <Icon name="edit" />
                               Edit
                             </button>
                             {/*
@@ -1289,6 +1299,7 @@ export function ImportView({
                                     );
                                 }}
                               >
+                                <Icon name="trash" />
                                 Remove
                               </button>
                             )}
@@ -1311,7 +1322,8 @@ export function ImportView({
                 >
                   {preview.manual && (
                     <button className="btn" disabled={busy} onClick={() => setAdding(true)}>
-                      + Add session
+                      <Icon name="add" />
+                      Add session
                     </button>
                   )}
                   {/*
@@ -1331,6 +1343,7 @@ export function ImportView({
                           void run(async () => apply(await restoreImportRows(preview.upload_id)))
                         }
                       >
+                        <Icon name="refresh" />
                         Put {preview.excluded.length === 1 ? "it" : "them"} back
                       </button>
                     </span>
@@ -1372,6 +1385,7 @@ export function ImportView({
                     </button>
                   )}
                   <button className="btn" onClick={() => setPreview(null)}>
+                    <Icon name="add" />
                     Add more sessions
                   </button>
                 </div>
@@ -1396,6 +1410,7 @@ export function ImportView({
                   })
                 }
               >
+                <Icon name="intake" />
                 Import {rows.length} session{rows.length === 1 ? "" : "s"}
               </button>
               {blockingRows.length > 0 && (
@@ -1491,6 +1506,7 @@ export function ImportView({
                         })
                       }
                     >
+                      <Icon name="trash" />
                       Delete
                     </button>
                     <button className="btn pri" disabled={busy} onClick={() => setDeleting(null)}>

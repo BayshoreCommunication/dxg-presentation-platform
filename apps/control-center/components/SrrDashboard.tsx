@@ -58,6 +58,7 @@ export function SrrDashboardView({
         if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
       }}
     >
+      <Icon name="intake" />
       Upload
     </button>
   );
@@ -126,6 +127,7 @@ export function SrrDashboardView({
               Local intake · {intakeFor.speaker} — {intakeFor.title}
             </h3>
             <button type="button" className="btn" onClick={() => setIntakeFor(null)}>
+              <Icon name="close" />
               Close
             </button>
           </div>
@@ -301,6 +303,7 @@ export function SrrDashboardView({
                         className="btn"
                         href={`/events/${eventId}/talks/${warning.slot_id}/inspection?v=${warning.file_version_id}`}
                       >
+                        <Icon name="eye" />
                         Open report
                       </a>
                     </td>
@@ -367,7 +370,7 @@ function CheckInButton({
   stations,
   disabled,
   onPick,
-  label = "Check in →",
+  label = "Check in",
 }: {
   stations: SrrStation[];
   disabled: boolean;
@@ -379,7 +382,8 @@ function CheckInButton({
   if (stations.length === 0) {
     return (
       <button className="btn pri" disabled title="Add a desk under Desks first">
-        Check in →
+        <Icon name="login" />
+        Check in
       </button>
     );
   }
@@ -394,6 +398,7 @@ function CheckInButton({
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
       >
+        <Icon name="login" />
         {label}
       </button>
       <FloatingMenu open={open} trigger={trigger} menu={menu} width={220}>
@@ -496,6 +501,7 @@ function StationsCard({
                           onChange={(event) => setEditing({ id: station.id, name: event.target.value })}
                         />
                         <button className="btn pri" disabled={working || !editing.name.trim()}>
+                          <Icon name="save" />
                           Save
                         </button>
                         <button type="button" className="btn" onClick={() => setEditing(null)}>
@@ -527,6 +533,7 @@ function StationsCard({
                               void run(() => retireStation(eventId, station.id)).then(() => setConfirming(null))
                             }
                           >
+                            <Icon name="trash" />
                             Remove {station.name}
                           </button>{" "}
                           <button className="btn" onClick={() => setConfirming(null)}>
@@ -536,6 +543,7 @@ function StationsCard({
                       ) : (
                         <>
                           <button className="btn" disabled={working} onClick={() => setEditing({ id: station.id, name: station.name })}>
+                            <Icon name="edit" />
                             Rename
                           </button>{" "}
                           <button
@@ -544,6 +552,7 @@ function StationsCard({
                             title={station.busy ? "A speaker is checked in here" : undefined}
                             onClick={() => setConfirming(station.id)}
                           >
+                            <Icon name="trash" />
                             Remove
                           </button>
                         </>
@@ -572,6 +581,7 @@ function StationsCard({
             style={{ flex: 1 }}
           />
           <button className="btn pri" disabled={working || !draft.trim()}>
+            <Icon name="add" />
             Add desk
           </button>
         </form>

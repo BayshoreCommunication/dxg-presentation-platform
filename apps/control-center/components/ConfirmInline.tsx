@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Icon } from "@/components/Icon";
 
 /**
  * "Are you sure?" asked on the page (D-113, UX_REVIEW batch 5). `window.confirm` and
@@ -28,6 +29,7 @@ export function ConfirmInline({
   busyLabel = "Working…",
   cancelLabel = "Cancel",
   danger = false,
+  icon,
   onConfirm,
   onClose,
 }: {
@@ -37,6 +39,8 @@ export function ConfirmInline({
   busyLabel?: string;
   cancelLabel?: string;
   danger?: boolean;
+  /** The confirm button's icon (`Icon` name), matching the button that asked. */
+  icon?: string;
   onConfirm: () => Promise<unknown>;
   onClose: () => void;
 }) {
@@ -67,6 +71,7 @@ export function ConfirmInline({
       )}
       <div className="confirm-inline-actions">
         <button type="button" className={danger ? "btn danger" : "btn pri"} disabled={busy} onClick={() => void go()} autoFocus>
+          {icon && <Icon name={icon} />}
           {busy ? busyLabel : confirmLabel}
         </button>
         <button type="button" className="btn" disabled={busy} onClick={onClose}>

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { PasswordField } from "@/components/PasswordField";
 import Link from "next/link";
 import { changePassword, getSession, logout, ApiError } from "@/lib/api";
+import { Icon } from "@/components/Icon";
 
 /**
  * Changing a password ends every other session, so it returns you to sign-in.
@@ -83,6 +84,7 @@ export function ChangePasswordForm({ firstUse }: { firstUse: boolean }) {
         />
 
         <button className="btn pri" style={{ width: "100%", padding: 9 }} disabled={busy} type="submit">
+          <Icon name="key" />
           {busy ? "Saving…" : "Set password"}
         </button>
 

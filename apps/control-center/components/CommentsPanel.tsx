@@ -4,6 +4,7 @@ import { COMMENT_LANE } from "@pmp/format";
 import { useCallback, useEffect, useState } from "react";
 import type { CommentRow } from "@/lib/api";
 import { addComment, getComments, ApiError } from "@/lib/api";
+import { Icon } from "@/components/Icon";
 
 // Lane names and audiences from the shared vocabulary (D-110); only the tones are local.
 const TONE: Record<string, string> = { internal: "int", speaker_visible: "spk", client_visible: "cli" };
@@ -100,6 +101,7 @@ export function CommentsPanel({ versionId, versionNumber }: { versionId: string;
         </b>
         {!writing && (
           <button type="button" className="btn" style={{ padding: "3px 10px" }} onClick={() => setWriting(true)}>
+            <Icon name="comment" />
             Add a note
           </button>
         )}
@@ -162,6 +164,7 @@ export function CommentsPanel({ versionId, versionNumber }: { versionId: string;
         )}
         <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 6 }}>
           <button type="button" className="btn pri" disabled={busy || !body.trim()} onClick={() => void submit()}>
+            <Icon name={lane === "internal" ? "comment" : "send"} />
             {busy ? "Adding…" : lane === "internal" ? "Add internal note" : "Send to speaker"}
           </button>
           <button

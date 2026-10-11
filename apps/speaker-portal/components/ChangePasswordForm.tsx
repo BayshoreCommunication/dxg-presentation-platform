@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { changePassword, logout, PortalError } from "@/lib/api";
 import { PasswordField } from "@/components/PasswordField";
+import { Icon } from "@/components/Icon";
 
 /**
  * Choosing a password. A first-use change (the temporary one from the invitation) cannot be
@@ -64,6 +65,7 @@ export function ChangePasswordForm({ firstUse }: { firstUse: boolean }) {
         <PasswordField id="confirm" label="Confirm new password" value={confirm} onChange={setConfirm} autoComplete="new-password" matches={next} />
 
         <button className="btn pri" style={{ width: "100%", padding: 9 }} disabled={busy} type="submit">
+          <Icon name="key" />
           {busy ? "Saving…" : "Set password"}
         </button>
 

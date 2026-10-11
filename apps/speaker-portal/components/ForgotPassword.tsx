@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { requestPasswordReset, PortalError } from "@/lib/api";
+import { Icon } from "@/components/Icon";
 
 /** The confirmation is the same whether or not the address has an account. */
 export function ForgotPassword() {
@@ -56,6 +57,7 @@ export function ForgotPassword() {
               <input id="email" type="email" autoComplete="username" autoFocus required value={email} onChange={(event) => setEmail(event.target.value)} />
             </div>
             <button className="btn pri" style={{ width: "100%", padding: 9 }} disabled={busy} type="submit">
+              <Icon name="key" />
               {busy ? "Sending…" : "Email me a reset link"}
             </button>
             <div style={{ textAlign: "center", fontSize: 12.5, marginTop: 12 }}>

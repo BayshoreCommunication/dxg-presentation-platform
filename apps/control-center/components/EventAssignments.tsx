@@ -8,6 +8,7 @@ import { assignStaffToEvent, ApiError } from "@/lib/api";
 import { Chip } from "@/components/Chip";
 import { ConfirmInline } from "@/components/ConfirmInline";
 import { ACCOUNT_KIND, formatDateRange, ROLE, wordsFor } from "@pmp/format";
+import { Icon } from "@/components/Icon";
 
 /**
  * Who is on each event, inverted from the per-account list.
@@ -180,6 +181,7 @@ export function EventAssignments({
                           question={`Take ${removing.person.display_name} off ${event.name}?`}
                           detail="They will no longer see this event. You can assign them again at any time."
                           confirmLabel="Remove"
+                          icon="trash"
                           busyLabel="Removing…"
                           danger
                           onConfirm={async () => {
@@ -203,6 +205,7 @@ export function EventAssignments({
                             style={{ padding: "2px 8px", fontSize: 12 }}
                             onClick={() => setWho(event.id, newcomer.id)}
                           >
+                            <Icon name="add" />
                             assign {newcomer.display_name} here
                           </button>
                         )}
@@ -240,6 +243,7 @@ export function EventAssignments({
                               })
                             }
                           >
+                            <Icon name="add" />
                             assign
                           </button>
                         )}

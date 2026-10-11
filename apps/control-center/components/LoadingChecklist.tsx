@@ -8,6 +8,7 @@ import { ApiError, fileDownloadUrl, markLoaded, unmarkLoaded } from "@/lib/api";
 import { ConfirmInline } from "@/components/ConfirmInline";
 import { WhyNot } from "@/components/WhyNot";
 import { ROOM_LABEL } from "@/lib/roomWords";
+import { Icon } from "@/components/Icon";
 
 /** Times on the event's clock (D-080). */
 const time = (iso: string, timeZone: string) =>
@@ -116,6 +117,7 @@ export function LoadingChecklist({
                               question={`Mark v${copy.version_number} as not loaded?`}
                               detail="Use this only if the tick was a mistake. The talk shows as not loaded until someone ticks it again."
                               confirmLabel="Mark not loaded"
+                              icon="undo"
                               busyLabel="Saving…"
                               onConfirm={async () => {
                                 await unmarkLoaded(copy.room_file_id!, copy.lock_version!);
@@ -129,6 +131,7 @@ export function LoadingChecklist({
                           {copy && !canceled && (
                             <>
                               <a className="btn" style={{ padding: "4px 10px" }} href={fileDownloadUrl(copy.file_version_id)}>
+                                <Icon name="download" />
                                 Download v{copy.version_number}
                               </a>{" "}
                               {canLoad && copy.room_file_id && copy.lock_version !== null && (
@@ -140,6 +143,7 @@ export function LoadingChecklist({
                                     disabled={busy !== null || undoing === talk.slot_id}
                                     onClick={() => setUndoing(talk.slot_id)}
                                   >
+                                    <Icon name="undo" />
                                     Undo
                                   </button>
                                 ) : (
@@ -150,6 +154,7 @@ export function LoadingChecklist({
                                     disabled={busy !== null}
                                     onClick={() => void tick(talk)}
                                   >
+                                    <Icon name="check" />
                                     {busy === talk.slot_id ? "Saving…" : "Mark loaded"}
                                   </button>
                                 )

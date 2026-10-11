@@ -5,6 +5,7 @@ import type { UsbResult } from "@/lib/api";
 import { beginSrrUpload, putSrrPart, ApiError } from "@/lib/api";
 import { Chip } from "@/components/Chip";
 import { WhyNot } from "@/components/WhyNot";
+import { Icon } from "@/components/Icon";
 
 /**
  * Local intake (was "USB intake", D-152): the three steps for a file the speaker brings —
@@ -113,6 +114,7 @@ export function LocalIntake({
               title={blocked ?? undefined}
               onClick={() => void scanAndImport()}
             >
+              <Icon name="intake" />
               {busy ? "Checking…" : "Check & import file"}
             </button>
             <WhyNot reason={blocked} />

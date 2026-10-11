@@ -11,6 +11,7 @@ import {
 } from "@/lib/api";
 import type { CompleteResult, UploadSession } from "@/lib/api";
 import { formatBytes } from "@pmp/format";
+import { Icon } from "@/components/Icon";
 
 type Phase = "idle" | "selected" | "hashing" | "uploading" | "paused" | "completing" | "done" | "failed";
 
@@ -223,9 +224,11 @@ export function UploadPanel({
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <button className="btn pri" onClick={() => void start(file)}>
+            <Icon name="intake" />
             Submit presentation
           </button>
           <button className="btn" onClick={() => inputRef.current?.click()}>
+            <Icon name="intake" />
             Choose a different file
           </button>
           <button className="btn" onClick={clearSelection}>
@@ -266,6 +269,7 @@ export function UploadPanel({
           </div>
           {fileInput}
           <button className="btn pri" onClick={() => inputRef.current?.click()}>
+            <Icon name="intake" />
             Choose file…
           </button>
         </div>
@@ -304,11 +308,13 @@ export function UploadPanel({
               pausedRef.current = true;
             }}
           >
+            <Icon name="pause" />
             Pause
           </button>
         )}
         {phase === "paused" && (
           <button className="btn pri" onClick={() => void resume()}>
+            <Icon name="play" />
             Resume upload
           </button>
         )}

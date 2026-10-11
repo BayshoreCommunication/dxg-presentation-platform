@@ -5,6 +5,7 @@ import { Kpi } from "@/components/Kpi";
 import { archiveDownloadUrl } from "@/lib/api";
 import { DownloadLog } from "@/components/DownloadLog";
 import { WhyNot } from "@/components/WhyNot";
+import { Icon } from "@/components/Icon";
 import { ARCHIVE_STATE, formatDate, plural, wordsFor } from "@pmp/format";
 
 const pct = (part: number, total: number) => (total === 0 ? 0 : Math.round((part / total) * 100));
@@ -173,10 +174,12 @@ export function ClientPortalView({ data }: { data: ClientView }) {
             {delivered ? (
               <>
                 <a className="btn pri" href={archiveDownloadUrl(pkg.id, "pptx")}>
+                  <Icon name="download" />
                   Download PowerPoint package
                 </a>
                 {hasPdf && (
                   <a className="btn pri" href={archiveDownloadUrl(pkg.id, "pdf")}>
+                    <Icon name="download" />
                     Download PDF package
                   </a>
                 )}
@@ -184,10 +187,12 @@ export function ClientPortalView({ data }: { data: ClientView }) {
             ) : (
               <>
                 <button className="btn pri" disabled>
+                  <Icon name="download" />
                   Download PowerPoint package
                 </button>
                 {hasPdf && (
                   <button className="btn pri" disabled>
+                    <Icon name="download" />
                     Download PDF package
                   </button>
                 )}

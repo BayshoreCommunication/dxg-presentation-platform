@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { copyText } from "@/lib/copy";
+import { Icon } from "@/components/Icon";
 
 /**
  * When the browser won't let the page copy (D-117): the text stays on screen, selected,
@@ -46,14 +47,17 @@ export function CopyFallback({
           className="btn pri"
           onClick={() => void copyText(text).then((copied) => (copied ? onCopied() : setFailed(true)))}
         >
+          <Icon name="copy" />
           Copy
         </button>
         {isLink && (
           <a className="btn" href={text} target="_blank" rel="noreferrer">
+            <Icon name="eye" />
             Open
           </a>
         )}
         <button type="button" className="btn" onClick={onClose}>
+          <Icon name="close" />
           Close
         </button>
       </div>

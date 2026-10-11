@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { Icon } from "@/components/Icon";
 
 /** Opens the browser's print dialog — once on arrival when `auto`, and on demand. */
 export function PrintButton({ auto = false }: { auto?: boolean }) {
@@ -12,6 +13,7 @@ export function PrintButton({ auto = false }: { auto?: boolean }) {
   }, [auto]);
   return (
     <button type="button" className="btn pri" onClick={() => window.print()}>
+      <Icon name="printer" />
       Print
     </button>
   );

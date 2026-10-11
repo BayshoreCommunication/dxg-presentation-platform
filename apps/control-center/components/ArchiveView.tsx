@@ -9,6 +9,7 @@ import { buildArchive, deliverArchive, archiveDownloadUrl, convertArchivePdfs, A
 import { DownloadLog } from "@/components/DownloadLog";
 import { Chip } from "@/components/Chip";
 import { WhyNot } from "@/components/WhyNot";
+import { Icon } from "@/components/Icon";
 import { ARCHIVE_STATE, formatBytes, formatDate, plural, wordsFor } from "@pmp/format";
 
 /** Chip tone per archive state; the words come from ARCHIVE_STATE (S39, D-110). */
@@ -228,6 +229,7 @@ export function ArchiveView({ eventId, initial }: { eventId: string; initial: Ar
                 })
               }
             >
+              <Icon name="box" />
               {pkg ? "Rebuild package" : "Build package"}
             </button>
             <button
@@ -241,15 +243,18 @@ export function ArchiveView({ eventId, initial }: { eventId: string; initial: Ar
                 })
               }
             >
+              <Icon name="send" />
               Deliver to client portal
             </button>
             {pkg?.archive_state === "delivered" && (
               <>
                 <a className="btn" href={archiveDownloadUrl(pkg.id, "pptx")}>
+                  <Icon name="download" />
                   Download PowerPoint package
                 </a>
                 {pkg.has_pdf && (
                   <a className="btn" href={archiveDownloadUrl(pkg.id, "pdf")}>
+                    <Icon name="download" />
                     Download PDF package
                   </a>
                 )}
@@ -350,6 +355,7 @@ function PdfStatus({
                 })
               }
             >
+              <Icon name="refresh" />
               Convert {remaining} to PDF
             </button>
           )}
@@ -365,6 +371,7 @@ function PdfStatus({
                 })
               }
             >
+              <Icon name="refresh" />
               Retry failed
             </button>
           )}

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { login, PortalError } from "@/lib/api";
 import { PasswordField } from "@/components/PasswordField";
+import { Icon } from "@/components/Icon";
 
 const REASONS: Record<string, string> = {
   required: "Please sign in to see your presentations.",
@@ -77,6 +78,7 @@ export function SpeakerLogin({ reason }: { reason: string | null }) {
         <PasswordField id="password" label="Password" value={password} onChange={setPassword} autoComplete="current-password" />
 
         <button className="btn pri" style={{ width: "100%", padding: 9 }} disabled={busy} type="submit">
+          <Icon name="login" />
           {busy ? "Signing in…" : "Sign in"}
         </button>
 
