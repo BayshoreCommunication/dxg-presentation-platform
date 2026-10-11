@@ -168,7 +168,7 @@ export const ROLE: Readonly<Record<string, Words>> = {
   content_reviewer: { label: "Reviewer", meaning: "Reviews and approves presentations." },
   srr_technician: { label: "Speaker Ready Room technician", meaning: "Checks speakers in and takes files by USB onsite." },
   room_technician: { label: "Room technician", meaning: "Runs one room's presentation PC." },
-  client_event_admin: { label: "Client administrator", meaning: "The client's view of the event and its archive." },
+  client_event_admin: { label: "Client access", meaning: "The client's view of the event and its archive." },
   scoped_reviewer: { label: "Client reviewer", meaning: "A client-side reviewer for chosen sessions only." },
 };
 
