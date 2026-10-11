@@ -266,6 +266,8 @@ export type FleetRoom = {
   agent_version: string | null;
   /** When the room's computer was given its device key; null if never (D-077). */
   key_issued_at: string | null;
+  /** DXG Technician staff assigned to this room (D-153). */
+  technicians: { user_id: string; name: string }[];
   talks: FleetTalk[];
 };
 
@@ -274,7 +276,12 @@ export type FleetRoom = {
  * approved version, whether a person has ticked it loaded on the room PC, and a link to
  * download it for copying. Room readiness is the ticks alone.
  */
-export async function syncFleet(tx: pg.PoolClient, eventId: string): Promise<FleetRoom[]> {
+export async function syncFleet(
+  tx: pg.PoolClient,
+  eventId: string,
+  /** A technician's own rooms only (D-153): set to their user id; unset for everyone else. */
+  onlyRoomsOf?: string,
+): Promise<FleetRoom[]> {
   const { rows: talkRows } = await tx.query<TalkAggRow>(TALK_AGG, [eventId]);
   const { rows: roomRows } = await tx.query<{
     room_id: string;
@@ -289,7 +296,14 @@ export async function syncFleet(tx: pg.PoolClient, eventId: string): Promise<Fle
        FROM pmp.rooms r
        LEFT JOIN pmp.room_agents ra ON ra.room_id = r.id AND ra.revoked_at IS NULL
       WHERE r.event_id = $1
+        AND ($2::uuid IS NULL OR EXISTS (SELECT 1 FROM pmp.room_assignments x WHERE x.room_id = r.id AND x.user_id = $2))
       ORDER BY r.name`,
+    [eventId, onlyRoomsOf ?? null],
+  );
+  const { rows: assigned } = await tx.query<{ room_id: string; user_id: string; name: string }>(
+    `SELECT x.room_id, x.user_id, u.display_name AS name
+       FROM pmp.room_assignments x JOIN pmp.users u ON u.id = x.user_id
+      WHERE x.event_id = $1 ORDER BY u.display_name`,
     [eventId],
   );
   const { rows: checklist } = await tx.query<{
@@ -346,6 +360,9 @@ export async function syncFleet(tx: pg.PoolClient, eventId: string): Promise<Fle
       heartbeat_age: room.heartbeat_age,
       agent_version: room.agent_version,
       key_issued_at: room.key_issued_at,
+      technicians: assigned
+        .filter((row) => row.room_id === room.room_id)
+        .map((row) => ({ user_id: row.user_id, name: row.name })),
       talks: checklist
         .filter((row) => row.room_id === room.room_id)
         .map((row) => {

@@ -1,4 +1,4 @@
-import { getFleet, getSession, getSummary } from "@/lib/api";
+import { getFleet, getSession, getSummary, getSyncTechnicians } from "@/lib/api";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { LoadingChecklist } from "@/components/LoadingChecklist";
 import { guard } from "@/lib/guard";
@@ -24,6 +24,9 @@ export default async function RoomSyncPage({ params }: { params: Promise<{ id: s
     `/events/${id}/sync`,
   );
   const principal = session.principal;
+  // A technician works their own rooms (D-153); admins and support staff give them out.
+  const isTechnician = principal.staff_kind === "technician";
+  const technicians = isTechnician ? null : (await getSyncTechnicians(id).catch(() => ({ items: [] }))).items;
   const canLoad =
     principal.is_root_admin ||
     principal.roles.includes("platform_admin") ||
@@ -46,10 +49,17 @@ export default async function RoomSyncPage({ params }: { params: Promise<{ id: s
         <b className="num">{toLoad}</b> {toLoad === 1 ? "talk" : "talks"} to load
       </div>
       <p className="note" style={{ margin: "0 0 14px" }}>
-        Copy each approved file onto the room&rsquo;s PC, then tick it here. Nothing on this page is checked
-        automatically.
+        {isTechnician ? "Your rooms. " : ""}Copy each approved file onto the room&rsquo;s PC, then tick it here.
+        Nothing on this page is checked automatically.
       </p>
-      <LoadingChecklist eventId={id} timezone={summary.event.timezone} rooms={items} canLoad={canLoad} />
+      <LoadingChecklist
+        eventId={id}
+        timezone={summary.event.timezone}
+        rooms={items}
+        canLoad={canLoad}
+        technicians={technicians}
+        isTechnician={isTechnician}
+      />
     </>
   );
 }

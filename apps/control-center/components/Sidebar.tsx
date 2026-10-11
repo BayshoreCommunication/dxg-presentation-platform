@@ -188,13 +188,14 @@ export function Sidebar({
   /*
    * Which screens this kind of account may open (D-151), mirroring the API's own rule:
    * support staff everything but the Speaker Ready Room and Manage presentations;
-   * technicians those two and the way to them. A DXG Admin sees all.
+   * technicians those two, Room sync and the way to them. A DXG Admin sees all.
    */
   const kind = principal?.staff_kind ?? null;
   const offeredToKind = (label: string): boolean => {
     const onsiteOrReview = label === "Speaker Ready Room" || label === "Manage presentations";
     if (kind === "support") return !onsiteOrReview;
-    if (kind === "technician") return onsiteOrReview || label === "Portfolio";
+    // Room sync too, for the rooms they are assigned to (client review, D-153).
+    if (kind === "technician") return onsiteOrReview || label === "Room sync" || label === "Portfolio";
     return true;
   };
 

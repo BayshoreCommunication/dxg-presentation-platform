@@ -262,6 +262,8 @@ export type FleetRoom = {
   readiness: "ready" | "attention";
   files_current: number;
   files_total: number;
+  /** DXG Technician staff assigned to this room (D-153). */
+  technicians: { user_id: string; name: string }[];
   talks: FleetTalk[];
 };
 
@@ -273,6 +275,36 @@ export const getReviewQueue = (eventId: string) =>
   request<{ items: QueueItem[] }>(`/events/${eventId}/review-queue`);
 export const getFleet = (eventId: string) =>
   request<{ items: FleetRoom[] }>(`/events/${eventId}/sync/fleet`);
+
+/** DXG Technician staff on the event — who a room can be given to (D-153). */
+export const getSyncTechnicians = (eventId: string) =>
+  request<{ items: { user_id: string; name: string; email: string }[] }>(`/events/${eventId}/sync/technicians`);
+
+/** Sets who works a room; the list replaces the room's technicians (D-153). */
+export const setRoomTechnicians = (eventId: string, roomId: string, userIds: string[]) =>
+  request<{ technicians: { user_id: string; name: string }[] }>(`/events/${eventId}/sync/rooms/${roomId}/technicians`, {
+    method: "PUT",
+    body: JSON.stringify({ user_ids: userIds }),
+  });
+
+/**
+ * Every approved presentation of one room, or of every room the caller works, as a zip
+ * (D-153). Fetched rather than linked, so "nothing approved yet" shows on the page instead
+ * of replacing it.
+ */
+export async function downloadApproved(eventId: string, roomId?: string): Promise<{ blob: Blob; filename: string }> {
+  const response = await fetch(
+    `${API_BASE_URL}/events/${eventId}/sync/approved.zip${roomId ? `?room=${encodeURIComponent(roomId)}` : ""}`,
+    { credentials: "include" },
+  );
+  if (!response.ok) {
+    const error = (await response.json().catch(() => ({}))) as { code?: string; message?: string };
+    throw new ApiError(error.code ?? "unknown", error.message ?? "The download could not be built.", response.status);
+  }
+  const disposition = response.headers.get("content-disposition") ?? "";
+  const filename = /filename="([^"]+)"/.exec(disposition)?.[1] ?? "approved-presentations.zip";
+  return { blob: await response.blob(), filename };
+}
 
 export type TransitionResult = {
   file_version_id: string;
