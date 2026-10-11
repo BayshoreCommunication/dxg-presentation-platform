@@ -172,6 +172,9 @@ const LINES: Record<string, string> = {
   more: "M8 3.333h.006M8 8h.006M8 12.667h.006",
   send: "M14 2 7.333 8.667M14 2 9.667 14 7.333 8.667 2 6.333Z",
   trash: "M2.667 4h10.666M6 4V2.667h4V4M3.667 4l.666 9.333h7.334L12.333 4M6.667 6.667v4M9.333 6.667v4",
+  // Download's arrow turned upward into the same tray: a file coming in (Local intake, D-152).
+  intake: "M8 10.333V2.667M5 5.667l3-3 3 3M2.667 11.333v.334c0 1.1 0 1.65.341 1.991.342.342.892.342 1.992.342h6c1.1 0 1.65 0 1.992-.342.341-.341.341-.891.341-1.991v-.334",
+  close: "M4.333 4.333l7.334 7.334M11.667 4.333l-7.334 7.334",
 };
 
 export type IconName = keyof typeof GLYPHS | keyof typeof LINES;

@@ -16,6 +16,7 @@ import { Chip } from "@/components/Chip";
 import { ConfirmationStrip } from "@/components/ConfirmationStrip";
 import { WhyNot } from "@/components/WhyNot";
 import { LocalIntake } from "@/components/LocalIntake";
+import { Icon } from "@/components/Icon";
 
 /**
  * Day and time on the event's clock — the actual date, not just a weekday, and never
@@ -360,6 +361,7 @@ export function CheckinView({
           aria-expanded={intakeOpen}
           onClick={() => setIntakeOpen((open) => !open)}
         >
+          <Icon name={intakeOpen ? "close" : "intake"} />
           {intakeOpen ? "Close local intake" : "Local intake"}
         </button>
         <span className="note">
