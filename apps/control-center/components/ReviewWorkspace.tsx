@@ -30,9 +30,12 @@ export function ReviewWorkspace({
   eventId,
   initialQueue,
   initialSelectedId,
+  upload,
 }: {
   eventId: string;
   initialQueue: QueueItem[];
+  /** "Upload a new version" for any talk (D-153), shown under the title. */
+  upload?: React.ReactNode;
   /** R22 (D-113): "Open in review workspace" from an inspection report opens that file. */
   initialSelectedId?: string | null;
 }) {
@@ -197,6 +200,7 @@ export function ReviewWorkspace({
   return (
     <>
       <h1 className="htitle">Manage presentations</h1>
+      {upload}
 
       {error && <div className="err">{error}</div>}
 

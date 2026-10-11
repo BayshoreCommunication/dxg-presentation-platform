@@ -143,3 +143,18 @@ describe("Download all (D-153)", () => {
     assert.equal(((await response.json()) as { code: string }).code, "room.nothing_approved");
   });
 });
+
+describe("a technician uploads a new version a presenter brings (D-153)", () => {
+  test("the intake is open to them (refused here only for the missing reason, so nothing is stored)", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const talks = (await (await call(delgado, "GET", `/events/${EVENT}/talks`)).json()) as { items: { slot_id: string }[] };
+    assert.ok(talks.items.length > 0, "a technician reads the event's talks for the picker");
+    const response = await call(delgado, "POST", `/events/${EVENT}/srr/slots/${talks.items[0]!.slot_id}/intake`, {
+      upload_id: "00000000-0000-4000-8000-000000000000",
+      file_name: "brought-to-the-room.pptx",
+      reason: " ",
+    });
+    assert.equal(response.status, 422);
+    assert.equal(((await response.json()) as { code: string }).code, "srr.reason_required");
+  });
+});

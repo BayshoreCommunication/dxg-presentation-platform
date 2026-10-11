@@ -273,6 +273,19 @@ export const getRiskList = (eventId: string) =>
   request<{ items: RiskItem[] }>(`/events/${eventId}/risk-list`);
 export const getReviewQueue = (eventId: string) =>
   request<{ items: QueueItem[] }>(`/events/${eventId}/review-queue`);
+/** Every talk of the event with its status (the agenda's view of files). */
+export type TalkRow = {
+  slot_id: string;
+  title: string;
+  room: string | null;
+  starts_at: string;
+  speaker: string | null;
+  version_count: number;
+  status: string;
+  status_label: string;
+};
+export const getTalks = (eventId: string) => request<{ items: TalkRow[] }>(`/events/${eventId}/talks`);
+
 export const getFleet = (eventId: string) =>
   request<{ items: FleetRoom[] }>(`/events/${eventId}/sync/fleet`);
 
