@@ -12,7 +12,11 @@
 # Node 24 runs the TypeScript sources directly (native type stripping), so the API and the
 # dispatcher are not compiled; the two Next apps are built here, never in a developer's tree.
 
-ARG NODE_IMAGE=node:24.4.1-bookworm-slim
+# Base (D-152): a current Node 24 on Debian 13 (trixie). ECR's scan of the 24.4.1-bookworm images found 7–8
+# critical OS-package CVEs in each (gnutls, perl, libtiff). Bump this tag for Node/Debian security releases;
+# `runtime` below also applies Debian's security updates at build time, refreshed weekly in CI, so
+# releases pick up fixes even before the Node image is refreshed.
+ARG NODE_IMAGE=node:24.21.0-trixie-slim
 
 # ── dependencies for the whole workspace ─────────────────────────────────────────────────
 FROM ${NODE_IMAGE} AS deps
@@ -22,12 +26,22 @@ COPY . .
 ENV ELECTRON_SKIP_BINARY_DOWNLOAD=1
 RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund
 
+# ── what every shipped image starts from: the base with Debian's security updates applied ─────
+FROM ${NODE_IMAGE} AS runtime
+# CI passes the ISO week (e.g. 2026-W41): a new value re-runs the upgrade below instead of reusing the
+# cached layer, so each week's first build picks up Debian's latest security fixes.
+ARG SECURITY_REFRESH=manual
+RUN echo "security refresh: $SECURITY_REFRESH" \
+ && apt-get update \
+ && DEBIAN_FRONTEND=noninteractive apt-get upgrade -y --no-install-recommends \
+ && apt-get clean && rm -rf /var/lib/apt/lists/*
+
 # ── API ───────────────────────────────────────────────────────────────────────────────
-FROM ${NODE_IMAGE} AS api
+FROM runtime AS api
 # LibreOffice renders the PDF previews reviewers see (D-074); fonts so slides lay out as authored.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends libreoffice-impress-nogui fonts-liberation fonts-dejavu-core fonts-noto-core ca-certificates \
- && rm -rf /var/lib/apt/lists/*
+ && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends libreoffice-impress-nogui fonts-liberation fonts-dejavu-core fonts-noto-core ca-certificates \
+ && apt-get clean && rm -rf /var/lib/apt/lists/*
 ENV NODE_ENV=production LIBREOFFICE_PATH=/usr/bin/soffice
 WORKDIR /app
 COPY --from=deps /app /app
@@ -41,7 +55,7 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
 CMD ["node", "apps/api/src/index.ts"]
 
 # ── mail dispatcher ───────────────────────────────────────────────────────────────────
-FROM ${NODE_IMAGE} AS dispatcher
+FROM runtime AS dispatcher
 ENV NODE_ENV=production
 WORKDIR /app
 COPY --from=deps /app /app
@@ -57,7 +71,7 @@ FROM deps AS portal-build
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build -w @pmp/speaker-portal
 
-FROM ${NODE_IMAGE} AS staff
+FROM runtime AS staff
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3000 HOSTNAME=0.0.0.0
 WORKDIR /app
 COPY --from=staff-build /app/apps/control-center/.next/standalone ./
@@ -66,7 +80,7 @@ USER node
 EXPOSE 3000
 CMD ["node", "apps/control-center/server.js"]
 
-FROM ${NODE_IMAGE} AS portal
+FROM runtime AS portal
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3001 HOSTNAME=0.0.0.0
 WORKDIR /app
 COPY --from=portal-build /app/apps/speaker-portal/.next/standalone ./

@@ -2777,3 +2777,20 @@ everywhere. Access is drawn by screen, as the client drew it:
 - **Addendum (Travis, same day):** the fourth level is offered after all, named **Client access** (the review's "Client
   Admin"): the client's own people, placed on their events, with the live read-only client portal and the archive.
 
+## D-152 (2026-10-11): Images on Node 24.21.0 / Debian 13 with security updates applied at build — Status: ACCEPTED (Rakibul: "fix the base image vulnerabilities")
+ECR's scan of the first CI-built images (D-149) found 7–8 critical and ~40 high CVEs in every image, all in the
+`node:24.4.1-bookworm-slim` base (gnutls, perl, libtiff) — pinned in mid-2025 and never updated since.
+- **Base**: `node:24.21.0-trixie-slim` (Debian 13). Compared with the same Node on Debian 12, both fully upgraded
+  (trivy, OS packages, api image): Debian 12 left 4 critical / 96 high, Debian 13 **1 critical / 78 high**; in
+  both, **none left has a fix available**. The remaining critical (libxml2 CVE-2026-6653) has no Debian fix yet.
+- **`runtime` stage**: every shipped image (api, dispatcher, staff, portal) now starts `FROM runtime`, which runs
+  `apt-get upgrade`. CI passes `SECURITY_REFRESH=<ISO week>`, so that layer is rebuilt once a week instead of
+  coming from the build cache forever; within a week it stays cached. Verified: same week → `CACHED`, new week → re-run.
+- **LibreOffice** goes from 7.4 to 25.2 with the base. The five practice/fixture decks convert on both with the same
+  page counts (and ~3× faster on 25.2); rendered slides are visually identical.
+- **Node**: CI (`checks`, `invariants`) and `.nvmrc` move to 24.21.0 so tests run on what production runs. Local
+  development needs `nvm install 24.21.0` (24.4.1 still works for dev). `.claude/launch.json` and the Windows Room
+  Agent runbook (G0-1) still say 24.4.1 — not production paths, left alone.
+- **To keep it this way**: bump `NODE_IMAGE` when Node 24 or Debian publish security releases; check ECR's scan
+  (`aws ecr describe-image-scan-findings`) after each `production` build.
+

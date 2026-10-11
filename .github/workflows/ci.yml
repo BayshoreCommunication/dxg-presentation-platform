@@ -27,7 +27,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 24.4.1, cache: npm }
+        with: { node-version: 24.21.0, cache: npm }
       - run: npm ci --no-audit --no-fund
       - run: npm run lint
       - name: Type-check every app
@@ -56,7 +56,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 24.4.1, cache: npm }
+        with: { node-version: 24.21.0, cache: npm }
       - run: npm ci --no-audit --no-fund
       - run: npm run db:migrate && npm run db:seed
       - name: Start the API, the background worker and the mail dispatcher
@@ -76,6 +76,10 @@ jobs:
         target: [api, dispatcher, staff, portal]
     steps:
       - uses: actions/checkout@v4
+      # Rebuilds the `runtime` stage (apt-get upgrade) once a week so Debian's security fixes reach
+      # the images even though everything else comes from the build cache (D-152).
+      - id: week
+        run: echo "week=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
       - uses: docker/setup-buildx-action@v3
       - uses: docker/build-push-action@v6
         with:
@@ -83,6 +87,7 @@ jobs:
           file: deploy/server/Dockerfile
           target: ${{ matrix.target }}
           push: false
+          build-args: SECURITY_REFRESH=${{ steps.week.outputs.week }}
           cache-from: type=gha,scope=${{ matrix.target }}
           cache-to: type=gha,mode=max,scope=${{ matrix.target }}
 
@@ -104,6 +109,8 @@ jobs:
       - uses: actions/checkout@v4
       - id: tag
         run: echo "tag=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
+      - id: week
+        run: echo "week=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::295229565954:role/pmp-github-image-push
@@ -119,6 +126,7 @@ jobs:
           platforms: linux/amd64
           push: true
           provenance: false
+          build-args: SECURITY_REFRESH=${{ steps.week.outputs.week }}
           tags: ${{ steps.ecr.outputs.registry }}/pmp-${{ matrix.target }}:${{ steps.tag.outputs.tag }}
           cache-from: type=gha,scope=${{ matrix.target }}
       - run: |
