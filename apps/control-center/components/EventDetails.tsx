@@ -194,7 +194,7 @@ export function EventDetails({
                   {/* Readable dates and a person to ask, not "a re-import" (S23, D-110). */}
                   <span>{formatDateRange(setup.starts_on, setup.ends_on)}</span>
                   <div className="note">
-                    Dates can&rsquo;t change after activation – ask a DXG administrator. Sessions,
+                    Dates can&rsquo;t change after activation – ask a DXG Admin. Sessions,
                     deadlines and room files are all set against them.
                   </div>
                 </td>

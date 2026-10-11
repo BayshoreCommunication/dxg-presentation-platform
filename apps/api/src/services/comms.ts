@@ -186,7 +186,7 @@ export async function updateTemplate(
   input: { subject?: unknown; body?: unknown; body_html?: unknown },
 ): Promise<Result<TemplateRow, DomainError>> {
   if (!hasAnyRole(actor, TEMPLATE_EDITORS)) {
-    return err({ code: "comms.forbidden", message: "Only a presentation manager, project manager or DXG administrator can edit email templates." });
+    return err({ code: "comms.forbidden", message: "Only a presentation manager, project manager or DXG Admin can edit email templates." });
   }
   const checked = checkTemplateText(input);
   if (!checked.ok) return checked;
@@ -225,7 +225,7 @@ export async function createTemplate(
   input: { name?: unknown; subject?: unknown; body?: unknown; body_html?: unknown },
 ): Promise<Result<TemplateRow, DomainError>> {
   if (!hasAnyRole(actor, TEMPLATE_EDITORS)) {
-    return err({ code: "comms.forbidden", message: "Only a presentation manager, project manager or DXG administrator can add email templates." });
+    return err({ code: "comms.forbidden", message: "Only a presentation manager, project manager or DXG Admin can add email templates." });
   }
   const name = typeof input.name === "string" ? input.name.replace(/\s+/g, " ").trim() : "";
   if (name.length < 1 || name.length > 80) {
@@ -273,7 +273,7 @@ export async function sendTestEmail(
   input: { to?: unknown; subject?: unknown; body?: unknown; body_html?: unknown },
 ): Promise<Result<{ to: string }, DomainError>> {
   if (!hasAnyRole(actor, TEMPLATE_EDITORS)) {
-    return err({ code: "comms.forbidden", message: "Only a presentation manager, project manager or DXG administrator can send a test email." });
+    return err({ code: "comms.forbidden", message: "Only a presentation manager, project manager or DXG Admin can send a test email." });
   }
   const typed = typeof input.to === "string" ? input.to.trim() : "";
   const address = checkAddress(typed);

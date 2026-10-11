@@ -16,14 +16,16 @@ export async function queueTemporaryPasswordEmail(
     displayName: string;
     temporaryPassword: string;
     reason: "created" | "reset";
-    accountType: "root_admin" | "staff";
+    accountType: "root_admin" | "support" | "technician" | "staff";
   },
 ): Promise<void> {
   const signIn = `${process.env.STAFF_BASE ?? "http://localhost:3000"}/login`;
+  const kindWords =
+    input.accountType === "root_admin" ? "DXG Admin" : input.accountType === "technician" ? "DXG Technician staff" : "DXG Support staff";
   const opening =
     input.reason === "created"
       ? [
-          `A DXG·PM ${input.accountType === "root_admin" ? "DXG administrator" : "staff"} account has been created for you.`,
+          `A DXG·PM ${kindWords} account has been created for you.`,
           "Sign in with this email address and the temporary password below:",
         ]
       : [

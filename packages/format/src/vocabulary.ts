@@ -162,7 +162,7 @@ export const IMPORT_ROW: Readonly<Record<string, Words>> = {
 
 // ── people ───────────────────────────────────────────────────────────────────────────
 export const ROLE: Readonly<Record<string, Words>> = {
-  platform_admin: { label: "DXG administrator", meaning: "Manages staff accounts and every event." },
+  platform_admin: { label: "DXG Admin", meaning: "Manages staff accounts and every event." },
   project_manager: { label: "Project manager", meaning: "Runs the event: setup, speakers, rooms and archive." },
   presentation_manager: { label: "Presentation manager", meaning: "Manages speakers, files and approvals." },
   content_reviewer: { label: "Reviewer", meaning: "Reviews and approves presentations." },
@@ -179,6 +179,13 @@ export function roleList(roles: readonly string[]): string {
   return `${names.slice(0, -1).join(", ")} or ${names.at(-1)}`;
 }
 
+/** The three kinds of DXG account (D-151), as the screens name them. */
+export const ACCOUNT_KIND: Readonly<Record<string, Words>> = {
+  root_admin: { label: "DXG Admin", meaning: "Every event, plus staff accounts and assignments." },
+  support: { label: "DXG Support staff", meaning: "Runs the events they are assigned to — everything except the Speaker Ready Room and Manage presentations." },
+  technician: { label: "DXG Technician staff", meaning: "The Speaker Ready Room and Manage presentations on the events they are assigned to, nothing else." },
+};
+
 /** Security words, one set (A22–A26, A28). */
 export const SECURITY = {
   factor: "sign-in app",
@@ -186,8 +193,8 @@ export const SECURITY = {
   code: "6-digit code from your sign-in app",
   recoveryCodes: "backup codes",
   recoveryCodesTitle: "Backup codes",
-  admin: "DXG administrator",
-  lostPhone: "Lost your phone? Use a backup code, or ask a DXG administrator to reset your sign-in app.",
+  admin: "DXG Admin",
+  lostPhone: "Lost your phone? Use a backup code, or ask a DXG Admin to reset your sign-in app.",
 } as const;
 
 // ── time ─────────────────────────────────────────────────────────────────────────────

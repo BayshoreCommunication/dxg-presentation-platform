@@ -45,7 +45,7 @@ export default async function NoAccessPage({ searchParams }: { searchParams: Pro
         </p>
 
         <p className="note" style={{ marginTop: 10, lineHeight: 1.6 }}>
-          Ask a DXG administrator to add you on <strong>Event assignments</strong>. Once they
+          Ask a DXG Admin to add you on <strong>Event assignments</strong>. Once they
           have, sign in again and your events will be there.
         </p>
 

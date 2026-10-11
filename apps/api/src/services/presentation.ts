@@ -225,7 +225,7 @@ export async function waiveFinding(
   if (!hasAnyRole(actor, atLeast("presentation_manager"))) {
     return err({
       code: "inspection.forbidden",
-      message: "Only a presentation manager, project manager or DXG administrator can accept a problem with a reason.",
+      message: "Only a presentation manager, project manager or DXG Admin can accept a problem with a reason.",
     });
   }
   if (!input.reason.trim()) {

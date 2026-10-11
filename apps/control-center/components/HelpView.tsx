@@ -50,7 +50,7 @@ export const GUIDES: Section[] = [
       {
         id: "create-event",
         title: "Create an event",
-        who: "Project manager or DXG administrator",
+        who: "Project manager or DXG Admin",
         steps: [
           "Press Create event in the sidebar.",
           "Basics: enter the name, venue, time zone and dates. The event must start tomorrow or later. Press Create draft.",
@@ -64,7 +64,7 @@ export const GUIDES: Section[] = [
       {
         id: "staff",
         title: "Give a colleague access",
-        who: "DXG administrator",
+        who: "DXG Admin",
         steps: [
           "Staff accounts → enter their work email and name → Create account. They get an email with a temporary password.",
           "Press Next: assign them to an event, choose the event and their role (each role's description is shown), then Assign.",
@@ -219,7 +219,7 @@ export const GUIDES: Section[] = [
         steps: [
           "Sign in with your work email and password, then the 6-digit code from the sign-in app on your phone.",
           "When you set up the sign-in app you get backup codes. Copy, download or print them and keep them somewhere safe — each works once, in place of the code.",
-          "Lost your phone? Use a backup code, or ask a DXG administrator to reset your sign-in app.",
+          "Lost your phone? Use a backup code, or ask a DXG Admin to reset your sign-in app.",
           "Forgotten your password? Use the link on the sign-in page.",
         ],
       },
@@ -394,7 +394,7 @@ export function HelpView() {
       </div>
 
       <p className="note">
-        Still stuck? Ask your DXG administrator. Back to the <Link href="/">portfolio</Link>.
+        Still stuck? Ask your DXG Admin. Back to the <Link href="/">portfolio</Link>.
       </p>
     </>
   );

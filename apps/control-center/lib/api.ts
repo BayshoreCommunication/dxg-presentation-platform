@@ -86,6 +86,8 @@ export type Principal = {
   mfa_enrolled: boolean;
   /** Staff, or a speaker with a persistent sign-in (D-146) who reaches only their own presentations. */
   account_kind: "staff" | "speaker";
+  /** Which kind of DXG account (D-151); decides which screens the sidebar offers. */
+  staff_kind: "root_admin" | "support" | "technician" | null;
 };
 
 export const getSession = () => request<{ principal: Principal }>("/auth/session");
@@ -1253,8 +1255,8 @@ export type StaffRow = {
   recovery_codes_left: number;
 };
 
-/** Root admin or staff — set on the account, not per event (D-100). */
-export type AccountType = "root_admin" | "staff";
+/** DXG Admin, DXG Support staff or DXG Technician staff — set on the account, not per event (D-100, D-151). */
+export type AccountType = "root_admin" | "support" | "technician";
 
 /** Roles held on an event. Root admin is not one of them: it is the account type. */
 export const EVENT_ROLE_NAMES = [
@@ -1273,6 +1275,13 @@ export const createStaff = (email: string, displayName: string, accountType: Acc
   request<{ user_id: string; account_type: AccountType; emailed_to: string | null }>("/admin/users", {
     method: "POST",
     body: JSON.stringify({ email, display_name: displayName, account_type: accountType }),
+  });
+
+/** Puts a support staff member or technician on an event, or takes them off; roles follow the kind (D-151). */
+export const assignStaffToEvent = (userId: string, eventId: string, assign: boolean) =>
+  request<{ assigned: boolean; roles: string[] }>(`/admin/users/${userId}/events`, {
+    method: "POST",
+    body: JSON.stringify({ event_id: eventId, assign }),
   });
 
 export const resetStaffPassword = (userId: string) =>

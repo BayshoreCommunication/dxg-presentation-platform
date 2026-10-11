@@ -9,7 +9,7 @@ test("unknown codes read as words, never raw", () => {
 });
 
 test("role lists are sentences", () => {
-  assert.equal(roleList(["content_reviewer", "project_manager", "platform_admin"]), "Reviewer, Project manager or DXG administrator");
+  assert.equal(roleList(["content_reviewer", "project_manager", "platform_admin"]), "Reviewer, Project manager or DXG Admin");
 });
 
 test("time zones by name, US first", () => {

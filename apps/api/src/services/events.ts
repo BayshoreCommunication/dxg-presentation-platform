@@ -21,7 +21,7 @@ const CONFIGURERS = atLeast("presentation_manager");
 
 const forbidden = (attempt: string): DomainError => ({
   code: "events.forbidden",
-  message: `${attempt} needs a presentation manager, project manager or DXG administrator.`,
+  message: `${attempt} needs a presentation manager, project manager or DXG Admin.`,
 });
 
 export type CreateEventInput = {

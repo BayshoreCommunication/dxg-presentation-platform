@@ -148,10 +148,15 @@ async function seed(): Promise<void> {
                mfa_secret = EXCLUDED.mfa_secret, mfa_enrolled_at = EXCLUDED.mfa_enrolled_at`,
         [id, email, name, devHash, DEV_MFA_SECRET],
       );
-      // Root admin is a flag on the account, not an event role (D-100).
+      // Root admin is a flag on the account, not an event role (D-100). The kind (D-151): the
+      // reviewer and the room technician are technicians; the presentation manager is support.
       if (role === "platform_admin") {
         await client.query(`UPDATE users SET is_root_admin = true WHERE id = $1`, [id]);
       } else {
+        await client.query(`UPDATE users SET staff_kind = $2 WHERE id = $1`, [
+          id,
+          role === "content_reviewer" || role === "room_technician" || role === "srr_technician" ? "technician" : "support",
+        ]);
         await client.query(
           `INSERT INTO event_roles (user_id, event_id, role) VALUES ($1, $2, $3)
            ON CONFLICT DO NOTHING`,

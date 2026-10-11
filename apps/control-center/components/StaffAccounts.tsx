@@ -17,7 +17,7 @@ import {
 import { Chip } from "@/components/Chip";
 import { WhyNot } from "@/components/WhyNot";
 import { ConfirmInline } from "@/components/ConfirmInline";
-import { plural, SECURITY } from "@pmp/format";
+import { ACCOUNT_KIND, plural, SECURITY } from "@pmp/format";
 
 const when = (iso: string | null) =>
   iso
@@ -35,22 +35,21 @@ const when = (iso: string | null) =>
  * comes into existence — and the only way back in for someone who has lost their
  * phone or their password.
  *
- * DXG administrators only (D-100; "root admin" in the code). An account is a DXG administrator (every event, every account) or
+ * DXG Admins only (D-100; "root admin" in the code). An account is a DXG Admin (every event, every account) or
  * staff (the events it is assigned to, nothing else). Temporary passwords go to the
  * account's own email address; this screen never shows one.
  */
 
 const ACCOUNT_TYPES: { value: AccountType; label: string; hint: string }[] = [
-  { value: "staff", label: "Staff", hint: "Works only on the events they are assigned to." },
-  { value: "root_admin", label: "DXG administrator", hint: "Every event, plus staff accounts and assignments." },
+  { value: "support", label: ACCOUNT_KIND.support!.label, hint: ACCOUNT_KIND.support!.meaning },
+  { value: "technician", label: ACCOUNT_KIND.technician!.label, hint: ACCOUNT_KIND.technician!.meaning },
+  { value: "root_admin", label: ACCOUNT_KIND.root_admin!.label, hint: ACCOUNT_KIND.root_admin!.meaning },
 ];
 
+const kindLabel = (type: AccountType) => ACCOUNT_KIND[type]?.label ?? type;
+
 function TypeBadge({ type }: { type: AccountType }) {
-  return type === "root_admin" ? (
-    <span className="chip c-sync">DXG administrator</span>
-  ) : (
-    <span className="chip c-info">staff</span>
-  );
+  return <span className={`chip ${type === "root_admin" ? "c-sync" : "c-info"}`}>{kindLabel(type)}</span>;
 }
 
 const small = { padding: "3px 9px", fontSize: 12 } as const;
@@ -67,11 +66,11 @@ function rowReason(user: StaffRow, isMe: boolean, lastRoot: boolean): string | n
   const reasons: string[] = [];
   if (isMe) {
     reasons.push(
-      `You can't make yourself staff, deactivate or delete your own account — ask another ${SECURITY.admin}.`,
+      `You can't change your own access level, deactivate or delete your own account — ask another ${SECURITY.admin}.`,
     );
   } else if (lastRoot) {
     reasons.push(
-      `The only active ${SECURITY.admin} can't be made staff, deactivated or deleted — make someone else a ${SECURITY.admin} first.`,
+      `The only active ${SECURITY.admin} can't be changed, deactivated or deleted — make someone else a ${SECURITY.admin} first.`,
     );
   }
   if (!user.mfa_enrolled) reasons.push(`No ${SECURITY.factor} to reset — they haven't set one up yet.`);
@@ -85,7 +84,9 @@ export function StaffAccounts({ initial, me }: { initial: StaffRow[]; me: string
   const [notice, setNotice] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
-  const [accountType, setAccountType] = useState<AccountType>("staff");
+  const [accountType, setAccountType] = useState<AccountType>("support");
+  /** The access level being chosen for a row, before "are you sure?". */
+  const [newType, setNewType] = useState<AccountType>("support");
   /** A14: the account just created, for the "assign them to an event" next step. */
   const [created, setCreated] = useState<{ id: string; name: string } | null>(null);
   /** The row whose "are you sure?" is open, and which action it is asking about. */
@@ -129,8 +130,9 @@ export function StaffAccounts({ initial, me }: { initial: StaffRow[]; me: string
       <h1 className="htitle">Staff accounts</h1>
       <div className="note" style={{ margin: "-8px 0 14px" }}>
         There is no signup. Accounts are created here, and every account sets up a sign-in app on
-        their phone before it can use the platform. DXG administrators see every event and every
-        account; staff see only the events they are assigned to.
+        their phone before it can use the platform. DXG Admins see every event and every account.
+        DXG Support staff run the events they are assigned to — everything except the Speaker Ready
+        Room and Manage presentations; DXG Technician staff see only those two.
       </div>
 
       {error && <div className="err">{error}</div>}
@@ -207,7 +209,7 @@ export function StaffAccounts({ initial, me }: { initial: StaffRow[]; me: string
             </select>
             <div className="note" style={{ marginTop: 4 }}>
               {ACCOUNT_TYPES.find((type) => type.value === accountType)?.hint}
-              {accountType === "staff" && " Assign them to events on Event assignments after creating the account."}
+              {accountType !== "root_admin" && " Assign them to events on Event assignments after creating the account."}
             </div>
           </div>
           <button
@@ -217,14 +219,12 @@ export function StaffAccounts({ initial, me }: { initial: StaffRow[]; me: string
             onClick={() =>
               void run(async () => {
                 const made = await createStaff(email, name, accountType);
-                setNotice(
-                  `${accountType === "root_admin" ? "DXG administrator" : "Staff"} account created — temporary password emailed to ${made.emailed_to ?? email}.`,
-                );
-                // DXG administrators already reach every event, so only staff need the next step.
-                if (accountType === "staff") setCreated({ id: made.user_id, name: name.trim() || email });
+                setNotice(`${kindLabel(accountType)} account created — temporary password emailed to ${made.emailed_to ?? email}.`);
+                // DXG Admins already reach every event, so only staff need the next step.
+                if (accountType !== "root_admin") setCreated({ id: made.user_id, name: name.trim() || email });
                 setEmail("");
                 setName("");
-                setAccountType("staff");
+                setAccountType("support");
               })
             }
           >
@@ -342,15 +342,14 @@ export function StaffAccounts({ initial, me }: { initial: StaffRow[]; me: string
                           <button
                             className="btn"
                             style={small}
-                            disabled={busy || (user.account_type === "root_admin" && (isMe || lastRoot))}
-                            title={
-                              user.account_type === "root_admin"
-                                ? "Limit them to the events they are assigned to"
-                                : "Give them every event and account administration"
-                            }
-                            onClick={() => ask(user.id, "type")}
+                            disabled={busy || isMe || (user.account_type === "root_admin" && lastRoot)}
+                            title="Change what this account can reach"
+                            onClick={() => {
+                              setNewType(user.account_type === "root_admin" ? "support" : user.account_type === "support" ? "technician" : "support");
+                              ask(user.id, "type");
+                            }}
                           >
-                            {user.account_type === "root_admin" ? "make staff" : "make DXG administrator"}
+                            change access level
                           </button>
                           <button
                             className={user.is_active ? "btn danger" : "btn"}
@@ -443,25 +442,41 @@ export function StaffAccounts({ initial, me }: { initial: StaffRow[]; me: string
                             </>
                           )}
                           {askingHere === "type" && (
-                            <ConfirmInline
-                              question={
-                                user.account_type === "root_admin"
-                                  ? `Make ${user.display_name} staff?`
-                                  : `Make ${user.display_name} a ${SECURITY.admin}?`
-                              }
-                              detail={
-                                user.account_type === "root_admin"
-                                  ? "They will only see the events they are assigned to, and can no longer manage accounts or assignments."
-                                  : "They will see every event and every account, and can create, reset and delete accounts."
-                              }
-                              confirmLabel={user.account_type === "root_admin" ? "Make staff" : `Make ${SECURITY.admin}`}
-                              busyLabel="Saving…"
-                              danger={user.account_type === "root_admin"}
-                              onConfirm={confirmed(async () => {
-                                await setStaffAccountType(user.id, user.account_type === "root_admin" ? "staff" : "root_admin");
-                              })}
-                              onClose={() => setAsking(null)}
-                            />
+                            <>
+                              <div className="field" style={{ margin: "8px 0 0" }}>
+                                <label htmlFor={`type-${user.id}`}>New access level for {user.display_name}</label>
+                                <select
+                                  id={`type-${user.id}`}
+                                  style={{ minWidth: 220 }}
+                                  value={newType}
+                                  onChange={(event) => setNewType(event.target.value as AccountType)}
+                                >
+                                  {ACCOUNT_TYPES.filter((type) => type.value !== user.account_type).map((type) => (
+                                    <option key={type.value} value={type.value}>
+                                      {type.label}
+                                    </option>
+                                  ))}
+                                </select>
+                                <div className="note" style={{ marginTop: 4 }}>
+                                  {ACCOUNT_TYPES.find((type) => type.value === newType)?.hint}
+                                </div>
+                              </div>
+                              <ConfirmInline
+                                question={`Make ${user.display_name} ${kindLabel(newType)}?`}
+                                detail={
+                                  newType === "root_admin"
+                                    ? "They will see every event and every account, and can create, reset and delete accounts."
+                                    : `They keep the events they are assigned to, as ${kindLabel(newType)}. The change applies at their next sign-in.`
+                                }
+                                confirmLabel={`Make ${kindLabel(newType)}`}
+                                busyLabel="Saving…"
+                                danger={user.account_type === "root_admin"}
+                                onConfirm={confirmed(async () => {
+                                  await setStaffAccountType(user.id, newType);
+                                })}
+                                onClose={() => setAsking(null)}
+                              />
+                            </>
                           )}
                           {askingHere === "deactivate" && (
                             <ConfirmInline

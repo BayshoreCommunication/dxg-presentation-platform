@@ -42,3 +42,20 @@ export type Actor = {
 
 export const hasAnyRole = (actor: Actor, roles: readonly EventRole[]): boolean =>
   actor.roles.some((held) => roles.includes(held));
+
+/**
+ * The three kinds of DXG account (D-151): what an account *is*, set on Staff accounts. A
+ * DXG Admin reaches everything; the other two are placed on events, and being placed
+ * grants the roles listed here. The screens each kind may open are a separate rule
+ * (`STAFF_KIND_ACCESS` in the API and the sidebar), because the client drew that line by
+ * screen, not by role: support staff run the event but never the Speaker Ready Room or
+ * Manage presentations; technicians run only those two.
+ */
+export const STAFF_KINDS = ["support", "technician"] as const;
+export type StaffKind = (typeof STAFF_KINDS)[number];
+
+export const ROLES_OF_KIND: Readonly<Record<StaffKind, readonly EventRole[]>> = {
+  support: ["project_manager", "presentation_manager"],
+  technician: ["srr_technician", "room_technician", "content_reviewer"],
+};
+
