@@ -2774,4 +2774,7 @@ everywhere. Access is drawn by screen, as the client drew it:
   lands on `/no-access?for=kind`, which says what the level allows; (3) a client's account showed as "DXG Support
   staff" — **Client admin** is a fourth kind (`staff_kind = 'client'`, **migration 036** reclassifies accounts whose
   every role is a client role), offered on Staff accounts; placing one on an event grants `client_event_admin`.
+- **Addendum (Travis, same day):** only three levels are offered on Staff accounts — DXG Admin, DXG Support staff,
+  DXG Technician staff. "Client admin" remains a kind in the data and the API (existing client accounts keep their
+  badge and portal) but is neither created nor chosen on the screen until asked for.
 
