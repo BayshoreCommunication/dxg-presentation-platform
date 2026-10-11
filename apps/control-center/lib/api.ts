@@ -87,7 +87,7 @@ export type Principal = {
   /** Staff, or a speaker with a persistent sign-in (D-146) who reaches only their own presentations. */
   account_kind: "staff" | "speaker";
   /** Which kind of DXG account (D-151); decides which screens the sidebar offers. */
-  staff_kind: "root_admin" | "support" | "technician" | null;
+  staff_kind: "root_admin" | "support" | "technician" | "client" | null;
 };
 
 export const getSession = () => request<{ principal: Principal }>("/auth/session");
@@ -1256,7 +1256,7 @@ export type StaffRow = {
 };
 
 /** DXG Admin, DXG Support staff or DXG Technician staff — set on the account, not per event (D-100, D-151). */
-export type AccountType = "root_admin" | "support" | "technician";
+export type AccountType = "root_admin" | "support" | "technician" | "client";
 
 /** Roles held on an event. Root admin is not one of them: it is the account type. */
 export const EVENT_ROLE_NAMES = [

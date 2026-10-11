@@ -43,13 +43,14 @@ const when = (iso: string | null) =>
 const ACCOUNT_TYPES: { value: AccountType; label: string; hint: string }[] = [
   { value: "support", label: ACCOUNT_KIND.support!.label, hint: ACCOUNT_KIND.support!.meaning },
   { value: "technician", label: ACCOUNT_KIND.technician!.label, hint: ACCOUNT_KIND.technician!.meaning },
+  { value: "client", label: ACCOUNT_KIND.client!.label, hint: ACCOUNT_KIND.client!.meaning },
   { value: "root_admin", label: ACCOUNT_KIND.root_admin!.label, hint: ACCOUNT_KIND.root_admin!.meaning },
 ];
 
 const kindLabel = (type: AccountType) => ACCOUNT_KIND[type]?.label ?? type;
 
 function TypeBadge({ type }: { type: AccountType }) {
-  return <span className={`chip ${type === "root_admin" ? "c-sync" : "c-info"}`}>{kindLabel(type)}</span>;
+  return <span className={`chip ${type === "root_admin" ? "c-sync" : type === "client" ? "c-mut" : "c-info"}`}>{kindLabel(type)}</span>;
 }
 
 const small = { padding: "3px 9px", fontSize: 12 } as const;

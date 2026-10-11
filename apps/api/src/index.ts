@@ -756,7 +756,7 @@ app.use((req, res, next) => {
     });
   }
   // What each kind of DXG account may open (D-151): the client drew the line by screen.
-  if (principal?.kind === "staff" && principal.staff_kind && principal.staff_kind !== "root_admin") {
+  if (principal?.kind === "staff" && (principal.staff_kind === "support" || principal.staff_kind === "technician")) {
     const refusal = kindRefusal(principal.staff_kind, req.path, req.method);
     if (refusal) return res.status(403).json({ code: "auth.kind_forbidden", message: refusal });
   }
@@ -3637,7 +3637,7 @@ app.post("/api/v1/admin/users", async (req, res) => {
     createStaffUser(tx, actor, {
       email: body.email as string,
       displayName: body.display_name ?? "",
-      accountType: (body.account_type ?? "support") as "root_admin" | "support" | "technician" | "staff",
+      accountType: (body.account_type ?? "support") as "root_admin" | "support" | "technician" | "client" | "staff",
       ...(body.password ? { password: body.password } : {}),
     }),
   );
@@ -3715,7 +3715,7 @@ app.post("/api/v1/admin/users/:userId/account-type", async (req, res) => {
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   const body = req.body as { account_type?: string };
   const result = await withScope(scopeFor(req), (tx) =>
-    setAccountType(tx, actor, String(req.params.userId), body.account_type as "root_admin" | "support" | "technician" | "staff"),
+    setAccountType(tx, actor, String(req.params.userId), body.account_type as "root_admin" | "support" | "technician" | "client" | "staff"),
   );
   if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
   return res.json(result.value);

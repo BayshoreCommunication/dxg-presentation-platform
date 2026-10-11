@@ -19,7 +19,7 @@ const forbidden = (what: string): DomainError => ({
 });
 
 /** DXG Admin, DXG Support staff or DXG Technician staff (D-151); "staff" is the old name for support. */
-type AccountType = "root_admin" | "support" | "technician";
+type AccountType = "root_admin" | "support" | "technician" | "client";
 
 export type StaffRow = {
   id: string;
@@ -238,7 +238,7 @@ export async function setAccountType(
   if (!hasAnyRole(actor, ADMIN_ROLES)) return err(forbidden("Changing an account type"));
   const accountType: AccountType = requested === "staff" ? "support" : requested;
   if (accountType !== "root_admin" && !STAFF_KINDS.includes(accountType as StaffKind)) {
-    return err({ code: "admin.bad_account_type", message: "Choose an access level: DXG Admin, DXG Support staff or DXG Technician staff." });
+    return err({ code: "admin.bad_account_type", message: "Choose an access level: DXG Admin, DXG Support staff, DXG Technician staff or Client admin." });
   }
   const target = await accountOf(tx, userId);
   if (!target) return err({ code: "admin.not_found", message: "This account no longer exists — it may have been removed. Refresh the page." });
@@ -252,7 +252,7 @@ export async function setAccountType(
 
   await tx.query(`UPDATE pmp.users SET is_root_admin = $1, staff_kind = $2 WHERE id = $3`, [
     accountType === "root_admin",
-    accountType === "technician" ? "technician" : accountType === "support" ? "support" : target.staff_kind,
+    accountType === "root_admin" ? target.staff_kind : accountType,
     userId,
   ]);
   // The roles held on each event follow the kind (D-151): a technician made support staff

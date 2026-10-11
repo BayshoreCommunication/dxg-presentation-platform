@@ -2767,3 +2767,11 @@ everywhere. Access is drawn by screen, as the client drew it:
   those roles. The per-role route stays for the rare hand grant; the screen no longer ticks roles.
 - Seed: m.vega support; c.delgado and t.okafor technicians. Tests: admin (kind refusals; placement and level change
   swap roles), event-configuration (a technician's refusal is by kind).
+- **Addendum, same day (bugs found while re-testing):** (1) a technician's review workspace failed on the slide
+  preview request (a POST) — now allowed; (2) support staff hit "no event" from every talk link (Files, agenda, risk
+  list) — they may now *read* a talk's detail, findings and comments (`SUPPORT_READS`), while rollback, waiving,
+  sending to the speaker and the review workspace stay refused and the screens hide those actions; a kind refusal
+  lands on `/no-access?for=kind`, which says what the level allows; (3) a client's account showed as "DXG Support
+  staff" — **Client admin** is a fourth kind (`staff_kind = 'client'`, **migration 036** reclassifies accounts whose
+  every role is a client role), offered on Staff accounts; placing one on an event grants `client_event_admin`.
+

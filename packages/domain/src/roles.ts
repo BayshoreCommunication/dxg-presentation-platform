@@ -51,11 +51,13 @@ export const hasAnyRole = (actor: Actor, roles: readonly EventRole[]): boolean =
  * screen, not by role: support staff run the event but never the Speaker Ready Room or
  * Manage presentations; technicians run only those two.
  */
-export const STAFF_KINDS = ["support", "technician"] as const;
+export const STAFF_KINDS = ["support", "technician", "client"] as const;
 export type StaffKind = (typeof STAFF_KINDS)[number];
 
 export const ROLES_OF_KIND: Readonly<Record<StaffKind, readonly EventRole[]>> = {
   support: ["project_manager", "presentation_manager"],
   technician: ["srr_technician", "room_technician", "content_reviewer"],
+  /** The client's own people: their portal, read-only, on the events they are placed on. */
+  client: ["client_event_admin"],
 };
 

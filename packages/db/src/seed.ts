@@ -155,7 +155,11 @@ async function seed(): Promise<void> {
       } else {
         await client.query(`UPDATE users SET staff_kind = $2 WHERE id = $1`, [
           id,
-          role === "content_reviewer" || role === "room_technician" || role === "srr_technician" ? "technician" : "support",
+          role === "content_reviewer" || role === "room_technician" || role === "srr_technician"
+            ? "technician"
+            : role === "client_event_admin"
+              ? "client"
+              : "support",
         ]);
         await client.query(
           `INSERT INTO event_roles (user_id, event_id, role) VALUES ($1, $2, $3)

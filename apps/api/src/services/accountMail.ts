@@ -16,12 +16,18 @@ export async function queueTemporaryPasswordEmail(
     displayName: string;
     temporaryPassword: string;
     reason: "created" | "reset";
-    accountType: "root_admin" | "support" | "technician" | "staff";
+    accountType: "root_admin" | "support" | "technician" | "client" | "staff";
   },
 ): Promise<void> {
   const signIn = `${process.env.STAFF_BASE ?? "http://localhost:3000"}/login`;
   const kindWords =
-    input.accountType === "root_admin" ? "DXG Admin" : input.accountType === "technician" ? "DXG Technician staff" : "DXG Support staff";
+    input.accountType === "root_admin"
+      ? "DXG Admin"
+      : input.accountType === "technician"
+        ? "DXG Technician staff"
+        : input.accountType === "client"
+          ? "Client admin"
+          : "DXG Support staff";
   const opening =
     input.reason === "created"
       ? [

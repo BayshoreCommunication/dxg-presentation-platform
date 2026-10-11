@@ -3538,3 +3538,8 @@ Travis's two tasks: the access levels are DXG Admin / DXG Support staff / DXG Te
 everything but the Speaker Ready Room and Manage presentations, technicians only those two. Built: migration 035,
 account types and labels, per-kind API gate and sidebar, command centre by kind, Event assignments as placement by
 kind (roles follow), seed kinds, tests. Full invariants green after expectation updates. Not deployed.
+**Same day, re-test:** three bugs fixed (technician preview POST refused; support staff bounced off every talk link —
+now read-only talk detail; client accounts labelled support staff — Client admin kind, migration 036). Walked as
+technician, support staff and admin (Staff accounts, Event assignments). Invariants 376/377 (1 skipped), unit 315,
+lint and type-check clean. Not deployed.
+

@@ -184,6 +184,7 @@ export const ACCOUNT_KIND: Readonly<Record<string, Words>> = {
   root_admin: { label: "DXG Admin", meaning: "Every event, plus staff accounts and assignments." },
   support: { label: "DXG Support staff", meaning: "Runs the events they are assigned to — everything except the Speaker Ready Room and Manage presentations." },
   technician: { label: "DXG Technician staff", meaning: "The Speaker Ready Room and Manage presentations on the events they are assigned to, nothing else." },
+  client: { label: "Client admin", meaning: "The client's own view of the events they are placed on — read-only, through the client portal." },
 };
 
 /** Security words, one set (A22–A26, A28). */
