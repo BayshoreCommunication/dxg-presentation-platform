@@ -238,7 +238,7 @@ export async function setAccountType(
   if (!hasAnyRole(actor, ADMIN_ROLES)) return err(forbidden("Changing an account type"));
   const accountType: AccountType = requested === "staff" ? "support" : requested;
   if (accountType !== "root_admin" && !STAFF_KINDS.includes(accountType as StaffKind)) {
-    return err({ code: "admin.bad_account_type", message: "Choose an access level: DXG Admin, DXG Support staff, DXG Technician staff or Client admin." });
+    return err({ code: "admin.bad_account_type", message: "Choose an access level: DXG Admin, DXG Support staff, DXG Technician staff or Client access." });
   }
   const target = await accountOf(tx, userId);
   if (!target) return err({ code: "admin.not_found", message: "This account no longer exists — it may have been removed. Refresh the page." });

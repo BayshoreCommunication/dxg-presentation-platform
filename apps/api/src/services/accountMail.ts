@@ -26,7 +26,7 @@ export async function queueTemporaryPasswordEmail(
       : input.accountType === "technician"
         ? "DXG Technician staff"
         : input.accountType === "client"
-          ? "Client admin"
+          ? "Client access"
           : "DXG Support staff";
   const opening =
     input.reason === "created"
