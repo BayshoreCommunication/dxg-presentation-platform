@@ -189,7 +189,7 @@ export const GUIDES: Section[] = [
           "A room is Ready when every talk in it is ticked loaded. Nothing on Room sync is checked automatically.",
           "Ticked one by mistake? Press Undo beside it; the talk shows as not loaded until it is ticked again.",
         ],
-        tip: "Launch in Room Agent records that a talk was presented. Opening PowerPoint on the room PC isn't connected yet.",
+        tip: "Download all on a room (or at the top, for all your rooms) brings every approved file in one zip. A presenter brought a new file? Upload new version beside their talk.",
       },
     ],
   },

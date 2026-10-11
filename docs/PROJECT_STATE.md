@@ -3564,3 +3564,17 @@ Dr. Priya Raman at Station 1, "Still checked in". New suite srr-local-intake 5/5
 the one failure (event-files "MedTech has an approved file") fails the same without these changes (local seed data
 has drifted). Lint and type-check clean. **Not pushed, not deployed** — Travis reviews locally first.
 Note: the browser walk left a junk v2 on Alicia Fontaine's talk in the local data (`npm run db:seed` resets it).
+
+## 2026-10-11 — Client review B6–B9: technicians by room, Download all, onsite upload, Room Agent removed (D-153, D-154)
+Built locally. **B7**: migration 037 `room_assignments`; Room sync names each room's technicians and admins/support
+assign them; technicians now open Room sync and see, tick and download only their own rooms. **B6**: Download all per
+room and for all one's rooms (zip, files named by time and talk). **B8**: Upload a new version on Manage
+presentations (pick the talk) and beside each talk on Room sync, through Local intake. **B9**: Room Agent app,
+screens, API routes, device keys, heartbeat script and seed rows removed; Mark loaded kept in `roomSync.ts`; old
+tables kept. Walked as the seeded technician C. Delgado: Room sync shows Ballroom A and Room 212 only, the zip downloads,
+the technicians list is refused; Manage presentations' upload opens Local intake for a chosen talk. New suite
+room-sync-technicians 8/8; unit 291 pass (the 24 Room Agent unit tests went with it); invariants 379/382 then the
+admin expectation updated (49/49 across admin, cross-event, manual-room-loading, room-sync) — the two still failing,
+event-files and event-owned-data's station check, need seed state the local data no longer has (approved MedTech
+file; a MedTech speaker not checked in): `npm run db:seed` resets it. Lint and type-check clean. **Not pushed, not
+deployed.** Deploy note: migration 037 runs with the others; no server change otherwise.

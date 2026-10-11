@@ -143,20 +143,6 @@ describe("email templates are editable, within what sending can fill in", () => 
 });
 
 describe("screens read the event's own name and clock", () => {
-  test("the Room Agent's holding slide names the room's own event", async (t: TestContext) => {
-    if (!up) return t.skip("API not running");
-    const fleet = (await (await call(`/events/${MEDTECH}/sync/fleet`)).json()) as { items: { room_id: string }[] };
-    const view = (await (await call(`/rooms/${fleet.items[0]!.room_id}/agent-view`)).json()) as {
-      event: { id: string; name: string; timezone: string };
-    };
-    const summary = (await (await call(`/events/${MEDTECH}/summary`)).json()) as {
-      event: { name: string; timezone: string };
-    };
-    assert.equal(view.event.id, MEDTECH);
-    assert.equal(view.event.name, summary.event.name);
-    assert.equal(view.event.timezone, summary.event.timezone);
-  });
-
   test("a talk's screen carries its event's timezone", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
     const talks = (await (await call(`/events/${MEDTECH}/talks`)).json()) as { items: { slot_id: string }[] };

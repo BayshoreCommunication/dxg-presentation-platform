@@ -1,7 +1,7 @@
 import type pg from "pg";
 import { appendAudit } from "@pmp/db";
-import type { Actor, DomainError, Result } from "@pmp/domain";
-import { err, ok } from "@pmp/domain";
+import { roomSyncLifecycle, transition, err, ok } from "@pmp/domain";
+import type { Actor, DomainError, Result, RoomSyncAction, RoomSyncState } from "@pmp/domain";
 import { writeZip } from "@pmp/files";
 import { storage } from "./ingest.ts";
 
@@ -182,4 +182,154 @@ export async function approvedRoomsZip(
   const today = new Date().toISOString().slice(0, 10);
   const label = byRoom || !rows[0] ? "rooms" : safe(rows[0].room).toLowerCase().replace(/[^a-z0-9]+/g, "-");
   return ok({ filename: `approved-${label}-${today}.zip`, body: writeZip(entries), count: entries.length });
+}
+
+/* ── ticking a file loaded (D-125; moved here from the retired Room Agent, D-154) ── */
+
+async function setSyncState(
+  tx: pg.PoolClient,
+  actor: Actor,
+  roomFileId: string,
+  action: RoomSyncAction,
+  from: RoomSyncState,
+  lockVersion: number,
+  roomId: string,
+): Promise<Result<RoomSyncState, DomainError>> {
+  const decision = transition(roomSyncLifecycle, { from, action, actor });
+  if (!decision.ok) return err(decision.error);
+
+  const { rowCount } = await tx.query(
+    `UPDATE pmp.room_files
+        SET sync_state = $1, lock_version = lock_version + 1,
+            acknowledged_by = CASE WHEN $2 THEN $3::uuid ELSE acknowledged_by END,
+            acknowledged_at = CASE WHEN $2 THEN now() ELSE acknowledged_at END
+      WHERE id = $4 AND lock_version = $5`,
+    [decision.value.to, action === "acknowledge", actor.id, roomFileId, lockVersion],
+  );
+  if (rowCount === 0) {
+    return err({
+      code: "room_sync.conflict",
+      message: "This room copy changed while you were looking at it.",
+      current_state: from,
+    });
+  }
+
+  const { rows } = await tx.query<{ event_id: string; client_id: string }>(
+    `SELECT event_id, client_id FROM pmp.room_files WHERE id = $1`,
+    [roomFileId],
+  );
+  await tx.query(
+    `INSERT INTO pmp.workflow_transitions
+       (event_id, client_id, subject_type, subject_id, room_id, from_state, to_state, action, actor_user_id)
+     VALUES ($1,$2,'room_file.sync',$3,$4,$5,$6,$7,$8)`,
+    [rows[0]!.event_id, rows[0]!.client_id, roomFileId, roomId, from, decision.value.to, action, actor.id],
+  );
+  await appendAudit(tx, {
+    partitionId: rows[0]!.event_id,
+    clientId: rows[0]!.client_id,
+    actorUserId: actor.id,
+    action: `room_sync.${action}`,
+    subjectType: "room_file",
+    subjectId: roomFileId,
+    detail: { room_id: roomId, from, to: decision.value.to },
+  });
+  return ok(decision.value.to);
+}
+
+/**
+ * D-125: DXG staff copy an approved file onto the room's presentation PC by hand and tick
+ * it here. The ticked copy becomes the one the room plays (`active`), and any other copy
+ * of the same talk the room was playing steps aside (`obsolete`) — the same hand-over
+ * `acknowledge` makes, without waiting for room software that isn't there.
+ */
+export async function markLoaded(
+  tx: pg.PoolClient,
+  actor: Actor,
+  roomFileId: string,
+  lockVersion: number,
+): Promise<Result<{ sync_state: RoomSyncState; lock_version: number }, DomainError>> {
+  const { rows } = await tx.query<{
+    sync_state: RoomSyncState;
+    lock_version: number;
+    room_id: string;
+    file_id: string;
+    review_state: string;
+  }>(
+    `SELECT rf.sync_state, rf.lock_version, rf.room_id, fv.file_id, fv.review_state
+       FROM pmp.room_files rf JOIN pmp.file_versions fv ON fv.id = rf.file_version_id
+      WHERE rf.id = $1 FOR UPDATE OF rf`,
+    [roomFileId],
+  );
+  const row = rows[0];
+  if (!row) return err({ code: "room_sync.not_found", message: "This file is no longer on the room's list — refresh the page." });
+
+  // Authority first, as in acknowledge: "you may not" beats "someone else changed it".
+  const permitted = transition(roomSyncLifecycle, { from: row.sync_state, action: "mark_loaded", actor });
+  if (!permitted.ok) return err(permitted.error);
+
+  if (row.lock_version !== lockVersion) {
+    return err({
+      code: "room_sync.conflict",
+      message: "This room copy changed while you were looking at it.",
+      current_state: row.sync_state,
+    });
+  }
+  // Only the approved version goes into a room: a copy of a version that has since been
+  // replaced by a newer approval must not become the one the room plays.
+  if (row.review_state !== "approved") {
+    return err({
+      code: "room_sync.not_approved",
+      message: "A newer version was approved since this page loaded. Refresh the page and load that one instead.",
+      current_state: row.sync_state,
+    });
+  }
+
+  // The copy the room was playing steps aside — as a consequence of this tick, so it is
+  // the system's transition, attributed to the person who ticked.
+  const system: Actor = { id: actor.id, roles: actor.roles, isMachine: true };
+  const { rows: previous } = await tx.query<{ id: string; sync_state: RoomSyncState; lock_version: number }>(
+    `SELECT rf.id, rf.sync_state, rf.lock_version
+       FROM pmp.room_files rf JOIN pmp.file_versions fv ON fv.id = rf.file_version_id
+      WHERE rf.room_id = $1 AND fv.file_id = $2 AND rf.sync_state = 'active' AND rf.id <> $3
+      FOR UPDATE OF rf`,
+    [row.room_id, row.file_id, roomFileId],
+  );
+  for (const old of previous) {
+    const retired = await setSyncState(tx, system, old.id, "obsolete", old.sync_state, old.lock_version, row.room_id);
+    if (!retired.ok) return err(retired.error);
+  }
+
+  const loaded = await setSyncState(tx, actor, roomFileId, "mark_loaded", row.sync_state, row.lock_version, row.room_id);
+  if (!loaded.ok) return err(loaded.error);
+  return ok({ sync_state: loaded.value, lock_version: row.lock_version + 1 });
+}
+
+/** D-125: take back a "loaded" tick made by mistake — the copy is "not loaded yet" again. */
+export async function unmarkLoaded(
+  tx: pg.PoolClient,
+  actor: Actor,
+  roomFileId: string,
+  lockVersion: number,
+): Promise<Result<{ sync_state: RoomSyncState; lock_version: number }, DomainError>> {
+  const { rows } = await tx.query<{ sync_state: RoomSyncState; lock_version: number; room_id: string }>(
+    `SELECT sync_state, lock_version, room_id FROM pmp.room_files WHERE id = $1 FOR UPDATE`,
+    [roomFileId],
+  );
+  const row = rows[0];
+  if (!row) return err({ code: "room_sync.not_found", message: "This file is no longer on the room's list — refresh the page." });
+
+  const permitted = transition(roomSyncLifecycle, { from: row.sync_state, action: "unmark_loaded", actor });
+  if (!permitted.ok) return err(permitted.error);
+
+  if (row.lock_version !== lockVersion) {
+    return err({
+      code: "room_sync.conflict",
+      message: "This room copy changed while you were looking at it.",
+      current_state: row.sync_state,
+    });
+  }
+
+  const undone = await setSyncState(tx, actor, roomFileId, "unmark_loaded", row.sync_state, row.lock_version, row.room_id);
+  if (!undone.ok) return err(undone.error);
+  return ok({ sync_state: undone.value, lock_version: row.lock_version + 1 });
 }

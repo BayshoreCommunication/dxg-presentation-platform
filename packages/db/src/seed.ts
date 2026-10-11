@@ -217,13 +217,6 @@ async function seed(): Promise<void> {
         );
       }
 
-      await client.query(
-        `INSERT INTO room_agents (room_id, event_id, client_id, device_fingerprint, public_key,
-                                  agent_version, last_heartbeat_at)
-         VALUES ($1, $2, $3, $4, '\\x00'::bytea, '1.4.2', now())`,
-        [roomId, IDS.event, IDS.client, `${talk.room.replace(/\s+/g, "-").toUpperCase()}-01`],
-      );
-
       const { rows: sessionRows } = await client.query<{ id: string }>(
         `INSERT INTO sessions (event_id, client_id, room_id, day_id, title, starts_at, ends_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,

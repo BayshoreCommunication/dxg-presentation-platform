@@ -329,7 +329,6 @@ const SCREENS: [RegExp, string][] = [
   [/^\/events\/[^/]+\/srr$/, "Speaker Ready Room"],
   [/^\/events\/[^/]+\/srr\/[^/]+$/, "Check-in"],
   [/^\/events\/[^/]+\/sync$/, "Room sync"],
-  [/^\/events\/[^/]+\/agent(\/[^/]+)?$/, "Room Agent"],
   [/^\/events\/[^/]+\/talks\/[^/]+$/, "Presentation detail"],
   [/^\/events\/[^/]+\/talks\/[^/]+\/inspection$/, "Inspection"],
   [/^\/admin\/users$/, "Staff accounts"],

@@ -122,9 +122,8 @@ export const GROUPS: {
     ],
   },
   /*
-   * No DEVICE group (Travis, 2026-10-08, from the client's review): Room sync covers the
-   * technician's job, and the Room Agent is to go. Its screen is still reachable by address
-   * until it is removed with the rest.
+   * No DEVICE group: the Room Agent is gone (client review, D-154) — Room sync covers the
+   * technician's job.
    */
   {
     group: "ADMIN",

@@ -151,7 +151,8 @@ export async function removeTestEvents(namePrefixes: readonly string[]): Promise
           "speaker_tokens",
           "speakers",
           "schedule_imports",
-          // A room's computer registration is set-up, not history, and points at the room.
+          // Who works a room (D-153), and the retired Room Agent's old registrations (D-154).
+          "room_assignments",
           "room_agents",
           "rooms",
           "tracks",

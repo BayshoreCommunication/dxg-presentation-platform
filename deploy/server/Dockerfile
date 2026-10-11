@@ -22,8 +22,6 @@ ARG NODE_IMAGE=node:24.21.0-trixie-slim
 FROM ${NODE_IMAGE} AS deps
 WORKDIR /app
 COPY . .
-# The Room Agent (apps/room-agent) is a Windows desktop app; servers never need Electron's binary.
-ENV ELECTRON_SKIP_BINARY_DOWNLOAD=1
 RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund
 
 # ── what every shipped image starts from: the base with Debian's security updates applied ─────

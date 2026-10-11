@@ -7,8 +7,8 @@ info:
     SRS §11 endpoint areas across all platform domains. Conventions: cursor
     pagination (`cursor`/`limit`, response `next_cursor`); all state transitions
     accept an Idempotency-Key header and an expected `lock_version`
-    (WORKFLOW_STATES common rules); errors use the Error schema; webhooks and
-    agent endpoints authenticate with their own schemes. Detailed request/response
+    (WORKFLOW_STATES common rules); errors use the Error schema; webhooks
+    authenticate with their own scheme. Detailed request/response
     schemas are elaborated per milestone task; entity shapes follow db/migrations.
 servers:
   - url: https://api.example.com/api/v1
@@ -26,7 +26,6 @@ tags:
   - {name: inspection}
   - {name: review}
   - {name: srr}
-  - {name: agent, description: Room Agent endpoints (device credential auth)}
   - {name: sync}
   - {name: reports}
   - {name: archive}
@@ -303,58 +302,25 @@ paths:
     parameters: [{$ref: '#/components/parameters/checkinId'}]
     post: {tags: [srr], summary: Record departure, responses: {'200': {$ref: '#/components/responses/OK'}}}
 
-  # ── room agent (M11, device credential auth) ───────────────────────
-  /agent/register:
-    post:
-      tags: [agent]
-      summary: Register with room code + device fingerprint; warns on duplicate agent (FR-AGT-001)
-      security: []
-      responses: {'201': {$ref: '#/components/responses/Created'}}
-  /agent/heartbeat:
-    post:
-      tags: [agent]
-      summary: 60s heartbeat (version, library hash, playback status)
-      security: [{agentAuth: []}]
-      responses: {'200': {$ref: '#/components/responses/OK'}}
-  /agent/manifest:
-    get:
-      tags: [agent]
-      summary: Delta manifest for this room (<500ms P95; FR-SYNC-001)
-      security: [{agentAuth: []}]
-      responses: {'200': {$ref: '#/components/responses/OK'}}
-  /agent/manifest/{manifestId}:applied:
-    parameters: [{name: manifestId, in: path, required: true, schema: {type: string, format: uuid}}]
-    post:
-      tags: [agent]
-      summary: Report manifest application result (per-file checksum outcomes)
-      security: [{agentAuth: []}]
-      responses: {'200': {$ref: '#/components/responses/OK'}}
-  /agent/logs:
-    post:
-      tags: [agent]
-      summary: Ship queued launch/error logs; deduped by agent_seq (FR-SYNC-003)
-      security: [{agentAuth: []}]
-      responses: {'202': {$ref: '#/components/responses/Accepted'}}
-
   # ── sync dashboard (M12) ────────────────────────────────────────────
   /events/{eventId}/sync/fleet:
     parameters: [{$ref: '#/components/parameters/eventId'}]
-    get: {tags: [sync], summary: 'Fleet status: agents, heartbeats, readiness per room', responses: {'200': {$ref: '#/components/responses/OK'}}}
-  /rooms/{roomId}/device-key:
-    parameters: [{$ref: '#/components/parameters/roomId'}]
-    post: {tags: [sync], summary: 'Issue or replace the room computer device key (shown once; replacing cancels the old one; D-077)', responses: {'201': {$ref: '#/components/responses/Created'}}}
-  /rooms/{roomId}:force-sync:
-    parameters: [{$ref: '#/components/parameters/roomId'}, {$ref: '#/components/parameters/idempotencyKey'}]
-    post: {tags: [sync], summary: Force manifest rebuild + push notification, responses: {'202': {$ref: '#/components/responses/Accepted'}}}
-  /room-files/{roomFileId}:transition:
-    parameters:
-      - {name: roomFileId, in: path, required: true, schema: {type: string, format: uuid}}
-      - {$ref: '#/components/parameters/idempotencyKey'}
-    post:
-      tags: [sync]
-      summary: Acknowledge change / activate / obsolete (WORKFLOW_STATES §4)
-      requestBody: {$ref: '#/components/requestBodies/Transition'}
-      responses: {'200': {$ref: '#/components/responses/OK'}, '409': {$ref: '#/components/responses/Conflict'}, '422': {$ref: '#/components/responses/IllegalTransition'}}
+    get: {tags: [sync], summary: 'Room sync loading checklist per room, with its technicians; a technician gets their own rooms only (D-125, D-153)', responses: {'200': {$ref: '#/components/responses/OK'}}}
+  /events/{eventId}/sync/technicians:
+    parameters: [{$ref: '#/components/parameters/eventId'}]
+    get: {tags: [sync], summary: "DXG Technician staff on the event, for giving out rooms (D-153)", responses: {'200': {$ref: '#/components/responses/OK'}}}
+  /events/{eventId}/sync/rooms/{roomId}/technicians:
+    parameters: [{$ref: '#/components/parameters/eventId'}, {$ref: '#/components/parameters/roomId'}]
+    put: {tags: [sync], summary: "Set who works a room (replaces the list; technicians only; not for technicians) (D-153)", responses: {'200': {$ref: '#/components/responses/OK'}, '422': {$ref: '#/components/responses/Error'}}}
+  /events/{eventId}/sync/approved.zip:
+    parameters: [{$ref: '#/components/parameters/eventId'}, {name: room, in: query, required: false, schema: {type: string, format: uuid}}]
+    get: {tags: [sync], summary: "Download all: every approved presentation of a room, or of all the caller's rooms, as one zip (D-153)", responses: {'200': {description: zip, content: {application/zip: {schema: {type: string, format: binary}}}}, '403': {$ref: '#/components/responses/Error'}, '422': {$ref: '#/components/responses/Error'}}}
+  /room-files/{roomFileId}/loaded:
+    parameters: [{name: roomFileId, in: path, required: true, schema: {type: string, format: uuid}}]
+    post: {tags: [sync], summary: "Tick the approved copy loaded on the room PC (D-125); a technician in their own rooms only (D-153)", responses: {'200': {$ref: '#/components/responses/OK'}, '403': {$ref: '#/components/responses/Error'}, '409': {$ref: '#/components/responses/Conflict'}}}
+  /room-files/{roomFileId}/unloaded:
+    parameters: [{name: roomFileId, in: path, required: true, schema: {type: string, format: uuid}}]
+    post: {tags: [sync], summary: "Take a mistaken loaded tick back (D-125)", responses: {'200': {$ref: '#/components/responses/OK'}, '409': {$ref: '#/components/responses/Conflict'}}}
 
   # ── reports (M13) ───────────────────────────────────────────────────
   /events/{eventId}/reports/{reportCode}:
@@ -436,7 +402,6 @@ components:
   securitySchemes:
     staffAuth: {type: openIdConnect, openIdConnectUrl: https://auth.example.com/.well-known/openid-configuration, description: Staff OIDC (MFA enforced)}
     speakerToken: {type: http, scheme: bearer, description: "Hashed, recipient-bound speaker portal token"}
-    agentAuth: {type: http, scheme: bearer, description: 'Room Agent device key, `<agent id>.<secret>`, issued from Room sync (D-077). A signed device-credential token (SECURITY_MODEL §2) may replace it.'}
     serviceAuth: {type: http, scheme: bearer, description: Service-to-service short-lived token}
     webhookSignature: {type: apiKey, in: header, name: X-Webhook-Signature, description: Provider HMAC signature}
   parameters:

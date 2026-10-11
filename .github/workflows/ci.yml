@@ -32,7 +32,7 @@ jobs:
       - run: npm run lint
       - name: Type-check every app
         run: |
-          for app in api dispatcher control-center speaker-portal room-agent; do
+          for app in api dispatcher control-center speaker-portal; do
             echo "::group::$app"; (cd apps/$app && npx tsc --noEmit -p .); echo "::endgroup::"
           done
       - run: npm test

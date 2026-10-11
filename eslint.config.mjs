@@ -25,7 +25,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ["packages/db/src/**", "apps/*/src/**", "scripts/**", "apps/*/scripts/**", "apps/room-agent/harness/**", "**/*.test.ts"],
+    files: ["packages/db/src/**", "apps/*/src/**", "scripts/**", "apps/*/scripts/**", "**/*.test.ts"],
     rules: { "no-console": "off" },
   },
   {

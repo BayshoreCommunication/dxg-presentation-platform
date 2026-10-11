@@ -2817,3 +2817,49 @@ ECR's scan of the first CI-built images (D-149) found 7–8 critical and ~40 hig
 - Tests: `tests/invariants/srr-local-intake.test.ts` (upload + update without a check-in, versions and source, audit
   with reason, reason required, talk of another event 404, support staff refused, CSV shape and times, technician
   may download).
+
+## D-153 (2026-10-11): Technicians work their assigned rooms; Download all; upload a new version onsite — Status: ACCEPTED (Travis, from the client's review, items B6–B8)
+- **Room assignments** (`room_assignments`, **migration 037**: user, room, event, client, who assigned; RLS like
+  every event table): on **Room sync**, admins and support staff press **Assign technicians** on a room and tick the
+  DXG Technician staff placed on the event (`GET /events/:id/sync/technicians`,
+  `PUT /events/:id/sync/rooms/:roomId/technicians` with the full list; anyone else is 422 `room.not_a_technician`).
+  Each room card names its technicians.
+- **Technicians and Room sync**: the client's review gave technicians "Speaker Ready Room and Room Sync"; D-151 had
+  only the SRR and Manage presentations. Room sync is now theirs too (sidebar and API kind gate), for **their own
+  rooms only**: the fleet lists only rooms assigned to them (none → "No rooms are assigned to you…"), Mark loaded /
+  Undo on another room is 403 `room.not_assigned`, and giving out rooms is refused by kind. Manage presentations
+  stays theirs as in D-151.
+- **Download all**: `GET /events/:id/sync/approved.zip[?room=<id>]` — every talk's approved, stored version in the
+  room (cancelled sessions left out), or in every room on the caller's page (a technician: their rooms), one zip,
+  one folder per room when there are several, each file named `MM-DD HHMM <talk> (vN).pptx` on the event's clock so
+  they sort in running order. Each file is logged as a download. Capped at 1 GB (422 `room.zip_too_large`: download
+  room by room); a room with nothing approved is 422 `room.nothing_approved`. Buttons: **Download all (n)** on each
+  room and **Download all approved [in my rooms] (n)** at the top; fetched, so an error shows on the page.
+- **Upload a new version onsite**: **Upload a new version** on Manage presentations (choose the talk, then Local
+  intake) and **Upload new version** beside each talk on Room sync — both use D-152's
+  `POST /events/:id/srr/slots/:slotId/intake` (scan → store → inspect → back to review; the room keeps the approved
+  copy until the new one is approved and ticked).
+- Seed: C. Delgado works Ballroom A and Room 212, T. Okafor Room 210. (C. Delgado's seeded role is still content
+  reviewer only, so they can see and download but not tick; a technician placed through Event assignments gets the
+  room-technician role and can.)
+- Tests: `tests/invariants/room-sync-technicians.test.ts` (8): technicians offered and others refused, own rooms only,
+  no giving out rooms, no ticking another room, zip by room and for all one's rooms, another room's zip refused,
+  nothing-approved, upload open to technicians; admin and cross-event suites updated.
+
+## D-154 (2026-10-11): The Room Agent is removed — Status: ACCEPTED (Travis, from the client's review, item B9: "Room Sync covers the full technician workflow")
+- Gone: the `apps/room-agent` workspace (Electron, its harness, autostart script and tests — Electron's 62 packages
+  leave the lock file), the control centre's Room Agent screens (`/events/:id/agent`, `/events/:id/agent/:roomId`),
+  the API's agent and room-PC routes (`POST /agent/heartbeat`, `POST /rooms/:id/device-key`,
+  `GET /rooms/:id/agent-view`, `POST /rooms/:id/sync`, `POST /room-files/:id/acknowledge`, `POST /rooms/:id/launch`;
+  `/api/v1/agent/` is no longer an open path), `services/agent.ts` and `services/deviceKeys.ts`, the
+  `db:heartbeat` script, the seed's agent rows, the fleet's heartbeat / agent version / device-key fields, the
+  "Room view →" link, its CSS, the CI type-check of the app and the Dockerfile's Electron setting. OpenAPI lists Room
+  sync's real routes instead.
+- Kept: **Mark loaded / Undo** (D-125) moved to `services/roomSync.ts` unchanged. The room-copy lifecycle in
+  `packages/domain` keeps its acknowledge / launch states (pure code, still the rules a room copy follows).
+  The tables (`room_agents`, `sync_manifests`, `launch_logs`) stay as history — nothing is dropped.
+- Superseded: D-077 (device keys), D-118, D-124 and D-128 (room view, Launch) and screen 15 of the client baseline.
+  The SRS's FR-AGT requirements and the Phase-0 PowerPoint PoC no longer apply; older planning documents (SRS, SPEC,
+  BUILD_SPEC, SCREEN_SPECS, PLAN, PHASE0_GATE, G0-1) are left as the record of what was planned.
+- Tests: `device-keys` suite removed with its routes; cross-event (the room check is now Room sync's), event-owned-data
+  and manual-room-loading (no room view or Launch) updated.

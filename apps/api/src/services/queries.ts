@@ -261,11 +261,6 @@ export type FleetRoom = {
   readiness: "ready" | "attention";
   files_current: number;
   files_total: number;
-  /** Kept for later room software; the screens no longer show it (D-125). */
-  heartbeat_age: number | null;
-  agent_version: string | null;
-  /** When the room's computer was given its device key; null if never (D-077). */
-  key_issued_at: string | null;
   /** DXG Technician staff assigned to this room (D-153). */
   technicians: { user_id: string; name: string }[];
   talks: FleetTalk[];
@@ -283,18 +278,9 @@ export async function syncFleet(
   onlyRoomsOf?: string,
 ): Promise<FleetRoom[]> {
   const { rows: talkRows } = await tx.query<TalkAggRow>(TALK_AGG, [eventId]);
-  const { rows: roomRows } = await tx.query<{
-    room_id: string;
-    room: string;
-    heartbeat_age: number | null;
-    agent_version: string | null;
-    key_issued_at: string | null;
-  }>(
-    `SELECT r.id AS room_id, r.name AS room,
-            EXTRACT(EPOCH FROM (now() - ra.last_heartbeat_at))::int AS heartbeat_age,
-            ra.agent_version, ra.key_issued_at
+  const { rows: roomRows } = await tx.query<{ room_id: string; room: string }>(
+    `SELECT r.id AS room_id, r.name AS room
        FROM pmp.rooms r
-       LEFT JOIN pmp.room_agents ra ON ra.room_id = r.id AND ra.revoked_at IS NULL
       WHERE r.event_id = $1
         AND ($2::uuid IS NULL OR EXISTS (SELECT 1 FROM pmp.room_assignments x WHERE x.room_id = r.id AND x.user_id = $2))
       ORDER BY r.name`,
@@ -357,9 +343,6 @@ export async function syncFleet(
       readiness: deriveRoomReadiness({ upcomingTalks: snapshots }),
       files_current: snapshots.filter((talk) => deriveTalkStatus(talk) === "synchronized_onsite").length,
       files_total: snapshots.length,
-      heartbeat_age: room.heartbeat_age,
-      agent_version: room.agent_version,
-      key_issued_at: room.key_issued_at,
       technicians: assigned
         .filter((row) => row.room_id === room.room_id)
         .map((row) => ({ user_id: row.user_id, name: row.name })),

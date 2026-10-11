@@ -70,7 +70,6 @@ const ALL: Screen[] = [
   { key: "checkin", baseline: "Check-in", url: CHECKIN, who: "staff" },
   { key: "ingest", baseline: "USB intake", url: CHECKIN, who: "staff", openUsb: true },
   { key: "sync", baseline: "Room sync", url: `${STAFF}/events/${E}/sync`, who: "staff" },
-  { key: "agent", baseline: "Room Agent (Ballroom A)", url: `${STAFF}/events/${E}/agent/${ids.room}`, who: "staff" },
   { key: "speaker", baseline: "Speaker portal", url: `${PORTAL}/portal`, who: "presenter", phone: true },
   { key: "client", baseline: "Client portal", url: `${STAFF}/client/${E}`, who: "client", phone: true },
 ];

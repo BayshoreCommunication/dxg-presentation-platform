@@ -68,8 +68,7 @@ import {
 const MFA_COOKIE = "pmp_mfa";
 /** The speaker site's sign-in page (D-148). */
 const SPEAKER_SITE = `${process.env.PORTAL_BASE ?? "http://localhost:3001"}/login`;
-import { agentView, syncRoom, acknowledge, launch, markLoaded, unmarkLoaded } from "./services/agent.ts";
-import { approvedRoomsZip, assignedTo, eventTechnicians, roomOfRoomFile, setRoomTechnicians } from "./services/roomSync.ts";
+import { approvedRoomsZip, assignedTo, eventTechnicians, markLoaded, roomOfRoomFile, setRoomTechnicians, unmarkLoaded } from "./services/roomSync.ts";
 import { srrDashboard, srrReportCsv, checkIn, checkinDetail, usbIngest, slotIntake, signOff, depart, emailReceipt, addStation, renameStation, retireStation } from "./services/srr.ts";
 import {
   presentationDetail,
@@ -104,7 +103,6 @@ import {
 } from "./services/events.ts";
 import { eventAgenda } from "./services/agenda.ts";
 import { roleList, SECURITY } from "@pmp/format";
-import { agentForKey, issueDeviceKey } from "./services/deviceKeys.ts";
 import { pdfStates, queuePdfs } from "./services/pdf.ts";
 import { reminderSchedule } from "./services/reminders.ts";
 import {
@@ -716,7 +714,6 @@ const NON_STAFF_PATHS = [
   "/api/v1/me/",
   "/api/v1/client/",
   "/api/v1/webhooks/",
-  "/api/v1/agent/",
   // The event's email banner, fetched by speakers' mail clients with no sign-in (D-138).
   // A GET-only route that serves that one image and nothing else.
   "/api/v1/email-banner/",
@@ -1325,102 +1322,6 @@ app.get("/api/v1/events/:eventId/sync/approved.zip", async (req, res) => {
   return res.send(result.value.body);
 });
 
-/**
- * Agent heartbeat (FR-AGT-001). Device-credential auth arrives with M5-1; for now
- * the agent identifies itself by room, which is enough to drive room readiness.
- */
-/*
- * A room computer's check-in (D-077). It must carry its device key as
- * `Authorization: Bearer <agent id>.<secret>`; the room it counts for is the key's own,
- * never a `room_id` in the body. It used to accept a bare room id, so anyone who knew
- * one could report that room online and "Rooms ready" would count it.
- */
-app.post("/api/v1/agent/heartbeat", async (req, res) => {
-  const body = (req.body ?? {}) as { agent_version?: string };
-  const key = /^Bearer\s+(.+)$/i.exec(req.headers.authorization ?? "")?.[1]?.trim();
-  const result = await withSystemScope(async (tx) => {
-    const agent = await agentForKey(tx, key);
-    if (!agent) return null;
-    await tx.query(
-      `UPDATE pmp.room_agents SET last_heartbeat_at = now(), agent_version = COALESCE($2, agent_version)
-        WHERE id = $1`,
-      [agent.id, typeof body.agent_version === "string" ? body.agent_version.slice(0, 40) : null],
-    );
-    return agent;
-  });
-  if (!result) {
-    // One answer for no key, a malformed key, an unknown agent and a wrong secret.
-    return res.status(401).json({
-      code: "agent.unauthenticated",
-      // D-112: no "device key" wording — the person at the room computer just needs to reconnect it.
-      message: "This room computer isn't connected to the event. Connect it again from Room sync.",
-    });
-  }
-  return res.json({ acknowledged: true, room_id: result.room_id, at: new Date().toISOString() });
-});
-
-/** Issue (or replace) the device key for a room's computer (D-077). Staff; shown once. */
-app.post("/api/v1/rooms/:roomId/device-key", async (req, res) => {
-  const actor = actorFrom(req);
-  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
-  const result = await withScope(scopeFor(req), (tx) => issueDeviceKey(tx, actor, String(req.params.roomId)));
-  if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
-  // Never cached anywhere between here and the operator's screen.
-  res.setHeader("cache-control", "no-store");
-  return res.status(201).json(result.value);
-});
-
-/* ── room agent (screen 15; M5 builds the Windows client itself) ──────────── */
-
-app.get("/api/v1/rooms/:roomId/agent-view", async (req, res) => {
-  const actor = actorFrom(req);
-  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
-  const roomId = String(req.params.roomId);
-  const view = await withScope(scopeFor(req), (tx) => agentView(tx, roomId));
-  if (!view) return res.status(404).json({ code: "agent.room_not_found", message: "This room no longer exists — it may have been removed. Refresh the page." });
-  return res.json(view);
-});
-
-app.post("/api/v1/rooms/:roomId/sync", async (req, res) => {
-  const actor = actorFrom(req);
-  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
-  const roomId = String(req.params.roomId);
-  // D-118: this copies files as a connected room PC would, so it needs one. It used to
-  // stamp a fresh heartbeat and mark files "on the room PC" for a room with no PC at all —
-  // a false "Ready to play" / "Synchronized onsite".
-  const result = await withScope(scopeFor(req), async (tx) => {
-    const { rows } = await tx.query<{ connected: boolean }>(
-      `SELECT EXISTS (SELECT 1 FROM pmp.room_agents
-                       WHERE room_id = $1 AND revoked_at IS NULL
-                         AND last_heartbeat_at > now() - interval '300 seconds') AS connected`,
-      [roomId],
-    );
-    if (!rows[0]?.connected) return null;
-    return syncRoom(tx, actor, roomId);
-  });
-  if (!result) {
-    return res.status(409).json({
-      code: "room_sync.no_room_pc",
-      message: "No room PC is connected to this room, so there is nothing to update. Files are copied when the room PC checks in.",
-    });
-  }
-  return res.json(result);
-});
-
-app.post("/api/v1/room-files/:roomFileId/acknowledge", async (req, res) => {
-  const actor = actorFrom(req);
-  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
-  const body = req.body as { lock_version?: number };
-  if (typeof body.lock_version !== "number") {
-    return res.status(400).json({ code: "request.invalid", message: "That request was incomplete. Refresh the page and try again." });
-  }
-  const result = await withScope(scopeFor(req), (tx) =>
-    acknowledge(tx, actor, String(req.params.roomFileId), body.lock_version as number),
-  );
-  if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
-  return res.json(result.value);
-});
-
 /*
  * D-125: room PCs are loaded and checked by hand. Staff copy the approved file onto the
  * room's PC, then tick it here ("loaded") — or take a mistaken tick back ("unloaded").
@@ -1455,20 +1356,6 @@ for (const [path, apply] of [
     return res.json(result.value);
   });
 }
-
-app.post("/api/v1/rooms/:roomId/launch", async (req, res) => {
-  const actor = actorFrom(req);
-  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
-  const body = req.body as { slot_id?: string };
-  if (!body.slot_id) {
-    return res.status(400).json({ code: "request.invalid", message: "Choose the presentation to open." });
-  }
-  const result = await withScope(scopeFor(req), (tx) =>
-    launch(tx, actor, { roomId: String(req.params.roomId), slotId: body.slot_id as string }),
-  );
-  if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
-  return res.json(result.value);
-});
 
 app.get("/api/v1/events/:eventId/speakers", async (req, res) => {
   const actor = actorFrom(req);

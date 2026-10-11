@@ -337,33 +337,6 @@ export const transitionVersion = (
     body: JSON.stringify(body),
   });
 
-export type AgentScheduleRow = {
-  slot_id: string;
-  title: string;
-  speaker: string | null;
-  starts_at: string;
-  file_version_id: string | null;
-  version_number: number | null;
-  room_file_id: string | null;
-  sync_state: string | null;
-  lock_version: number | null;
-  acknowledged: boolean;
-  requires_ack: boolean;
-  launchable: boolean;
-  presented_at: string | null;
-};
-
-export type AgentView = {
-  room: { id: string; name: string };
-  event: { id: string; name: string; accent: string | null; timezone: string };
-  // The API also returns the room computer's registration and library (`agent`, `library`)
-  // for later room software; the screens don't use them (D-125).
-  schedule: AgentScheduleRow[];
-};
-
-export const getAgentView = (roomId: string) =>
-  request<AgentView>(`/rooms/${roomId}/agent-view`);
-
 /**
  * D-125: staff copy the approved file onto the room PC by hand, then tick it here. The
  * ticked copy is the one the room plays; an older one it replaces steps aside.
@@ -380,12 +353,6 @@ export const unmarkLoaded = (roomFileId: string, lockVersion: number) =>
     method: "POST",
     body: JSON.stringify({ lock_version: lockVersion }),
   });
-
-export const launchInRoom = (roomId: string, slotId: string) =>
-  request<{ launched: boolean; at?: string; reason?: string }>(
-    `/rooms/${roomId}/launch`,
-    { method: "POST", body: JSON.stringify({ slot_id: slotId }) },
-  );
 
 /* ── Speaker Ready Room ───────────────────────────────────────────────────── */
 
