@@ -113,16 +113,38 @@ describe("what the team decides reaches the speaker inside the site (2026-10-11)
     const before = (await json(await fetch(`${API}/me/notifications`, { headers: { cookie: speaker } }))) as { items: unknown[]; unread: number };
     const mine = (await json(await fetch(`${API}/me/presentations`, { headers: { cookie: speaker } }))) as Mine;
     const talk = mine.events[0]!.talks[0]!;
-    const pending = talk.versions.find((version) => !version.downloadable);
-    if (!pending) return t.skip("fixture: no version in review to send back");
 
-    const asked = await fetch(`${API}/file-versions/${pending.id}/request-revision`, {
+    // A version of the speaker's own that is genuinely awaiting review: uploaded here, so the
+    // test does not depend on what the seed or an earlier suite left on the talk.
+    const body = await readFile("tests/fixtures/g0-1/aspect-16x9.pptx");
+    const sha256 = createHash("sha256").update(body).digest("hex");
+    const begun = (await json(
+      await fetch(`${API}/me/uploads`, {
+        method: "POST",
+        headers: headers(speaker),
+        body: JSON.stringify({ slot_id: talk.slot_id, file_name: "needs-changes.pptx", total_bytes: body.length }),
+      }),
+    )) as { upload_id: string };
+    await fetch(`${API}/me/uploads/${begun.upload_id}/parts/1`, {
+      method: "PUT",
+      headers: { "content-type": "application/octet-stream", cookie: speaker },
+      body,
+    });
+    const uploaded = (await json(
+      await fetch(`${API}/me/uploads/${begun.upload_id}/complete`, {
+        method: "POST",
+        headers: headers(speaker),
+        body: JSON.stringify({ slot_id: talk.slot_id, file_name: "needs-changes.pptx", sha256 }),
+      }),
+    )) as { file_version_id: string; processing_state: string };
+    assert.equal(uploaded.processing_state, "stored", "fixture: the upload is stored and awaiting review");
+
+    const asked = await fetch(`${API}/file-versions/${uploaded.file_version_id}/request-revision`, {
       method: "POST",
       headers: headers(reviewer),
       body: JSON.stringify({ note: "Please use the 16:9 template and embed the video." }),
     });
-    assert.ok([200, 409].includes(asked.status), `request-revision ${asked.status}`);
-    if (asked.status !== 200) return t.skip("fixture: that version could not be sent back");
+    assert.equal(asked.status, 200, `request-revision ${asked.status} ${await asked.text()}`);
 
     const after = (await json(await fetch(`${API}/me/notifications`, { headers: { cookie: speaker } }))) as {
       items: { kind: string; title: string; body: string; talk: string | null; read_at: string | null }[];
