@@ -43,13 +43,10 @@ const when = (iso: string | null) =>
 const ACCOUNT_TYPES: { value: AccountType; label: string; hint: string }[] = [
   { value: "support", label: ACCOUNT_KIND.support!.label, hint: ACCOUNT_KIND.support!.meaning },
   { value: "technician", label: ACCOUNT_KIND.technician!.label, hint: ACCOUNT_KIND.technician!.meaning },
+  // The client's own people (the review's "Client Admin"), named "Client access" (Travis, 2026-10-11).
+  { value: "client", label: ACCOUNT_KIND.client!.label, hint: ACCOUNT_KIND.client!.meaning },
   { value: "root_admin", label: ACCOUNT_KIND.root_admin!.label, hint: ACCOUNT_KIND.root_admin!.meaning },
 ];
-/*
- * Three levels on offer (Travis, 2026-10-11). "Client admin" stays a kind in the data —
- * accounts that already are one keep their badge and their portal — but is not created or
- * chosen here until the client asks for it.
- */
 
 const kindLabel = (type: AccountType) => ACCOUNT_KIND[type]?.label ?? type;
 
