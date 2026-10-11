@@ -1,6 +1,6 @@
 "use client";
 
-import { formatDateRange } from "@pmp/format";
+import { ACCOUNT_KIND, formatDateRange } from "@pmp/format";
 import Link from "next/link";
 import { Suspense, useEffect, useRef, useState } from "react";
 import { usePathname, useParams, useRouter, useSearchParams } from "next/navigation";
@@ -184,6 +184,19 @@ export function Sidebar({
    */
   const eventId = params?.id;
   const current = events.find((event) => event.id === eventId);
+  /*
+   * Which screens this kind of account may open (D-151), mirroring the API's own rule:
+   * support staff everything but the Speaker Ready Room and Manage presentations;
+   * technicians those two and the way to them. A DXG Admin sees all.
+   */
+  const kind = principal?.staff_kind ?? null;
+  const offeredToKind = (label: string): boolean => {
+    const onsiteOrReview = label === "Speaker Ready Room" || label === "Manage presentations";
+    if (kind === "support") return !onsiteOrReview;
+    if (kind === "technician") return onsiteOrReview || label === "Portfolio";
+    return true;
+  };
+
   const renderGroup = ({ group, roles, items }: (typeof GROUPS)[number]) => {
             // Roles held anywhere, plus those on this event — a practice event's roles
             // count only inside it (D-116).
@@ -193,7 +206,7 @@ export function Sidebar({
             ];
             const allowed = (needed?: string[]) => !needed || needed.some((role) => held.includes(role));
             // A whole group can be out of reach, and an item within a reachable one.
-            const visible = allowed(roles) ? items.filter((item) => allowed(item.roles)) : [];
+            const visible = allowed(roles) ? items.filter((item) => allowed(item.roles) && offeredToKind(item.label)) : [];
             // A group whose every entry is hidden would otherwise leave a stray heading.
             if (visible.length === 0) return null;
             return (
@@ -277,7 +290,7 @@ export function Sidebar({
                   <Link href="/events/new">Create your first event</Link>
                 </div>
               ) : (
-                <WhyNot reason="Ask a DXG administrator to add you to an event." />
+                <WhyNot reason="Ask a DXG Admin to add you to an event." />
               )}
             </>
           ) : (
@@ -403,8 +416,8 @@ function AccountMenu({ principal }: { principal: Principal }) {
         </span>
         <span className="who">
           <b>{principal.display_name}</b>
-          {/* DXG administrator or staff (D-100, D-110); raw role codes read like a stack trace. */}
-          <small>{principal.is_root_admin ? "DXG administrator" : "Staff"}</small>
+          {/* DXG Admin, support staff or technician (D-100, D-110, D-151); raw role codes read like a stack trace. */}
+          <small>{ACCOUNT_KIND[principal.staff_kind ?? "support"]?.label ?? "Staff"}</small>
         </span>
         <span style={{ color: "var(--subtle-foreground)", display: "flex" }}>
           <Icon name="chevrons" size={12} />

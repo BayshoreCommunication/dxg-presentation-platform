@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { getSummary, getRiskList, getFleet, getDraft, getSession, getAgenda, getSpeakers, getReviewQueue } from "@/lib/api";
+import { getSummary, getRiskList, getFleet, getDraft, getSession, getAgenda, getSpeakers, getReviewQueue, ApiError } from "@/lib/api";
 import { Chip } from "@/components/Chip";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { EventTabs } from "@/components/EventTabs";
@@ -48,16 +48,25 @@ export default async function CommandCenterPage({
 }) {
   const { id } = await params;
   const { tab } = await searchParams;
-  const [summary, risk, fleet, setup, session, agenda, speakers, review] = await guard(
+  /*
+   * A technician's event is the Speaker Ready Room and Manage presentations (D-151); the
+   * command centre is support staff's, so they are sent on. Support staff see it without
+   * the review queue, which the API refuses them.
+   */
+  const session = await guard(getSession(), `/events/${id}`);
+  const kind = session.principal.staff_kind;
+  if (kind === "technician") redirect(`/events/${id}/srr`);
+  const unlessRefused = <T,>(work: Promise<T>, fallback: T): Promise<T> =>
+    work.catch((caught: unknown) => (caught instanceof ApiError && caught.status === 403 ? fallback : Promise.reject(caught)));
+  const [summary, risk, fleet, setup, agenda, speakers, review] = await guard(
     Promise.all([
       getSummary(id),
       getRiskList(id),
       getFleet(id),
       getDraft(id),
-      getSession(),
       getAgenda(id),
       getSpeakers(id),
-      getReviewQueue(id),
+      unlessRefused(getReviewQueue(id), { items: [] }),
     ]),
     `/events/${id}`,
   );
@@ -201,11 +210,13 @@ export default async function CommandCenterPage({
             the screen is for and how many are waiting, so an empty one is visible
             before anyone clicks.
           */}
-          <Link href={`/events/${id}/review`} className="btn pri">
-            {review.items.length > 0
-              ? `Manage presentations (${review.items.length}) →`
-              : "Manage presentations · none waiting"}
-          </Link>
+          {kind !== "support" && (
+            <Link href={`/events/${id}/review`} className="btn pri">
+              {review.items.length > 0
+                ? `Manage presentations (${review.items.length}) →`
+                : "Manage presentations · none waiting"}
+            </Link>
+          )}
         </div>
       </div>
 

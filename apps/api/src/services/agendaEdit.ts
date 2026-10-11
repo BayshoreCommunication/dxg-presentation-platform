@@ -41,7 +41,7 @@ const EDITORS = atLeast("presentation_manager");
 
 const forbidden = (attempt: string): DomainError => ({
   code: "agenda.forbidden",
-  message: `${attempt} needs a presentation manager, project manager or DXG administrator.`,
+  message: `${attempt} needs a presentation manager, project manager or DXG Admin.`,
 });
 
 const notFound = (what: string): DomainError => ({ code: "agenda.not_found", message: `This ${what} no longer exists on this event — it may have been removed. Refresh the page.` });

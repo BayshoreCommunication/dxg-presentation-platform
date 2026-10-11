@@ -1,4 +1,4 @@
-import { getPresentation, getFindings } from "@/lib/api";
+import { getPresentation, getFindings, getSession } from "@/lib/api";
 import { InspectionView } from "@/components/InspectionView";
 import { guard } from "@/lib/guard";
 
@@ -13,6 +13,9 @@ export default async function InspectionPage({
 }) {
   const { id, slotId } = await params;
   const { v } = await searchParams;
+  const readOnly = await getSession()
+    .then((session) => session.principal.staff_kind === "support")
+    .catch(() => false);
   const detail = await guard(getPresentation(slotId), `/events/${id}/talks/${slotId}/inspection`);
   const version =
     detail.versions.find((row) => row.file_version_id === v) ?? detail.versions[0] ?? null;
@@ -20,6 +23,6 @@ export default async function InspectionPage({
     ? (await guard(getFindings(version.file_version_id), `/events/${id}/talks/${slotId}/inspection`)).items
     : [];
   return (
-    <InspectionView eventId={id} detail={detail} version={version} initialFindings={findings} />
+    <InspectionView eventId={id} detail={detail} version={version} initialFindings={findings} readOnly={readOnly} />
   );
 }

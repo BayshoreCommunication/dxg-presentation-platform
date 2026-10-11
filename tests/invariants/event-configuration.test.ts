@@ -161,7 +161,8 @@ describe("a room technician cannot reconfigure the event they staff", () => {
     const response = await patch(probeEvent, technician, { settings: { upload_deadline: "1999-01-01" } });
 
     assert.equal(response.status, 403);
-    assert.equal(((await response.json()) as { code: string }).code, "events.forbidden");
+    // A room technician is a technician (D-151): refused by kind before the event rule can speak.
+    assert.ok(["events.forbidden", "auth.kind_forbidden"].includes(((await response.json()) as { code: string }).code));
     // Refused *and* unchanged: a 403 that still wrote would be the worse failure.
     assert.deepEqual((await setupOf(probeEvent, admin)).settings, before.settings);
   });
@@ -190,7 +191,8 @@ describe("a room technician cannot reconfigure the event they staff", () => {
       headers: json(technician),
     });
     assert.equal(response.status, 403);
-    assert.equal(((await response.json()) as { code: string }).code, "events.forbidden");
+    // A room technician is a technician (D-151): refused by kind before the event rule can speak.
+    assert.ok(["events.forbidden", "auth.kind_forbidden"].includes(((await response.json()) as { code: string }).code));
   });
 });
 

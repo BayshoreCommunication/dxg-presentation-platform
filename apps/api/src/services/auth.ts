@@ -70,6 +70,8 @@ export type Principal =
        * staff route — and reaches only its own presentations, matched by email on every event.
        */
       account_kind: "staff" | "speaker";
+      /** Which kind of DXG account (D-151): admin (root), support staff or technician. Null for a speaker. */
+      staff_kind: "root_admin" | "support" | "technician" | "client" | null;
     }
   | { kind: "presenter"; speaker_id: string; email: string | null; display_name: string; event_id: string; client_id: string };
 
@@ -243,9 +245,10 @@ export async function principalFor(tx: pg.PoolClient, userId: string): Promise<P
     mfa_enrolled: boolean;
     is_root_admin: boolean;
     account_kind: "staff" | "speaker";
+    staff_kind: "support" | "technician" | "client";
   }>(
     `SELECT id, email::text, display_name, must_change_password,
-            (mfa_enrolled_at IS NOT NULL) AS mfa_enrolled, is_root_admin, account_kind
+            (mfa_enrolled_at IS NOT NULL) AS mfa_enrolled, is_root_admin, account_kind, staff_kind
        FROM pmp.users WHERE id = $1`,
     [userId],
   );
@@ -273,6 +276,7 @@ export async function principalFor(tx: pg.PoolClient, userId: string): Promise<P
     must_change_password: user.must_change_password,
     mfa_enrolled: user.mfa_enrolled,
     account_kind: user.account_kind,
+    staff_kind: user.account_kind === "speaker" ? null : user.is_root_admin ? "root_admin" : user.staff_kind,
   };
 }
 
@@ -532,8 +536,8 @@ export async function logout(tx: pg.PoolClient, token: string): Promise<void> {
 export async function createStaffUser(
   tx: pg.PoolClient,
   actor: Actor,
-  input: { email: string; displayName: string; password?: string; accountType?: "root_admin" | "staff" },
-): Promise<Result<{ user_id: string; account_type: "root_admin" | "staff"; emailed_to: string | null }, DomainError>> {
+  input: { email: string; displayName: string; password?: string; accountType?: "root_admin" | "support" | "technician" | "client" | "staff" },
+): Promise<Result<{ user_id: string; account_type: "root_admin" | "support" | "technician" | "client"; emailed_to: string | null }, DomainError>> {
   // Only a root admin makes accounts (D-100): staff see their own events, not the people list.
   if (!hasAnyRole(actor, ["platform_admin"])) {
     return err({
@@ -541,9 +545,10 @@ export async function createStaffUser(
       message: `Only a ${SECURITY.admin} can create accounts.`,
     });
   }
-  const accountType = input.accountType ?? "staff";
-  if (accountType !== "staff" && accountType !== "root_admin") {
-    return err({ code: "auth.bad_account_type", message: "Choose an access level: staff or DXG administrator." });
+  // "staff" is the old name for support staff (D-151), still accepted.
+  const accountType = input.accountType === "staff" || !input.accountType ? "support" : input.accountType;
+  if (accountType !== "support" && accountType !== "technician" && accountType !== "client" && accountType !== "root_admin") {
+    return err({ code: "auth.bad_account_type", message: "Choose an access level: DXG Admin, DXG Support staff, DXG Technician staff or Client admin." });
   }
   const email = input.email.trim().toLowerCase();
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
@@ -563,9 +568,9 @@ export async function createStaffUser(
 
   const displayName = input.displayName.trim() || email;
   const { rows } = await tx.query<{ id: string }>(
-    `INSERT INTO pmp.users (email, display_name, password_hash, password_set_at, must_change_password, is_root_admin)
-     VALUES ($1::citext, $2, $3, now(), true, $4) RETURNING id`,
-    [email, displayName, await hashPassword(temporary), accountType === "root_admin"],
+    `INSERT INTO pmp.users (email, display_name, password_hash, password_set_at, must_change_password, is_root_admin, staff_kind)
+     VALUES ($1::citext, $2, $3, now(), true, $4, $5) RETURNING id`,
+    [email, displayName, await hashPassword(temporary), accountType === "root_admin", accountType === "root_admin" ? "support" : accountType],
   );
   const userId = rows[0]!.id;
 
@@ -691,7 +696,7 @@ export async function createSpeakerAccount(
   if (!hasAnyRole(actor, atLeast("srr_technician"))) {
     return err({
       code: "auth.forbidden",
-      message: "Only a Speaker Ready Room technician, a manager or a DXG administrator can create a speaker's sign-in.",
+      message: "Only a Speaker Ready Room technician, a manager or a DXG Admin can create a speaker's sign-in.",
     });
   }
   const { rows } = await tx.query<{ id: string; full_name: string; email: string | null; client_id: string }>(
@@ -797,7 +802,7 @@ export async function issuePresenterCredential(
   if (!hasAnyRole(actor, atLeast("srr_technician"))) {
     return err({
       code: "auth.forbidden",
-      message: "Only a Speaker Ready Room technician, a manager or a DXG administrator can issue a speaker's access code.",
+      message: "Only a Speaker Ready Room technician, a manager or a DXG Admin can issue a speaker's access code.",
     });
   }
 
@@ -858,7 +863,7 @@ export async function revokePresenterCredential(
   speakerId: string,
 ): Promise<Result<{ revoked: number }, DomainError>> {
   if (!hasAnyRole(actor, atLeast("srr_technician"))) {
-    return err({ code: "auth.forbidden", message: "Only a Speaker Ready Room technician, a manager or a DXG administrator can withdraw a speaker's access code." });
+    return err({ code: "auth.forbidden", message: "Only a Speaker Ready Room technician, a manager or a DXG Admin can withdraw a speaker's access code." });
   }
   const { rowCount } = await tx.query(
     `UPDATE pmp.speaker_tokens SET revoked_at = now() WHERE speaker_id = $1 AND revoked_at IS NULL`,

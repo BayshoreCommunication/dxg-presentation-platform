@@ -76,9 +76,12 @@ export default async function PortfolioPage({
               </Link>
             )
           )}
-          <Link href="/events/new" className="btn pri">
-            + Create event
-          </Link>
+          {/* A technician neither creates events nor practises (D-151): the API would refuse both. */}
+          {principal?.staff_kind !== "technician" && (
+            <Link href="/events/new" className="btn pri">
+              + Create event
+            </Link>
+          )}
         </span>
       </div>
 
@@ -90,7 +93,7 @@ export default async function PortfolioPage({
 
       {items.map((event, index) => card(event, summaries[index]!))}
 
-      {!showArchived && (
+      {!showArchived && principal?.staff_kind !== "technician" && (
         <>
           <div
             style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, margin: "24px 0 10px" }}

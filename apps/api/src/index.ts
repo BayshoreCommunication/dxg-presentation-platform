@@ -60,6 +60,7 @@ import {
   grantRole,
   revokeRole,
   setAccountType,
+  assignToEvent,
   deleteAccount,
 } from "./services/admin.ts";
 
@@ -305,7 +306,7 @@ const plainError = (body: unknown): unknown => {
   if (code.endsWith(".illegal_transition")) {
     message = "That can't be done at this stage — it may have changed since you opened it. Refresh the page to see where it stands.";
   } else if (code.endsWith(".override_forbidden")) {
-    message = "Your access doesn't allow overriding this step. Ask a project manager or a DXG administrator.";
+    message = "Your access doesn't allow overriding this step. Ask a project manager or a DXG Admin.";
   } else if (code.endsWith(".unknown_state")) {
     message = "That isn't a step this can move to. Refresh the page and try again.";
   } else if (code.endsWith(".forbidden") && Array.isArray(required)) {
@@ -673,7 +674,7 @@ app.use(async (req, res, next) => {
 
   return res.status(403).json({
     code: "auth.not_on_this_event",
-    message: "Your account has no role on this event. Ask a DXG administrator to add you in Event assignments.",
+    message: "Your account has no role on this event. Ask a DXG Admin to add you in Event assignments.",
   });
 });
 
@@ -754,8 +755,60 @@ app.use((req, res, next) => {
           : "You haven't been added to an event yet.",
     });
   }
+  // What each kind of DXG account may open (D-151): the client drew the line by screen.
+  if (principal?.kind === "staff" && (principal.staff_kind === "support" || principal.staff_kind === "technician")) {
+    const refusal = kindRefusal(principal.staff_kind, req.path, req.method);
+    if (refusal) return res.status(403).json({ code: "auth.kind_forbidden", message: refusal });
+  }
   return next();
 });
+
+/*
+ * The screens by route (D-151). "Onsite and review" is the Speaker Ready Room and Manage
+ * presentations — the technician's whole job, and the one part of the event support staff
+ * never open. Everything a technician needs besides those is the event's own summary and
+ * the files a review shows; everything else is support staff's.
+ */
+const ONSITE_AND_REVIEW: RegExp[] = [
+  /^\/api\/v1\/events\/[^/]+\/srr(\/|$)/,
+  /^\/api\/v1\/srr\//,
+  /^\/api\/v1\/events\/[^/]+\/review-queue$/,
+  /^\/api\/v1\/file-versions\/[^/]+(:transition|\/request-revision|\/comments|\/findings)$/,
+  /^\/api\/v1\/findings\//,
+  /^\/api\/v1\/slots\//,
+];
+/** What a technician may open besides the two screens: the way to them, and what a review shows. */
+const TECHNICIAN_ALSO: RegExp[] = [
+  /^\/api\/v1\/events$/,
+  /^\/api\/v1\/events\/[^/]+$/,
+  /^\/api\/v1\/events\/[^/]+\/(summary|talks|risk-list)$/,
+  /^\/api\/v1\/file-versions\/[^/]+\/(download|preview|media)(\/|$)/,
+  /^\/api\/v1\/timezones$/,
+  /^\/api\/v1\/clients$/,
+];
+/** Asking for a slide preview is a POST, and part of looking at a file in review. */
+const TECHNICIAN_ALSO_WRITES: RegExp[] = [/^\/api\/v1\/file-versions\/[^/]+\/preview$/];
+
+/**
+ * What support staff may still *read* of a presentation: its detail, findings and comments,
+ * since the Files screen, the agenda and the room list all open a talk. The decisions — approve,
+ * ask for changes, reject, comment, waive, roll back — stay refused; the screen hides them.
+ */
+const SUPPORT_READS: RegExp[] = [/^\/api\/v1\/slots\/[^/]+$/, /^\/api\/v1\/file-versions\/[^/]+\/(findings|comments)$/];
+
+function kindRefusal(kind: "support" | "technician", path: string, method: string): string | null {
+  const onsiteOrReview = ONSITE_AND_REVIEW.some((pattern) => pattern.test(path));
+  if (kind === "support") {
+    if (!onsiteOrReview) return null;
+    if (method === "GET" && SUPPORT_READS.some((pattern) => pattern.test(path))) return null;
+    return "The Speaker Ready Room and Manage presentations are for DXG Technician staff and DXG Admins.";
+  }
+  if (onsiteOrReview) return null;
+  // A technician reads the event (GET) on the way to their screens; writes elsewhere are not theirs.
+  if (method === "GET" && TECHNICIAN_ALSO.some((pattern) => pattern.test(path))) return null;
+  if (TECHNICIAN_ALSO_WRITES.some((pattern) => pattern.test(path))) return null;
+  return "DXG Technician staff work the Speaker Ready Room and Manage presentations only. Ask a DXG Admin if you need more.";
+}
 
 
 const statusFor = (error: DomainError): number => {
@@ -2895,7 +2948,7 @@ app.get("/api/v1/client/events/:eventId", async (req, res) => {
   if (!isClient && !isStaff) {
     return res.status(403).json({
       code: "auth.not_a_client_role",
-      message: "The client portal is for the client's own team. Ask a DXG administrator if you need access.",
+      message: "The client portal is for the client's own team. Ask a DXG Admin if you need access.",
     });
   }
 
@@ -3584,7 +3637,7 @@ app.post("/api/v1/admin/users", async (req, res) => {
     createStaffUser(tx, actor, {
       email: body.email as string,
       displayName: body.display_name ?? "",
-      accountType: (body.account_type ?? "staff") as "root_admin" | "staff",
+      accountType: (body.account_type ?? "support") as "root_admin" | "support" | "technician" | "client" | "staff",
       ...(body.password ? { password: body.password } : {}),
     }),
   );
@@ -3662,7 +3715,7 @@ app.post("/api/v1/admin/users/:userId/account-type", async (req, res) => {
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   const body = req.body as { account_type?: string };
   const result = await withScope(scopeFor(req), (tx) =>
-    setAccountType(tx, actor, String(req.params.userId), body.account_type as "root_admin" | "staff"),
+    setAccountType(tx, actor, String(req.params.userId), body.account_type as "root_admin" | "support" | "technician" | "client" | "staff"),
   );
   if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
   return res.json(result.value);
@@ -3681,6 +3734,19 @@ app.post("/api/v1/admin/users/:userId/unlock", async (req, res) => {
   const actor = actorFrom(req);
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   const result = await withScope(scopeFor(req), (tx) => unlock(tx, actor, String(req.params.userId)));
+  if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+  return res.json(result.value);
+});
+
+/** Puts support staff or a technician on an event, or takes them off; the roles follow the kind (D-151). */
+app.post("/api/v1/admin/users/:userId/events", async (req, res) => {
+  const body = req.body as { event_id?: string; assign?: boolean };
+  if (!body.event_id) return res.status(400).json({ code: "request.invalid", message: "Choose an event." });
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  const result = await withScope(scopeFor(req, body.event_id), (tx) =>
+    assignToEvent(tx, actor, { userId: String(req.params.userId), eventId: body.event_id as string, assign: body.assign !== false }),
+  );
   if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
   return res.json(result.value);
 });

@@ -4,11 +4,10 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { EventRow, StaffRow } from "@/lib/api";
-import { setStaffRole, EVENT_ROLE_NAMES, ApiError } from "@/lib/api";
+import { assignStaffToEvent, ApiError } from "@/lib/api";
 import { Chip } from "@/components/Chip";
-import { WhyNot } from "@/components/WhyNot";
 import { ConfirmInline } from "@/components/ConfirmInline";
-import { formatDateRange, ROLE, wordsFor } from "@pmp/format";
+import { ACCOUNT_KIND, formatDateRange, ROLE, wordsFor } from "@pmp/format";
 
 /**
  * Who is on each event, inverted from the per-account list.
@@ -60,25 +59,14 @@ export function EventAssignments({
   const [busy, setBusy] = useState(false);
   /** A19 (D-113): an error belongs to the event row it happened on, not the top of the page. */
   const [error, setError] = useState<{ eventId: string; message: string } | null>(null);
-  /** A18 (D-113): the role removal waiting for "are you sure?". */
-  const [removing, setRemoving] = useState<{ eventId: string; person: StaffRow; role: string } | null>(null);
+  /** A18 (D-113): the removal waiting for "are you sure?". */
+  const [removing, setRemoving] = useState<{ eventId: string; person: StaffRow } | null>(null);
   const newcomer = assign
-    ? initial.find((person) => person.id === assign && person.is_active && person.account_type === "staff")
+    ? initial.find((person) => person.id === assign && person.is_active && person.account_type !== "root_admin")
     : undefined;
-  /** Who is being assigned to which event, and with which roles, before pressing assign. */
-  const [draft, setDraft] = useState<Record<string, { who: string; roles: string[] }>>({});
-
-  const setWho = (eventId: string, who: string) =>
-    setDraft((current) => ({ ...current, [eventId]: { who, roles: [] } }));
-
-  const toggleRole = (eventId: string, role: string) =>
-    setDraft((current) => {
-      const entry = current[eventId] ?? { who: "", roles: [] };
-      const roles = entry.roles.includes(role)
-        ? entry.roles.filter((held) => held !== role)
-        : [...entry.roles, role];
-      return { ...current, [eventId]: { ...entry, roles } };
-    });
+  /** Who is about to be assigned to which event. The roles follow their kind (D-151). */
+  const [draft, setDraft] = useState<Record<string, string>>({});
+  const setWho = (eventId: string, who: string) => setDraft((current) => ({ ...current, [eventId]: who }));
 
   async function run(eventId: string, work: () => Promise<void>) {
     setBusy(true);
@@ -97,8 +85,9 @@ export function EventAssignments({
     <>
       <h1 className="htitle">Event assignments</h1>
       <div className="note" style={{ margin: "-8px 0 14px" }}>
-        A role is held on an event, not on the platform — so a staff member assigned nowhere can sign in
-        and reach nothing. DXG administrators reach every event already and are not listed here.
+        Staff are placed on events; a staff member assigned nowhere can sign in and reach nothing. What they
+        can do on an event follows their access level — DXG Support staff run it, DXG Technician staff work the
+        Speaker Ready Room and Manage presentations. DXG Admins reach every event already and are not listed here.
       </div>
 
       {newcomer && (
@@ -106,7 +95,7 @@ export function EventAssignments({
           <div className="cbd">
             <b>Assigning {newcomer.display_name}.</b>{" "}
             <span className="note">
-              Press &ldquo;assign {newcomer.display_name} here&rdquo; on the event they will work, then tick their roles.
+              Press &ldquo;assign {newcomer.display_name} here&rdquo; on the event they will work.
             </span>
           </div>
         </div>
@@ -164,51 +153,38 @@ export function EventAssignments({
                             {person.is_active && !person.mfa_enrolled && (
                               <Chip status="needs_revision" label="Sign-in app not set up" />
                             )}
-                            {/*
-                              Each hat keeps its own remove, because they are removed one
-                              at a time — taking someone off room sync should not also
-                              take them off review.
-                            */}
-                            {roles.map((role) => (
-                              <span
-                                key={role}
-                                style={{ display: "inline-flex", alignItems: "center", gap: 3 }}
-                              >
-                                {/* A17: role names from the shared vocabulary; the meaning on hover here, visible in the picker below. */}
-                                <span className="chip c-mut" title={wordsFor(ROLE, role).meaning}>
-                                  {wordsFor(ROLE, role).label}
-                                </span>
-                                <button
-                                  className="btn"
-                                  title={`Remove ${wordsFor(ROLE, role).label}`}
-                                  style={{ padding: "0 5px", fontSize: 11, lineHeight: 1.5 }}
-                                  disabled={busy}
-                                  onClick={() => {
-                                    setError(null);
-                                    setRemoving({ eventId: event.id, person, role });
-                                  }}
-                                >
-                                  ×
-                                </button>
-                              </span>
-                            ))}
+                            <span className="chip c-info" title={ACCOUNT_KIND[person.account_type]?.meaning}>
+                              {ACCOUNT_KIND[person.account_type]?.label ?? person.account_type}
+                            </span>
+                            <span className="note" title={roles.map((role) => wordsFor(ROLE, role).label).join(", ")}>
+                              {roles.map((role) => wordsFor(ROLE, role).label).join(" · ")}
+                            </span>
+                            <button
+                              className="btn"
+                              title={`Take ${person.display_name} off ${event.name}`}
+                              style={{ padding: "0 5px", fontSize: 11, lineHeight: 1.5 }}
+                              disabled={busy}
+                              onClick={() => {
+                                setError(null);
+                                setRemoving({ eventId: event.id, person });
+                              }}
+                            >
+                              ×
+                            </button>
                           </div>
                         ))
                       )}
 
                       {removing?.eventId === event.id && (
                         <ConfirmInline
-                          question={`Remove ${removing.person.display_name} as ${wordsFor(ROLE, removing.role).label} on ${event.name}?`}
-                          detail={
-                            people.find((p) => p.person.id === removing.person.id)?.roles.length === 1
-                              ? "This is their only role here, so they will no longer see this event. You can assign them again at any time."
-                              : "Their other roles on this event stay. You can assign this one again at any time."
-                          }
-                          confirmLabel="Remove role"
+                          question={`Take ${removing.person.display_name} off ${event.name}?`}
+                          detail="They will no longer see this event. You can assign them again at any time."
+                          confirmLabel="Remove"
                           busyLabel="Removing…"
                           danger
                           onConfirm={async () => {
-                            await setStaffRole(removing.person.id, event.id, removing.role, false);
+                            await assignStaffToEvent(removing.person.id, event.id, false);
+                            setRemoving(null);
                             router.refresh();
                           }}
                           onClose={() => setRemoving(null)}
@@ -216,115 +192,56 @@ export function EventAssignments({
                       )}
 
                       {/*
-                        Assigning happens here rather than on the account rows: this is
-                        where the question is being asked, and the event is already
-                        decided by which row you are on — so it cannot be got wrong by
-                        leaving a dropdown on its default.
-
-                        Roles are checkboxes, not a single choice, because one person
-                        routinely wears two hats on an event — the SRR technician who
-                        also runs a room, the presentation manager who reviews content.
-                        The data model always allowed it; making it one role at a time
-                        implied otherwise and cost a round trip per hat.
+                        Assigning happens here rather than on the account rows: this is where the
+                        question is being asked, and the event is already decided by which row you are
+                        on. No roles to tick (D-151): the account's access level says what it does.
                       */}
-                      <div style={{ marginTop: 8 }}>
-                        {newcomer && draft[event.id]?.who !== newcomer.id && (
+                      <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                        {newcomer && draft[event.id] !== newcomer.id && (
                           <button
                             className="btn pri"
-                            style={{ padding: "2px 8px", fontSize: 12, marginRight: 6 }}
+                            style={{ padding: "2px 8px", fontSize: 12 }}
                             onClick={() => setWho(event.id, newcomer.id)}
                           >
                             assign {newcomer.display_name} here
                           </button>
                         )}
                         <select
-                          value={draft[event.id]?.who ?? ""}
+                          value={draft[event.id] ?? ""}
                           onChange={(e) => setWho(event.id, e.target.value)}
                           style={{ fontSize: 12, padding: "3px 6px" }}
                         >
                           <option value="">assign someone…</option>
                           {initial
-                            // Root admins reach every event without a role (D-100).
-                            .filter((person) => person.is_active && person.account_type === "staff")
+                            // Admins reach every event without a role (D-100); those already here are not offered.
+                            .filter(
+                              (person) =>
+                                person.is_active &&
+                                person.account_type !== "root_admin" &&
+                                !people.some((entry) => entry.person.id === person.id),
+                            )
                             .map((person) => (
                               <option key={person.id} value={person.id}>
-                                {person.display_name}
+                                {person.display_name} — {ACCOUNT_KIND[person.account_type]?.label ?? person.account_type}
                               </option>
                             ))}
                         </select>
-
-                        {draft[event.id]?.who && (
-                          <div style={{ marginTop: 6 }}>
-                            <div className="note" style={{ marginBottom: 4 }}>
-                              as — tick every role they hold on this event:
-                            </div>
-                            <div style={{ display: "grid", gap: 4, marginBottom: 6 }}>
-                              {EVENT_ROLE_NAMES.map((role) => {
-                                const already = people.some(
-                                  (p) => p.person.id === draft[event.id]?.who && p.roles.includes(role),
-                                );
-                                return (
-                                  <label
-                                    key={role}
-                                    className="note"
-                                    style={{
-                                      display: "inline-flex",
-                                      alignItems: "center",
-                                      gap: 4,
-                                      opacity: already ? 0.45 : 1,
-                                    }}
-                                    /* Held already, so there is nothing to add. */
-                                    title={already ? "Already holds this role here" : undefined}
-                                  >
-                                    <input
-                                      type="checkbox"
-                                      disabled={already || busy}
-                                      checked={already || (draft[event.id]?.roles ?? []).includes(role)}
-                                      onChange={() => toggleRole(event.id, role)}
-                                    />
-                                    <span>
-                                      <b style={{ fontWeight: 600 }}>{wordsFor(ROLE, role).label}</b>
-                                      <span style={{ color: "var(--dim)" }}> — {wordsFor(ROLE, role).meaning}</span>
-                                    </span>
-                                  </label>
-                                );
-                              })}
-                            </div>
-                            <button
-                              className="btn"
-                              style={{ padding: "2px 8px", fontSize: 12 }}
-                              disabled={busy}
-                              onClick={() =>
-                                void run(event.id, async () => {
-                                  const chosen = draft[event.id];
-                                  if (!chosen?.who) throw new ApiError("request", "Pick who to assign.", 400);
-                                  if (!chosen.roles.length) {
-                                    throw new ApiError("request", "Tick at least one role.", 400);
-                                  }
-                                  // Sequential, so a failure part-way names the role it
-                                  // failed on rather than losing it in a race.
-                                  for (const role of chosen.roles) {
-                                    await setStaffRole(chosen.who, event.id, role, true);
-                                  }
-                                  setDraft((current) => ({ ...current, [event.id]: { who: "", roles: [] } }));
-                                })
-                              }
-                            >
-                              assign{" "}
-                              {(draft[event.id]?.roles.length ?? 0) > 0 &&
-                                `${draft[event.id]!.roles.length} role${draft[event.id]!.roles.length > 1 ? "s" : ""}`}
-                            </button>
-                            {/* D-111: the greyed boxes say why on the page, not only on hover. */}
-                            <WhyNot
-                              reason={
-                                EVENT_ROLE_NAMES.some((role) =>
-                                  people.some((p) => p.person.id === draft[event.id]?.who && p.roles.includes(role)),
-                                )
-                                  ? "Greyed roles are ones they already hold here — remove one with × above."
-                                  : null
-                              }
-                            />
-                          </div>
+                        {draft[event.id] && (
+                          <button
+                            className="btn"
+                            style={{ padding: "2px 8px", fontSize: 12 }}
+                            disabled={busy}
+                            onClick={() =>
+                              void run(event.id, async () => {
+                                const who = draft[event.id];
+                                if (!who) throw new ApiError("request", "Pick who to assign.", 400);
+                                await assignStaffToEvent(who, event.id, true);
+                                setDraft((current) => ({ ...current, [event.id]: "" }));
+                              })
+                            }
+                          >
+                            assign
+                          </button>
                         )}
                         {/* A19: the error shows under the event it happened on. */}
                         {error?.eventId === event.id && (

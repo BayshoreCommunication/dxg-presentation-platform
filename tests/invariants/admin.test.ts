@@ -110,7 +110,8 @@ describe("only an admin administers accounts", () => {
     const body = (await json(response)) as { items: { email: string; account_type: string }[] };
     assert.ok(body.items.length > 0);
     assert.equal(body.items.find((user) => user.email === "admin@example.invalid")?.account_type, "root_admin");
-    assert.equal(body.items.find((user) => user.email === "m.vega@example.invalid")?.account_type, "staff");
+    // "staff" became "support" (D-151): the old name is still accepted on the way in.
+    assert.equal(body.items.find((user) => user.email === "m.vega@example.invalid")?.account_type, "support");
   });
 });
 
@@ -276,7 +277,7 @@ describe("temporary passwords are emailed, not shown (D-100)", () => {
     assert.equal(response.status, 201);
     const body = await json(response);
     assert.equal(body.emailed_to, email);
-    assert.equal(body.account_type, "staff");
+    assert.equal(body.account_type, "support");
     assert.equal("temporary_password" in body, false, "the password must never come back to the administrator");
   });
 
@@ -316,7 +317,7 @@ describe("root admins and staff (D-100)", () => {
     const list = (await json(await fetch(`${API}/admin/users`, { headers: { cookie: admin } }))) as {
       items: { id: string; account_type: string }[];
     };
-    assert.equal(list.items.find((user) => user.id === created.user_id)?.account_type, "staff");
+    assert.equal(list.items.find((user) => user.id === created.user_id)?.account_type, "support");
   });
 
   test("an unknown account type is refused", async (t: TestContext) => {
@@ -392,6 +393,84 @@ after(async () => {
   // Its own prefixes only. `"probe-"` also matched other suites' accounts
   // (`probe-brand-reviewer-…`, `probe-outsider-…`) and deleted them mid-setup whenever the
   // suites ran at the same time — which they do once sign-in no longer queues them.
-  await removeTestAccounts(["roleless-", "probe-admin-"]);
+  await removeTestAccounts(["roleless-", "probe-admin-", "probe-kind-"]);
   await removeTestEvents(["probe-admin-event-"]);
 });
+
+describe("three kinds of DXG account (D-151)", () => {
+  const EVENT_ID = "22222222-2222-4222-8222-222222222222";
+
+  test("support staff never open the Speaker Ready Room or Manage presentations; technicians open nothing else", async (t: TestContext) => {
+    if (!up || !presentationManager) return t.skip("API not running");
+    const technician = await signInStaff(API, "c.delgado@example.invalid", PASSWORD);
+    // m.vega is support staff (seed): the event is theirs, the two screens are not.
+    for (const path of [`/events/${EVENT_ID}/review-queue`, `/events/${EVENT_ID}/srr`]) {
+      const refused = await fetch(`${API}${path}`, { headers: { cookie: presentationManager } });
+      assert.equal(refused.status, 403, path);
+      assert.equal(((await json(refused)) as { code: string }).code, "auth.kind_forbidden");
+    }
+    assert.equal((await fetch(`${API}/events/${EVENT_ID}/speakers`, { headers: { cookie: presentationManager } })).status, 200);
+    // Support staff may look at a talk (the Files screen and the agenda open one) but not decide on it.
+    const talks = (await json(await fetch(`${API}/events/${EVENT_ID}/talks`, { headers: { cookie: presentationManager } }))) as {
+      items: { slot_id: string }[];
+    };
+    const slot = talks.items[0]!.slot_id;
+    assert.equal((await fetch(`${API}/slots/${slot}`, { headers: { cookie: presentationManager } })).status, 200);
+    const decide = await fetch(`${API}/slots/${slot}/roll-back`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: presentationManager },
+      body: JSON.stringify({ target_version_id: "00000000-0000-4000-8000-000000000000", reason: "probe" }),
+    });
+    assert.equal(decide.status, 403);
+    assert.equal(((await json(decide)) as { code: string }).code, "auth.kind_forbidden");
+    // c.delgado is a technician (seed): the two screens and the way to them, nothing else.
+    assert.equal((await fetch(`${API}/events/${EVENT_ID}/review-queue`, { headers: { cookie: technician } })).status, 200);
+    assert.equal((await fetch(`${API}/events/${EVENT_ID}/srr`, { headers: { cookie: technician } })).status, 200);
+    assert.equal((await fetch(`${API}/events/${EVENT_ID}/summary`, { headers: { cookie: technician } })).status, 200);
+    // Looking at a file in review asks for its slide preview (a POST): that is their job too.
+    const queue = (await json(await fetch(`${API}/events/${EVENT_ID}/review-queue`, { headers: { cookie: technician } }))) as {
+      items: { file_version_id: string }[];
+    };
+    if (queue.items[0]) {
+      const preview = await fetch(`${API}/file-versions/${queue.items[0].file_version_id}/preview`, { method: "POST", headers: { cookie: technician } });
+      assert.notEqual(preview.status, 403, "a technician may ask for a preview");
+    }
+    for (const path of [`/events/${EVENT_ID}/speakers`, `/events/${EVENT_ID}/comms`, `/events/${EVENT_ID}/files`, `/events/${EVENT_ID}/sync/fleet`]) {
+      const refused = await fetch(`${API}${path}`, { headers: { cookie: technician } });
+      assert.equal(refused.status, 403, path);
+      assert.equal(((await json(refused)) as { code: string }).code, "auth.kind_forbidden");
+    }
+  });
+
+  test("placing someone on an event grants their kind's roles; a kind change swaps them", async (t: TestContext) => {
+    if (!up || !admin) return t.skip("API not running");
+    const email = `probe-kind-${Date.now()}@example.invalid`;
+    const made = (await json(await create({ email, display_name: "Kind Probe", account_type: "technician" }))) as { user_id: string };
+    const headers = { "content-type": "application/json", cookie: admin };
+    const placed = (await json(
+      await fetch(`${API}/admin/users/${made.user_id}/events`, { method: "POST", headers, body: JSON.stringify({ event_id: EVENT_ID, assign: true }) }),
+    )) as { assigned: boolean; roles: string[] };
+    assert.equal(placed.assigned, true);
+    assert.deepEqual([...placed.roles].sort(), ["content_reviewer", "room_technician", "srr_technician"]);
+
+    const rolesOf = async () => {
+      const list = (await json(await fetch(`${API}/admin/users`, { headers: { cookie: admin } }))) as {
+        items: { id: string; account_type: string; roles: { event_id: string; role: string }[] }[];
+      };
+      const row = list.items.find((user) => user.id === made.user_id)!;
+      return { type: row.account_type, roles: row.roles.filter((held) => held.event_id === EVENT_ID).map((held) => held.role).sort() };
+    };
+    assert.deepEqual(await rolesOf(), { type: "technician", roles: ["content_reviewer", "room_technician", "srr_technician"] });
+
+    const changed = await fetch(`${API}/admin/users/${made.user_id}/account-type`, { method: "POST", headers, body: JSON.stringify({ account_type: "support" }) });
+    assert.equal(changed.status, 200);
+    assert.deepEqual(await rolesOf(), { type: "support", roles: ["presentation_manager", "project_manager"] });
+
+    const removed = (await json(
+      await fetch(`${API}/admin/users/${made.user_id}/events`, { method: "POST", headers, body: JSON.stringify({ event_id: EVENT_ID, assign: false }) }),
+    )) as { assigned: boolean };
+    assert.equal(removed.assigned, false);
+    assert.deepEqual((await rolesOf()).roles, []);
+  });
+});
+

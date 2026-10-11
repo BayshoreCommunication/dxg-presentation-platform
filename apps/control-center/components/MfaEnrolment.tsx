@@ -154,7 +154,7 @@ export function MfaEnrolment() {
         {errorCode === "mfa.already_enrolled" && (
           <div className="note" style={{ marginBottom: 14, lineHeight: 1.6, color: "var(--dim)" }}>
             Your sign-in app is already set up, so there is nothing to do here. Lost your phone? Ask
-            a DXG administrator to open <strong>Staff accounts</strong>, find your name and choose{" "}
+            a DXG Admin to open <strong>Staff accounts</strong>, find your name and choose{" "}
             <strong>reset sign-in app</strong>. That clears the old one and lets you set up a new one
             — it can&apos;t be done from this screen, by design.
           </div>

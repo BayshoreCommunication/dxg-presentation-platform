@@ -2751,3 +2751,27 @@ pipe, a background build that never ran, 55 GB of build cache).
 - **One toast** (`components/Toast.tsx` in both apps): every screen that drew its own `.toast` renders the shared one —
   a close button, and it closes itself after six seconds. `.toast` is clickable only while shown.
 - Tests: speaker-accounts (revision request → unread notice with the message; read-all; staff cookie refused).
+
+## D-151 (2026-10-11): Three kinds of DXG account — Status: ACCEPTED (Travis, from the client's review)
+Accounts are **DXG Admin**, **DXG Support staff** or **DXG Technician staff** (`users.staff_kind`, **migration 035**;
+`is_root_admin` still marks an admin; existing staff became support staff). "DXG administrator" reads "DXG Admin"
+everywhere. Access is drawn by screen, as the client drew it:
+- **Support staff**: everything on the events they are placed on **except** the Speaker Ready Room and Manage
+  presentations. **Technician staff**: those two screens only (plus the way to them — the portfolio, the event's
+  summary, the files a review shows). **Admin**: everything. Enforced in the API by path (`kindRefusal`, 403
+  `auth.kind_forbidden`) after the staff gate, and mirrored by the sidebar; the command centre sends a technician on to
+  the Speaker Ready Room and shows support staff no review link.
+- **Placement, not roles**: Event assignments puts a person on an event (`POST /admin/users/:id/events`), and the roles
+  that placement grants follow the kind — support → project manager + presentation manager; technician → SRR
+  technician + room technician + reviewer (`ROLES_OF_KIND`). Changing an account's level keeps its events and swaps
+  those roles. The per-role route stays for the rare hand grant; the screen no longer ticks roles.
+- Seed: m.vega support; c.delgado and t.okafor technicians. Tests: admin (kind refusals; placement and level change
+  swap roles), event-configuration (a technician's refusal is by kind).
+- **Addendum, same day (bugs found while re-testing):** (1) a technician's review workspace failed on the slide
+  preview request (a POST) — now allowed; (2) support staff hit "no event" from every talk link (Files, agenda, risk
+  list) — they may now *read* a talk's detail, findings and comments (`SUPPORT_READS`), while rollback, waiving,
+  sending to the speaker and the review workspace stay refused and the screens hide those actions; a kind refusal
+  lands on `/no-access?for=kind`, which says what the level allows; (3) a client's account showed as "DXG Support
+  staff" — **Client admin** is a fourth kind (`staff_kind = 'client'`, **migration 036** reclassifies accounts whose
+  every role is a client role), offered on Staff accounts; placing one on an event grants `client_event_admin`.
+

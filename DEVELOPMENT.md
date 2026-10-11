@@ -35,7 +35,9 @@ npm run demo:link            # Raman by default; pass a name, e.g. -- Osei
 There is no signup. Every credential is created by DXG.
 
 `npm run db:seed` prints the development staff logins and a presenter access code for
-each speaker. Staff sign in at http://localhost:3000/login; presenters at
+each speaker. The seeded kinds (D-151): admin@ is a DXG Admin, m.vega@ is DXG Support staff
+(everything but the Speaker Ready Room and Manage presentations), c.delgado@ and t.okafor@ are
+DXG Technician staff (only those two screens). Staff sign in at http://localhost:3000/login; presenters at
 http://localhost:3001/login, or by following their link, which pre-fills the code and
 asks only for their email address.
 

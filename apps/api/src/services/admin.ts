@@ -1,8 +1,8 @@
 import type pg from "pg";
 import { appendAudit } from "@pmp/db";
 import { hashPassword, generateAccessCode, checkPassword } from "@pmp/auth";
-import type { Actor, DomainError, EventRole, Result } from "@pmp/domain";
-import { err, ok, hasAnyRole, EVENT_ROLES } from "@pmp/domain";
+import type { Actor, DomainError, EventRole, Result, StaffKind } from "@pmp/domain";
+import { err, ok, hasAnyRole, EVENT_ROLES, ROLES_OF_KIND, STAFF_KINDS } from "@pmp/domain";
 import { queueTemporaryPasswordEmail } from "./accountMail.ts";
 
 /**
@@ -15,10 +15,11 @@ const ADMIN_ROLES: EventRole[] = ["platform_admin"];
 
 const forbidden = (what: string): DomainError => ({
   code: "admin.forbidden",
-  message: `${what} is for DXG administrators only.`,
+  message: `${what} is for DXG Admins only.`,
 });
 
-type AccountType = "root_admin" | "staff";
+/** DXG Admin, DXG Support staff or DXG Technician staff (D-151); "staff" is the old name for support. */
+type AccountType = "root_admin" | "support" | "technician" | "client";
 
 export type StaffRow = {
   id: string;
@@ -38,8 +39,8 @@ export async function listStaff(tx: pg.PoolClient, actor: Actor): Promise<Result
   if (!hasAnyRole(actor, ADMIN_ROLES)) return err(forbidden("Viewing accounts"));
 
   const { rows } = await tx.query<StaffRow>(
-    `SELECT u.id, u.email::text, u.display_name,
-            CASE WHEN u.is_root_admin THEN 'root_admin' ELSE 'staff' END AS account_type,
+    `SELECT u.id, u.email::text, u.display_name, u.account_kind,
+            CASE WHEN u.is_root_admin THEN 'root_admin' ELSE u.staff_kind END AS account_type,
             u.is_active,
             (u.mfa_enrolled_at IS NOT NULL) AS mfa_enrolled,
             u.must_change_password, u.locked_until,
@@ -57,7 +58,8 @@ export async function listStaff(tx: pg.PoolClient, actor: Actor): Promise<Result
       WHERE u.deleted_at IS NULL
       ORDER BY u.is_root_admin DESC, u.display_name`,
   );
-  return ok(rows);
+  // Speaker accounts (D-146) are not staff and have their own screen.
+  return ok(rows.filter((row) => (row as StaffRow & { account_kind?: string }).account_kind !== "speaker"));
 }
 
 /** A temporary password is shown once and must be changed on first use. */
@@ -93,7 +95,7 @@ export async function resetPassword(
     displayName: target.display_name,
     temporaryPassword: temporary,
     reason: "reset",
-    accountType: target.is_root_admin ? "root_admin" : "staff",
+    accountType: kindOf(target),
   });
   await audit(tx, actor, userId, "admin.password_reset", { emailed: true });
   return ok({ emailed_to: target.email });
@@ -188,7 +190,7 @@ export async function grantRole(
   if (input.role === "platform_admin") {
     return err({
       code: "admin.unknown_role",
-      message: "DXG administrator isn't an event role. Change the access level on Staff accounts instead.",
+      message: "DXG Admin isn't an event role. Change the access level on Staff accounts instead.",
     });
   }
   const target = await accountOf(tx, input.userId);
@@ -222,39 +224,100 @@ export async function revokeRole(
 }
 
 /**
- * Root admin or staff (D-100). Promoting is a root admin's call; demoting the last active
- * root admin is refused, since nobody would be left to promote anyone back.
+ * DXG Admin, support staff or technician (D-100, D-151). Promoting is an admin's call;
+ * demoting the last active admin is refused, since nobody would be left to promote anyone
+ * back. Changing between support and technician keeps the account's events and swaps the
+ * roles it holds there for the new kind's.
  */
 export async function setAccountType(
   tx: pg.PoolClient,
   actor: Actor,
   userId: string,
-  accountType: AccountType,
+  requested: AccountType | "staff",
 ): Promise<Result<{ account_type: AccountType }, DomainError>> {
   if (!hasAnyRole(actor, ADMIN_ROLES)) return err(forbidden("Changing an account type"));
-  if (accountType !== "root_admin" && accountType !== "staff") {
-    return err({ code: "admin.bad_account_type", message: "Choose an access level: staff or DXG administrator." });
+  const accountType: AccountType = requested === "staff" ? "support" : requested;
+  if (accountType !== "root_admin" && !STAFF_KINDS.includes(accountType as StaffKind)) {
+    return err({ code: "admin.bad_account_type", message: "Choose an access level: DXG Admin, DXG Support staff, DXG Technician staff or Client admin." });
   }
   const target = await accountOf(tx, userId);
   if (!target) return err({ code: "admin.not_found", message: "This account no longer exists — it may have been removed. Refresh the page." });
-  if (accountType === "staff") {
+  if (accountType !== "root_admin" && target.is_root_admin) {
     if (userId === actor.id) {
-      return err({ code: "admin.self_lockout", message: "You can't remove your own DXG administrator access. Ask another DXG administrator." });
+      return err({ code: "admin.self_lockout", message: "You can't remove your own DXG Admin access. Ask another DXG Admin." });
     }
-    const refusal = await lastRootAdminRefusal(tx, userId, "make staff");
+    const refusal = await lastRootAdminRefusal(tx, userId, "change");
     if (refusal) return err(refusal);
   }
 
-  await tx.query(`UPDATE pmp.users SET is_root_admin = $1 WHERE id = $2`, [accountType === "root_admin", userId]);
+  await tx.query(`UPDATE pmp.users SET is_root_admin = $1, staff_kind = $2 WHERE id = $3`, [
+    accountType === "root_admin",
+    accountType === "root_admin" ? target.staff_kind : accountType,
+    userId,
+  ]);
+  // The roles held on each event follow the kind (D-151): a technician made support staff
+  // keeps their events, as support staff.
+  if (accountType !== "root_admin") {
+    const { rows: events } = await tx.query<{ event_id: string }>(
+      `SELECT DISTINCT event_id FROM pmp.event_roles WHERE user_id = $1 AND role <> 'platform_admin'`,
+      [userId],
+    );
+    for (const row of events) await placeOnEvent(tx, userId, row.event_id, accountType);
+  }
   // New powers, or fewer, take effect at the next sign-in rather than mid-session.
   await tx.query(`UPDATE pmp.auth_sessions SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL`, [
     userId,
   ]);
-  await audit(tx, actor, userId, "admin.account_type_changed", {
-    from: target.is_root_admin ? "root_admin" : "staff",
-    to: accountType,
-  });
+  await audit(tx, actor, userId, "admin.account_type_changed", { from: kindOf(target), to: accountType });
   return ok({ account_type: accountType });
+}
+
+/** The roles a kind holds on an event, and nothing else of the kind-bundled ones. */
+async function placeOnEvent(tx: pg.PoolClient, userId: string, eventId: string, kind: StaffKind): Promise<void> {
+  const bundled = [...new Set(Object.values(ROLES_OF_KIND).flat())];
+  await tx.query(`DELETE FROM pmp.event_roles WHERE user_id = $1 AND event_id = $2 AND role = ANY($3::text[])`, [
+    userId,
+    eventId,
+    bundled,
+  ]);
+  for (const role of ROLES_OF_KIND[kind]) {
+    await tx.query(`INSERT INTO pmp.event_roles (user_id, event_id, role) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`, [
+      userId,
+      eventId,
+      role,
+    ]);
+  }
+}
+
+/**
+ * Puts a support staff member or technician on an event, or takes them off it (D-151).
+ * The roles follow the account's kind; an administrator no longer ticks them.
+ */
+export async function assignToEvent(
+  tx: pg.PoolClient,
+  actor: Actor,
+  input: { userId: string; eventId: string; assign: boolean },
+): Promise<Result<{ assigned: boolean; roles: readonly EventRole[] }, DomainError>> {
+  if (!hasAnyRole(actor, ADMIN_ROLES)) return err(forbidden("Assigning staff"));
+  const target = await accountOf(tx, input.userId);
+  if (!target) return err({ code: "admin.not_found", message: "This account no longer exists — it may have been removed. Refresh the page." });
+  if (target.is_root_admin) {
+    return err({ code: "admin.not_assignable", message: "A DXG Admin reaches every event already." });
+  }
+  const { rows } = await tx.query(`SELECT id FROM pmp.events WHERE id = $1`, [input.eventId]);
+  if (!rows[0]) return err({ code: "admin.event_not_found", message: "This event no longer exists — it may have been removed. Refresh the page." });
+
+  if (input.assign) {
+    await placeOnEvent(tx, input.userId, input.eventId, target.staff_kind);
+    await audit(tx, actor, input.userId, "admin.assigned", { event_id: input.eventId, kind: target.staff_kind });
+    return ok({ assigned: true, roles: ROLES_OF_KIND[target.staff_kind] });
+  }
+  await tx.query(`DELETE FROM pmp.event_roles WHERE user_id = $1 AND event_id = $2 AND role <> 'platform_admin'`, [
+    input.userId,
+    input.eventId,
+  ]);
+  await audit(tx, actor, input.userId, "admin.unassigned", { event_id: input.eventId });
+  return ok({ assigned: false, roles: [] });
 }
 
 /**
@@ -297,17 +360,19 @@ export async function deleteAccount(
   ]);
   await audit(tx, actor, userId, "admin.account_deleted", {
     email: target.email,
-    was: target.is_root_admin ? "root_admin" : "staff",
+    was: kindOf(target),
   });
   return ok({ deleted: true });
 }
 
-type Account = { id: string; email: string; display_name: string; is_root_admin: boolean; is_active: boolean };
+type Account = { id: string; email: string; display_name: string; is_root_admin: boolean; is_active: boolean; staff_kind: StaffKind };
+
+const kindOf = (account: Account): AccountType => (account.is_root_admin ? "root_admin" : account.staff_kind);
 
 /** A live (not deleted) account, or nothing. */
 async function accountOf(tx: pg.PoolClient, userId: string): Promise<Account | undefined> {
   const { rows } = await tx.query<Account>(
-    `SELECT id, email::text, display_name, is_root_admin, is_active
+    `SELECT id, email::text, display_name, is_root_admin, is_active, staff_kind
        FROM pmp.users WHERE id = $1 AND deleted_at IS NULL`,
     [userId],
   );
@@ -331,7 +396,7 @@ async function lastRootAdminRefusal(
   if (row?.is_root_admin && row.others === 0) {
     return {
       code: "admin.last_admin",
-      message: `This is the only active DXG administrator, so you can't ${what} it. Make someone else a DXG administrator first.`,
+      message: `This is the only active DXG Admin, so you can't ${what} it. Make someone else a DXG Admin first.`,
     };
   }
   return undefined;

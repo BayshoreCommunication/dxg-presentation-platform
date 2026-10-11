@@ -59,10 +59,13 @@ export function PresentationDetailView({
   eventId,
   initial,
   comments,
+  readOnly = false,
 }: {
   eventId: string;
   initial: PresentationDetail;
   comments: CommentRow[];
+  /** Support staff (D-151) look; the decisions — here, a rollback — are not theirs. */
+  readOnly?: boolean;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -365,7 +368,7 @@ export function PresentationDetailView({
                   </td>
                   <td style={{ textAlign: "right" }}>
                     {/* Only a version that was once approved can be rolled back to (D-076). */}
-                    {row.review_state === "superseded" && row.approved_at && approved && (
+                    {!readOnly && row.review_state === "superseded" && row.approved_at && approved && (
                       <button
                         className="btn warnb"
                         style={{ padding: "4px 10px" }}
