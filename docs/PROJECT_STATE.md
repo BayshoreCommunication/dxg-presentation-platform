@@ -3495,6 +3495,19 @@ an invitation arrived from noreply@av-rfpilot.com with the "Sign in to manage yo
 https://speakers.av-rfpilot.com/login. First finding: the test address was a **staff** account, so the email said
 "your password" and the speaker site (rightly) refused the staff password. Fixed the same day (below).
 
+## 2026-10-08 — CI-built images; deployed 2fb67b5 to production (D-146..D-149)
+Production images are now built by GitHub Actions and pulled from ECR (D-149): the `publish` job runs on the
+`production` branch only, IAM role `pmp-github-image-push` (OIDC, immutable-subject trust), four ECR repositories,
+`deploy/server/deploy.sh`. First run failed at AWS sign-in because the role trusted the plain `repo:Org/name` subject
+while this repository sends the ID form — fixed in the trust policy, failed jobs re-run green.
+**Deployed `2fb67b5`** (PR #1 merged into main, then main → new `production` branch) with `./deploy.sh 2fb67b5` after
+copying `deploy/server` and adding `PMP_IMAGE_PREFIX` to the server's `.env`. Backup
+`backups/pmp-2026-10-08T110536Z.dump`; migrations 032 and 033 applied. All five app containers on the ECR images,
+no restarts; both `/ops/health` `{"status":"ok","database":"up","worker":"up"}`, both `/login` 200, speaker site
+serves Manage presentations and `/api/v1/me/session` answers 401 without a cookie; no errors in the logs. Disk 17 %
+(build cache 13 GB → 1.2 GB). From now on speaker invitations and reminders carry temporary passwords.
+Runbook PRODUCTION.md §2, §3.6, §5 and §6 rewritten for the new flow.
+
 ## 2026-10-08 — Send sign-in refuses a staff member's address
 A speaker whose email is a DXG staff account's got an invitation saying "sign in with your password", which opens
 nothing on the speaker site (a staff address is never turned into a speaker's, D-146). `sendUploadLink` now refuses
@@ -3510,3 +3523,12 @@ email; and the toast should close itself (6 s) with a close icon, everywhere. Bu
 (migration 034) written on request-changes/reject/approve; the speaker site's bell lists them and marks them read;
 the shared `Toast` replaces the ten per-screen toasts in the control centre. Walked locally: a reviewer's request
 appears under the bell on :3001 with the message; speaker-accounts 14/14. Not deployed.
+
+## 2026-10-11 — Deployed d60dd22 to production (D-150, staff-address refusal)
+`./deploy.sh d60dd22` (the `production` CI run published the images). The first attempt stopped at step 4 after the
+pull and the backup (`backups/pmp-2026-10-11T065820Z.dump`): `/opt/pmp/deploy/server` is root-owned, so `sed -i`
+could not create its temporary file — the first deploy had only appended `PMP_TAG`. Nothing had changed for users.
+Fixed in `deploy.sh` (mktemp + `cat > .env`, then checks the line; PR #2), copied to the server by hand, re-run:
+backup `backups/pmp-2026-10-11T070455Z.dump`, migration 034 applied, all five app containers on `d60dd22`, no
+restarts, both `/ops/health` ok, both `/login` 200, no errors in the logs, disk 20 %. The `2fb67b5` images stay on
+the server for rollback. **PR #2 must reach `production` before `deploy/server` is copied to the server again.**
