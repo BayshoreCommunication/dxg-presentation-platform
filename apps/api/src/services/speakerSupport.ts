@@ -91,7 +91,9 @@ export async function speakerAccountFor(
   actor: Actor,
   eventId: string,
   speakerId: string,
-): Promise<Result<SpeakerAccount, DomainError>> {
+  /** Only adding someone makes the speaker's sign-in; looking at the list never does. */
+  options: { create: boolean } = { create: true },
+): Promise<Result<SpeakerAccount | null, DomainError>> {
   if (!hasAnyRole(actor, MANAGERS)) return err(FORBIDDEN);
   const { rows } = await tx.query<{ full_name: string; email: string | null; client_id: string }>(
     `SELECT full_name, email::text, client_id FROM pmp.speakers
@@ -103,6 +105,16 @@ export async function speakerAccountFor(
   const email = (speaker.email ?? "").trim().toLowerCase();
   if (!EMAIL.test(email)) {
     return err({ code: "support.speaker_no_email", message: "Add the speaker's email address first — their support staff work under it." });
+  }
+  if (!options.create) {
+    const { rows: found } = await tx.query<{ id: string; display_name: string; account_kind: string; assists: boolean }>(
+      `SELECT id, display_name, account_kind, (assists_user_id IS NOT NULL) AS assists FROM pmp.users
+        WHERE lower(email::text) = $1 AND is_active AND deleted_at IS NULL`,
+      [email],
+    );
+    const account = found[0];
+    if (!account || account.account_kind !== "speaker" || account.assists) return ok(null);
+    return ok({ user_id: account.id, name: account.display_name, email, client_id: speaker.client_id });
   }
   const signIn = await ensureSpeakerSignIn(tx, { email, displayName: speaker.full_name, eventId, clientId: speaker.client_id, actorUserId: actor.id });
   if (signIn.outcome === "staff" || signIn.outcome === "assistant") {

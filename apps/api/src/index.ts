@@ -3360,9 +3360,10 @@ app.get("/api/v1/events/:eventId/speakers/:speakerId/support-staff", async (req,
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   const eventId = String(req.params.eventId);
   const result = await withScope(scopeFor(req, eventId), async (tx) => {
-    const speaker = await speakerAccountFor(tx, actor, eventId, String(req.params.speakerId));
+    const speaker = await speakerAccountFor(tx, actor, eventId, String(req.params.speakerId), { create: false });
     if (!speaker.ok) return speaker;
-    return { ok: true as const, value: { speaker: { name: speaker.value.name, email: speaker.value.email }, items: await listSupportStaff(tx, speaker.value.user_id), max: MAX_SUPPORT_STAFF } };
+    // No sign-in yet means no support staff yet; opening the list makes nothing.
+    return { ok: true as const, value: { items: speaker.value ? await listSupportStaff(tx, speaker.value.user_id) : [], max: MAX_SUPPORT_STAFF } };
   });
   if (!result.ok) return res.status(result.error.code.startsWith("support.") ? 422 : statusFor(result.error)).json(result.error);
   return res.json(result.value);
@@ -3376,7 +3377,7 @@ app.post("/api/v1/events/:eventId/speakers/:speakerId/support-staff", async (req
   const result = await withScope(scopeFor(req, eventId), async (tx) => {
     const speaker = await speakerAccountFor(tx, actor, eventId, String(req.params.speakerId));
     if (!speaker.ok) return speaker;
-    return addSupportStaff(tx, speaker.value, { name: body.name, email: body.email }, { actorUserId: actor.id, eventId });
+    return addSupportStaff(tx, speaker.value!, { name: body.name, email: body.email }, { actorUserId: actor.id, eventId });
   });
   if (!result.ok) {
     const status = result.error.code === "support.email_taken" ? 409 : result.error.code.startsWith("support.") ? 422 : statusFor(result.error);
@@ -3390,8 +3391,9 @@ app.delete("/api/v1/events/:eventId/speakers/:speakerId/support-staff/:userId", 
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   const eventId = String(req.params.eventId);
   const result = await withScope(scopeFor(req, eventId), async (tx) => {
-    const speaker = await speakerAccountFor(tx, actor, eventId, String(req.params.speakerId));
+    const speaker = await speakerAccountFor(tx, actor, eventId, String(req.params.speakerId), { create: false });
     if (!speaker.ok) return speaker;
+    if (!speaker.value) return { ok: false as const, error: { code: "support.not_found", message: "That person isn't on this speaker's support staff any more. Refresh the page." } };
     return removeSupportStaff(tx, speaker.value, String(req.params.userId), { actorUserId: actor.id, eventId });
   });
   if (!result.ok) return res.status(result.error.code === "support.not_found" ? 404 : statusFor(result.error)).json(result.error);

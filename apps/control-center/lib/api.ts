@@ -653,7 +653,7 @@ export type SpeakerRow = {
 
 export type SupportStaffRow = { user_id: string; name: string; email: string; state: "invited" | "active"; added_at: string };
 export const getSpeakerSupportStaff = (eventId: string, speakerId: string) =>
-  request<{ speaker: { name: string; email: string }; items: SupportStaffRow[]; max: number }>(
+  request<{ items: SupportStaffRow[]; max: number }>(
     `/events/${eventId}/speakers/${speakerId}/support-staff`,
   );
 export const addSpeakerSupportStaff = (eventId: string, speakerId: string, name: string, email: string) =>

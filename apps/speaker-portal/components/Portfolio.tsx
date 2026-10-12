@@ -63,7 +63,7 @@ export function Portfolio({ events }: { events: MyEvent[] }) {
                     Speaker Ready Room
                   </Link>
                 </span>
-                <Link href="/" className="btn pri">
+                <Link href={`/events/${event.id}/presentations`} className="btn pri">
                   Manage presentations →
                 </Link>
               </div>

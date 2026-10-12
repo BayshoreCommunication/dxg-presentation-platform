@@ -102,7 +102,7 @@ export function NotificationBell() {
             </div>
           ) : (
             items.slice(0, 20).map((item) => (
-              <Link key={item.id} href="/" className="item notice" role="menuitem" onClick={() => setOpen(false)}>
+              <Link key={item.id} href={`/events/${item.event_id}/presentations`} className="item notice" role="menuitem" onClick={() => setOpen(false)}>
                 <span className="notice-head">
                   <span className={`chip ${item.kind === "approved" ? "c-ok" : item.kind === "rejected" ? "c-bad" : "c-warn"}`}>
                     {KIND_WORDS[item.kind]}

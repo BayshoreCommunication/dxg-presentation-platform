@@ -100,6 +100,22 @@ describe("DXG staff give a speaker's assistant a sign-in (D-156)", () => {
   });
 });
 
+describe("looking is not doing", () => {
+  test("opening a speaker's support staff makes no sign-in for them", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    await removeTestAccounts(["k.osei@example.invalid"]);
+    const list = (await (await call(admin, "GET", `/events/${EVENT}/speakers`)).json()) as { items: { id: string; email: string | null }[] };
+    const osei = list.items.find((row) => row.email === "k.osei@example.invalid")!;
+    const opened = await call(admin, "GET", `/events/${EVENT}/speakers/${osei.id}/support-staff`);
+    assert.equal(opened.status, 200);
+    assert.deepEqual(((await opened.json()) as { items: unknown[] }).items, []);
+    const made = await withSystemScope(async (tx) =>
+      (await tx.query(`SELECT 1 FROM pmp.users WHERE lower(email::text) = 'k.osei@example.invalid'`)).rows.length,
+    );
+    assert.equal(made, 0, "the Sign-in column must not turn to Invited with nothing sent");
+  });
+});
+
 describe("only DXG Admins and support staff add them", () => {
   test("the speaker can't add or remove them; a technician can't either", async (t: TestContext) => {
     if (!up) return t.skip("API not running");

@@ -20,10 +20,41 @@ export function UploadNewVersion({ eventId, talks, timezone }: { eventId: string
   const [slotId, setSlotId] = useState("");
   const [toast, setToast] = useState<string | null>(null);
   const closeToast = useCallback(() => setToast(null), []);
-  const live = talks.filter((talk) => talk.status !== "canceled");
-  const chosen = live.find((talk) => talk.slot_id === slotId) ?? null;
   const when = (iso: string) =>
     new Date(iso).toLocaleString("en-US", { weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false, timeZone: timezone });
+
+  /*
+   * One entry per presentation, grouped under its session. A session's presentations all carry
+   * the session's name ("Demo Talk" six times read as one talk listed six times), so each is
+   * told apart by its speaker and its status; one with no speaker is numbered in its session.
+   * The talks list has a row per speaker, so co-presented talks are folded into one entry.
+   */
+  const live = (() => {
+    const bySlot = new Map<string, TalkRow & { speakers: string[] }>();
+    for (const talk of talks) {
+      if (talk.status === "canceled") continue;
+      const seen = bySlot.get(talk.slot_id);
+      if (seen) {
+        if (talk.speaker) seen.speakers.push(talk.speaker);
+      } else {
+        bySlot.set(talk.slot_id, { ...talk, speakers: talk.speaker ? [talk.speaker] : [] });
+      }
+    }
+    return [...bySlot.values()];
+  })();
+  const groups = (() => {
+    const out = new Map<string, { label: string; items: { slot_id: string; label: string }[] }>();
+    for (const talk of live) {
+      const key = `${talk.title}|${talk.starts_at}|${talk.room ?? ""}`;
+      const group = out.get(key) ?? { label: `${talk.title} · ${when(talk.starts_at)} · ${talk.room ?? "No room"}`, items: [] };
+      const who = talk.speakers.length > 0 ? talk.speakers.join(" & ") : "No speaker yet";
+      const same = group.items.filter((item) => item.label.startsWith(who)).length;
+      group.items.push({ slot_id: talk.slot_id, label: `${who}${same > 0 || who === "No speaker yet" ? ` (${same + 1})` : ""} · ${talk.status_label}` });
+      out.set(key, group);
+    }
+    return [...out.values()];
+  })();
+  const chosen = live.find((talk) => talk.slot_id === slotId) ?? null;
 
   return (
     <>
@@ -50,14 +81,17 @@ export function UploadNewVersion({ eventId, talks, timezone }: { eventId: string
           </div>
           <div className="cbd">
             <div className="field">
-              <label htmlFor="upload-talk">Talk</label>
+              <label htmlFor="upload-talk">Presentation</label>
               <select id="upload-talk" style={{ width: "100%" }} value={slotId} onChange={(event) => setSlotId(event.target.value)}>
-                <option value="">Choose the talk…</option>
-                {live.map((talk) => (
-                  <option key={talk.slot_id} value={talk.slot_id}>
-                    {when(talk.starts_at)} · {talk.room ?? "No room"} · {talk.title}
-                    {talk.speaker ? ` — ${talk.speaker}` : ""}
-                  </option>
+                <option value="">Choose the presentation…</option>
+                {groups.map((group) => (
+                  <optgroup key={group.label} label={group.label}>
+                    {group.items.map((item) => (
+                      <option key={item.slot_id} value={item.slot_id}>
+                        {item.label}
+                      </option>
+                    ))}
+                  </optgroup>
                 ))}
               </select>
             </div>
@@ -71,7 +105,7 @@ export function UploadNewVersion({ eventId, talks, timezone }: { eventId: string
                 }}
               />
             ) : (
-              <div className="note">Choose the talk first.</div>
+              <div className="note">Choose the presentation first.</div>
             )}
           </div>
         </div>
