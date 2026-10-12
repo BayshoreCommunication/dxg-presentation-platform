@@ -3618,3 +3618,18 @@ speakers suites 73/73.
 
 **Same day, Travis:** Open in PowerPoint is a plain download now (the computer's own app opens it); the `ms-powerpoint:`
 hand-over, the Download button and the open-link API are gone (`open_links` table left in place).
+
+## 2026-10-12 — Review pass over the client-review work (no new features)
+Travis: nothing more to add; check what was built since 91a333a for anything left. Fixed: a desk's intake/sign-off
+picked a speaker's *earliest* talk (now the next one not yet ended); a room kept a technician taken off the event and
+then refused every save (stale names drop off; the fleet lists current technicians only); a removed speaker support
+staff member couldn't be added back, and their address later becoming a speaker's gave a 500 (the account reopens /
+turns into the speaker's); support staff of a deactivated speaker could act as a speaker (refused at sign-in and on
+every speaker route); Room sync showed support staff an Upload that always failed (hidden); the check-in CSV could
+carry a formula (cells starting `= + - @` get an apostrophe); removing a speaker could empty a session (tidy one at a
+time); `approved.zip` with a bad room id was a 500 (404) and sized the zip only while reading (checked first). Also:
+the Support staff dialog no longer makes a speaker's sign-in just by opening; SRR rows keyed per talk; the upload
+picker names each presentation by speaker and status; the speaker site shows one event at a time (switcher, and
+`/events/:id/presentations`). Lint, type-check, unit 291; invariants 398/400 — the two failures need seed state the
+local data no longer has, as before. Known, not changed: an assistant reaches every event carrying the speaker's
+address (speaker accounts span clients, D-146); `open_links` (migration 040) is unused.

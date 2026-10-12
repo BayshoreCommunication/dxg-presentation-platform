@@ -147,6 +147,33 @@ export async function addSupportStaff(
     return err({ code: "support.too_many", message: `A speaker can have up to ${MAX_SUPPORT_STAFF} support staff. Remove one to add another.` });
   }
 
+  // Taken off this speaker before and added back: the same sign-in opens again, with a new password.
+  const { rows: returning } = await tx.query<{ id: string }>(
+    `SELECT id FROM pmp.users WHERE lower(email::text) = $1 AND assists_user_id = $2 AND NOT is_active AND deleted_at IS NULL`,
+    [email, speaker.user_id],
+  );
+  if (returning[0]) {
+    const temporary = generateAccessCode(4, 4);
+    const { rows } = await tx.query<SupportStaffRow>(
+      `UPDATE pmp.users SET is_active = true, display_name = $2, password_hash = $3, password_set_at = now(),
+              must_change_password = true, failed_logins = 0, locked_until = NULL
+        WHERE id = $1
+       RETURNING id AS user_id, display_name AS name, email::text AS email, 'invited' AS state, created_at AS added_at`,
+      [returning[0].id, name, await hashPassword(temporary)],
+    );
+    await queueSupportSignInEmail(tx, { to: email, name, speaker: speaker.name, temporaryPassword: temporary });
+    await appendAudit(tx, {
+      partitionId: by.eventId,
+      clientId: speaker.client_id,
+      actorUserId: by.actorUserId,
+      action: "auth.speaker_support_added",
+      subjectType: "user",
+      subjectId: rows[0]!.user_id,
+      detail: { email, assists: speaker.user_id, speaker: speaker.email, again: true },
+    });
+    return ok(rows[0]!);
+  }
+
   const { rows: taken } = await tx.query(
     `SELECT 1 FROM pmp.users WHERE lower(email::text) = $1 AND deleted_at IS NULL
      UNION ALL

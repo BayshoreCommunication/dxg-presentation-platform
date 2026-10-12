@@ -54,9 +54,13 @@ export async function setRoomTechnicians(
   const room = rooms[0];
   if (!room) return err({ code: "room.not_found", message: "This room no longer exists at this event. Refresh the page." });
 
-  const wanted = [...new Set(userIds)];
   const technicians = await eventTechnicians(tx, eventId);
   const allowed = new Map(technicians.map((person) => [person.user_id, person.name]));
+  // Someone already on the room who is no longer a technician here (taken off the event, made
+  // another kind, deactivated) simply drops off; only adding a stranger is refused.
+  const { rows: current } = await tx.query<{ user_id: string }>(`SELECT user_id FROM pmp.room_assignments WHERE room_id = $1`, [roomId]);
+  const stale = new Set(current.map((row) => row.user_id).filter((id) => !allowed.has(id)));
+  const wanted = [...new Set(userIds)].filter((id) => !stale.has(id));
   const stranger = wanted.find((id) => !allowed.has(id));
   if (stranger) {
     return err({
@@ -123,9 +127,11 @@ export async function approvedRoomsZip(
     filename: string;
     s3_key: string;
     client_id: string;
+    size_bytes: string;
   }>(
     `SELECT r.name AS room, r.id AS room_id, e.timezone, se.starts_at, s.title,
-            fv.id AS version_id, fv.version_number, fv.original_filename AS filename, fv.s3_key, fv.client_id
+            fv.id AS version_id, fv.version_number, fv.original_filename AS filename, fv.s3_key, fv.client_id,
+            fv.size_bytes::text AS size_bytes
        FROM pmp.slots s
        JOIN pmp.sessions se ON se.id = s.session_id
        JOIN pmp.rooms r ON r.id = se.room_id
@@ -144,6 +150,13 @@ export async function approvedRoomsZip(
     return err({ code: "room.nothing_approved", message: "There are no approved presentations to download yet." });
   }
 
+  // Checked from the recorded sizes before anything is read, so an oversized request costs nothing.
+  if (rows.reduce((sum, row) => sum + Number(row.size_bytes), 0) > ROOM_ZIP_MAX_BYTES) {
+    return err({
+      code: "room.zip_too_large",
+      message: "These presentations add up to more than 1 GB. Download them room by room instead.",
+    });
+  }
   const byRoom = new Set(rows.map((row) => row.room_id)).size > 1;
   const used = new Set<string>();
   const entries: { name: string; body: Buffer }[] = [];

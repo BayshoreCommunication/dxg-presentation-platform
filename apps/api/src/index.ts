@@ -1297,6 +1297,7 @@ app.get("/api/v1/events/:eventId/sync/approved.zip", async (req, res) => {
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   const eventId = String(req.params.eventId);
   const roomId = typeof req.query.room === "string" && req.query.room ? req.query.room : null;
+  if (roomId && !UUID.test(roomId)) return res.status(404).json({ code: "room.not_found", message: "That room isn't on this event." });
   const technician = technicianId(req);
   const result = await withScope(scopeFor(req, eventId), async (tx) => {
     let rooms: string[] | null = roomId ? [roomId] : null;
@@ -1656,6 +1657,11 @@ function speakerAccountOf(
    * speaker's — and only what submitting content needs: Manage presentations and their own
    * password. Everything else on the speaker site is the speaker's own.
    */
+  // The speaker they assist is gone: nothing of theirs is open any more (D-156).
+  if (principal.assisting && !principal.assisting.active) {
+    res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+    return null;
+  }
   if (principal.assisting && !options.allowSupportStaff) {
     res.status(403).json({
       code: "auth.support_staff_forbidden",

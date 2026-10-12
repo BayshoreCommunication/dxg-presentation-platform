@@ -209,4 +209,15 @@ describe("support staff submit the speaker's content, and nothing else", () => {
     });
     assert.notEqual(again.status, 200);
   });
+
+  test("added back after being removed, the same sign-in opens again", async (t: TestContext) => {
+    if (!up || !assistantId) return t.skip("API not running");
+    const back = await call(admin, "POST", staffPath(), { name: "Probe Assistant", email: ASSISTANT });
+    assert.equal(back.status, 201);
+    assert.equal(((await back.json()) as { user_id: string }).user_id, assistantId, "the same account, not a refusal");
+    const row = await withSystemScope(async (tx) =>
+      (await tx.query<{ is_active: boolean; must_change_password: boolean }>(`SELECT is_active, must_change_password FROM pmp.users WHERE id = $1`, [assistantId])).rows[0]!,
+    );
+    assert.deepEqual(row, { is_active: true, must_change_password: true });
+  });
 });

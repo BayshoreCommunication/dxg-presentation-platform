@@ -76,7 +76,7 @@ export type Principal =
        * Speaker Support Staff (D-156): the speaker this account submits content for. Its reach is
        * that speaker's presentations, and only Manage presentations. Null for everyone else.
        */
-      assisting: { user_id: string; name: string; email: string } | null;
+      assisting: { user_id: string; name: string; email: string; active: boolean } | null;
     }
   | { kind: "presenter"; speaker_id: string; email: string | null; display_name: string; event_id: string; client_id: string };
 
@@ -175,9 +175,12 @@ export async function staffLogin(
     locked_until: Date | null;
     is_active: boolean;
   }>(
-    `SELECT id, email::text, display_name, password_hash, must_change_password,
-            failed_logins, locked_until, is_active
-       FROM pmp.users WHERE lower(email::text) = $1`,
+    // Speaker support staff (D-156) sign in only while the speaker they assist still can.
+    `SELECT u.id, u.email::text, u.display_name, u.password_hash, u.must_change_password,
+            u.failed_logins, u.locked_until,
+            (u.is_active AND (u.assists_user_id IS NULL OR EXISTS (
+               SELECT 1 FROM pmp.users a WHERE a.id = u.assists_user_id AND a.is_active AND a.deleted_at IS NULL))) AS is_active
+       FROM pmp.users u WHERE lower(u.email::text) = $1`,
     [email],
   );
   const user = rows[0];
@@ -254,12 +257,15 @@ export async function principalFor(tx: pg.PoolClient, userId: string): Promise<P
     assisted_id: string | null;
     assisted_name: string | null;
     assisted_email: string | null;
+    assisted_active: boolean | null;
   }>(
     `SELECT u.id, u.email::text, u.display_name, u.must_change_password,
             (u.mfa_enrolled_at IS NOT NULL) AS mfa_enrolled, u.is_root_admin, u.account_kind, u.staff_kind,
-            a.id AS assisted_id, a.display_name AS assisted_name, a.email::text AS assisted_email
+            a.id AS assisted_id, a.display_name AS assisted_name, a.email::text AS assisted_email,
+            (a.is_active AND a.deleted_at IS NULL) AS assisted_active
        FROM pmp.users u
-       LEFT JOIN pmp.users a ON a.id = u.assists_user_id AND a.is_active AND a.deleted_at IS NULL
+       -- Support staff stay support staff whatever becomes of the speaker: never a speaker of their own.
+       LEFT JOIN pmp.users a ON a.id = u.assists_user_id
       WHERE u.id = $1`,
     [userId],
   );
@@ -290,7 +296,7 @@ export async function principalFor(tx: pg.PoolClient, userId: string): Promise<P
     staff_kind: user.account_kind === "speaker" ? null : user.is_root_admin ? "root_admin" : user.staff_kind,
     assisting:
       user.account_kind === "speaker" && user.assisted_id
-        ? { user_id: user.assisted_id, name: user.assisted_name!, email: user.assisted_email! }
+        ? { user_id: user.assisted_id, name: user.assisted_name!, email: user.assisted_email!, active: Boolean(user.assisted_active) }
         : null,
   };
 }
@@ -646,11 +652,24 @@ export async function ensureSpeakerSignIn(
   input: { email: string; displayName: string; eventId: string; clientId: string; actorUserId?: string | undefined },
 ): Promise<SpeakerSignIn> {
   const email = input.email.trim().toLowerCase();
-  const { rows: existing } = await tx.query<{ id: string; account_kind: string; must_change_password: boolean; assists: boolean }>(
-    `SELECT id, account_kind, must_change_password, (assists_user_id IS NOT NULL) AS assists FROM pmp.users
-      WHERE lower(email::text) = $1 AND is_active AND deleted_at IS NULL`,
+  const { rows: existing } = await tx.query<{ id: string; account_kind: string; must_change_password: boolean; assists: boolean; is_active: boolean }>(
+    `SELECT id, account_kind, must_change_password, (assists_user_id IS NOT NULL) AS assists, is_active FROM pmp.users
+      WHERE lower(email::text) = $1 AND deleted_at IS NULL`,
     [email],
   );
+  /*
+   * Addresses are unique across accounts, closed ones included. A removed support staff member's
+   * address that turns out to be a speaker's own becomes that speaker's sign-in (no longer
+   * assisting anyone); any other closed account stays closed, as staff ones do.
+   */
+  if (existing[0] && !existing[0].is_active) {
+    if (existing[0].account_kind !== "speaker" || !existing[0].assists) {
+      return { user_id: existing[0].id, email, outcome: "staff", temporary_password: null };
+    }
+    await tx.query(`UPDATE pmp.users SET is_active = true, assists_user_id = NULL, must_change_password = true WHERE id = $1`, [existing[0].id]);
+    existing[0].assists = false;
+    existing[0].must_change_password = true;
+  }
   const found = existing[0];
   if (found && found.account_kind !== "speaker") return { user_id: found.id, email, outcome: "staff", temporary_password: null };
   // A Speaker Support Staff sign-in (D-156) reaches another speaker's work, never a talk of its own.

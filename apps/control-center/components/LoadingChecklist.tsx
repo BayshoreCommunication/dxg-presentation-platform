@@ -32,6 +32,7 @@ export function LoadingChecklist({
   canLoad,
   technicians,
   isTechnician,
+  canUpload = true,
 }: {
   eventId: string;
   timezone: string;
@@ -41,6 +42,8 @@ export function LoadingChecklist({
   technicians: { user_id: string; name: string }[] | null;
   /** A technician sees their own rooms only (D-154). */
   isTechnician: boolean;
+  /** Taking in a new version is the onsite team's (D-151): support staff don't see Upload. */
+  canUpload?: boolean;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
@@ -231,7 +234,7 @@ export function LoadingChecklist({
                           )}
                         </td>
                         <td style={{ textAlign: "right", whiteSpace: "nowrap", verticalAlign: "top" }}>
-                          {!canceled && (
+                          {!canceled && canUpload && (
                             <button
                               type="button"
                               className="btn"
