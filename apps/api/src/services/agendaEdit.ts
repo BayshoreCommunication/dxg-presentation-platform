@@ -719,6 +719,20 @@ export async function removeSpeaker(
     `DELETE FROM pmp.speaker_assignments WHERE speaker_id = $1 RETURNING slot_id`,
     [speakerId],
   );
+  /*
+   * D-137's tidy-up, as when a presenter is taken off on the Agenda: a presentation they leave
+   * with nobody on it, nothing uploaded and other presentations in its session is an empty row
+   * nobody can use, so it goes. Removing a speaker from the Speakers screen used to leave it
+   * behind as "No speaker assigned yet".
+   */
+  await tx.query(
+    `DELETE FROM pmp.slots s
+      WHERE s.id = ANY($1::uuid[])
+        AND NOT EXISTS (SELECT 1 FROM pmp.speaker_assignments sa WHERE sa.slot_id = s.id)
+        AND NOT EXISTS (SELECT 1 FROM pmp.files f WHERE f.slot_id = s.id)
+        AND EXISTS (SELECT 1 FROM pmp.slots other WHERE other.session_id = s.session_id AND other.id <> s.id)`,
+    [assignments.map((row) => row.slot_id)],
+  );
   // A speaker removed while at a desk is checked out, so the desk is free again.
   await tx.query(`UPDATE pmp.srr_checkins SET departed_at = now(), lock_version = lock_version + 1 WHERE speaker_id = $1 AND departed_at IS NULL`, [
     speakerId,
