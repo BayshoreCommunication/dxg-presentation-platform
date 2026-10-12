@@ -406,6 +406,8 @@ export type SrrStation = {
   name: string;
   technician: string | null;
   speaker: string | null;
+  /** The visit at this desk; the desk opens it directly. */
+  checkin_id: string | null;
   busy: boolean;
   lock_version: number;
 };
@@ -435,7 +437,8 @@ export type CheckinDetail = {
   checkin: { id: string; station: string | null; checked_in_at: string; technician: string; departed_at: string | null };
   speaker: { id: string; name: string };
   talk: {
-    slot_id: string;
+    /** Null when the speaker is no longer on a session — the visit can still be checked out. */
+    slot_id: string | null;
     title: string;
     room: string | null;
     starts_at: string;
@@ -1458,10 +1461,6 @@ export const getEventFiles = (eventId: string, query: FileQuery = {}) => {
   const suffix = params.toString();
   return request<EventFiles>(`/events/${eventId}/files${suffix ? `?${suffix}` : ""}`);
 };
-
-/** A five-minute link to one version, for PowerPoint on this computer to open (D-158). */
-export const getOpenLink = (versionId: string) =>
-  request<{ path: string; filename: string; expires_at: string }>(`/file-versions/${versionId}/open-link`, { method: "POST" });
 
 /** A plain link: a top-level navigation carries the session cookie, like the archive's. */
 export const fileDownloadUrl = (versionId: string) => `${API_BASE_URL}/file-versions/${versionId}/download`;
