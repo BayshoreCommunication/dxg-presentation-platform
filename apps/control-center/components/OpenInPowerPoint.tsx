@@ -32,7 +32,8 @@ const HOW: Record<Desktop, string> = {
  * Only PowerPoint shows exactly what the room will — other apps are close, not the same.
  */
 export function OpenInPowerPoint({ versionId, primary = false }: { versionId: string; primary?: boolean }) {
-  const [os, setOs] = useState<Desktop>("other");
+  // Unknown until the page is running in the browser; until then it reads as most desks are (PowerPoint).
+  const [os, setOs] = useState<Desktop | null>(null);
   const [state, setState] = useState<"idle" | "opening" | "downloaded">("idle");
   const [error, setError] = useState<string | null>(null);
   useEffect(() => setOs(desktop()), []);
@@ -48,7 +49,7 @@ export function OpenInPowerPoint({ versionId, primary = false }: { versionId: st
 
   async function open() {
     setError(null);
-    if (os !== "windows" && os !== "mac") {
+    if (os === "linux" || os === "other") {
       download();
       return;
     }
@@ -77,7 +78,7 @@ export function OpenInPowerPoint({ versionId, primary = false }: { versionId: st
 
   return (
     <span style={{ display: "inline-flex", flexDirection: "column", gap: 4 }}>
-      <button type="button" className={primary ? "btn pri" : "btn"} disabled={state === "opening"} title={HOW[os]} onClick={() => void open()}>
+      <button type="button" className={primary ? "btn pri" : "btn"} disabled={state === "opening"} title={HOW[os ?? "windows"]} onClick={() => void open()}>
         <Icon name="play" />
         {state === "opening" ? "Opening…" : os === "linux" || os === "other" ? "Open on this computer" : "Open in PowerPoint"}
       </button>
