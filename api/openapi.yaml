@@ -20,6 +20,7 @@ tags:
   - {name: import}
   - {name: schedule}
   - {name: speakers}
+  - {name: speaker, description: "The speaker site's own routes under /me (D-146, D-148, D-155)"}
   - {name: communications}
   - {name: portal, description: Speaker-portal endpoints (speaker token auth)}
   - {name: files}
@@ -284,6 +285,15 @@ paths:
       tags: [srr]
       summary: Local intake without a check-in — staff upload/update a speaker's file from the SRR (D-152)
       responses: {'200': {$ref: '#/components/responses/OK'}, '404': {$ref: '#/components/responses/Error'}, '422': {$ref: '#/components/responses/Error'}}
+  /events/{eventId}/srr-open:
+    parameters: [{$ref: '#/components/parameters/eventId'}]
+    put: {tags: [srr], summary: "The Speaker Ready Room's event-day switch, {open: boolean}; DXG Admins and support staff (D-156). While closed, check-in, intake on a check-in and sign-off are 409 srr.closed_conflict", responses: {'200': {$ref: '#/components/responses/OK'}, '403': {$ref: '#/components/responses/Error'}}}
+  /me/support-staff:
+    get: {tags: [speaker], summary: "The speaker's support staff (D-155)", responses: {'200': {$ref: '#/components/responses/OK'}}}
+    post: {tags: [speaker], summary: "Give an assistant a sign-in that submits this speaker's presentations (D-155)", responses: {'201': {$ref: '#/components/responses/Created'}, '409': {$ref: '#/components/responses/Error'}, '422': {$ref: '#/components/responses/Error'}}}
+  /me/support-staff/{userId}:
+    parameters: [{name: userId, in: path, required: true, schema: {type: string, format: uuid}}]
+    delete: {tags: [speaker], summary: "Remove a support staff member; their sign-in and sessions end (D-155)", responses: {'200': {$ref: '#/components/responses/OK'}, '404': {$ref: '#/components/responses/Error'}}}
   /events/{eventId}/srr/report.csv:
     parameters: [{$ref: '#/components/parameters/eventId'}]
     get:

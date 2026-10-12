@@ -12,6 +12,8 @@ export type EventSummary = {
     timezone: string;
     /** Null when no venue has been recorded — the header says so rather than inventing one. */
     venue: string | null;
+    /** The Speaker Ready Room's event-day switch (D-156). */
+    srr_open: boolean;
   };
   collected: number;
   total: number;
@@ -93,7 +95,7 @@ export async function eventSummary(tx: pg.PoolClient, eventId: string): Promise<
      * of 3 · Doors 08:00" on every event, whatever its venue and however long it ran.
      */
     `SELECT e.id, e.name, e.starts_on::text, e.ends_on::text, e.status, e.timezone,
-            v.name AS venue
+            v.name AS venue, e.srr_open
        FROM pmp.events e
        LEFT JOIN pmp.venues v ON v.id = e.venue_id
       WHERE e.id = $1`,

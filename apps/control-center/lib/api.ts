@@ -164,7 +164,7 @@ export type EventRow = {
 
 export type Summary = {
   /** `venue` is null when none was recorded — the header says so rather than inventing one. */
-  event: EventRow & { timezone: string; venue: string | null };
+  event: EventRow & { timezone: string; venue: string | null; srr_open: boolean };
   total: number;
   collected: number;
   approved: number;
@@ -391,7 +391,13 @@ export type SrrDashboard = {
   expected: ExpectedArrival[];
   warnings: SrrWarning[];
   stations: SrrStation[];
+  /** The event-day switch (D-156): closed, nobody checks in. */
+  open: boolean;
 };
+
+/** Opens or closes the Speaker Ready Room (D-156). DXG Admins and support staff. */
+export const setSrrOpen = (eventId: string, open: boolean) =>
+  request<{ srr_open: boolean }>(`/events/${eventId}/srr-open`, { method: "PUT", body: JSON.stringify({ open }) });
 
 /** A Speaker Ready Room desk, set up per event (D-080). */
 export type SrrStation = {

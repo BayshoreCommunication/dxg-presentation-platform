@@ -1,3 +1,4 @@
+import { SrrSwitch } from "@/components/SrrSwitch";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSummary, getRiskList, getFleet, getDraft, getSession, getAgenda, getSpeakers, getReviewQueue, ApiError } from "@/lib/api";
@@ -219,6 +220,13 @@ export default async function CommandCenterPage({
           )}
         </div>
       </div>
+
+      {/* The Speaker Ready Room's event-day switch (D-156): support staff run the event and open it. */}
+      {!archived && (
+        <div style={{ margin: "-4px 0 14px" }}>
+          <SrrSwitch eventId={id} open={summary.event.srr_open} canSwitch={canConfigure} />
+        </div>
+      )}
 
       {archived && (
         <div className="err" style={{ borderLeftColor: "var(--line)", background: "var(--mist)" }}>

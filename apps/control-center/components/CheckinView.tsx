@@ -50,10 +50,13 @@ export function CheckinView({
   eventId,
   timezone,
   initial,
+  srrOpen = true,
 }: {
   eventId: string;
   timezone: string;
   initial: CheckinDetail;
+  /** The event-day switch (D-156): closed, no intake or sign-off here — only checking out. */
+  srrOpen?: boolean;
 }) {
   const router = useRouter();
   const [detail, setDetail] = useState(initial);
@@ -87,7 +90,8 @@ export function CheckinView({
     [refresh],
   );
 
-  const signable = detail.latest && detail.latest.processing_state === "stored";
+  // Closed (D-156), nothing is signed off or taken in here; checking out still works.
+  const signable = srrOpen && detail.latest && detail.latest.processing_state === "stored";
   const [confirmCheckout, setConfirmCheckout] = useState(false);
   const latestNumber = detail.latest?.version_number;
   const approvedNumber = detail.approved?.version_number;
@@ -222,7 +226,7 @@ export function CheckinView({
     </button>
   );
   const openUsb = (
-    <button type="button" className="btn pri" onClick={() => setIntakeOpen(true)}>
+    <button type="button" className="btn pri" disabled={!srrOpen} onClick={() => setIntakeOpen(true)}>
       <Icon name="intake" />
       Take the file (Local intake)
     </button>
@@ -315,6 +319,12 @@ export function CheckinView({
       </p>
 
       {error && <div className="err">{error}</div>}
+      {!srrOpen && (
+        <div className="err" style={{ borderLeftColor: "var(--line)", background: "var(--mist)" }}>
+          The Speaker Ready Room is closed, so nothing can be taken in or signed off here. You can still check{" "}
+          {detail.speaker.name} out. A DXG Admin or support staff opens the room on the event day.
+        </div>
+      )}
 
       {/* ── What to do now (D-120): one sentence, one main button. A beginner used to face a
           status chip, the same room-PC warning twice, three boxes and a paragraph of rules
@@ -366,6 +376,7 @@ export function CheckinView({
           type="button"
           className={intakeOpen ? "btn" : "btn pri"}
           aria-expanded={intakeOpen}
+          disabled={!srrOpen && !intakeOpen}
           onClick={() => setIntakeOpen((open) => !open)}
         >
           <Icon name={intakeOpen ? "close" : "intake"} />

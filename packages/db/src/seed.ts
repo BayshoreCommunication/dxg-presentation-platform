@@ -123,8 +123,9 @@ async function seed(): Promise<void> {
     ]);
 
     await client.query(
-      `INSERT INTO events (id, client_id, name, starts_on, ends_on, timezone, status)
-       VALUES ($1, $2, 'MedTech Forward 2026', '2026-03-10', '2026-03-12', 'America/New_York', 'active')`,
+      // The demo's Speaker Ready Room is open, as on an event day (D-156).
+      `INSERT INTO events (id, client_id, name, starts_on, ends_on, timezone, status, srr_open)
+       VALUES ($1, $2, 'MedTech Forward 2026', '2026-03-10', '2026-03-12', 'America/New_York', 'active', true)`,
       [IDS.event, IDS.client],
     );
 

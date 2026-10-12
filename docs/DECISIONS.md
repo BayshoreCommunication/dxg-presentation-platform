@@ -2863,3 +2863,41 @@ ECR's scan of the first CI-built images (D-149) found 7–8 critical and ~40 hig
   BUILD_SPEC, SCREEN_SPECS, PLAN, PHASE0_GATE, G0-1) are left as the record of what was planned.
 - Tests: `device-keys` suite removed with its routes; cross-event (the room check is now Room sync's), event-owned-data
   and manual-room-loading (no room view or Launch) updated.
+
+## D-155 (2026-10-12): Speaker Support Staff — Status: ACCEPTED (Travis, from the client's review, item C10)
+The review: "Speaker Support Staff role added for admin assistants submitting on behalf of a presenter — junior role
+scoped to content submission under the main speaker's account."
+- **Model** (**migration 038**): `users.assists_user_id`. A support staff member is a **speaker account** (so every
+  speaker rule — own cookie, no staff route, no second factor, temporary password first — applies unchanged) that
+  assists another speaker account. Its principal carries `assisting: {user_id, name, email}`.
+- **Reach**: the assisted speaker's presentations, matched by *their* email as the speaker's own are (D-146) — never
+  the assistant's own address. Open to them: `/me/session`, `/me/password`, `/me/presentations`, the upload routes
+  and downloads. Refused (403 `auth.support_staff_forbidden`): events, agenda, Speaker Ready Room, notifications and
+  support staff. An upload they make is the speaker's version (`uploaded_by_speaker`), with `uploaded_by_user` the
+  assistant — who actually sent it.
+- **Who adds them**: the speaker, on the speaker site's new **Support staff** page (`GET/POST /me/support-staff`,
+  `DELETE /me/support-staff/:userId`): name + email, a temporary password emailed (sensitive outbox row, "Your
+  DXG·PM sign-in to submit <speaker>'s presentations"), up to 5. Refused: an address that is already any account,
+  a speaker's own address on any event, the speaker's own (`support.*`). Removing deactivates the sign-in and ends
+  its sessions. Audited against the assistant's account.
+- **Their screen**: one sidebar door (Manage presentations), "Support staff for <speaker>" in place of the event
+  switcher, no bell, a line above the page saying uploads are submitted as the speaker's, the account badge "Support
+  staff"; any other page sends them back to Manage presentations. Speaker Help has a guide.
+- An address that is a support staff sign-in is never turned into a speaker's own (`ensureSpeakerSignIn` outcome
+  `assistant`; Create sign-in refuses it).
+- Tests: `tests/invariants/speaker-support-staff.test.ts` (6).
+
+## D-156 (2026-10-12): The Speaker Ready Room opens on the event day — Status: ACCEPTED (Travis, from the client's review, item A4)
+The review: "Speaker Ready Room activates on event day (admin-controlled on/off switch)".
+- `events.srr_open` (**migration 039**): events that already existed stay **open** (nothing in use changes); new
+  events start **closed**; practice events and the seed's demo are open.
+- **Switch**: `PUT /events/:id/srr-open {open}` — DXG Admins and support staff (presentation manager or above on the
+  event); technicians work the room but don't open it. Outside the `/srr` path because support staff, who never open
+  the room itself (D-151), run the event. Shown as a chip + **Open the Speaker Ready Room** / **Close it** (asks
+  first) on the command centre and on the Speaker Ready Room page; audited `srr.opened` / `srr.closed`.
+- **Closed**: check-in, local intake on a check-in and sign-off are refused (409 `srr.closed_conflict`) and their
+  buttons are off with the reason; setting up desks, checking a speaker out, the check-in report and uploading from
+  the room (Upload / Manage presentations / Room sync, D-152/D-153) still work. The speaker's Speaker Ready Room says
+  it opens on the event day.
+- Tests: `tests/invariants/srr-open.test.ts` (3); the suites that check speakers in on their own new events open the
+  room first.

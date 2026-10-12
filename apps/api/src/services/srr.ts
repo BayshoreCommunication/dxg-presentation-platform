@@ -48,7 +48,7 @@ export type SrrWarning = {
 export async function srrDashboard(
   tx: pg.PoolClient,
   eventId: string,
-): Promise<{ expected: ExpectedArrival[]; warnings: SrrWarning[]; stations: SrrStation[] }> {
+): Promise<{ expected: ExpectedArrival[]; warnings: SrrWarning[]; stations: SrrStation[]; open: boolean }> {
   const { rows } = await tx.query<{
     speaker_id: string;
     speaker: string;
@@ -143,7 +143,7 @@ export async function srrDashboard(
     [eventId],
   );
 
-  return { expected, warnings, stations: await eventStations(tx, eventId) };
+  return { expected, warnings, stations: await eventStations(tx, eventId), open: await srrIsOpen(tx, eventId) };
 }
 
 /* ── Speaker Ready Room stations (D-080) ─────────────────────────────────── */
@@ -316,6 +316,52 @@ export async function retireStation(
   return ok({ retired: true });
 }
 
+/* ── the event-day switch (client review, D-156) ─────────────────────────── */
+
+const SRR_CLOSED: DomainError = {
+  code: "srr.closed_conflict",
+  message: "The Speaker Ready Room is closed. A DXG Admin or support staff opens it on the event day.",
+};
+
+export async function srrIsOpen(tx: pg.PoolClient, eventId: string): Promise<boolean> {
+  const { rows } = await tx.query<{ srr_open: boolean }>(`SELECT srr_open FROM pmp.events WHERE id = $1`, [eventId]);
+  return rows[0]?.srr_open ?? false;
+}
+
+/**
+ * Opens or closes the Speaker Ready Room for the event: DXG Admins and support staff, whose
+ * placement makes them presentation and project managers (D-151). Technicians work the room;
+ * they don't open it.
+ */
+export async function setSrrOpen(
+  tx: pg.PoolClient,
+  actor: Actor,
+  eventId: string,
+  open: boolean,
+): Promise<Result<{ srr_open: boolean }, DomainError>> {
+  if (!hasAnyRole(actor, atLeast("presentation_manager"))) {
+    return err({ code: "auth.forbidden", message: "Only a DXG Admin or support staff can open or close the Speaker Ready Room." });
+  }
+  const { rows } = await tx.query<{ client_id: string; was: boolean }>(
+    `UPDATE pmp.events e SET srr_open = $2 FROM (SELECT srr_open AS was FROM pmp.events WHERE id = $1) old
+      WHERE e.id = $1 RETURNING e.client_id, old.was`,
+    [eventId, open],
+  );
+  if (!rows[0]) return err({ code: "events.not_found", message: "This event no longer exists." });
+  if (rows[0].was !== open) {
+    await appendAudit(tx, {
+      partitionId: eventId,
+      clientId: rows[0].client_id,
+      actorUserId: actor.id,
+      action: open ? "srr.opened" : "srr.closed",
+      subjectType: "event",
+      subjectId: eventId,
+      detail: {},
+    });
+  }
+  return ok({ srr_open: open });
+}
+
 /* ── screen 12: check-in ─────────────────────────────────────────────────── */
 
 export async function checkIn(
@@ -323,6 +369,9 @@ export async function checkIn(
   actor: Actor,
   input: { eventId: string; speakerId: string; stationId: string | undefined },
 ): Promise<Result<{ checkin_id: string }, DomainError>> {
+  // Closed until the event day (D-156): no one checks in.
+  if (!(await srrIsOpen(tx, input.eventId))) return err(SRR_CLOSED);
+
   const { rows: existing } = await tx.query<{ id: string }>(
     `SELECT id FROM pmp.srr_checkins WHERE speaker_id = $1 AND departed_at IS NULL`,
     [input.speakerId],
@@ -712,6 +761,7 @@ export async function usbIngest(
     `SELECT event_id, client_id FROM pmp.srr_checkins WHERE id = $1`,
     [input.checkinId],
   );
+  if (!(await srrIsOpen(tx, scope[0]!.event_id))) return err(SRR_CLOSED);
   return takeLocalFile(tx, actor, {
     eventId: scope[0]!.event_id,
     clientId: scope[0]!.client_id,
@@ -811,6 +861,7 @@ export async function signOff(
     [input.fileVersionId],
   );
   if (!version[0]) return err({ code: "srr.version_not_found", message: "This version no longer exists — it may have been removed. Refresh the page." });
+  if (!(await srrIsOpen(tx, version[0].event_id))) return err(SRR_CLOSED);
 
   // I-2 again, at the last gate: nothing unscanned is ever signed for.
   if (version[0].processing_state !== "stored") {

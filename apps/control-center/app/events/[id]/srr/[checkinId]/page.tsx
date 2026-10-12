@@ -14,5 +14,5 @@ export default async function CheckinPage({
     Promise.all([getCheckin(checkinId), getSummary(id)]),
     `/events/${id}/srr/${checkinId}`,
   );
-  return <CheckinView eventId={id} timezone={summary.event.timezone} initial={detail} />;
+  return <CheckinView eventId={id} timezone={summary.event.timezone} initial={detail} srrOpen={summary.event.srr_open} />;
 }

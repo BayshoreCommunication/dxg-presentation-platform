@@ -70,7 +70,7 @@ const MFA_COOKIE = "pmp_mfa";
 const SPEAKER_SITE = `${process.env.PORTAL_BASE ?? "http://localhost:3001"}/login`;
 import { addSupportStaff, listSupportStaff, MAX_SUPPORT_STAFF, removeSupportStaff } from "./services/speakerSupport.ts";
 import { approvedRoomsZip, assignedTo, eventTechnicians, markLoaded, roomOfRoomFile, setRoomTechnicians, unmarkLoaded } from "./services/roomSync.ts";
-import { srrDashboard, srrReportCsv, checkIn, checkinDetail, usbIngest, slotIntake, signOff, depart, emailReceipt, addStation, renameStation, retireStation } from "./services/srr.ts";
+import { setSrrOpen, srrDashboard, srrReportCsv, checkIn, checkinDetail, usbIngest, slotIntake, signOff, depart, emailReceipt, addStation, renameStation, retireStation } from "./services/srr.ts";
 import {
   presentationDetail,
   findingsFor,
@@ -1888,6 +1888,21 @@ app.get("/api/v1/events/:eventId/srr", async (req, res) => {
     srrDashboard(tx, eventId),
   );
   return res.json(view);
+});
+
+/**
+ * The Speaker Ready Room's event-day switch (D-156). Outside the `/srr` path on purpose: support
+ * staff never open the room itself (D-151), but they run the event and open it on the day.
+ */
+app.put("/api/v1/events/:eventId/srr-open", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  const open = (req.body as { open?: unknown })?.open;
+  if (typeof open !== "boolean") return res.status(400).json({ code: "request.invalid", message: "Say whether to open or close the room." });
+  const eventId = String(req.params.eventId);
+  const result = await withScope(scopeFor(req, eventId), (tx) => setSrrOpen(tx, actor, eventId, open));
+  if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+  return res.json(result.value);
 });
 
 /** The check-in / checkout report as CSV (D-152): presenter, desk, check-in and checkout times. */

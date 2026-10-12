@@ -248,6 +248,8 @@ export type MySrr = {
   checkins: { id: string; station: string | null; checked_in_at: string; departed_at: string | null; technician: string }[];
   sign_offs: { signed_at: string; version_number: number; file_name: string; talk: string; receipt_emailed_to: string | null }[];
   talks: PortalTalk[];
+  /** Whether the room has opened yet — it opens on the event day (D-156). */
+  open: boolean;
 };
 
 export const getMySrr = (eventId: string) => request<MySrr>(`/me/events/${eventId}/srr`);

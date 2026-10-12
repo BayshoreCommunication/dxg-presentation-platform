@@ -223,6 +223,8 @@ export type MySrr = {
   /** What they confirmed as final, newest first. */
   sign_offs: { signed_at: string; version_number: number; file_name: string; talk: string; receipt_emailed_to: string | null }[];
   talks: PortalTalk[];
+  /** Whether the room is open yet — it opens on the event day (D-156). */
+  open: boolean;
 };
 
 /**
@@ -231,8 +233,8 @@ export type MySrr = {
  * replace before they do (a speaker may update from here; the client's review asked for it).
  */
 export async function mySrr(tx: pg.PoolClient, session: PortalSession): Promise<MySrr> {
-  const { rows: eventRows } = await tx.query<MySrr["event"]>(
-    `SELECT e.id, e.name, e.timezone, e.starts_on::text, e.ends_on::text, v.name AS venue
+  const { rows: eventRows } = await tx.query<MySrr["event"] & { srr_open: boolean }>(
+    `SELECT e.id, e.name, e.timezone, e.starts_on::text, e.ends_on::text, v.name AS venue, e.srr_open
        FROM pmp.events e LEFT JOIN pmp.venues v ON v.id = e.venue_id WHERE e.id = $1`,
     [session.event_id],
   );
@@ -265,12 +267,14 @@ export async function mySrr(tx: pg.PoolClient, session: PortalSession): Promise<
       ORDER BY so.signed_at DESC`,
     [session.speaker_id, session.event_id],
   );
+  const { srr_open: open, ...event } = eventRows[0]!;
   return {
-    event: eventRows[0]!,
+    event,
     stations,
     checkins,
     sign_offs: signOffs,
     talks: await portalTalks(tx, session),
+    open,
   };
 }
 

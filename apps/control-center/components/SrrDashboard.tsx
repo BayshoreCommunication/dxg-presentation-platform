@@ -6,6 +6,7 @@ import type { ExpectedArrival, SrrDashboard, SrrStation } from "@/lib/api";
 import { addStation, renameStation, retireStation, startCheckin, ingestForSlot, srrReportUrl, ApiError } from "@/lib/api";
 import { LocalIntake } from "@/components/LocalIntake";
 import { Toast } from "@/components/Toast";
+import { SrrSwitch } from "@/components/SrrSwitch";
 import { Icon } from "@/components/Icon";
 import { FloatingMenu, useFloatingMenu } from "@/components/FloatingMenu";
 import { CHECK, wordsFor } from "@pmp/format";
@@ -34,11 +35,14 @@ export function SrrDashboardView({
   eventName,
   timezone,
   data,
+  canSwitch,
 }: {
   eventId: string;
   eventName: string;
   timezone: string;
   data: SrrDashboard;
+  /** May open or close the room on the event day (D-156). */
+  canSwitch: boolean;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -63,8 +67,9 @@ export function SrrDashboardView({
     </button>
   );
   // Why "Check in →" is greyed, once above the list rather than on every row (R33, D-111).
-  const checkInBlocked =
-    data.stations.length === 0
+  const checkInBlocked = !data.open
+    ? "The Speaker Ready Room is closed. It opens on the event day — a DXG Admin or support staff opens it."
+    : data.stations.length === 0
       ? "Check in is off until this room has a desk. Add one under Desks above."
       : data.stations.every((station) => station.busy)
         ? "Every desk is in use. To free one, check a speaker out: open their check-in and press Check out."
@@ -119,6 +124,22 @@ export function SrrDashboardView({
       </div>
 
       {error && <div className="err">{error}</div>}
+
+      {/* The event-day switch (D-156). */}
+      <div className={data.open ? undefined : "card next-step"} style={data.open ? { margin: "0 0 12px" } : undefined}>
+        <div className={data.open ? undefined : "cbd"}>
+          {!data.open && (
+            <>
+              <div className="next-step-label">Not open yet</div>
+              <p className="next-step-body" style={{ marginTop: 0 }}>
+                The Speaker Ready Room opens on the event day. Until then you can set up desks and upload speakers&rsquo;
+                files, but no one can be checked in.
+              </p>
+            </>
+          )}
+          <SrrSwitch eventId={eventId} open={data.open} canSwitch={canSwitch} />
+        </div>
+      </div>
 
       {intakeFor && (
         <div className="card">
@@ -226,7 +247,7 @@ export function SrrDashboardView({
                           {uploadButton(row)}{" "}
                           <CheckInButton
                             stations={data.stations}
-                            disabled={busy}
+                            disabled={busy || !data.open}
                             onPick={(stationId) => void check(row.speaker_id, stationId)}
                           />
                         </td>
@@ -264,7 +285,7 @@ export function SrrDashboardView({
                       <CheckInButton
                         stations={data.stations}
                         label="Check in again"
-                        disabled={busy}
+                        disabled={busy || !data.open}
                         onPick={(stationId) => void check(row.speaker_id, stationId)}
                       />
                     </td>

@@ -3578,3 +3578,16 @@ admin expectation updated (49/49 across admin, cross-event, manual-room-loading,
 event-files and event-owned-data's station check, need seed state the local data no longer has (approved MedTech
 file; a MedTech speaker not checked in): `npm run db:seed` resets it. Lint and type-check clean. **Not pushed, not
 deployed.** Deploy note: migration 037 runs with the others; no server change otherwise.
+
+## 2026-10-12 — Client review C10 and A4: Speaker Support Staff; SRR event-day switch (D-155, D-156)
+Built locally. **C10**: migration 038; speakers add assistants on the speaker site's Support staff page (temporary
+password emailed); an assistant reaches only the speaker's Manage presentations and their uploads are the speaker's,
+recorded as sent by the assistant. Walked on :3001: Raman added "Sam Assistant"; signed in as them — one sidebar door,
+"Support staff for Dr. Priya Raman", other pages send them back. **A4**: migration 039 `events.srr_open` (existing
+events open, new ones closed); switch on the command centre and the SRR page for admins and support staff; closed →
+no check-in, intake on a check-in or sign-off (buttons off with the reason), checkout and desks still work. Walked as
+the admin: closed MedTech's room, saw the banners and disabled buttons, opened it again. New suites
+speaker-support-staff 6/6, srr-open 3/3. **Not pushed, not deployed.** Deploy note: migrations 038 and 039 run with
+the others; production events keep their Speaker Ready Room open. Remaining from the review: A5 (Preview Slides in
+local PowerPoint — to be discussed) and the production check-in page error (needs the server log).
+Local data: a test assistant `s.assistant@example.invalid` exists on Raman (remove it on Support staff, or reseed).
