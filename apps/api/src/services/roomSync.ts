@@ -6,88 +6,9 @@ import { writeZip } from "@pmp/files";
 import { storage } from "./ingest.ts";
 
 /*
- * Room sync for DXG Technician staff (client review, D-154): a technician works the rooms
- * they are assigned to — sees only those, ticks only those, and downloads every approved
- * file of a room (or of all their rooms) in one zip.
+ * Room sync (client review, D-154): every approved file of a room, or of every room on the
+ * event, in one zip. DXG Technician staff on the event work every room of it (D-160).
  */
-
-/** DXG Technician staff placed on the event: the people a room can be given to. */
-export async function eventTechnicians(tx: pg.PoolClient, eventId: string): Promise<{ user_id: string; name: string; email: string }[]> {
-  const { rows } = await tx.query<{ user_id: string; name: string; email: string }>(
-    `SELECT DISTINCT u.id AS user_id, u.display_name AS name, u.email::text AS email
-       FROM pmp.users u JOIN pmp.event_roles er ON er.user_id = u.id
-      WHERE er.event_id = $1 AND u.staff_kind = 'technician' AND NOT u.is_root_admin
-        AND u.account_kind = 'staff' AND u.is_active
-      ORDER BY u.display_name`,
-    [eventId],
-  );
-  return rows;
-}
-
-/** Whether this technician is assigned to the room. */
-export async function assignedTo(tx: pg.PoolClient, userId: string, roomId: string): Promise<boolean> {
-  const { rows } = await tx.query(`SELECT 1 FROM pmp.room_assignments WHERE user_id = $1 AND room_id = $2`, [userId, roomId]);
-  return rows.length > 0;
-}
-
-/** The room a room-file row belongs to, for the technician's own-room check. */
-export async function roomOfRoomFile(tx: pg.PoolClient, roomFileId: string): Promise<string | null> {
-  const { rows } = await tx.query<{ room_id: string }>(`SELECT room_id FROM pmp.room_files WHERE id = $1`, [roomFileId]);
-  return rows[0]?.room_id ?? null;
-}
-
-/**
- * Sets who works a room: the list replaces the room's current technicians. Everyone named
- * must be DXG Technician staff on the event.
- */
-export async function setRoomTechnicians(
-  tx: pg.PoolClient,
-  actor: Actor,
-  eventId: string,
-  roomId: string,
-  userIds: string[],
-): Promise<Result<{ technicians: { user_id: string; name: string }[] }, DomainError>> {
-  const { rows: rooms } = await tx.query<{ client_id: string; name: string }>(
-    `SELECT client_id, name FROM pmp.rooms WHERE id = $1 AND event_id = $2`,
-    [roomId, eventId],
-  );
-  const room = rooms[0];
-  if (!room) return err({ code: "room.not_found", message: "This room no longer exists at this event. Refresh the page." });
-
-  const technicians = await eventTechnicians(tx, eventId);
-  const allowed = new Map(technicians.map((person) => [person.user_id, person.name]));
-  // Someone already on the room who is no longer a technician here (taken off the event, made
-  // another kind, deactivated) simply drops off; only adding a stranger is refused.
-  const { rows: current } = await tx.query<{ user_id: string }>(`SELECT user_id FROM pmp.room_assignments WHERE room_id = $1`, [roomId]);
-  const stale = new Set(current.map((row) => row.user_id).filter((id) => !allowed.has(id)));
-  const wanted = [...new Set(userIds)].filter((id) => !stale.has(id));
-  const stranger = wanted.find((id) => !allowed.has(id));
-  if (stranger) {
-    return err({
-      code: "room.not_a_technician",
-      message: "Only DXG Technician staff placed on this event can be given a room. Place them on the event under Event assignments first.",
-    });
-  }
-
-  await tx.query(`DELETE FROM pmp.room_assignments WHERE room_id = $1 AND NOT (user_id = ANY($2::uuid[]))`, [roomId, wanted]);
-  for (const userId of wanted) {
-    await tx.query(
-      `INSERT INTO pmp.room_assignments (user_id, room_id, event_id, client_id, assigned_by)
-       VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING`,
-      [userId, roomId, eventId, room.client_id, actor.id],
-    );
-  }
-  await appendAudit(tx, {
-    partitionId: eventId,
-    clientId: room.client_id,
-    actorUserId: actor.id,
-    action: "room.technicians_set",
-    subjectType: "room",
-    subjectId: roomId,
-    detail: { room: room.name, technicians: wanted.map((id) => allowed.get(id)) },
-  });
-  return ok({ technicians: wanted.map((id) => ({ user_id: id, name: allowed.get(id)! })).sort((a, b) => a.name.localeCompare(b.name)) });
-}
 
 /** Big enough for a day of a busy room; past it, download room by room. */
 export const ROOM_ZIP_MAX_BYTES = 1024 * 1024 * 1024;

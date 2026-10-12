@@ -3652,3 +3652,11 @@ becomes that speaker's own sign-in and sees only their own talk. Taken off the e
 no event left the refusal read "You haven't been added to an event yet", wrong for someone just removed — now "You
 aren't on any event yet. Ask a DXG Admin to add you in Event assignments." (API, no-access page, Help tip). Related
 suites 152/152 plus admin, practice, auth separation 53/53; lint, type-check clean.
+
+## 2026-10-12 — Room sync: technicians see every room of their events (D-160)
+Travis: drop Assign technicians; the event assignment is enough. Room sync now shows a technician every room of the
+event, with Mark loaded and Download all everywhere; the per-room assignment button, line, routes and seed rows are
+gone (`room_assignments` kept as history). Walked locally as the demo technician on Tech Summit: Main Hall, Room 1 and
+Room 2 all listed, no assignment controls. room-sync-technicians rewritten (5 + Download all 4); with manual room
+loading, admin, cross-event, event scope, technician-submits and SRR local intake 72/72; unit 291; lint and
+type-check clean. Not pushed — Travis reviews locally first.

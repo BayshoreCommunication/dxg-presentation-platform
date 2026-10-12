@@ -262,8 +262,6 @@ export type FleetRoom = {
   readiness: "ready" | "attention";
   files_current: number;
   files_total: number;
-  /** DXG Technician staff assigned to this room (D-154). */
-  technicians: { user_id: string; name: string }[];
   talks: FleetTalk[];
 };
 
@@ -288,17 +286,6 @@ export const getTalks = (eventId: string) => request<{ items: TalkRow[] }>(`/eve
 
 export const getFleet = (eventId: string) =>
   request<{ items: FleetRoom[] }>(`/events/${eventId}/sync/fleet`);
-
-/** DXG Technician staff on the event — who a room can be given to (D-154). */
-export const getSyncTechnicians = (eventId: string) =>
-  request<{ items: { user_id: string; name: string; email: string }[] }>(`/events/${eventId}/sync/technicians`);
-
-/** Sets who works a room; the list replaces the room's technicians (D-154). */
-export const setRoomTechnicians = (eventId: string, roomId: string, userIds: string[]) =>
-  request<{ technicians: { user_id: string; name: string }[] }>(`/events/${eventId}/sync/rooms/${roomId}/technicians`, {
-    method: "PUT",
-    body: JSON.stringify({ user_ids: userIds }),
-  });
 
 /**
  * Every approved presentation of one room, or of every room the caller works, as a zip

@@ -4,8 +4,7 @@ import Link from "next/link";
 import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { FleetRoom, FleetTalk } from "@/lib/api";
-import { ApiError, downloadApproved, fileDownloadUrl, ingestForSlot, markLoaded, setRoomTechnicians, unmarkLoaded } from "@/lib/api";
-import { FloatingMenu, useFloatingMenu } from "@/components/FloatingMenu";
+import { ApiError, downloadApproved, fileDownloadUrl, ingestForSlot, markLoaded, unmarkLoaded } from "@/lib/api";
 import { LocalIntake } from "@/components/LocalIntake";
 import { Toast } from "@/components/Toast";
 import { ConfirmInline } from "@/components/ConfirmInline";
@@ -21,27 +20,21 @@ const time = (iso: string, timeZone: string) =>
  * Room sync's loading checklist (D-125): a card per room, one line per talk — its approved
  * version, whether a person has ticked it loaded on the room PC, a link to download it for
  * copying, and Mark loaded (or Undo). Rooms that still need something come first.
- * Since D-154 a room names the DXG Technician staff who work it (assigned here by admins and
- * support staff), downloads all its approved files in one zip, and takes a new version a
- * presenter brings to the room.
+ * Since D-154 a room downloads all its approved files in one zip and takes a new version a
+ * presenter brings to the room. DXG Technician staff on the event see every room (D-160):
+ * Event assignments is the only place anyone is given work.
  */
 export function LoadingChecklist({
   eventId,
   timezone,
   rooms,
   canLoad,
-  technicians,
-  isTechnician,
   canUpload = true,
 }: {
   eventId: string;
   timezone: string;
   rooms: FleetRoom[];
   canLoad: boolean;
-  /** The event's DXG Technician staff, for assigning rooms; null when this account can't assign. */
-  technicians: { user_id: string; name: string }[] | null;
-  /** A technician sees their own rooms only (D-154). */
-  isTechnician: boolean;
   /** Taking in a new version is the onsite team's (D-151): support staff don't see Upload. */
   canUpload?: boolean;
 }) {
@@ -99,9 +92,7 @@ export function LoadingChecklist({
     return (
       <div className="card">
         <div className="empty">
-          {isTechnician
-            ? "No rooms are assigned to you on this event yet. Ask a DXG Admin or support staff to add you to your rooms on Room sync."
-            : "This event has no rooms yet — rooms come from the sessions on the agenda."}
+          This event has no rooms yet — rooms come from the sessions on the agenda.
         </div>
       </div>
     );
@@ -123,7 +114,7 @@ export function LoadingChecklist({
           <Icon name="download" />
           {zipping === "all"
             ? "Preparing zip…"
-            : `Download all approved${isTechnician ? " in my rooms" : ""} (${totalApproved})`}
+            : `Download all approved (${totalApproved})`}
         </button>
       </div>
       <WhyNot
@@ -136,28 +127,9 @@ export function LoadingChecklist({
       {ordered.map((room) => (
         <div className="card" key={room.room_id}>
           <div className="chd">
-            <div>
-              <h3>{room.room}</h3>
-              <div className="note" style={{ marginTop: 2 }}>
-                {room.technicians.length > 0
-                  ? `Technicians: ${room.technicians.map((person) => person.name).join(", ")}`
-                  : "No technician assigned"}
-              </div>
-            </div>
+            <h3>{room.room}</h3>
             <span style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
               <span className={`chip ${room.readiness === "ready" ? "c-ok" : "c-warn"}`}>{ROOM_LABEL[room.readiness]}</span>
-              {technicians && (
-                <AssignTechnicians
-                  eventId={eventId}
-                  room={room}
-                  technicians={technicians}
-                  onSaved={(message) => {
-                    setToast(message);
-                    router.refresh();
-                  }}
-                  onError={setError}
-                />
-              )}
               <button
                 type="button"
                 className="btn"
@@ -291,95 +263,5 @@ export function LoadingChecklist({
       ))}
       <Toast message={toast} onClose={closeToast} />
     </>
-  );
-}
-
-/** Who works this room (D-154): tick DXG Technician staff on the event, then Save. */
-function AssignTechnicians({
-  eventId,
-  room,
-  technicians,
-  onSaved,
-  onError,
-}: {
-  eventId: string;
-  room: FleetRoom;
-  technicians: { user_id: string; name: string }[];
-  onSaved: (message: string) => void;
-  onError: (message: string | null) => void;
-}) {
-  const { open, setOpen, trigger, menu } = useFloatingMenu();
-  const [chosen, setChosen] = useState<Set<string>>(new Set(room.technicians.map((person) => person.user_id)));
-  const [saving, setSaving] = useState(false);
-
-  async function save() {
-    setSaving(true);
-    onError(null);
-    try {
-      const { technicians: now } = await setRoomTechnicians(eventId, room.room_id, [...chosen]);
-      setOpen(false);
-      onSaved(
-        now.length > 0
-          ? `${room.room}: ${now.map((person) => person.name).join(", ")}`
-          : `${room.room} has no technician now`,
-      );
-    } catch (caught) {
-      onError(caught instanceof ApiError ? caught.message : "That didn't save. Try again.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div className="rowmenu">
-      <button
-        ref={trigger}
-        type="button"
-        className="btn"
-        aria-haspopup="menu"
-        aria-expanded={open}
-        onClick={() => {
-          setChosen(new Set(room.technicians.map((person) => person.user_id)));
-          setOpen((value) => !value);
-        }}
-      >
-        <Icon name="users" />
-        Assign technicians
-      </button>
-      <FloatingMenu open={open} trigger={trigger} menu={menu} width={260}>
-        <div className="label">Who works {room.room}?</div>
-        {technicians.length === 0 ? (
-          <div className="note" style={{ padding: "6px 10px" }}>
-            No DXG Technician staff on this event yet. Place them under Event assignments first.
-          </div>
-        ) : (
-          technicians.map((person) => (
-            <label key={person.user_id} className="item" style={{ display: "flex", gap: 8, alignItems: "center", cursor: "pointer" }}>
-              <input
-                type="checkbox"
-                style={{ height: "auto" }}
-                checked={chosen.has(person.user_id)}
-                onChange={(event) => {
-                  const next = new Set(chosen);
-                  if (event.target.checked) next.add(person.user_id);
-                  else next.delete(person.user_id);
-                  setChosen(next);
-                }}
-              />
-              {person.name}
-            </label>
-          ))
-        )}
-        <div style={{ display: "flex", gap: 8, padding: "8px 10px 4px" }}>
-          <button type="button" className="btn pri" disabled={saving} onClick={() => void save()}>
-            <Icon name="save" />
-            {saving ? "Saving…" : "Save"}
-          </button>
-          <button type="button" className="btn" onClick={() => setOpen(false)}>
-            Cancel
-          </button>
-        </div>
-      </FloatingMenu>
-    </div>
   );
 }
