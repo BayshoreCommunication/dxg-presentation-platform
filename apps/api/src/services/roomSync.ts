@@ -6,7 +6,7 @@ import { writeZip } from "@pmp/files";
 import { storage } from "./ingest.ts";
 
 /*
- * Room sync for DXG Technician staff (client review, D-153): a technician works the rooms
+ * Room sync for DXG Technician staff (client review, D-154): a technician works the rooms
  * they are assigned to — sees only those, ticks only those, and downloads every approved
  * file of a room (or of all their rooms) in one zip.
  */
@@ -101,7 +101,7 @@ function stamp(iso: string, timeZone: string): string {
 const safe = (name: string) => name.replace(/[\\/:*?"<>|]+/g, "_").trim() || "file";
 
 /**
- * Every approved presentation of the given rooms as one zip (D-153), one folder per room
+ * Every approved presentation of the given rooms as one zip (D-154), one folder per room
  * when there is more than one, each file named by start time and talk so a technician can
  * copy them onto the room PC in order. Cancelled sessions are left out. Each file is logged
  * as a download.
@@ -184,7 +184,7 @@ export async function approvedRoomsZip(
   return ok({ filename: `approved-${label}-${today}.zip`, body: writeZip(entries), count: entries.length });
 }
 
-/* ── ticking a file loaded (D-125; moved here from the retired Room Agent, D-154) ── */
+/* ── ticking a file loaded (D-125; moved here from the retired Room Agent, D-155) ── */
 
 async function setSyncState(
   tx: pg.PoolClient,

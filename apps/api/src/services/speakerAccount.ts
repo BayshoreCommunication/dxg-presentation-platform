@@ -223,7 +223,7 @@ export type MySrr = {
   /** What they confirmed as final, newest first. */
   sign_offs: { signed_at: string; version_number: number; file_name: string; talk: string; receipt_emailed_to: string | null }[];
   talks: PortalTalk[];
-  /** Whether the room is open yet — it opens on the event day (D-156). */
+  /** Whether the room is open yet — it opens on the event day (D-157). */
   open: boolean;
 };
 

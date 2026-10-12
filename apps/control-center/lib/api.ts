@@ -262,7 +262,7 @@ export type FleetRoom = {
   readiness: "ready" | "attention";
   files_current: number;
   files_total: number;
-  /** DXG Technician staff assigned to this room (D-153). */
+  /** DXG Technician staff assigned to this room (D-154). */
   technicians: { user_id: string; name: string }[];
   talks: FleetTalk[];
 };
@@ -289,11 +289,11 @@ export const getTalks = (eventId: string) => request<{ items: TalkRow[] }>(`/eve
 export const getFleet = (eventId: string) =>
   request<{ items: FleetRoom[] }>(`/events/${eventId}/sync/fleet`);
 
-/** DXG Technician staff on the event — who a room can be given to (D-153). */
+/** DXG Technician staff on the event — who a room can be given to (D-154). */
 export const getSyncTechnicians = (eventId: string) =>
   request<{ items: { user_id: string; name: string; email: string }[] }>(`/events/${eventId}/sync/technicians`);
 
-/** Sets who works a room; the list replaces the room's technicians (D-153). */
+/** Sets who works a room; the list replaces the room's technicians (D-154). */
 export const setRoomTechnicians = (eventId: string, roomId: string, userIds: string[]) =>
   request<{ technicians: { user_id: string; name: string }[] }>(`/events/${eventId}/sync/rooms/${roomId}/technicians`, {
     method: "PUT",
@@ -302,7 +302,7 @@ export const setRoomTechnicians = (eventId: string, roomId: string, userIds: str
 
 /**
  * Every approved presentation of one room, or of every room the caller works, as a zip
- * (D-153). Fetched rather than linked, so "nothing approved yet" shows on the page instead
+ * (D-154). Fetched rather than linked, so "nothing approved yet" shows on the page instead
  * of replacing it.
  */
 export async function downloadApproved(eventId: string, roomId?: string): Promise<{ blob: Blob; filename: string }> {
@@ -391,11 +391,11 @@ export type SrrDashboard = {
   expected: ExpectedArrival[];
   warnings: SrrWarning[];
   stations: SrrStation[];
-  /** The event-day switch (D-156): closed, nobody checks in. */
+  /** The event-day switch (D-157): closed, nobody checks in. */
   open: boolean;
 };
 
-/** Opens or closes the Speaker Ready Room (D-156). DXG Admins and support staff. */
+/** Opens or closes the Speaker Ready Room (D-157). DXG Admins and support staff. */
 export const setSrrOpen = (eventId: string, open: boolean) =>
   request<{ srr_open: boolean }>(`/events/${eventId}/srr-open`, { method: "PUT", body: JSON.stringify({ open }) });
 
@@ -499,7 +499,7 @@ export const ingestUsb = (checkinId: string, body: { upload_id: string; file_nam
     { method: "POST", body: JSON.stringify(body) },
   );
 
-/** Local intake without a check-in: staff upload a speaker's file from the Speaker Ready Room (D-152). */
+/** Local intake without a check-in: staff upload a speaker's file from the Speaker Ready Room (D-153). */
 export const ingestForSlot = (
   eventId: string,
   slotId: string,
@@ -507,7 +507,7 @@ export const ingestForSlot = (
 ) =>
   request<UsbResult>(`/events/${eventId}/srr/slots/${slotId}/intake`, { method: "POST", body: JSON.stringify(body) });
 
-/** The check-in / checkout report, as a CSV download (D-152). */
+/** The check-in / checkout report, as a CSV download (D-153). */
 export const srrReportUrl = (eventId: string) => `${API_BASE_URL}/events/${eventId}/srr/report.csv`;
 
 export const signOffCheckin = (checkinId: string, fileVersionId: string) =>
@@ -642,11 +642,11 @@ export type SpeakerRow = {
   last_email: { status: string; at: string; to: string; count: number } | null;
   /** The speaker's persistent sign-in (D-146): none, invited (temporary password unchanged) or active. */
   account: "invited" | "active" | null;
-  /** Speaker support staff on that sign-in (D-155). */
+  /** Speaker support staff on that sign-in (D-156). */
   support_staff: number;
 };
 
-/* ── a speaker's support staff (D-155): assistants who submit their presentations ── */
+/* ── a speaker's support staff (D-156): assistants who submit their presentations ── */
 
 export type SupportStaffRow = { user_id: string; name: string; email: string; state: "invited" | "active"; added_at: string };
 export const getSpeakerSupportStaff = (eventId: string, speakerId: string) =>
@@ -1459,7 +1459,7 @@ export const getEventFiles = (eventId: string, query: FileQuery = {}) => {
   return request<EventFiles>(`/events/${eventId}/files${suffix ? `?${suffix}` : ""}`);
 };
 
-/** A five-minute link to one version, for PowerPoint on this computer to open (D-157). */
+/** A five-minute link to one version, for PowerPoint on this computer to open (D-158). */
 export const getOpenLink = (versionId: string) =>
   request<{ path: string; filename: string; expires_at: string }>(`/file-versions/${versionId}/open-link`, { method: "POST" });
 

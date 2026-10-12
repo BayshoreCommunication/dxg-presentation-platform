@@ -12,7 +12,7 @@ export type EventSummary = {
     timezone: string;
     /** Null when no venue has been recorded — the header says so rather than inventing one. */
     venue: string | null;
-    /** The Speaker Ready Room's event-day switch (D-156). */
+    /** The Speaker Ready Room's event-day switch (D-157). */
     srr_open: boolean;
   };
   collected: number;
@@ -263,7 +263,7 @@ export type FleetRoom = {
   readiness: "ready" | "attention";
   files_current: number;
   files_total: number;
-  /** DXG Technician staff assigned to this room (D-153). */
+  /** DXG Technician staff assigned to this room (D-154). */
   technicians: { user_id: string; name: string }[];
   talks: FleetTalk[];
 };
@@ -276,7 +276,7 @@ export type FleetRoom = {
 export async function syncFleet(
   tx: pg.PoolClient,
   eventId: string,
-  /** A technician's own rooms only (D-153): set to their user id; unset for everyone else. */
+  /** A technician's own rooms only (D-154): set to their user id; unset for everyone else. */
   onlyRoomsOf?: string,
 ): Promise<FleetRoom[]> {
   const { rows: talkRows } = await tx.query<TalkAggRow>(TALK_AGG, [eventId]);

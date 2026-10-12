@@ -4,7 +4,7 @@ import type { TestContext } from "node:test";
 import { signInStaff } from "../helpers/signIn.ts";
 
 /**
- * The Speaker Ready Room's event-day switch (client review, D-156): a new event's room
+ * The Speaker Ready Room's event-day switch (client review, D-157): a new event's room
  * starts closed; DXG Admins and support staff open it on the day. While closed nobody checks
  * in, takes a file in at a check-in or signs off — setting up desks, checking out and the
  * report still work.
@@ -56,7 +56,7 @@ after(async () => {
   if (up && eventId) await call("POST", `/events/${eventId}/archive`);
 });
 
-describe("a new event's Speaker Ready Room starts closed (D-156)", () => {
+describe("a new event's Speaker Ready Room starts closed (D-157)", () => {
   test("it says so; desks can be set up, but no one checks in", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
     const room = (await (await call("GET", `/events/${eventId}/srr`)).json()) as { open: boolean };

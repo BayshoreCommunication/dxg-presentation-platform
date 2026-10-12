@@ -122,7 +122,7 @@ export const GROUPS: {
     ],
   },
   /*
-   * No DEVICE group: the Room Agent is gone (client review, D-154) — Room sync covers the
+   * No DEVICE group: the Room Agent is gone (client review, D-155) — Room sync covers the
    * technician's job.
    */
   {
@@ -193,7 +193,7 @@ export function Sidebar({
   const offeredToKind = (label: string): boolean => {
     const onsiteOrReview = label === "Speaker Ready Room" || label === "Manage presentations";
     if (kind === "support") return !onsiteOrReview;
-    // Room sync too, for the rooms they are assigned to (client review, D-153).
+    // Room sync too, for the rooms they are assigned to (client review, D-154).
     if (kind === "technician") return onsiteOrReview || label === "Room sync" || label === "Portfolio";
     return true;
   };

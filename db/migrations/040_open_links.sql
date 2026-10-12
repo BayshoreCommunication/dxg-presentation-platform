@@ -1,5 +1,5 @@
 -- 040_open_links.sql
--- "Open in PowerPoint" (client review, D-157): PowerPoint on the desk's computer fetches the
+-- "Open in PowerPoint" (client review, D-158): PowerPoint on the desk's computer fetches the
 -- file itself and carries no sign-in, so it is handed a short-lived link to exactly one
 -- version. Only the token's hash is kept. Re-running changes nothing.
 SET search_path TO pmp, public;

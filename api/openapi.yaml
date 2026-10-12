@@ -20,7 +20,7 @@ tags:
   - {name: import}
   - {name: schedule}
   - {name: speakers}
-  - {name: speaker, description: "The speaker site's own routes under /me (D-146, D-148, D-155)"}
+  - {name: speaker, description: "The speaker site's own routes under /me (D-146, D-148, D-156)"}
   - {name: communications}
   - {name: portal, description: Speaker-portal endpoints (speaker token auth)}
   - {name: files}
@@ -275,7 +275,7 @@ paths:
     parameters: [{$ref: '#/components/parameters/checkinId'}, {$ref: '#/components/parameters/idempotencyKey'}]
     post:
       tags: [srr]
-      summary: Local intake on a check-in (USB drive or saved file) with mandatory scan; quarantine on failure (FR-SRR-002, D-152)
+      summary: Local intake on a check-in (USB drive or saved file) with mandatory scan; quarantine on failure (FR-SRR-002, D-153)
       responses: {'201': {$ref: '#/components/responses/Created'}, '422': {$ref: '#/components/responses/Error'}}
   /events/{eventId}/srr/slots/{slotId}/intake:
     parameters:
@@ -283,22 +283,22 @@ paths:
       - {name: slotId, in: path, required: true, schema: {type: string, format: uuid}}
     post:
       tags: [srr]
-      summary: Local intake without a check-in — staff upload/update a speaker's file from the SRR (D-152)
+      summary: Local intake without a check-in — staff upload/update a speaker's file from the SRR (D-153)
       responses: {'200': {$ref: '#/components/responses/OK'}, '404': {$ref: '#/components/responses/Error'}, '422': {$ref: '#/components/responses/Error'}}
   /events/{eventId}/srr-open:
     parameters: [{$ref: '#/components/parameters/eventId'}]
-    put: {tags: [srr], summary: "The Speaker Ready Room's event-day switch, {open: boolean}; DXG Admins and support staff (D-156). While closed, check-in, intake on a check-in and sign-off are 409 srr.closed_conflict", responses: {'200': {$ref: '#/components/responses/OK'}, '403': {$ref: '#/components/responses/Error'}}}
+    put: {tags: [srr], summary: "The Speaker Ready Room's event-day switch, {open: boolean}; DXG Admins and support staff (D-157). While closed, check-in, intake on a check-in and sign-off are 409 srr.closed_conflict", responses: {'200': {$ref: '#/components/responses/OK'}, '403': {$ref: '#/components/responses/Error'}}}
   /me/support-staff:
-    get: {tags: [speaker], summary: "The speaker's support staff (D-155)", responses: {'200': {$ref: '#/components/responses/OK'}}}
-    post: {tags: [speaker], summary: "Give an assistant a sign-in that submits this speaker's presentations (D-155)", responses: {'201': {$ref: '#/components/responses/Created'}, '409': {$ref: '#/components/responses/Error'}, '422': {$ref: '#/components/responses/Error'}}}
+    get: {tags: [speaker], summary: "The speaker's support staff (D-156)", responses: {'200': {$ref: '#/components/responses/OK'}}}
+    post: {tags: [speaker], summary: "Give an assistant a sign-in that submits this speaker's presentations (D-156)", responses: {'201': {$ref: '#/components/responses/Created'}, '409': {$ref: '#/components/responses/Error'}, '422': {$ref: '#/components/responses/Error'}}}
   /me/support-staff/{userId}:
     parameters: [{name: userId, in: path, required: true, schema: {type: string, format: uuid}}]
-    delete: {tags: [speaker], summary: "Remove a support staff member; their sign-in and sessions end (D-155)", responses: {'200': {$ref: '#/components/responses/OK'}, '404': {$ref: '#/components/responses/Error'}}}
+    delete: {tags: [speaker], summary: "Remove a support staff member; their sign-in and sessions end (D-156)", responses: {'200': {$ref: '#/components/responses/OK'}, '404': {$ref: '#/components/responses/Error'}}}
   /events/{eventId}/srr/report.csv:
     parameters: [{$ref: '#/components/parameters/eventId'}]
     get:
       tags: [srr]
-      summary: Check-in / checkout report as CSV — presenter, desk, check-in and checkout times on the event's clock (D-152)
+      summary: Check-in / checkout report as CSV — presenter, desk, check-in and checkout times on the event's clock (D-153)
       responses: {'200': {description: CSV file, content: {text/csv: {schema: {type: string}}}}}
   /file-versions/{versionId}/compare/{otherVersionId}:
     parameters:
@@ -315,19 +315,19 @@ paths:
   # ── sync dashboard (M12) ────────────────────────────────────────────
   /events/{eventId}/sync/fleet:
     parameters: [{$ref: '#/components/parameters/eventId'}]
-    get: {tags: [sync], summary: 'Room sync loading checklist per room, with its technicians; a technician gets their own rooms only (D-125, D-153)', responses: {'200': {$ref: '#/components/responses/OK'}}}
+    get: {tags: [sync], summary: 'Room sync loading checklist per room, with its technicians; a technician gets their own rooms only (D-125, D-154)', responses: {'200': {$ref: '#/components/responses/OK'}}}
   /events/{eventId}/sync/technicians:
     parameters: [{$ref: '#/components/parameters/eventId'}]
-    get: {tags: [sync], summary: "DXG Technician staff on the event, for giving out rooms (D-153)", responses: {'200': {$ref: '#/components/responses/OK'}}}
+    get: {tags: [sync], summary: "DXG Technician staff on the event, for giving out rooms (D-154)", responses: {'200': {$ref: '#/components/responses/OK'}}}
   /events/{eventId}/sync/rooms/{roomId}/technicians:
     parameters: [{$ref: '#/components/parameters/eventId'}, {$ref: '#/components/parameters/roomId'}]
-    put: {tags: [sync], summary: "Set who works a room (replaces the list; technicians only; not for technicians) (D-153)", responses: {'200': {$ref: '#/components/responses/OK'}, '422': {$ref: '#/components/responses/Error'}}}
+    put: {tags: [sync], summary: "Set who works a room (replaces the list; technicians only; not for technicians) (D-154)", responses: {'200': {$ref: '#/components/responses/OK'}, '422': {$ref: '#/components/responses/Error'}}}
   /events/{eventId}/sync/approved.zip:
     parameters: [{$ref: '#/components/parameters/eventId'}, {name: room, in: query, required: false, schema: {type: string, format: uuid}}]
-    get: {tags: [sync], summary: "Download all: every approved presentation of a room, or of all the caller's rooms, as one zip (D-153)", responses: {'200': {description: zip, content: {application/zip: {schema: {type: string, format: binary}}}}, '403': {$ref: '#/components/responses/Error'}, '422': {$ref: '#/components/responses/Error'}}}
+    get: {tags: [sync], summary: "Download all: every approved presentation of a room, or of all the caller's rooms, as one zip (D-154)", responses: {'200': {description: zip, content: {application/zip: {schema: {type: string, format: binary}}}}, '403': {$ref: '#/components/responses/Error'}, '422': {$ref: '#/components/responses/Error'}}}
   /room-files/{roomFileId}/loaded:
     parameters: [{name: roomFileId, in: path, required: true, schema: {type: string, format: uuid}}]
-    post: {tags: [sync], summary: "Tick the approved copy loaded on the room PC (D-125); a technician in their own rooms only (D-153)", responses: {'200': {$ref: '#/components/responses/OK'}, '403': {$ref: '#/components/responses/Error'}, '409': {$ref: '#/components/responses/Conflict'}}}
+    post: {tags: [sync], summary: "Tick the approved copy loaded on the room PC (D-125); a technician in their own rooms only (D-154)", responses: {'200': {$ref: '#/components/responses/OK'}, '403': {$ref: '#/components/responses/Error'}, '409': {$ref: '#/components/responses/Conflict'}}}
   /room-files/{roomFileId}/unloaded:
     parameters: [{name: roomFileId, in: path, required: true, schema: {type: string, format: uuid}}]
     post: {tags: [sync], summary: "Take a mistaken loaded tick back (D-125)", responses: {'200': {$ref: '#/components/responses/OK'}, '409': {$ref: '#/components/responses/Conflict'}}}

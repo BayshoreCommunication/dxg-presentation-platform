@@ -53,7 +53,7 @@ export function SpeakersView({
   const [askRemind, setAskRemind] = useState(false);
   // D-147: sending a sign-in asks first, as every email does.
   const [askSignIn, setAskSignIn] = useState<string | null>(null);
-  // A speaker's support staff (D-155), managed in a dialog.
+  // A speaker's support staff (D-156), managed in a dialog.
   const [supportFor, setSupportFor] = useState<SpeakerRow | null>(null);
 
   // The server component re-renders on refresh; the list here is client state, so a
@@ -480,7 +480,7 @@ export function SpeakersView({
                           />
                         )}
                       </td>
-                      {/* Support staff (D-155) and Remove (D-147): everything else a speaker needs is on the Agenda or in their sign-in. */}
+                      {/* Support staff (D-156) and Remove (D-147): everything else a speaker needs is on the Agenda or in their sign-in. */}
                       <td style={{ width: 1, whiteSpace: "nowrap", textAlign: "right" }}>
                         <HoverTip label={row.email ? "Assistants who submit this speaker's presentations" : "Add an email address first"}>
                           <button

@@ -73,7 +73,7 @@ export type Principal =
       /** Which kind of DXG account (D-151): admin (root), support staff or technician. Null for a speaker. */
       staff_kind: "root_admin" | "support" | "technician" | "client" | null;
       /**
-       * Speaker Support Staff (D-155): the speaker this account submits content for. Its reach is
+       * Speaker Support Staff (D-156): the speaker this account submits content for. Its reach is
        * that speaker's presentations, and only Manage presentations. Null for everyone else.
        */
       assisting: { user_id: string; name: string; email: string } | null;
@@ -653,7 +653,7 @@ export async function ensureSpeakerSignIn(
   );
   const found = existing[0];
   if (found && found.account_kind !== "speaker") return { user_id: found.id, email, outcome: "staff", temporary_password: null };
-  // A Speaker Support Staff sign-in (D-155) reaches another speaker's work, never a talk of its own.
+  // A Speaker Support Staff sign-in (D-156) reaches another speaker's work, never a talk of its own.
   if (found?.assists) return { user_id: found.id, email, outcome: "assistant", temporary_password: null };
   if (found && !found.must_change_password) return { user_id: found.id, email, outcome: "active", temporary_password: null };
 

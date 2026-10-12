@@ -172,10 +172,10 @@ const LINES: Record<string, string> = {
   more: "M8 3.333h.006M8 8h.006M8 12.667h.006",
   send: "M14 2 7.333 8.667M14 2 9.667 14 7.333 8.667 2 6.333Z",
   trash: "M2.667 4h10.666M6 4V2.667h4V4M3.667 4l.666 9.333h7.334L12.333 4M6.667 6.667v4M9.333 6.667v4",
-  // Download's arrow turned upward into the same tray: a file coming in (Local intake, D-152).
+  // Download's arrow turned upward into the same tray: a file coming in (Local intake, D-153).
   intake: "M8 10.333V2.667M5 5.667l3-3 3 3M2.667 11.333v.334c0 1.1 0 1.65.341 1.991.342.342.892.342 1.992.342h6c1.1 0 1.65 0 1.992-.342.341-.341.341-.891.341-1.991v-.334",
   close: "M4.333 4.333l7.334 7.334M11.667 4.333l-7.334 7.334",
-  // The check-in's buttons (D-152): confirm as final, preview, check out, receipt.
+  // The check-in's buttons (D-153): confirm as final, preview, check out, receipt.
   check: "M3.333 8.333 6.333 11.333 12.667 4.667",
   eye: "M1.333 8S3.667 3.333 8 3.333 14.667 8 14.667 8 12.333 12.667 8 12.667 1.333 8 1.333 8ZM8 10a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z",
   checkout: "M6 14H3.333c-.736 0-1.333-.597-1.333-1.333V3.333C2 2.597 2.597 2 3.333 2H6M10.667 11.333 14 8l-3.333-3.333M14 8H6",

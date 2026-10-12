@@ -6,7 +6,7 @@ import { generateAccessCode, hashPassword } from "@pmp/auth";
 import { ensureSpeakerSignIn } from "./auth.ts";
 
 /*
- * Speaker Support Staff (client review, D-155): an admin assistant who submits presentations
+ * Speaker Support Staff (client review, D-156): an admin assistant who submits presentations
  * for a speaker. DXG staff — Admins and support staff — give them a sign-in from the Speakers
  * screen (Travis: "DXG-কে দিয়ে করাও"); the speaker sees the list on their site. It is a speaker
  * account that *assists* theirs — it reaches the speaker's presentations (Manage

@@ -123,7 +123,7 @@ async function seed(): Promise<void> {
     ]);
 
     await client.query(
-      // The demo's Speaker Ready Room is open, as on an event day (D-156).
+      // The demo's Speaker Ready Room is open, as on an event day (D-157).
       `INSERT INTO events (id, client_id, name, starts_on, ends_on, timezone, status, srr_open)
        VALUES ($1, $2, 'MedTech Forward 2026', '2026-03-10', '2026-03-12', 'America/New_York', 'active', true)`,
       [IDS.event, IDS.client],
@@ -209,7 +209,7 @@ async function seed(): Promise<void> {
       );
       const roomId = roomRows[0]!.id;
 
-      // Room sync works by room (D-153): C. Delgado has Ballroom A and Room 212, T. Okafor Room 210.
+      // Room sync works by room (D-154): C. Delgado has Ballroom A and Room 212, T. Okafor Room 210.
       const worksHere = talk.room === "Room 210" ? [IDS.roomTech] : [IDS.reviewer];
       for (const userId of worksHere) {
         await client.query(

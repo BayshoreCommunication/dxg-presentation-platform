@@ -151,7 +151,7 @@ export async function removeTestEvents(namePrefixes: readonly string[]): Promise
           "speaker_tokens",
           "speakers",
           "schedule_imports",
-          // Who works a room (D-153), and the retired Room Agent's old registrations (D-154).
+          // Who works a room (D-154), and the retired Room Agent's old registrations (D-155).
           "room_assignments",
           "room_agents",
           "rooms",

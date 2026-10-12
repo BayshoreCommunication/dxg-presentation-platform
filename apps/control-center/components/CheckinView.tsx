@@ -35,7 +35,7 @@ const when = (iso: string, timeZone: string) =>
   });
 
 /**
- * Screens 12 and 13 — check-in and the three-step local intake (`LocalIntake`, D-152).
+ * Screens 12 and 13 — check-in and the three-step local intake (`LocalIntake`, D-153).
  */
 /** "v2 · deck.pptx · 24 slides" (R34, D-112). */
 const receiptVersion = (receipt: NonNullable<CheckinDetail["receipt"]>) =>
@@ -56,7 +56,7 @@ export function CheckinView({
   eventId: string;
   timezone: string;
   initial: CheckinDetail;
-  /** The event-day switch (D-156): closed, no intake or sign-off here — only checking out. */
+  /** The event-day switch (D-157): closed, no intake or sign-off here — only checking out. */
   srrOpen?: boolean;
 }) {
   const router = useRouter();
@@ -91,7 +91,7 @@ export function CheckinView({
     [refresh],
   );
 
-  // Closed (D-156), nothing is signed off or taken in here; checking out still works.
+  // Closed (D-157), nothing is signed off or taken in here; checking out still works.
   const signable = srrOpen && detail.latest && detail.latest.processing_state === "stored";
   const [confirmCheckout, setConfirmCheckout] = useState(false);
   const latestNumber = detail.latest?.version_number;
@@ -233,7 +233,7 @@ export function CheckinView({
     </button>
   );
   /*
-   * "Preview slides" opens the deck in this computer's PowerPoint (client review, D-157), where
+   * "Preview slides" opens the deck in this computer's PowerPoint (client review, D-158), where
    * transitions, animations and video play as in the room; the browser's slide images stay as a
    * quick look.
    */

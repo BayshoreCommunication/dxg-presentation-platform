@@ -221,7 +221,7 @@ export default async function CommandCenterPage({
         </div>
       </div>
 
-      {/* The Speaker Ready Room's event-day switch (D-156): support staff run the event and open it. */}
+      {/* The Speaker Ready Room's event-day switch (D-157): support staff run the event and open it. */}
       {!archived && (
         <div style={{ margin: "-4px 0 14px" }}>
           <SrrSwitch eventId={id} open={summary.event.srr_open} canSwitch={canConfigure} />

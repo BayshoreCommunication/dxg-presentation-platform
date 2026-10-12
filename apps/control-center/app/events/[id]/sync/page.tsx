@@ -24,7 +24,7 @@ export default async function RoomSyncPage({ params }: { params: Promise<{ id: s
     `/events/${id}/sync`,
   );
   const principal = session.principal;
-  // A technician works their own rooms (D-153); admins and support staff give them out.
+  // A technician works their own rooms (D-154); admins and support staff give them out.
   const isTechnician = principal.staff_kind === "technician";
   const technicians = isTechnician ? null : (await getSyncTechnicians(id).catch(() => ({ items: [] }))).items;
   const canLoad =

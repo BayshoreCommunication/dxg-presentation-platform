@@ -2795,7 +2795,7 @@ ECR's scan of the first CI-built images (D-149) found 7–8 critical and ~40 hig
   (`aws ecr describe-image-scan-findings`) after each `production` build.
 
 
-## D-152 (2026-10-11): Local intake, staff upload from the Speaker Ready Room, check-in report — Status: ACCEPTED (Travis, from the client's review, items A1–A3)
+## D-153 (2026-10-11): Local intake, staff upload from the Speaker Ready Room, check-in report — Status: ACCEPTED (Travis, from the client's review, items A1–A3)
 - **Local intake**: "USB intake" is renamed **Local intake** everywhere people read it (check-in, SRR dashboard,
   Presentation detail, Files source, Help, status vocabulary). It takes a file from a USB drive **or** one saved on the
   desk's computer — the browser's file picker reaches both, so nothing else changed in how the file arrives. Stored
@@ -2818,7 +2818,7 @@ ECR's scan of the first CI-built images (D-149) found 7–8 critical and ~40 hig
   with reason, reason required, talk of another event 404, support staff refused, CSV shape and times, technician
   may download).
 
-## D-153 (2026-10-11): Technicians work their assigned rooms; Download all; upload a new version onsite — Status: ACCEPTED (Travis, from the client's review, items B6–B8)
+## D-154 (2026-10-11): Technicians work their assigned rooms; Download all; upload a new version onsite — Status: ACCEPTED (Travis, from the client's review, items B6–B8)
 - **Room assignments** (`room_assignments`, **migration 037**: user, room, event, client, who assigned; RLS like
   every event table): on **Room sync**, admins and support staff press **Assign technicians** on a room and tick the
   DXG Technician staff placed on the event (`GET /events/:id/sync/technicians`,
@@ -2836,7 +2836,7 @@ ECR's scan of the first CI-built images (D-149) found 7–8 critical and ~40 hig
   room by room); a room with nothing approved is 422 `room.nothing_approved`. Buttons: **Download all (n)** on each
   room and **Download all approved [in my rooms] (n)** at the top; fetched, so an error shows on the page.
 - **Upload a new version onsite**: **Upload a new version** on Manage presentations (choose the talk, then Local
-  intake) and **Upload new version** beside each talk on Room sync — both use D-152's
+  intake) and **Upload new version** beside each talk on Room sync — both use D-153's
   `POST /events/:id/srr/slots/:slotId/intake` (scan → store → inspect → back to review; the room keeps the approved
   copy until the new one is approved and ticked).
 - Seed: C. Delgado works Ballroom A and Room 212, T. Okafor Room 210. (C. Delgado's seeded role is still content
@@ -2846,7 +2846,7 @@ ECR's scan of the first CI-built images (D-149) found 7–8 critical and ~40 hig
   no giving out rooms, no ticking another room, zip by room and for all one's rooms, another room's zip refused,
   nothing-approved, upload open to technicians; admin and cross-event suites updated.
 
-## D-154 (2026-10-11): The Room Agent is removed — Status: ACCEPTED (Travis, from the client's review, item B9: "Room Sync covers the full technician workflow")
+## D-155 (2026-10-11): The Room Agent is removed — Status: ACCEPTED (Travis, from the client's review, item B9: "Room Sync covers the full technician workflow")
 - Gone: the `apps/room-agent` workspace (Electron, its harness, autostart script and tests — Electron's 62 packages
   leave the lock file), the control centre's Room Agent screens (`/events/:id/agent`, `/events/:id/agent/:roomId`),
   the API's agent and room-PC routes (`POST /agent/heartbeat`, `POST /rooms/:id/device-key`,
@@ -2864,7 +2864,7 @@ ECR's scan of the first CI-built images (D-149) found 7–8 critical and ~40 hig
 - Tests: `device-keys` suite removed with its routes; cross-event (the room check is now Room sync's), event-owned-data
   and manual-room-loading (no room view or Launch) updated.
 
-## D-155 (2026-10-12): Speaker Support Staff — Status: ACCEPTED (Travis, from the client's review, item C10)
+## D-156 (2026-10-12): Speaker Support Staff — Status: ACCEPTED (Travis, from the client's review, item C10)
 The review: "Speaker Support Staff role added for admin assistants submitting on behalf of a presenter — junior role
 scoped to content submission under the main speaker's account."
 - **Model** (**migration 038**): `users.assists_user_id`. A support staff member is a **speaker account** (so every
@@ -2887,7 +2887,7 @@ scoped to content submission under the main speaker's account."
   `assistant`; Create sign-in refuses it).
 - Tests: `tests/invariants/speaker-support-staff.test.ts` (6).
 
-## D-156 (2026-10-12): The Speaker Ready Room opens on the event day — Status: ACCEPTED (Travis, from the client's review, item A4)
+## D-157 (2026-10-12): The Speaker Ready Room opens on the event day — Status: ACCEPTED (Travis, from the client's review, item A4)
 The review: "Speaker Ready Room activates on event day (admin-controlled on/off switch)".
 - `events.srr_open` (**migration 039**): events that already existed stay **open** (nothing in use changes); new
   events start **closed**; practice events and the seed's demo are open.
@@ -2897,7 +2897,7 @@ The review: "Speaker Ready Room activates on event day (admin-controlled on/off 
   first) on the command centre and on the Speaker Ready Room page; audited `srr.opened` / `srr.closed`.
 - **Closed**: check-in, local intake on a check-in and sign-off are refused (409 `srr.closed_conflict`) and their
   buttons are off with the reason; setting up desks, checking a speaker out, the check-in report and uploading from
-  the room (Upload / Manage presentations / Room sync, D-152/D-153) still work. The speaker's Speaker Ready Room says
+  the room (Upload / Manage presentations / Room sync, D-153/D-154) still work. The speaker's Speaker Ready Room says
   it opens on the event day.
 - Tests: `tests/invariants/srr-open.test.ts` (3); the suites that check speakers in on their own new events open the
   room first.
@@ -2910,7 +2910,7 @@ The review: "Speaker Ready Room activates on event day (admin-controlled on/off 
   staff page lists them read-only ("ask the DXG team"); `POST/DELETE /me/support-staff` are gone. Audited on the event.
   The sign-in email now says the DXG team set it up. Tests updated (7).
 
-## D-157 (2026-10-12): Preview Slides opens the deck in the desk computer's own app — Status: ACCEPTED (Travis, from the client's review, item A5)
+## D-158 (2026-10-12): Preview Slides opens the deck in the desk computer's own app — Status: ACCEPTED (Travis, from the client's review, item A5)
 The review: "Preview Slides should trigger the deck to open in PowerPoint locally (not in-browser preview) — in-browser
 preview won't show transitions, animations, or video." Options weighed with Travis: PowerPoint for the Web (needs the
 client's files sent to Microsoft and a Microsoft 365 tenant — left for DXG to decide), a desk app (another Room Agent),

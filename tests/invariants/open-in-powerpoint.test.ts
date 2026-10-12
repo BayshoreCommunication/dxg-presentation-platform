@@ -5,7 +5,7 @@ import { withSystemScope } from "@pmp/db";
 import { signInStaff } from "../helpers/signIn.ts";
 
 /**
- * "Open in PowerPoint" (client review, D-157): staff get a five-minute link to one stored
+ * "Open in PowerPoint" (client review, D-158): staff get a five-minute link to one stored
  * version, which PowerPoint fetches without a sign-in; it serves that file only, only while it
  * lasts, and issuing it is audited.
  */
@@ -34,7 +34,7 @@ before(async () => {
   );
 });
 
-describe("a link PowerPoint can open (D-157)", () => {
+describe("a link PowerPoint can open (D-158)", () => {
   test("issued to staff for a stored version; serves the file without a sign-in; audited", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
     const issued = await fetch(`${API}/file-versions/${versionId}/open-link`, { method: "POST", headers: { cookie: admin } });

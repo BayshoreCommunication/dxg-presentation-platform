@@ -6,7 +6,7 @@ import { ApiError, setSrrOpen } from "@/lib/api";
 import { ConfirmInline } from "@/components/ConfirmInline";
 
 /**
- * The Speaker Ready Room's event-day switch (client review, D-156). Opening it lets
+ * The Speaker Ready Room's event-day switch (client review, D-157). Opening it lets
  * technicians check speakers in, take files in at a desk and sign off; closing it stops
  * those (a speaker at a desk can still check out). Closing asks first.
  */
@@ -31,7 +31,7 @@ export function SrrSwitch({ eventId, open, canSwitch }: { eventId: string; open:
 
   return (
     <span style={{ display: "inline-flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-      {/* A real on/off switch (D-156); without the right to change it, the same switch, read-only. */}
+      {/* A real on/off switch (D-157); without the right to change it, the same switch, read-only. */}
       <button
         type="button"
         role="switch"

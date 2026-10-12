@@ -1,5 +1,5 @@
 -- 037_room_assignments.sql
--- Which DXG Technician staff work which rooms (client review, D-153): a technician sees and
+-- Which DXG Technician staff work which rooms (client review, D-154): a technician sees and
 -- loads only the rooms they are assigned to on Room sync. Admins and support staff assign
 -- them there. Re-running changes nothing.
 SET search_path TO pmp, public;

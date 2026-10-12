@@ -231,7 +231,7 @@ export function PresentationDetailView({
               <Icon name={previewOpen ? "close" : "eye"} />
               {previewOpen ? "Hide slides" : "Preview slides"}
             </button>
-            {/* The deck in this computer's own PowerPoint, with transitions, animations and video (D-157). */}
+            {/* The deck in this computer's own PowerPoint, with transitions, animations and video (D-158). */}
             {latest && latest.processing_state === "stored" && <OpenInPowerPoint versionId={latest.file_version_id} />}
             {latest && (
               <Link
@@ -246,7 +246,7 @@ export function PresentationDetailView({
               <Icon name="eye" />
               Review workspace
             </Link>
-            {/* R19 (D-113): local intake lives on the speaker's check-in and, since D-152, beside
+            {/* R19 (D-113): local intake lives on the speaker's check-in and, since D-153, beside
                 the speaker in the Speaker Ready Room — go straight to the check-in when there is one. */}
             {initial.srr?.checkin_id ? (
               <Link className="btn" href={`/events/${eventId}/srr/${initial.srr.checkin_id}`}>

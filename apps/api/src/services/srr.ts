@@ -316,7 +316,7 @@ export async function retireStation(
   return ok({ retired: true });
 }
 
-/* ── the event-day switch (client review, D-156) ─────────────────────────── */
+/* ── the event-day switch (client review, D-157) ─────────────────────────── */
 
 const SRR_CLOSED: DomainError = {
   code: "srr.closed_conflict",
@@ -369,7 +369,7 @@ export async function checkIn(
   actor: Actor,
   input: { eventId: string; speakerId: string; stationId: string | undefined },
 ): Promise<Result<{ checkin_id: string }, DomainError>> {
-  // Closed until the event day (D-156): no one checks in.
+  // Closed until the event day (D-157): no one checks in.
   if (!(await srrIsOpen(tx, input.eventId))) return err(SRR_CLOSED);
 
   const { rows: existing } = await tx.query<{ id: string }>(
@@ -602,7 +602,7 @@ export async function checkinDetail(tx: pg.PoolClient, checkinId: string): Promi
 /* ── screen 13: local intake (was "USB intake") ─────────────────────────── */
 
 /*
- * "Local intake" (client review, D-152): the file comes from a USB drive or from a copy
+ * "Local intake" (client review, D-153): the file comes from a USB drive or from a copy
  * saved on the desk's computer — the browser cannot tell the two apart, and the rules are
  * the same for both. The stored names (`srr_usb`, `usb_ingestions`, `/usb-ingestions`)
  * keep their first spelling; only what people read changed.
@@ -775,7 +775,7 @@ export async function usbIngest(
 
 /**
  * Local intake straight from the Speaker Ready Room, without a check-in (client review,
- * D-152): DXG staff upload or update a speaker's presentation the way the speaker can from
+ * D-153): DXG staff upload or update a speaker's presentation the way the speaker can from
  * their own Speaker Ready Room view. Same scan → store → re-approval path; the version's
  * source is `srr_manual`.
  */
@@ -1022,7 +1022,7 @@ export async function depart(
   return ok({ departed: true });
 }
 
-/* ── check-in / checkout report (client review, D-152) ───────────────────── */
+/* ── check-in / checkout report (client review, D-153) ───────────────────── */
 
 const csvCell = (value: string): string =>
   /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;

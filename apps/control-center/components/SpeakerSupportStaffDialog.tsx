@@ -6,7 +6,7 @@ import { ApiError, addSpeakerSupportStaff, getSpeakerSupportStaff, removeSpeaker
 import { Icon } from "@/components/Icon";
 
 /**
- * A speaker's support staff (client review, D-155) — not DXG Support staff: assistants who
+ * A speaker's support staff (client review, D-156) — not DXG Support staff: assistants who
  * submit this speaker's presentations. DXG Admins and support staff add them here; each gets
  * a sign-in by email and sees only the speaker's Manage presentations on the speaker site.
  */

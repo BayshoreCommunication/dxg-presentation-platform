@@ -1,7 +1,7 @@
 import type { SupportStaffRow } from "@/lib/api";
 
 /**
- * Speaker Support Staff (client review, D-155): the assistants who may submit this speaker's
+ * Speaker Support Staff (client review, D-156): the assistants who may submit this speaker's
  * presentations. The DXG team adds and removes them (Travis: "DXG-কে দিয়ে করাও"); the speaker
  * sees who they are here.
  */

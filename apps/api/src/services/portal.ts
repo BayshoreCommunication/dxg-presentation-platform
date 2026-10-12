@@ -298,7 +298,7 @@ export async function completeUpload(
     slotId: string;
     fileName: string;
     expectedSha256?: string;
-    /** The speaker's support staff who submitted it (D-155), recorded as the uploading user. */
+    /** The speaker's support staff who submitted it (D-156), recorded as the uploading user. */
     submittedByUserId?: string;
   },
 ): Promise<{ ok: true; value: CompleteResult } | { ok: false; code: string; message: string }> {

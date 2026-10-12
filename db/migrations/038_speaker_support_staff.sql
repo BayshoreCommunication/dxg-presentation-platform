@@ -1,5 +1,5 @@
 -- 038_speaker_support_staff.sql
--- Speaker Support Staff (client review, D-155): an assistant who submits content for a speaker.
+-- Speaker Support Staff (client review, D-156): an assistant who submits content for a speaker.
 -- The assistant is a speaker account (so every speaker rule applies) that assists another
 -- speaker account; it reaches that speaker's presentations, never its own. Re-running changes nothing.
 SET search_path TO pmp, public;

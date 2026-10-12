@@ -36,7 +36,7 @@ export function SpeakerReadyRoom({ srr }: { srr: MySrr }) {
         </p>
       </div>
 
-      {/* The room opens on the event day (D-156). */}
+      {/* The room opens on the event day (D-157). */}
       {!srr.open && (
         <div className="card next-step">
           <div className="cbd">

@@ -33,7 +33,7 @@ const GROUPS: { group: string; items: { label: string; href: string; icon: strin
     items: [
       { label: "Agenda", href: "/events/:id/agenda", icon: "calendar" },
       { label: "Manage presentations", href: "/", icon: "review" },
-      // Assistants who submit for the speaker (client review, D-155).
+      // Assistants who submit for the speaker (client review, D-156).
       { label: "Support staff", href: "/support-staff", icon: "users" },
     ],
   },
@@ -41,7 +41,7 @@ const GROUPS: { group: string; items: { label: string; href: string; icon: strin
 ];
 
 /*
- * Speaker Support Staff (D-155) submit content for the speaker they assist, and nothing else:
+ * Speaker Support Staff (D-156) submit content for the speaker they assist, and nothing else:
  * one door — Manage presentations — and no event switcher, bell or onsite screens.
  */
 const SUPPORT_GROUPS: typeof GROUPS = [

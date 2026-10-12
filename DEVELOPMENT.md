@@ -4,7 +4,7 @@ Status: M0 in progress. The backend spine (domain state machines, database layer
 **All seventeen screens of the client baseline now run on real data** — the ten Control Center
 screens, the Onsite screens (Speaker Ready Room, check-in with Local intake, Room sync) and the
 Client portal in the Control Center app, plus the speaker site in its own app. The Room Agent was
-retired after the client's review (D-154): Room sync covers the technician's job. The product runs end to end: create an event,
+retired after the client's review (D-155): Room sync covers the technician's job. The product runs end to end: create an event,
 import an agenda, invite speakers, collect and inspect files, review and approve, run the Speaker
 Ready Room, load each room by hand from Room sync, and deliver the archive to the client.
 
@@ -117,7 +117,7 @@ Worth demonstrating if the room is technical:
 
 ### Room sync (the onsite half) — the chain that justifies the product
 
-**Room sync** is the technician's checklist (D-125, D-153). Admins and support staff give each
+**Room sync** is the technician's checklist (D-125, D-154). Admins and support staff give each
 room its DXG Technician staff (**Assign technicians** on the room); a technician sees only their
 own rooms. Sign in as `c.delgado@example.invalid` (Ballroom A, Room 212) or `t.okafor@example.invalid`
 (Room 210) to see it from their side.
@@ -326,7 +326,7 @@ workflow transition and a hash-chained audit record are written — all in one t
 - Inspection is deterministic parsing only. Codec detection currently infers risk from the media
   container; a real codec probe arrives with the media worker (M2-4).
 - **There is no room software.** Room PCs are loaded by hand from Room sync (D-125); the Room
-  Agent (an Electron app, its screens and its API) was removed after the client's review (D-154).
+  Agent (an Electron app, its screens and its API) was removed after the client's review (D-155).
   Its old tables (`room_agents`, `sync_manifests`, `launch_logs`) stay in the database as history.
 - **Email is delivered by the outbox dispatcher.** In development it writes to `.data/mail/`; in
   production it sends through SES. The transport is chosen by `MAIL_TRANSPORT` (default: `file`

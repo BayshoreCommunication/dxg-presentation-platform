@@ -8,7 +8,7 @@ import { WhyNot } from "@/components/WhyNot";
 import { Icon } from "@/components/Icon";
 
 /**
- * Local intake (was "USB intake", D-152): the three steps for a file the speaker brings —
+ * Local intake (was "USB intake", D-153): the three steps for a file the speaker brings —
  * on a USB drive or saved on the desk's computer; the browser's file picker reaches both.
  * Ordered by the rules, not by the layout: nothing is compared or accepted before the
  * scan, and acceptance needs a reason (FR-SRR-002/003/004). Used on a check-in and

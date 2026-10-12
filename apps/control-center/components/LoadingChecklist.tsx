@@ -21,7 +21,7 @@ const time = (iso: string, timeZone: string) =>
  * Room sync's loading checklist (D-125): a card per room, one line per talk — its approved
  * version, whether a person has ticked it loaded on the room PC, a link to download it for
  * copying, and Mark loaded (or Undo). Rooms that still need something come first.
- * Since D-153 a room names the DXG Technician staff who work it (assigned here by admins and
+ * Since D-154 a room names the DXG Technician staff who work it (assigned here by admins and
  * support staff), downloads all its approved files in one zip, and takes a new version a
  * presenter brings to the room.
  */
@@ -39,7 +39,7 @@ export function LoadingChecklist({
   canLoad: boolean;
   /** The event's DXG Technician staff, for assigning rooms; null when this account can't assign. */
   technicians: { user_id: string; name: string }[] | null;
-  /** A technician sees their own rooms only (D-153). */
+  /** A technician sees their own rooms only (D-154). */
   isTechnician: boolean;
 }) {
   const router = useRouter();
@@ -51,7 +51,7 @@ export function LoadingChecklist({
   const [toast, setToast] = useState<string | null>(null);
   const closeToast = useCallback(() => setToast(null), []);
 
-  /** One zip of a room's approved files, or of every room on the page (D-153). */
+  /** One zip of a room's approved files, or of every room on the page (D-154). */
   async function downloadAll(roomId?: string) {
     setZipping(roomId ?? "all");
     setError(null);
@@ -291,7 +291,7 @@ export function LoadingChecklist({
   );
 }
 
-/** Who works this room (D-153): tick DXG Technician staff on the event, then Save. */
+/** Who works this room (D-154): tick DXG Technician staff on the event, then Save. */
 function AssignTechnicians({
   eventId,
   room,

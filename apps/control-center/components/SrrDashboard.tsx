@@ -41,13 +41,13 @@ export function SrrDashboardView({
   eventName: string;
   timezone: string;
   data: SrrDashboard;
-  /** May open or close the room on the event day (D-156). */
+  /** May open or close the room on the event day (D-157). */
   canSwitch: boolean;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Local intake without a check-in (D-152): staff upload or update a speaker's file here.
+  // Local intake without a check-in (D-153): staff upload or update a speaker's file here.
   const [intakeFor, setIntakeFor] = useState<ExpectedArrival | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const closeToast = useCallback(() => setToast(null), []);
@@ -97,7 +97,7 @@ export function SrrDashboardView({
   return (
     <>
       <h1 className="htitle">Speaker Ready Room · {eventName}</h1>
-      {/* The day's line and the check-in / checkout report (D-152) share a row; on a narrow
+      {/* The day's line and the check-in / checkout report (D-153) share a row; on a narrow
           screen the button drops below the line with a gap rather than touching it. */}
       <div
         style={{
@@ -125,7 +125,7 @@ export function SrrDashboardView({
 
       {error && <div className="err">{error}</div>}
 
-      {/* The event-day switch (D-156). */}
+      {/* The event-day switch (D-157). */}
       <div className={data.open ? undefined : "card next-step"} style={data.open ? { margin: "0 0 12px" } : undefined}>
         <div className={data.open ? undefined : "cbd"}>
           {!data.open && (

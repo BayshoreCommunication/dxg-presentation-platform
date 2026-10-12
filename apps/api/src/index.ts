@@ -721,7 +721,7 @@ const NON_STAFF_PATHS = [
   "/api/v1/email-banner/",
   // Images placed in a formatted email's message (D-139), fetched the same way.
   "/api/v1/email-image/",
-  // "Open in PowerPoint" (D-157): PowerPoint fetches one version by a five-minute link, with no sign-in.
+  // "Open in PowerPoint" (D-158): PowerPoint fetches one version by a five-minute link, with no sign-in.
   "/api/v1/open/",
   "/ops/",
 ];
@@ -781,7 +781,7 @@ const ONSITE_AND_REVIEW: RegExp[] = [
 ];
 /** What a technician may open besides the two screens: the way to them, and what a review shows. */
 const TECHNICIAN_ALSO: RegExp[] = [
-  // Room sync, for the rooms they are assigned to (client review, D-153).
+  // Room sync, for the rooms they are assigned to (client review, D-154).
   /^\/api\/v1\/events\/[^/]+\/sync\/(fleet|approved\.zip)$/,
   /^\/api\/v1\/events$/,
   /^\/api\/v1\/events\/[^/]+$/,
@@ -793,9 +793,9 @@ const TECHNICIAN_ALSO: RegExp[] = [
 /** Asking for a slide preview is a POST, and part of looking at a file in review. */
 const TECHNICIAN_ALSO_WRITES: RegExp[] = [
   /^\/api\/v1\/file-versions\/[^/]+\/preview$/,
-  // Opening a deck in the desk's PowerPoint (D-157).
+  // Opening a deck in the desk's PowerPoint (D-158).
   /^\/api\/v1\/file-versions\/[^/]+\/open-link$/,
-  // Ticking a file loaded on the room PC — their own rooms only, checked in the route (D-153).
+  // Ticking a file loaded on the room PC — their own rooms only, checked in the route (D-154).
   /^\/api\/v1\/room-files\/[^/]+\/(loaded|unloaded)$/,
 ];
 
@@ -1224,7 +1224,7 @@ app.get("/api/v1/file-versions/:versionId/download", async (req, res) => {
 });
 
 /**
- * "Open in PowerPoint" (client review, D-157): a five-minute link to one version for PowerPoint on
+ * "Open in PowerPoint" (client review, D-158): a five-minute link to one version for PowerPoint on
  * this computer to fetch — it carries no sign-in. Issuing it is audited.
  */
 app.post("/api/v1/file-versions/:versionId/open-link", async (req, res) => {
@@ -1278,7 +1278,7 @@ app.post("/api/v1/events/:eventId/:filesAndAction", async (req, res, next) => {
   return res.send(result.value.body);
 });
 
-/** The signed-in DXG Technician's user id, or null for any other account (D-153). */
+/** The signed-in DXG Technician's user id, or null for any other account (D-154). */
 const technicianId = (req: express.Request): string | null => {
   const principal = (req as express.Request & { principal?: Principal }).principal;
   return principal?.kind === "staff" && principal.staff_kind === "technician" ? principal.user_id : null;
@@ -1288,14 +1288,14 @@ app.get("/api/v1/events/:eventId/sync/fleet", async (req, res) => {
   const actor = actorFrom(req);
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   const eventId = String(req.params.eventId);
-  // A technician sees the rooms they are assigned to, and only those (D-153).
+  // A technician sees the rooms they are assigned to, and only those (D-154).
   const items = await withScope(scopeFor(req, eventId), (tx) =>
     syncFleet(tx, eventId, technicianId(req) ?? undefined),
   );
   return res.json({ items, next_cursor: null });
 });
 
-/** The DXG Technician staff on the event, for giving them rooms (D-153). */
+/** The DXG Technician staff on the event, for giving them rooms (D-154). */
 app.get("/api/v1/events/:eventId/sync/technicians", async (req, res) => {
   const actor = actorFrom(req);
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
@@ -1304,7 +1304,7 @@ app.get("/api/v1/events/:eventId/sync/technicians", async (req, res) => {
   return res.json({ items });
 });
 
-/** Who works a room: the list replaces the room's technicians (D-153). Not for technicians. */
+/** Who works a room: the list replaces the room's technicians (D-154). Not for technicians. */
 app.put("/api/v1/events/:eventId/sync/rooms/:roomId/technicians", async (req, res) => {
   const actor = actorFrom(req);
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
@@ -1324,7 +1324,7 @@ app.put("/api/v1/events/:eventId/sync/rooms/:roomId/technicians", async (req, re
 
 /**
  * Every approved presentation of a room (`?room=<id>`) or of every room the caller works,
- * as one zip (client review "Download All", D-153). A technician gets their own rooms only.
+ * as one zip (client review "Download All", D-154). A technician gets their own rooms only.
  */
 app.get("/api/v1/events/:eventId/sync/approved.zip", async (req, res) => {
   const actor = actorFrom(req);
@@ -1375,7 +1375,7 @@ for (const [path, apply] of [
     const technician = technicianId(req);
     const roomFileId = String(req.params.roomFileId);
     const result = await withScope(scopeFor(req), async (tx) => {
-      // A technician ticks files in their own rooms only (D-153).
+      // A technician ticks files in their own rooms only (D-154).
       if (technician) {
         const roomId = await roomOfRoomFile(tx, roomFileId);
         if (!roomId || !(await assignedTo(tx, technician, roomId))) return null;
@@ -1422,7 +1422,7 @@ app.get("/api/v1/events/:eventId/speakers", async (req, res) => {
                 WHERE u.account_kind = 'speaker' AND u.is_active AND u.deleted_at IS NULL
                   AND lower(u.email::text) = lower(sp.email::text)
                 LIMIT 1) AS account,
-              -- Their support staff (D-155): assistants hanging off that sign-in.
+              -- Their support staff (D-156): assistants hanging off that sign-in.
               (SELECT count(*)::int FROM pmp.users a JOIN pmp.users m ON m.id = a.assists_user_id
                 WHERE a.is_active AND a.deleted_at IS NULL
                   AND lower(m.email::text) = lower(sp.email::text)) AS support_staff,
@@ -1686,7 +1686,7 @@ function speakerAccountOf(
     return null;
   }
   /*
-   * Speaker Support Staff (D-155) reach the speaker they assist — `email` and `name` are that
+   * Speaker Support Staff (D-156) reach the speaker they assist — `email` and `name` are that
    * speaker's — and only what submitting content needs: Manage presentations and their own
    * password. Everything else on the speaker site is the speaker's own.
    */
@@ -1747,7 +1747,7 @@ app.get("/api/v1/me/presentations", async (req, res) => {
   return res.json({ speaker: { name: me.name, email: me.email }, events });
 });
 
-/* Speaker Support Staff (D-155): the speaker sees who may submit for them; DXG staff add them. */
+/* Speaker Support Staff (D-156): the speaker sees who may submit for them; DXG staff add them. */
 app.get("/api/v1/me/support-staff", async (req, res) => {
   const me = speakerAccountOf(req, res);
   if (!me) return;
@@ -1868,7 +1868,7 @@ app.post("/api/v1/me/uploads/:uploadId/complete", async (req, res) => {
       uploadId,
       slotId: owned.slotId,
       fileName: body.file_name as string,
-      // Who actually submitted it, when it was the speaker's support staff (D-155).
+      // Who actually submitted it, when it was the speaker's support staff (D-156).
       ...(me.supportStaff ? { submittedByUserId: me.user_id } : {}),
       ...(body.sha256 ? { expectedSha256: body.sha256 } : {}),
     });
@@ -1909,7 +1909,7 @@ app.get("/api/v1/events/:eventId/srr", async (req, res) => {
 });
 
 /**
- * The Speaker Ready Room's event-day switch (D-156). Outside the `/srr` path on purpose: support
+ * The Speaker Ready Room's event-day switch (D-157). Outside the `/srr` path on purpose: support
  * staff never open the room itself (D-151), but they run the event and open it on the day.
  */
 app.put("/api/v1/events/:eventId/srr-open", async (req, res) => {
@@ -1923,7 +1923,7 @@ app.put("/api/v1/events/:eventId/srr-open", async (req, res) => {
   return res.json(result.value);
 });
 
-/** The check-in / checkout report as CSV (D-152): presenter, desk, check-in and checkout times. */
+/** The check-in / checkout report as CSV (D-153): presenter, desk, check-in and checkout times. */
 app.get("/api/v1/events/:eventId/srr/report.csv", async (req, res) => {
   const actor = actorFrom(req);
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
@@ -2037,7 +2037,7 @@ app.post("/api/v1/srr/checkins/:checkinId/usb-ingestions", async (req, res) => {
 });
 
 /*
- * Local intake straight from the Speaker Ready Room (D-152): staff upload or update a
+ * Local intake straight from the Speaker Ready Room (D-153): staff upload or update a
  * speaker's presentation without checking them in first. The file goes up through
  * `/srr/uploads` as on a check-in.
  */
@@ -3386,7 +3386,7 @@ app.post("/api/v1/events/:eventId/speakers/:speakerId/send-link", async (req, re
 });
 
 /*
- * A speaker's support staff (D-155): DXG Admins and support staff list, add and remove the
+ * A speaker's support staff (D-156): DXG Admins and support staff list, add and remove the
  * assistants who submit the speaker's presentations. The sign-in hangs off the speaker's own.
  */
 app.get("/api/v1/events/:eventId/speakers/:speakerId/support-staff", async (req, res) => {

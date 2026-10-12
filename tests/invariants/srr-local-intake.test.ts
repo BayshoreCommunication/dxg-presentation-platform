@@ -6,7 +6,7 @@ import { withSystemScope } from "@pmp/db";
 import { signInStaff } from "../helpers/signIn.ts";
 
 /**
- * The Speaker Ready Room after the client's review (D-152): "local intake" takes a file
+ * The Speaker Ready Room after the client's review (D-153): "local intake" takes a file
  * from a USB drive or one saved on the desk's computer; DXG staff may upload or update a
  * speaker's presentation straight from the room, without a check-in; and the room's
  * check-ins and checkouts come out as a CSV report.
@@ -92,7 +92,7 @@ before(async () => {
 
   // One visit, checked in and out, for the report.
   deskName = `Desk ${RUN}`;
-  // A new event's Speaker Ready Room starts closed (D-156); open it, as on the event day.
+  // A new event's Speaker Ready Room starts closed (D-157); open it, as on the event day.
   assert.equal((await call("PUT", `/events/${eventId}/srr-open`, { open: true })).status, 200);
   const station = (await (await call("POST", `/events/${eventId}/srr/stations`, { name: deskName })).json()) as { id: string };
   const checkin = await call("POST", `/events/${eventId}/srr/checkins`, { speaker_id: speaker.speaker_id, station_id: station.id });
@@ -106,7 +106,7 @@ after(async () => {
   await call("POST", `/events/${eventId}/archive`);
 });
 
-describe("local intake from the Speaker Ready Room, without a check-in (D-152)", () => {
+describe("local intake from the Speaker Ready Room, without a check-in (D-153)", () => {
   test("staff upload a speaker's file; it is scanned, stored as the next version and sent to review", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
     const first = await call("POST", `/events/${eventId}/srr/slots/${slotId}/intake`, {
@@ -181,7 +181,7 @@ describe("local intake from the Speaker Ready Room, without a check-in (D-152)",
   });
 });
 
-describe("the check-in / checkout report (D-152)", () => {
+describe("the check-in / checkout report (D-153)", () => {
   test("is a CSV with presenter, desk, check-in and checkout times on the event's clock", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
     const response = await call("GET", `/events/${eventId}/srr/report.csv`);

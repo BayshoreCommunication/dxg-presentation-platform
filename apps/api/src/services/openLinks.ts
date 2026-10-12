@@ -6,7 +6,7 @@ import { err, ok } from "@pmp/domain";
 import { storage } from "./ingest.ts";
 
 /*
- * "Open in PowerPoint" (client review, D-157): the Speaker Ready Room's preview opens the deck in
+ * "Open in PowerPoint" (client review, D-158): the Speaker Ready Room's preview opens the deck in
  * the desk computer's own PowerPoint, where transitions, animations and video play as they will
  * in the room. PowerPoint fetches the file itself (`ms-powerpoint:ofv|u|<url>`) without the
  * staff sign-in, so it gets a link that opens one version for a few minutes. Several fetches are

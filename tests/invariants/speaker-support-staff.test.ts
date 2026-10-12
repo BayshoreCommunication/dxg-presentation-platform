@@ -8,7 +8,7 @@ import { cookieFrom, signInStaff } from "../helpers/signIn.ts";
 import { removeTestAccounts } from "../helpers/cleanup.ts";
 
 /**
- * Speaker Support Staff (client review, D-155): DXG staff give a speaker's assistant a sign-in
+ * Speaker Support Staff (client review, D-156): DXG staff give a speaker's assistant a sign-in
  * from the Speakers screen (the speaker only sees the list); the assistant reaches that speaker's presentations — and submits under their name — but
  * nothing else of the speaker site, and nothing of their own.
  */
@@ -59,7 +59,7 @@ after(async () => {
   if (up) await removeTestAccounts(["probe-assistant-"]);
 });
 
-describe("DXG staff give a speaker's assistant a sign-in (D-155)", () => {
+describe("DXG staff give a speaker's assistant a sign-in (D-156)", () => {
   test("added with a temporary password, emailed; the speaker sees them listed", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
     const added = await call(admin, "POST", staffPath(), { name: "Probe Assistant", email: ASSISTANT });

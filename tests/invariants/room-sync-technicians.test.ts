@@ -5,7 +5,7 @@ import { withSystemScope } from "@pmp/db";
 import { signInStaff } from "../helpers/signIn.ts";
 
 /**
- * Room sync by room (client review, D-153): admins and support staff give rooms to DXG
+ * Room sync by room (client review, D-154): admins and support staff give rooms to DXG
  * Technician staff; a technician sees, ticks and downloads only the rooms they work; and
  * "Download all" brings a room's (or all of one's rooms') approved presentations as one zip.
  */
@@ -70,7 +70,7 @@ after(async () => {
   }
 });
 
-describe("technicians work the rooms they are given (D-153)", () => {
+describe("technicians work the rooms they are given (D-154)", () => {
   test("the event's technicians are offered; a non-technician is refused", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
     const list = (await (await call(admin, "GET", `/events/${EVENT}/sync/technicians`)).json()) as { items: { user_id: string }[] };
@@ -114,7 +114,7 @@ describe("technicians work the rooms they are given (D-153)", () => {
   });
 });
 
-describe("Download all (D-153)", () => {
+describe("Download all (D-154)", () => {
   test("a room's approved presentations come as one zip", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
     const response = await call(delgado, "GET", `/events/${EVENT}/sync/approved.zip?room=${room("Ballroom A").room_id}`);
@@ -144,7 +144,7 @@ describe("Download all (D-153)", () => {
   });
 });
 
-describe("a technician uploads a new version a presenter brings (D-153)", () => {
+describe("a technician uploads a new version a presenter brings (D-154)", () => {
   test("the intake is open to them (refused here only for the missing reason, so nothing is stored)", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
     const talks = (await (await call(delgado, "GET", `/events/${EVENT}/talks`)).json()) as { items: { slot_id: string }[] };

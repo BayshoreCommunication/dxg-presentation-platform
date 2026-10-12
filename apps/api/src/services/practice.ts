@@ -186,7 +186,7 @@ export async function createPracticeEvent(
   );
   // Marked before anything else is written to it. `createEvent` has made the owner its
   // project manager — administrators too, since the build acts without their admin role.
-  // A practice event's Speaker Ready Room is open from the start: it is for trying things (D-156).
+  // A practice event's Speaker Ready Room is open from the start: it is for trying things (D-157).
   await tx.query(`UPDATE pmp.events SET is_practice = true, practice_owner = $2, srr_open = true WHERE id = $1`, [eventId, owner.id]);
 
   must(

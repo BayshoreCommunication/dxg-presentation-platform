@@ -24,7 +24,7 @@ const HOW: Record<Desktop, string> = {
 };
 
 /**
- * "Open in PowerPoint" (client review, D-157): the deck plays in the desk computer's own app,
+ * "Open in PowerPoint" (client review, D-158): the deck plays in the desk computer's own app,
  * where transitions, animations and video look as they will in the room — the browser preview
  * can't show those. On Windows and Mac it hands PowerPoint a five-minute link to this one
  * version (`ms-powerpoint:ofv|u|…`); if PowerPoint doesn't take it (the page never loses focus

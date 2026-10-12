@@ -67,11 +67,11 @@ export type Principal = {
   display_name: string;
   account_kind: "staff" | "speaker";
   must_change_password: boolean;
-  /** Speaker Support Staff (D-155): the speaker this account submits for; null for a speaker. */
+  /** Speaker Support Staff (D-156): the speaker this account submits for; null for a speaker. */
   assisting?: { user_id: string; name: string; email: string } | null;
 };
 
-/* ── Speaker Support Staff (D-155) ─────────────────────────────────────────── */
+/* ── Speaker Support Staff (D-156) ─────────────────────────────────────────── */
 
 export type SupportStaffRow = { user_id: string; name: string; email: string; state: "invited" | "active"; added_at: string };
 export const getSupportStaff = () => request<{ items: SupportStaffRow[]; max: number }>("/me/support-staff");
@@ -245,7 +245,7 @@ export type MySrr = {
   checkins: { id: string; station: string | null; checked_in_at: string; departed_at: string | null; technician: string }[];
   sign_offs: { signed_at: string; version_number: number; file_name: string; talk: string; receipt_emailed_to: string | null }[];
   talks: PortalTalk[];
-  /** Whether the room has opened yet — it opens on the event day (D-156). */
+  /** Whether the room has opened yet — it opens on the event day (D-157). */
   open: boolean;
 };
 

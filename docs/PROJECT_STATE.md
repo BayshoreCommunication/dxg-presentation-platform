@@ -3553,7 +3553,7 @@ counts as 7.4 and identical slides. CI and `.nvmrc` on 24.21.0. Not deployed —
 `main` → `production` release; after it, compare ECR's scan of the new images with the 2026-10-08 numbers.
 
 
-## 2026-10-11 — Client review A1–A3: Local intake, staff upload from the SRR, check-in report (D-152)
+## 2026-10-11 — Client review A1–A3: Local intake, staff upload from the SRR, check-in report (D-153)
 Remaining items from Ace Johnson's review counted with Travis: 10 items + the production check-in bug (A1–A5 SRR,
 B6–B9 Room sync/technician, C10 Speaker Support Staff). Built A1–A3 locally: "USB intake" → **Local intake** (USB
 drive or saved file) everywhere it is read; **Upload** beside each speaker on the SRR dashboard, taking a new version
@@ -3565,7 +3565,7 @@ the one failure (event-files "MedTech has an approved file") fails the same with
 has drifted). Lint and type-check clean. **Not pushed, not deployed** — Travis reviews locally first.
 Note: the browser walk left a junk v2 on Alicia Fontaine's talk in the local data (`npm run db:seed` resets it).
 
-## 2026-10-11 — Client review B6–B9: technicians by room, Download all, onsite upload, Room Agent removed (D-153, D-154)
+## 2026-10-11 — Client review B6–B9: technicians by room, Download all, onsite upload, Room Agent removed (D-154, D-155)
 Built locally. **B7**: migration 037 `room_assignments`; Room sync names each room's technicians and admins/support
 assign them; technicians now open Room sync and see, tick and download only their own rooms. **B6**: Download all per
 room and for all one's rooms (zip, files named by time and talk). **B8**: Upload a new version on Manage
@@ -3579,7 +3579,7 @@ event-files and event-owned-data's station check, need seed state the local data
 file; a MedTech speaker not checked in): `npm run db:seed` resets it. Lint and type-check clean. **Not pushed, not
 deployed.** Deploy note: migration 037 runs with the others; no server change otherwise.
 
-## 2026-10-12 — Client review C10 and A4: Speaker Support Staff; SRR event-day switch (D-155, D-156)
+## 2026-10-12 — Client review C10 and A4: Speaker Support Staff; SRR event-day switch (D-156, D-157)
 Built locally. **C10**: migration 038; speakers add assistants on the speaker site's Support staff page (temporary
 password emailed); an assistant reaches only the speaker's Manage presentations and their uploads are the speaker's,
 recorded as sent by the assistant. Walked on :3001: Raman added "Sam Assistant"; signed in as them — one sidebar door,
@@ -3596,7 +3596,7 @@ Local data: a test assistant `s.assistant@example.invalid` exists on Raman (remo
 "Support staff (n)" on each speaker; the speaker's Support staff page is read-only. Walked as the admin: Raman's dialog
 lists Sam Assistant. speaker-support-staff 7/7, speakers-add-and-send and speaker-accounts green (54/54).
 
-## 2026-10-12 — Client review A5: Preview Slides opens in the computer's own PowerPoint (D-157)
+## 2026-10-12 — Client review A5: Preview Slides opens in the computer's own PowerPoint (D-158)
 Built locally: **Open in PowerPoint** + **Quick look** on the check-in, Open in PowerPoint on Presentation detail;
 Windows/Mac hand PowerPoint a five-minute link (`ms-powerpoint:`), falling back to a download; Linux downloads.
 Migration 040 `open_links`. The link serves the file through the staff site's own address (checked via :3000) without a

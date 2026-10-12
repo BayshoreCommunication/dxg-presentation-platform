@@ -102,7 +102,7 @@ before(async () => {
       slot_id: slot.slot_id,
     })
   ).json()) as { speaker_id: string };
-  // A new event's Speaker Ready Room starts closed (D-156); open it, as on the event day.
+  // A new event's Speaker Ready Room starts closed (D-157); open it, as on the event day.
   assert.equal((await call("PUT", `/events/${eventId}/srr-open`, { open: true })).status, 200);
   const station = (await (await call("POST", `/events/${eventId}/srr/stations`, { name: `Desk ${RUN}` })).json()) as { id: string };
   const checkin = await call("POST", `/events/${eventId}/srr/checkins`, { speaker_id: speaker.speaker_id, station_id: station.id });

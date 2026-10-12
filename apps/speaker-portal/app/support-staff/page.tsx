@@ -4,7 +4,7 @@ import { SupportStaff } from "@/components/SupportStaff";
 
 export const dynamic = "force-dynamic";
 
-/** The speaker's support staff (D-155): assistants who submit presentations for them. */
+/** The speaker's support staff (D-156): assistants who submit presentations for them. */
 export default async function SupportStaffPage() {
   try {
     const { items, max } = await getSupportStaff();
