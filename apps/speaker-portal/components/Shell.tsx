@@ -32,7 +32,7 @@ const GROUPS: { group: string; items: { label: string; href: string; icon: strin
     group: "CONTROL CENTER",
     items: [
       { label: "Agenda", href: "/events/:id/agenda", icon: "calendar" },
-      { label: "Manage presentations", href: "/", icon: "review" },
+      { label: "Manage presentations", href: "/events/:id/presentations", icon: "review" },
       // Assistants who submit for the speaker (client review, D-156).
       { label: "Support staff", href: "/support-staff", icon: "users" },
     ],
@@ -75,7 +75,7 @@ function Frame({ principal, events, children }: { principal: Principal; events: 
   const pathname = usePathname() ?? "";
   const router = useRouter();
   const params = useParams<{ id?: string }>();
-  // The event the event-scoped screens are about: the URL's, else the newest the speaker is on.
+  // The event every screen is about: the URL's, else the newest the speaker is on.
   const eventId = params?.id ?? events[0]?.id;
   const current = events.find((event) => event.id === eventId);
   const [collapsed, setCollapsed] = useState(false);
@@ -170,7 +170,11 @@ function Frame({ principal, events, children }: { principal: Principal; events: 
                       value={eventId ?? ""}
                       onChange={(event) => {
                         const chosen = event.target.value;
-                        if (chosen) router.push(`/events/${chosen}/agenda`);
+                        if (!chosen) return;
+                        // Stay on the same screen, now for the chosen event.
+                        if (/\/agenda$/.test(pathname)) router.push(`/events/${chosen}/agenda`);
+                        else if (/\/srr$/.test(pathname)) router.push(`/events/${chosen}/srr`);
+                        else router.push(`/events/${chosen}/presentations`);
                       }}
                     >
                       {events.map((event) => (
@@ -246,8 +250,14 @@ function Frame({ principal, events, children }: { principal: Principal; events: 
         <div className="grp">{group}</div>
         <div className="navitems">
           {items.map((item) => {
-            const needsEvent = item.href.includes(":id");
-            const href = needsEvent && !eventId ? undefined : item.href.replace(":id", eventId ?? "");
+            // Manage presentations works with no event too: "/" says there is nothing yet.
+            const href = item.href.includes(":id")
+              ? eventId
+                ? item.href.replace(":id", eventId)
+                : item.href.endsWith("/presentations")
+                  ? "/"
+                  : undefined
+              : item.href;
             if (!href) {
               return (
                 <a key={item.label} aria-disabled="true" title="You are not on an event yet">

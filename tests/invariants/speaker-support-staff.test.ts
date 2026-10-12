@@ -100,6 +100,22 @@ describe("DXG staff give a speaker's assistant a sign-in (D-156)", () => {
   });
 });
 
+describe("looking is not doing", () => {
+  test("opening a speaker's support staff makes no sign-in for them", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    await removeTestAccounts(["k.osei@example.invalid"]);
+    const list = (await (await call(admin, "GET", `/events/${EVENT}/speakers`)).json()) as { items: { id: string; email: string | null }[] };
+    const osei = list.items.find((row) => row.email === "k.osei@example.invalid")!;
+    const opened = await call(admin, "GET", `/events/${EVENT}/speakers/${osei.id}/support-staff`);
+    assert.equal(opened.status, 200);
+    assert.deepEqual(((await opened.json()) as { items: unknown[] }).items, []);
+    const made = await withSystemScope(async (tx) =>
+      (await tx.query(`SELECT 1 FROM pmp.users WHERE lower(email::text) = 'k.osei@example.invalid'`)).rows.length,
+    );
+    assert.equal(made, 0, "the Sign-in column must not turn to Invited with nothing sent");
+  });
+});
+
 describe("only DXG Admins and support staff add them", () => {
   test("the speaker can't add or remove them; a technician can't either", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
@@ -192,5 +208,16 @@ describe("support staff submit the speaker's content, and nothing else", () => {
       body: JSON.stringify({ email: ASSISTANT, password: PASSWORD }),
     });
     assert.notEqual(again.status, 200);
+  });
+
+  test("added back after being removed, the same sign-in opens again", async (t: TestContext) => {
+    if (!up || !assistantId) return t.skip("API not running");
+    const back = await call(admin, "POST", staffPath(), { name: "Probe Assistant", email: ASSISTANT });
+    assert.equal(back.status, 201);
+    assert.equal(((await back.json()) as { user_id: string }).user_id, assistantId, "the same account, not a refusal");
+    const row = await withSystemScope(async (tx) =>
+      (await tx.query<{ is_active: boolean; must_change_password: boolean }>(`SELECT is_active, must_change_password FROM pmp.users WHERE id = $1`, [assistantId])).rows[0]!,
+    );
+    assert.deepEqual(row, { is_active: true, must_change_password: true });
   });
 });

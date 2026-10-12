@@ -91,7 +91,9 @@ export async function speakerAccountFor(
   actor: Actor,
   eventId: string,
   speakerId: string,
-): Promise<Result<SpeakerAccount, DomainError>> {
+  /** Only adding someone makes the speaker's sign-in; looking at the list never does. */
+  options: { create: boolean } = { create: true },
+): Promise<Result<SpeakerAccount | null, DomainError>> {
   if (!hasAnyRole(actor, MANAGERS)) return err(FORBIDDEN);
   const { rows } = await tx.query<{ full_name: string; email: string | null; client_id: string }>(
     `SELECT full_name, email::text, client_id FROM pmp.speakers
@@ -103,6 +105,16 @@ export async function speakerAccountFor(
   const email = (speaker.email ?? "").trim().toLowerCase();
   if (!EMAIL.test(email)) {
     return err({ code: "support.speaker_no_email", message: "Add the speaker's email address first — their support staff work under it." });
+  }
+  if (!options.create) {
+    const { rows: found } = await tx.query<{ id: string; display_name: string; account_kind: string; assists: boolean }>(
+      `SELECT id, display_name, account_kind, (assists_user_id IS NOT NULL) AS assists FROM pmp.users
+        WHERE lower(email::text) = $1 AND is_active AND deleted_at IS NULL`,
+      [email],
+    );
+    const account = found[0];
+    if (!account || account.account_kind !== "speaker" || account.assists) return ok(null);
+    return ok({ user_id: account.id, name: account.display_name, email, client_id: speaker.client_id });
   }
   const signIn = await ensureSpeakerSignIn(tx, { email, displayName: speaker.full_name, eventId, clientId: speaker.client_id, actorUserId: actor.id });
   if (signIn.outcome === "staff" || signIn.outcome === "assistant") {
@@ -133,6 +145,33 @@ export async function addSupportStaff(
   }
   if ((await listSupportStaff(tx, speaker.user_id)).length >= MAX_SUPPORT_STAFF) {
     return err({ code: "support.too_many", message: `A speaker can have up to ${MAX_SUPPORT_STAFF} support staff. Remove one to add another.` });
+  }
+
+  // Taken off this speaker before and added back: the same sign-in opens again, with a new password.
+  const { rows: returning } = await tx.query<{ id: string }>(
+    `SELECT id FROM pmp.users WHERE lower(email::text) = $1 AND assists_user_id = $2 AND NOT is_active AND deleted_at IS NULL`,
+    [email, speaker.user_id],
+  );
+  if (returning[0]) {
+    const temporary = generateAccessCode(4, 4);
+    const { rows } = await tx.query<SupportStaffRow>(
+      `UPDATE pmp.users SET is_active = true, display_name = $2, password_hash = $3, password_set_at = now(),
+              must_change_password = true, failed_logins = 0, locked_until = NULL
+        WHERE id = $1
+       RETURNING id AS user_id, display_name AS name, email::text AS email, 'invited' AS state, created_at AS added_at`,
+      [returning[0].id, name, await hashPassword(temporary)],
+    );
+    await queueSupportSignInEmail(tx, { to: email, name, speaker: speaker.name, temporaryPassword: temporary });
+    await appendAudit(tx, {
+      partitionId: by.eventId,
+      clientId: speaker.client_id,
+      actorUserId: by.actorUserId,
+      action: "auth.speaker_support_added",
+      subjectType: "user",
+      subjectId: rows[0]!.user_id,
+      detail: { email, assists: speaker.user_id, speaker: speaker.email, again: true },
+    });
+    return ok(rows[0]!);
   }
 
   const { rows: taken } = await tx.query(

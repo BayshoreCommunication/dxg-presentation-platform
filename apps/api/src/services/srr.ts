@@ -486,7 +486,9 @@ export async function checkinDetail(tx: pg.PoolClient, checkinId: string): Promi
        LEFT JOIN pmp.sessions se ON se.id = s.session_id
        LEFT JOIN pmp.rooms r ON r.id = se.room_id
       WHERE c.id = $1
-      ORDER BY (se.starts_at IS NULL), se.starts_at
+      -- Their next talk that hasn't ended (else their last): a file taken in today belongs to
+      -- today's talk, not to one they gave yesterday.
+      ORDER BY (se.starts_at IS NULL), (se.ends_at < now()), CASE WHEN se.ends_at < now() THEN se.starts_at END DESC, se.starts_at
       LIMIT 1`,
     [checkinId],
   );
@@ -1046,8 +1048,14 @@ export async function depart(
 
 /* ── check-in / checkout report (client review, D-153) ───────────────────── */
 
-const csvCell = (value: string): string =>
-  /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+/**
+ * A spreadsheet cell. A value that would start a formula (`=`, `+`, `-`, `@`, tab, return) is
+ * prefixed with an apostrophe, so a name typed into an agenda can never run in Excel.
+ */
+const csvCell = (raw: string): string => {
+  const value = /^[=+\-@\t\r]/.test(raw) ? `'${raw}` : raw;
+  return /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+};
 
 /**
  * Every check-in of the event, one row each, in the order they happened: who, at which

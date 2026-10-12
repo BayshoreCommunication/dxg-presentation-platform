@@ -59,6 +59,7 @@ export default async function RoomSyncPage({ params }: { params: Promise<{ id: s
         canLoad={canLoad}
         technicians={technicians}
         isTechnician={isTechnician}
+        canUpload={principal.staff_kind !== "support"}
       />
     </>
   );

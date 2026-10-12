@@ -47,7 +47,7 @@ before(async () => {
     const agenda = (await (await call("GET", `/events/${eventId}/agenda`)).json()) as { items: { presentations: { slot_id: string; title: string }[] }[] };
     const slot = agenda.items.flatMap((item) => item.presentations).find((talk) => talk.title === title)!;
     speakers.push(((await (
-      await call("POST", `/events/${eventId}/speakers`, { name: `Same Name ${RUN}`, email: `desk${n}.${RUN}@example.invalid`, organization: "", slot_id: slot.slot_id })
+      await call("POST", `/events/${eventId}/speakers`, { name: `=Same Name ${RUN}`, email: `desk${n}.${RUN}@example.invalid`, organization: "", slot_id: slot.slot_id })
     ).json()) as { speaker_id: string }).speaker_id);
     stations.push(((await (await call("POST", `/events/${eventId}/srr/stations`, { name: `Desk ${n}` })).json()) as { id: string }).id);
   }
@@ -68,6 +68,12 @@ describe("a desk whose speaker has no talk any more", () => {
     }
     const room = (await (await call("GET", `/events/${eventId}/srr`)).json()) as { stations: { id: string; checkin_id: string | null }[] };
     assert.deepEqual(stations.map((id) => room.stations.find((station) => station.id === id)?.checkin_id), ids);
+  });
+
+  test("a name that looks like a formula is written to the report as text", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const csv = await (await call("GET", `/events/${eventId}/srr/report.csv`)).text();
+    assert.ok(csv.includes(`'=Same Name ${RUN}`), "prefixed with an apostrophe so Excel does not run it");
   });
 
   test("taken off their session, their check-in still opens and checks out", async (t: TestContext) => {

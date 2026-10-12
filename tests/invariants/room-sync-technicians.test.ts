@@ -104,6 +104,24 @@ describe("technicians work the rooms they are given (D-154)", () => {
     }
   });
 
+  test("someone on a room who is no longer a technician drops off it; saving still works", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const roomId = room("Room 212").room_id;
+    await withSystemScope((tx) =>
+      tx.query(
+        `INSERT INTO pmp.room_assignments (user_id, room_id, event_id, client_id)
+         SELECT $1, id, event_id, client_id FROM pmp.rooms WHERE id = $2 ON CONFLICT DO NOTHING`,
+        [VEGA, roomId],
+      ),
+    );
+    const listed = (await fleet(admin)).find((item) => item.room_id === roomId)!;
+    assert.equal(listed.technicians.some((person) => person.user_id === VEGA), false, "not shown as the room's technician");
+    const saved = await call(admin, "PUT", `/events/${EVENT}/sync/rooms/${roomId}/technicians`, { user_ids: [VEGA, DELGADO] });
+    assert.equal(saved.status, 200, "the stale name the screen still holds doesn't block the save");
+    assert.deepEqual(((await saved.json()) as { technicians: { user_id: string }[] }).technicians.map((person) => person.user_id), [DELGADO]);
+    await call(admin, "PUT", `/events/${EVENT}/sync/rooms/${roomId}/technicians`, { user_ids: [] });
+  });
+
   test("a technician ticks files in their own rooms only", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
     const copy = room("Ballroom A").talks.find((talk) => talk.approved?.room_file_id)?.approved;
@@ -133,6 +151,11 @@ describe("Download all (D-154)", () => {
     assert.equal(((await refused.json()) as { code: string }).code, "room.not_assigned");
     const mine = await call(delgado, "GET", `/events/${EVENT}/sync/approved.zip`);
     assert.equal(mine.status, 200);
+  });
+
+  test("a room address that isn't a room is not found, not a server error", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    assert.equal((await call(admin, "GET", `/events/${EVENT}/sync/approved.zip?room=not-a-room`)).status, 404);
   });
 
   test("a room with nothing approved says so", async (t: TestContext) => {

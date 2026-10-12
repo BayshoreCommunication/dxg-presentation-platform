@@ -233,7 +233,7 @@ export function SrrDashboardView({
                 <tbody>
                   {toCome.map((row) => {
                     return (
-                      <tr key={row.speaker_id} className="srr-row">
+                      <tr key={`${row.speaker_id}-${row.slot_id}`} className="srr-row">
                         <td>
                           <b>{row.speaker}</b>
                           <span className="note">
@@ -274,7 +274,7 @@ export function SrrDashboardView({
             <table>
               <tbody>
                 {left.map((row) => (
-                  <tr key={row.speaker_id} className="srr-row">
+                  <tr key={`${row.speaker_id}-${row.slot_id}`} className="srr-row">
                     <td>
                       <b>{row.speaker}</b>
                       <span className="note">

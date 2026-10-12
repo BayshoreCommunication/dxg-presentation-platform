@@ -289,9 +289,12 @@ export async function syncFleet(
     [eventId, onlyRoomsOf ?? null],
   );
   const { rows: assigned } = await tx.query<{ room_id: string; user_id: string; name: string }>(
+    // Only people who are still technicians on the event (D-154): one taken off it drops off its rooms.
     `SELECT x.room_id, x.user_id, u.display_name AS name
        FROM pmp.room_assignments x JOIN pmp.users u ON u.id = x.user_id
-      WHERE x.event_id = $1 ORDER BY u.display_name`,
+      WHERE x.event_id = $1 AND u.is_active AND u.staff_kind = 'technician'
+        AND EXISTS (SELECT 1 FROM pmp.event_roles er WHERE er.user_id = u.id AND er.event_id = x.event_id)
+      ORDER BY u.display_name`,
     [eventId],
   );
   const { rows: checklist } = await tx.query<{
