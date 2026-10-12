@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ApiError, setSrrOpen } from "@/lib/api";
-import { Icon } from "@/components/Icon";
 import { ConfirmInline } from "@/components/ConfirmInline";
 
 /**
@@ -31,20 +30,25 @@ export function SrrSwitch({ eventId, open, canSwitch }: { eventId: string; open:
   }
 
   return (
-    <span style={{ display: "inline-flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-      <span className={`chip ${open ? "c-ok" : "c-warn"}`}>Speaker Ready Room {open ? "open" : "closed"}</span>
-      {canSwitch &&
-        (open ? (
-          <button type="button" className="btn" disabled={busy || asking} onClick={() => setAsking(true)}>
-            <Icon name="pause" />
-            Close it
-          </button>
-        ) : (
-          <button type="button" className="btn pri" disabled={busy} onClick={() => void set(true)}>
-            <Icon name="play" />
-            {busy ? "Opening…" : "Open the Speaker Ready Room"}
-          </button>
-        ))}
+    <span style={{ display: "inline-flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+      {/* A real on/off switch (D-156); without the right to change it, the same switch, read-only. */}
+      <button
+        type="button"
+        role="switch"
+        aria-checked={open}
+        aria-label="Speaker Ready Room open"
+        className={`srr-switch${open ? " on" : ""}`}
+        disabled={!canSwitch || busy || asking}
+        title={canSwitch ? undefined : "A DXG Admin or support staff opens and closes the Speaker Ready Room"}
+        onClick={() => (open ? setAsking(true) : void set(true))}
+      >
+        <span className="track" aria-hidden="true">
+          <span className="knob" />
+        </span>
+        <span className="text">
+          Speaker Ready Room: <b>{busy ? "…" : open ? "Open" : "Closed"}</b>
+        </span>
+      </button>
       {asking && (
         <ConfirmInline
           question="Close the Speaker Ready Room?"
