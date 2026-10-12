@@ -1744,7 +1744,8 @@ app.post("/api/v1/me/notifications/read", async (req, res) => {
 
 /** The speaker's events, for the sidebar's switcher and the portfolio. */
 app.get("/api/v1/me/events", async (req, res) => {
-  const me = speakerAccountOf(req, res);
+  // Support staff get the speaker's events too, for their switcher (D-156).
+  const me = speakerAccountOf(req, res, { allowSupportStaff: true });
   if (!me) return;
   return res.json({ items: await withSystemScope((tx) => myEvents(tx, me.email)) });
 });

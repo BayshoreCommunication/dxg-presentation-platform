@@ -17,15 +17,12 @@ export default async function EventPresentationsPage({ params }: { params: Promi
   try {
     const { principal } = await getSession();
     if (principal.must_change_password) redirect("/account/password?first=1");
-    // Support staff have one page, the speaker's every event (no switcher for them).
-    if (principal.assisting) target = "/";
-    else {
-      const { speaker, events } = await getMyPresentations();
-      const event = events.find((item) => item.id === id);
-      // An event they don't speak at (or no longer do): their newest, or the empty page.
-      if (event) return <Presentations speaker={speaker} events={[event]} />;
-      target = "/";
-    }
+    // The speaker's own, or — for their support staff — the speaker's they assist.
+    const { speaker, events } = await getMyPresentations();
+    const event = events.find((item) => item.id === id);
+    // An event they don't speak at (or no longer do): their newest, or the empty page.
+    if (event) return <Presentations speaker={speaker} events={[event]} />;
+    target = "/";
   } catch (caught) {
     if (caught instanceof PortalError && (caught.status === 401 || caught.status === 403)) {
       redirect("/login?reason=required");

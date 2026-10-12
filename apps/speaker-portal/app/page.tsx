@@ -8,10 +8,9 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Manage presentations — DXG·PM" };
 
 /**
- * Where the speaker site opens (D-146, D-148). A speaker goes to Manage presentations for their
- * newest event — each event has its own, chosen in the sidebar (Travis, 2026-10-12: one event at a
- * time, not one under another). Support staff have no switcher, so they see every event of the
- * speaker they assist here.
+ * Where the speaker site opens (D-146, D-148). A speaker — or their support staff — goes to Manage
+ * presentations for the newest event; each event has its own, chosen in the sidebar (Travis,
+ * 2026-10-12: one event at a time, not one under another).
  */
 export default async function HomePage() {
   let target: string | null = null;
@@ -20,7 +19,7 @@ export default async function HomePage() {
     // A temporary password opens nothing but the page that replaces it.
     if (principal.must_change_password) redirect("/account/password?first=1");
     const { speaker, events } = await getMyPresentations();
-    if (principal.assisting || events.length === 0) return <Presentations speaker={speaker} events={events} />;
+    if (events.length === 0) return <Presentations speaker={speaker} events={events} />;
     target = `/events/${events[0]!.id}/presentations`;
   } catch (caught) {
     if (caught instanceof PortalError && (caught.status === 401 || caught.status === 403)) {

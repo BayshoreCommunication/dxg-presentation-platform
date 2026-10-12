@@ -185,11 +185,14 @@ describe("support staff submit the speaker's content, and nothing else", () => {
     assert.ok(row.by_speaker, "and whose presentation it is");
   });
 
-  test("the agenda, Speaker Ready Room, messages, events and support staff are the speaker's", async (t: TestContext) => {
+  test("the agenda, Speaker Ready Room, messages and support staff are the speaker's", async (t: TestContext) => {
     if (!up || !assistant) return t.skip("API not running");
     const events = (await (await call(speaker, "GET", "/me/events")).json()) as { items: { id: string }[] };
     const event = events.items[0]!.id;
-    for (const path of ["/me/events", `/me/events/${event}/agenda`, `/me/events/${event}/srr`, "/me/notifications", "/me/support-staff"]) {
+    // Their switcher lists the speaker's events (D-156); the screens behind them stay the speaker's.
+    const theirEvents = (await (await call(assistant, "GET", "/me/events")).json()) as { items: { id: string }[] };
+    assert.deepEqual(theirEvents.items.map((item) => item.id), events.items.map((item) => item.id));
+    for (const path of [`/me/events/${event}/agenda`, `/me/events/${event}/srr`, "/me/notifications", "/me/support-staff"]) {
       const refused = await call(assistant, "GET", path);
       assert.equal(refused.status, 403, path);
       assert.equal(((await refused.json()) as { code: string }).code, "auth.support_staff_forbidden", path);

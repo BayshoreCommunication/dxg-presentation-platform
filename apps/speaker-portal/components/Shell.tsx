@@ -42,12 +42,13 @@ const GROUPS: { group: string; items: { label: string; href: string; icon: strin
 
 /*
  * Speaker Support Staff (D-156) submit content for the speaker they assist, and nothing else:
- * one door — Manage presentations — and no event switcher, bell or onsite screens.
+ * one door — Manage presentations, for the event chosen in the switcher (the speaker's events,
+ * Travis 2026-10-12) — and no bell or onsite screens.
  */
 const SUPPORT_GROUPS: typeof GROUPS = [
-  { group: "CONTROL CENTER", items: [{ label: "Manage presentations", href: "/", icon: "review" }] },
+  { group: "CONTROL CENTER", items: [{ label: "Manage presentations", href: "/events/:id/presentations", icon: "review" }] },
 ];
-const SUPPORT_PATHS = ["/", "/help", "/account/password"];
+const SUPPORT_PATHS = [/^\/$/, /^\/events\/[^/]+\/presentations$/, /^\/help$/, /^\/account\/password$/];
 
 const BARE = ["/login", "/forgot-password", "/reset-password", "/account/password", "/t/"];
 
@@ -86,7 +87,7 @@ function Frame({ principal, events, children }: { principal: Principal; events: 
 
   // Support staff have Manage presentations only; any other page sends them there.
   useEffect(() => {
-    if (assisting && !SUPPORT_PATHS.includes(pathname)) router.replace("/");
+    if (assisting && !SUPPORT_PATHS.some((path) => path.test(pathname))) router.replace("/");
   }, [assisting, pathname, router]);
 
   useEffect(() => {
@@ -149,46 +150,47 @@ function Frame({ principal, events, children }: { principal: Principal; events: 
           </button>
         </div>
         <div className="sidebody">
+          {/* Support staff see whose work it is, then the same event switcher (D-156). */}
           {assisting ? (
-            <div className="evtctx">
+            <div className="evtctx" style={{ paddingBottom: 0 }}>
               <span className="note">
                 Support staff for <b>{assisting.name}</b>
               </span>
             </div>
           ) : (
-            <>
-              <nav className="topnav" aria-label="Events">
-                {GROUPS.filter((entry) => entry.group === "EVENTS").map(renderGroup)}
-              </nav>
-              <div className="evtctx">
-                {events.length === 0 ? (
-                  <span className="note">No events yet — the organisers add you to an agenda.</span>
-                ) : (
-                  <>
-                    <select
-                      aria-label="Switch event"
-                      value={eventId ?? ""}
-                      onChange={(event) => {
-                        const chosen = event.target.value;
-                        if (!chosen) return;
-                        // Stay on the same screen, now for the chosen event.
-                        if (/\/agenda$/.test(pathname)) router.push(`/events/${chosen}/agenda`);
-                        else if (/\/srr$/.test(pathname)) router.push(`/events/${chosen}/srr`);
-                        else router.push(`/events/${chosen}/presentations`);
-                      }}
-                    >
-                      {events.map((event) => (
-                        <option key={event.id} value={event.id}>
-                          {event.name}
-                        </option>
-                      ))}
-                    </select>
-                    {current && <div className="note">{dayLabel(current)}</div>}
-                  </>
-                )}
-              </div>
-            </>
+            <nav className="topnav" aria-label="Events">
+              {GROUPS.filter((entry) => entry.group === "EVENTS").map(renderGroup)}
+            </nav>
           )}
+          <div className="evtctx">
+            {events.length === 0 ? (
+              <span className="note">
+                {assisting ? "No events yet." : "No events yet — the organisers add you to an agenda."}
+              </span>
+            ) : (
+              <>
+                <select
+                  aria-label="Switch event"
+                  value={eventId ?? ""}
+                  onChange={(event) => {
+                    const chosen = event.target.value;
+                    if (!chosen) return;
+                    // Stay on the same screen, now for the chosen event.
+                    if (!assisting && /\/agenda$/.test(pathname)) router.push(`/events/${chosen}/agenda`);
+                    else if (!assisting && /\/srr$/.test(pathname)) router.push(`/events/${chosen}/srr`);
+                    else router.push(`/events/${chosen}/presentations`);
+                  }}
+                >
+                  {events.map((event) => (
+                    <option key={event.id} value={event.id}>
+                      {event.name}
+                    </option>
+                  ))}
+                </select>
+                {current && <div className="note">{dayLabel(current)}</div>}
+              </>
+            )}
+          </div>
           <nav aria-label="This site">{groups.filter((entry) => entry.group !== "EVENTS").map(renderGroup)}</nav>
           <AccountMenu principal={principal} />
         </div>
