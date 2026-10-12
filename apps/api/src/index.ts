@@ -68,6 +68,7 @@ import {
 const MFA_COOKIE = "pmp_mfa";
 /** The speaker site's sign-in page (D-148). */
 const SPEAKER_SITE = `${process.env.PORTAL_BASE ?? "http://localhost:3001"}/login`;
+import { addSupportStaff, listSupportStaff, MAX_SUPPORT_STAFF, removeSupportStaff } from "./services/speakerSupport.ts";
 import { approvedRoomsZip, assignedTo, eventTechnicians, markLoaded, roomOfRoomFile, setRoomTechnicians, unmarkLoaded } from "./services/roomSync.ts";
 import { srrDashboard, srrReportCsv, checkIn, checkinDetail, usbIngest, slotIntake, signOff, depart, emailReceipt, addStation, renameStation, retireStation } from "./services/srr.ts";
 import {
@@ -1630,8 +1631,8 @@ app.post("/api/v1/portal/uploads/:uploadId/complete", (req, res) =>
 function speakerAccountOf(
   req: express.Request,
   res: express.Response,
-  options: { allowUnchangedPassword?: boolean } = {},
-): { user_id: string; email: string; name: string; must_change_password: boolean } | null {
+  options: { allowUnchangedPassword?: boolean; allowSupportStaff?: boolean } = {},
+): { user_id: string; email: string; name: string; must_change_password: boolean; supportStaff: boolean } | null {
   const principal = (req as express.Request & { principal?: Principal }).principal;
   if (principal?.kind !== "staff") {
     res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
@@ -1646,12 +1647,30 @@ function speakerAccountOf(
     res.status(403).json({ code: "auth.password_change_required", message: "Choose your own password before continuing." });
     return null;
   }
-  return { user_id: principal.user_id, email: principal.email, name: principal.display_name, must_change_password: principal.must_change_password };
+  /*
+   * Speaker Support Staff (D-155) reach the speaker they assist — `email` and `name` are that
+   * speaker's — and only what submitting content needs: Manage presentations and their own
+   * password. Everything else on the speaker site is the speaker's own.
+   */
+  if (principal.assisting && !options.allowSupportStaff) {
+    res.status(403).json({
+      code: "auth.support_staff_forbidden",
+      message: `As ${principal.assisting.name}'s support staff you can submit their presentations under Manage presentations. The rest of the site is theirs.`,
+    });
+    return null;
+  }
+  return {
+    user_id: principal.user_id,
+    email: principal.assisting?.email ?? principal.email,
+    name: principal.assisting?.name ?? principal.display_name,
+    must_change_password: principal.must_change_password,
+    supportStaff: Boolean(principal.assisting),
+  };
 }
 
 /** Who is signed in on the speaker site (D-148). */
 app.get("/api/v1/me/session", (req, res) => {
-  const me = speakerAccountOf(req, res, { allowUnchangedPassword: true });
+  const me = speakerAccountOf(req, res, { allowUnchangedPassword: true, allowSupportStaff: true });
   if (!me) return;
   const principal = (req as express.Request & { principal?: Principal }).principal;
   return res.json({ principal });
@@ -1665,7 +1684,7 @@ app.post("/api/v1/me/logout", async (req, res) => {
 });
 
 app.post("/api/v1/me/password", async (req, res) => {
-  const me = speakerAccountOf(req, res, { allowUnchangedPassword: true });
+  const me = speakerAccountOf(req, res, { allowUnchangedPassword: true, allowSupportStaff: true });
   if (!me) return;
   const body = req.body as { current_password?: string; new_password?: string };
   if (!body.current_password || !body.new_password) {
@@ -1684,10 +1703,37 @@ app.post("/api/v1/me/password", async (req, res) => {
 });
 
 app.get("/api/v1/me/presentations", async (req, res) => {
-  const me = speakerAccountOf(req, res);
+  const me = speakerAccountOf(req, res, { allowSupportStaff: true });
   if (!me) return;
   const events = await withSystemScope((tx) => myPresentations(tx, me.email));
   return res.json({ speaker: { name: me.name, email: me.email }, events });
+});
+
+/* Speaker Support Staff (D-155): the speaker gives an assistant a sign-in to submit for them. */
+app.get("/api/v1/me/support-staff", async (req, res) => {
+  const me = speakerAccountOf(req, res);
+  if (!me) return;
+  return res.json({ items: await withSystemScope((tx) => listSupportStaff(tx, me.user_id)), max: MAX_SUPPORT_STAFF });
+});
+
+app.post("/api/v1/me/support-staff", async (req, res) => {
+  const me = speakerAccountOf(req, res);
+  if (!me) return;
+  const body = (req.body ?? {}) as { name?: unknown; email?: unknown };
+  const result = await withSystemScope((tx) => addSupportStaff(tx, me, { name: body.name, email: body.email }));
+  if (!result.ok) {
+    const status = result.error.code === "support.email_taken" ? 409 : 422;
+    return res.status(status).json(result.error);
+  }
+  return res.status(201).json(result.value);
+});
+
+app.delete("/api/v1/me/support-staff/:userId", async (req, res) => {
+  const me = speakerAccountOf(req, res);
+  if (!me) return;
+  const result = await withSystemScope((tx) => removeSupportStaff(tx, me.user_id, String(req.params.userId)));
+  if (!result.ok) return res.status(404).json(result.error);
+  return res.json(result.value);
 });
 
 /** What the team told this speaker, in their site: review decisions and approvals. */
@@ -1736,7 +1782,7 @@ app.get("/api/v1/me/events/:eventId/srr", async (req, res) => {
 });
 
 app.post("/api/v1/me/uploads", async (req, res) => {
-  const me = speakerAccountOf(req, res);
+  const me = speakerAccountOf(req, res, { allowSupportStaff: true });
   if (!me) return;
   const body = req.body as { slot_id?: string; file_name?: string; total_bytes?: number };
   if (!body.slot_id || !body.file_name || typeof body.total_bytes !== "number") {
@@ -1758,7 +1804,7 @@ app.post("/api/v1/me/uploads", async (req, res) => {
 });
 
 app.get("/api/v1/me/uploads/:uploadId", async (req, res) => {
-  const me = speakerAccountOf(req, res);
+  const me = speakerAccountOf(req, res, { allowSupportStaff: true });
   if (!me) return;
   const uploadId = String(req.params.uploadId);
   return withSystemScope(async (tx) => {
@@ -1769,7 +1815,7 @@ app.get("/api/v1/me/uploads/:uploadId", async (req, res) => {
 });
 
 app.put("/api/v1/me/uploads/:uploadId/parts/:partNumber", async (req, res) => {
-  const me = speakerAccountOf(req, res);
+  const me = speakerAccountOf(req, res, { allowSupportStaff: true });
   if (!me) return;
   const uploadId = String(req.params.uploadId);
   const part = Number(req.params.partNumber);
@@ -1786,7 +1832,7 @@ app.put("/api/v1/me/uploads/:uploadId/parts/:partNumber", async (req, res) => {
 });
 
 app.post("/api/v1/me/uploads/:uploadId/complete", async (req, res) => {
-  const me = speakerAccountOf(req, res);
+  const me = speakerAccountOf(req, res, { allowSupportStaff: true });
   if (!me) return;
   const uploadId = String(req.params.uploadId);
   const body = req.body as { slot_id?: string; file_name?: string; sha256?: string };
@@ -1804,6 +1850,8 @@ app.post("/api/v1/me/uploads/:uploadId/complete", async (req, res) => {
       uploadId,
       slotId: owned.slotId,
       fileName: body.file_name as string,
+      // Who actually submitted it, when it was the speaker's support staff (D-155).
+      ...(me.supportStaff ? { submittedByUserId: me.user_id } : {}),
       ...(body.sha256 ? { expectedSha256: body.sha256 } : {}),
     });
     if (!result.ok) return res.status(422).json({ code: result.code, message: result.message });
@@ -1812,7 +1860,7 @@ app.post("/api/v1/me/uploads/:uploadId/complete", async (req, res) => {
 });
 
 app.get("/api/v1/me/file-versions/:versionId/download", async (req, res) => {
-  const me = speakerAccountOf(req, res);
+  const me = speakerAccountOf(req, res, { allowSupportStaff: true });
   if (!me) return;
   const versionId = String(req.params.versionId);
   return withSystemScope(async (tx) => {

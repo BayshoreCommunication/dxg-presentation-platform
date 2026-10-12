@@ -293,7 +293,14 @@ async function refuseSlot(
 export async function completeUpload(
   tx: pg.PoolClient,
   session: PortalSession,
-  input: { uploadId: string; slotId: string; fileName: string; expectedSha256?: string },
+  input: {
+    uploadId: string;
+    slotId: string;
+    fileName: string;
+    expectedSha256?: string;
+    /** The speaker's support staff who submitted it (D-155), recorded as the uploading user. */
+    submittedByUserId?: string;
+  },
 ): Promise<{ ok: true; value: CompleteResult } | { ok: false; code: string; message: string }> {
   /*
    * Checked again here, not only when the upload began: the talk comes from this
@@ -310,6 +317,7 @@ export async function completeUpload(
     uploadId: input.uploadId,
     source: "portal",
     speakerId: session.speaker_id,
+    ...(input.submittedByUserId ? { actorUserId: input.submittedByUserId } : {}),
     ...(input.expectedSha256 === undefined ? {} : { expectedSha256: input.expectedSha256 }),
   });
   if (!result.ok) return { ok: false, code: result.error.code, message: result.error.message };

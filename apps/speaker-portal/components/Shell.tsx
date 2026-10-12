@@ -33,10 +33,21 @@ const GROUPS: { group: string; items: { label: string; href: string; icon: strin
     items: [
       { label: "Agenda", href: "/events/:id/agenda", icon: "calendar" },
       { label: "Manage presentations", href: "/", icon: "review" },
+      // Assistants who submit for the speaker (client review, D-155).
+      { label: "Support staff", href: "/support-staff", icon: "users" },
     ],
   },
   { group: "ONSITE", items: [{ label: "Speaker Ready Room", href: "/events/:id/srr", icon: "users" }] },
 ];
+
+/*
+ * Speaker Support Staff (D-155) submit content for the speaker they assist, and nothing else:
+ * one door — Manage presentations — and no event switcher, bell or onsite screens.
+ */
+const SUPPORT_GROUPS: typeof GROUPS = [
+  { group: "CONTROL CENTER", items: [{ label: "Manage presentations", href: "/", icon: "review" }] },
+];
+const SUPPORT_PATHS = ["/", "/help", "/account/password"];
 
 const BARE = ["/login", "/forgot-password", "/reset-password", "/account/password", "/t/"];
 
@@ -70,6 +81,13 @@ function Frame({ principal, events, children }: { principal: Principal; events: 
   const [collapsed, setCollapsed] = useState(false);
   const [narrow, setNarrow] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const assisting = principal.assisting ?? null;
+  const groups = assisting ? SUPPORT_GROUPS : GROUPS;
+
+  // Support staff have Manage presentations only; any other page sends them there.
+  useEffect(() => {
+    if (assisting && !SUPPORT_PATHS.includes(pathname)) router.replace("/");
+  }, [assisting, pathname, router]);
 
   useEffect(() => {
     try {
@@ -105,6 +123,8 @@ function Frame({ principal, events, children }: { principal: Principal; events: 
     ? "Help"
     : pathname.startsWith("/portfolio")
       ? "Portfolio"
+      : pathname.startsWith("/support-staff")
+        ? "Support staff"
       : /\/agenda$/.test(pathname)
         ? "Agenda"
         : /\/srr$/.test(pathname)
@@ -129,33 +149,43 @@ function Frame({ principal, events, children }: { principal: Principal; events: 
           </button>
         </div>
         <div className="sidebody">
-          <nav className="topnav" aria-label="Events">
-            {GROUPS.filter((entry) => entry.group === "EVENTS").map(renderGroup)}
-          </nav>
-          <div className="evtctx">
-            {events.length === 0 ? (
-              <span className="note">No events yet — the organisers add you to an agenda.</span>
-            ) : (
-              <>
-                <select
-                  aria-label="Switch event"
-                  value={eventId ?? ""}
-                  onChange={(event) => {
-                    const chosen = event.target.value;
-                    if (chosen) router.push(`/events/${chosen}/agenda`);
-                  }}
-                >
-                  {events.map((event) => (
-                    <option key={event.id} value={event.id}>
-                      {event.name}
-                    </option>
-                  ))}
-                </select>
-                {current && <div className="note">{dayLabel(current)}</div>}
-              </>
-            )}
-          </div>
-          <nav aria-label="This site">{GROUPS.filter((entry) => entry.group !== "EVENTS").map(renderGroup)}</nav>
+          {assisting ? (
+            <div className="evtctx">
+              <span className="note">
+                Support staff for <b>{assisting.name}</b>
+              </span>
+            </div>
+          ) : (
+            <>
+              <nav className="topnav" aria-label="Events">
+                {GROUPS.filter((entry) => entry.group === "EVENTS").map(renderGroup)}
+              </nav>
+              <div className="evtctx">
+                {events.length === 0 ? (
+                  <span className="note">No events yet — the organisers add you to an agenda.</span>
+                ) : (
+                  <>
+                    <select
+                      aria-label="Switch event"
+                      value={eventId ?? ""}
+                      onChange={(event) => {
+                        const chosen = event.target.value;
+                        if (chosen) router.push(`/events/${chosen}/agenda`);
+                      }}
+                    >
+                      {events.map((event) => (
+                        <option key={event.id} value={event.id}>
+                          {event.name}
+                        </option>
+                      ))}
+                    </select>
+                    {current && <div className="note">{dayLabel(current)}</div>}
+                  </>
+                )}
+              </div>
+            </>
+          )}
+          <nav aria-label="This site">{groups.filter((entry) => entry.group !== "EVENTS").map(renderGroup)}</nav>
           <AccountMenu principal={principal} />
         </div>
       </aside>
@@ -183,7 +213,7 @@ function Frame({ principal, events, children }: { principal: Principal; events: 
             </nav>
           </div>
           <div className="right">
-            <NotificationBell />
+            {!assisting && <NotificationBell />}
             <Link href="/help" className="btn help-link" title="How this screen works">
               ? Help
             </Link>
@@ -197,7 +227,15 @@ function Frame({ principal, events, children }: { principal: Principal; events: 
             </HeaderMenu>
           </div>
         </header>
-        <div className="content">{children}</div>
+        <div className="content">
+          {assisting && (
+            <div className="note" style={{ margin: "0 0 12px" }}>
+              You are signed in as <b>{principal.display_name}</b>, support staff for <b>{assisting.name}</b>. Uploads you
+              make are submitted as theirs.
+            </div>
+          )}
+          {children}
+        </div>
       </main>
     </div>
   );
@@ -303,7 +341,7 @@ function AccountMenu({ principal }: { principal: Principal }) {
         </span>
         <span className="who">
           <b>{principal.display_name}</b>
-          <small>Speaker</small>
+          <small>{principal.assisting ? "Support staff" : "Speaker"}</small>
         </span>
         <span style={{ color: "var(--subtle-foreground)", display: "flex" }}>
           <Icon name="chevrons" size={12} />

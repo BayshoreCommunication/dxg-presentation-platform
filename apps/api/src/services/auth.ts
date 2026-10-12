@@ -72,6 +72,11 @@ export type Principal =
       account_kind: "staff" | "speaker";
       /** Which kind of DXG account (D-151): admin (root), support staff or technician. Null for a speaker. */
       staff_kind: "root_admin" | "support" | "technician" | "client" | null;
+      /**
+       * Speaker Support Staff (D-155): the speaker this account submits content for. Its reach is
+       * that speaker's presentations, and only Manage presentations. Null for everyone else.
+       */
+      assisting: { user_id: string; name: string; email: string } | null;
     }
   | { kind: "presenter"; speaker_id: string; email: string | null; display_name: string; event_id: string; client_id: string };
 
@@ -246,10 +251,16 @@ export async function principalFor(tx: pg.PoolClient, userId: string): Promise<P
     is_root_admin: boolean;
     account_kind: "staff" | "speaker";
     staff_kind: "support" | "technician" | "client";
+    assisted_id: string | null;
+    assisted_name: string | null;
+    assisted_email: string | null;
   }>(
-    `SELECT id, email::text, display_name, must_change_password,
-            (mfa_enrolled_at IS NOT NULL) AS mfa_enrolled, is_root_admin, account_kind, staff_kind
-       FROM pmp.users WHERE id = $1`,
+    `SELECT u.id, u.email::text, u.display_name, u.must_change_password,
+            (u.mfa_enrolled_at IS NOT NULL) AS mfa_enrolled, u.is_root_admin, u.account_kind, u.staff_kind,
+            a.id AS assisted_id, a.display_name AS assisted_name, a.email::text AS assisted_email
+       FROM pmp.users u
+       LEFT JOIN pmp.users a ON a.id = u.assists_user_id AND a.is_active AND a.deleted_at IS NULL
+      WHERE u.id = $1`,
     [userId],
   );
   const user = rows[0]!;
@@ -277,6 +288,10 @@ export async function principalFor(tx: pg.PoolClient, userId: string): Promise<P
     mfa_enrolled: user.mfa_enrolled,
     account_kind: user.account_kind,
     staff_kind: user.account_kind === "speaker" ? null : user.is_root_admin ? "root_admin" : user.staff_kind,
+    assisting:
+      user.account_kind === "speaker" && user.assisted_id
+        ? { user_id: user.assisted_id, name: user.assisted_name!, email: user.assisted_email! }
+        : null,
   };
 }
 
@@ -615,7 +630,7 @@ export type SpeakerSignIn = {
    * speaker has chosen a password — nothing to issue. `staff`: the address is a staff
    * member's; they sign in as they always do.
    */
-  outcome: "created" | "reissued" | "active" | "staff";
+  outcome: "created" | "reissued" | "active" | "staff" | "assistant";
   temporary_password: string | null;
 };
 
@@ -631,13 +646,15 @@ export async function ensureSpeakerSignIn(
   input: { email: string; displayName: string; eventId: string; clientId: string; actorUserId?: string | undefined },
 ): Promise<SpeakerSignIn> {
   const email = input.email.trim().toLowerCase();
-  const { rows: existing } = await tx.query<{ id: string; account_kind: string; must_change_password: boolean }>(
-    `SELECT id, account_kind, must_change_password FROM pmp.users
+  const { rows: existing } = await tx.query<{ id: string; account_kind: string; must_change_password: boolean; assists: boolean }>(
+    `SELECT id, account_kind, must_change_password, (assists_user_id IS NOT NULL) AS assists FROM pmp.users
       WHERE lower(email::text) = $1 AND is_active AND deleted_at IS NULL`,
     [email],
   );
   const found = existing[0];
   if (found && found.account_kind !== "speaker") return { user_id: found.id, email, outcome: "staff", temporary_password: null };
+  // A Speaker Support Staff sign-in (D-155) reaches another speaker's work, never a talk of its own.
+  if (found?.assists) return { user_id: found.id, email, outcome: "assistant", temporary_password: null };
   if (found && !found.must_change_password) return { user_id: found.id, email, outcome: "active", temporary_password: null };
 
   const temporary = `${generateAccessCode(4, 4)}`;
@@ -721,6 +738,9 @@ export async function createSpeakerAccount(
   // A staff address is never turned into a speaker's: the person already signs in.
   if (signIn.outcome === "staff") {
     return err({ code: "auth.email_taken", message: "That address already belongs to a DXG staff account." });
+  }
+  if (signIn.outcome === "assistant") {
+    return err({ code: "auth.email_taken", message: "That address is another speaker's support staff sign-in. Use the speaker's own address." });
   }
   if (signIn.temporary_password) {
     await queueSpeakerSignInEmail(tx, { to: email, displayName: speaker.full_name, temporaryPassword: signIn.temporary_password });
