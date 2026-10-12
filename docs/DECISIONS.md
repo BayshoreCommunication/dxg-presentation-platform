@@ -2936,3 +2936,8 @@ our own player (can't match PowerPoint). Chosen: open natively, the browser tell
   signed-in download) and the computer opens it in its own app — PowerPoint, Keynote or the default; no
   `ms-powerpoint:` hand-over, no separate Download button, no notes. The open-link routes and `services/openLinks.ts`
   are removed; the `open_links` table (migration 040) stays, unused.
+- **Addendum (Travis, 2026-10-12): support staff get the event switcher too.** An assistant's sidebar shows "Support
+  staff for <speaker>" and the speaker's events in the same select; Manage presentations shows the chosen event only
+  (`/events/:id/presentations`), and the site opens on the newest. `GET /me/events` is open to them; the agenda,
+  Speaker Ready Room, bell and support-staff list stay the speaker's. One assistant still assists one speaker — a PA
+  for several speakers needs an address per speaker (a many-speaker assistant would be a model change, not made).
