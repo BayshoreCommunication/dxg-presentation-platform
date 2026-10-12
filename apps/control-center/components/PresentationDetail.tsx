@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from "react";
 import { Toast } from "@/components/Toast";
+import { OpenInPowerPoint } from "@/components/OpenInPowerPoint";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { CommentRow, PresentationDetail } from "@/lib/api";
@@ -230,6 +231,8 @@ export function PresentationDetailView({
               <Icon name={previewOpen ? "close" : "eye"} />
               {previewOpen ? "Hide slides" : "Preview slides"}
             </button>
+            {/* The deck in this computer's own PowerPoint, with transitions, animations and video (D-157). */}
+            {latest && latest.processing_state === "stored" && <OpenInPowerPoint versionId={latest.file_version_id} />}
             {latest && (
               <Link
                 className="btn"

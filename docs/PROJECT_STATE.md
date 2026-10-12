@@ -3595,3 +3595,11 @@ Local data: a test assistant `s.assistant@example.invalid` exists on Raman (remo
 **Same day, Travis:** Speaker support staff are added by DXG (Admins and support staff) from the Speakers screen —
 "Support staff (n)" on each speaker; the speaker's Support staff page is read-only. Walked as the admin: Raman's dialog
 lists Sam Assistant. speaker-support-staff 7/7, speakers-add-and-send and speaker-accounts green (54/54).
+
+## 2026-10-12 — Client review A5: Preview Slides opens in the computer's own PowerPoint (D-157)
+Built locally: **Open in PowerPoint** + **Quick look** on the check-in, Open in PowerPoint on Presentation detail;
+Windows/Mac hand PowerPoint a five-minute link (`ms-powerpoint:`), falling back to a download; Linux downloads.
+Migration 040 `open_links`. The link serves the file through the staff site's own address (checked via :3000) without a
+cookie. open-in-powerpoint 3/3; lint and type-check clean. **Not pushed, not deployed.** Every item of the client's
+review is now built locally; still open: the production check-in page error (needs the server log), and PowerPoint for
+the Web if DXG wants it (their Microsoft 365, their consent to send files to Microsoft).

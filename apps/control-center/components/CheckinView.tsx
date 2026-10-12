@@ -16,6 +16,7 @@ import { Chip } from "@/components/Chip";
 import { ConfirmationStrip } from "@/components/ConfirmationStrip";
 import { WhyNot } from "@/components/WhyNot";
 import { LocalIntake } from "@/components/LocalIntake";
+import { OpenInPowerPoint } from "@/components/OpenInPowerPoint";
 import { Icon } from "@/components/Icon";
 
 /**
@@ -231,11 +232,21 @@ export function CheckinView({
       Take the file (Local intake)
     </button>
   );
+  /*
+   * "Preview slides" opens the deck in this computer's PowerPoint (client review, D-157), where
+   * transitions, animations and video play as in the room; the browser's slide images stay as a
+   * quick look.
+   */
   const preview = (
-    <a className="btn" href={`/events/${eventId}/talks/${detail.talk.slot_id}`} target="_blank" rel="noopener">
-      <Icon name="eye" />
-      Preview slides
-    </a>
+    <>
+      {detail.latest && detail.latest.processing_state === "stored" && (
+        <OpenInPowerPoint versionId={detail.latest.file_version_id} />
+      )}
+      <a className="btn" href={`/events/${eventId}/talks/${detail.talk.slot_id}`} target="_blank" rel="noopener">
+        <Icon name="eye" />
+        Quick look
+      </a>
+    </>
   );
   const who = detail.speaker.name;
 

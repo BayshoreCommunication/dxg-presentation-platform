@@ -2909,3 +2909,21 @@ The review: "Speaker Ready Room activates on event day (admin-controlled on/off 
   **Speaker support staff**, never "Support staff", which is a DXG access level (D-151). The speaker site's Support
   staff page lists them read-only ("ask the DXG team"); `POST/DELETE /me/support-staff` are gone. Audited on the event.
   The sign-in email now says the DXG team set it up. Tests updated (7).
+
+## D-157 (2026-10-12): Preview Slides opens the deck in the desk computer's own app — Status: ACCEPTED (Travis, from the client's review, item A5)
+The review: "Preview Slides should trigger the deck to open in PowerPoint locally (not in-browser preview) — in-browser
+preview won't show transitions, animations, or video." Options weighed with Travis: PowerPoint for the Web (needs the
+client's files sent to Microsoft and a Microsoft 365 tenant — left for DXG to decide), a desk app (another Room Agent),
+our own player (can't match PowerPoint). Chosen: open natively, the browser telling the desktop apart.
+- **Open in PowerPoint** on the check-in (beside Confirm, with **Quick look** = the browser's slide images) and on
+  Presentation detail. Windows and Mac: the button asks for an **open link**
+  (`POST /file-versions/:id/open-link`, staff; technicians allowed) and hands it to PowerPoint as
+  `ms-powerpoint:ofv|u|<origin>/api/v1/open/<token>/<speaker - talk - vN>.pptx`; if the page doesn't lose focus to
+  PowerPoint (or its "Open PowerPoint?" prompt) within 2.5 s, the file downloads instead (Keynote / default app).
+  Linux and anything else: the file downloads ("Open on this computer"). The button's tooltip says which; only
+  PowerPoint shows exactly what the room will.
+- **Open links** (`open_links`, **migration 040**): random token, only its hash stored, one stored version, **5
+  minutes**, several fetches allowed (PowerPoint asks more than once, each counted), no sign-in
+  (`/api/v1/open/` is an open path), served `inline` with the right content type; expired or unknown → 404. Issuing
+  is audited (`file.open_link_issued`). Old links are cleared as new ones are made. No new secret or setting.
+- Tests: `tests/invariants/open-in-powerpoint.test.ts` (3).
