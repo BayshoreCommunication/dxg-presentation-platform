@@ -3615,3 +3615,6 @@ null when there is none — nothing to take in or sign off, Check out works); ea
 speaker checks them out; a missing check-in shows "This check-in no longer exists" instead of crashing; sign-off now
 refuses a version that is not the talk's. New suite srr-desk-without-talk 3/3; SRR, review, loading, agenda and
 speakers suites 73/73.
+
+**Same day, Travis:** Open in PowerPoint is a plain download now (the computer's own app opens it); the `ms-powerpoint:`
+hand-over, the Download button and the open-link API are gone (`open_links` table left in place).

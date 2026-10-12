@@ -2932,3 +2932,7 @@ our own player (can't match PowerPoint). Chosen: open natively, the browser tell
   prompt counted as handed over, so nothing downloaded. **Download** now sits beside Open in PowerPoint on every desktop
   (the computer's default app — Keynote here — opens the file); after a hand-over the page says "Wrong app, or nothing
   opened? Press Download". Linux shows Download alone.
+- **Addendum 2 (Travis, same day): just the download.** "Open in PowerPoint" now downloads the version (the ordinary
+  signed-in download) and the computer opens it in its own app — PowerPoint, Keynote or the default; no
+  `ms-powerpoint:` hand-over, no separate Download button, no notes. The open-link routes and `services/openLinks.ts`
+  are removed; the `open_links` table (migration 040) stays, unused.

@@ -70,7 +70,6 @@ const MFA_COOKIE = "pmp_mfa";
 const SPEAKER_SITE = `${process.env.PORTAL_BASE ?? "http://localhost:3001"}/login`;
 import { addSupportStaff, listSupportStaff, MAX_SUPPORT_STAFF, removeSupportStaff, speakerAccountFor } from "./services/speakerSupport.ts";
 import { approvedRoomsZip, assignedTo, eventTechnicians, markLoaded, roomOfRoomFile, setRoomTechnicians, unmarkLoaded } from "./services/roomSync.ts";
-import { issueOpenLink, readOpenLink } from "./services/openLinks.ts";
 import { setSrrOpen, srrDashboard, srrReportCsv, checkIn, checkinDetail, usbIngest, slotIntake, signOff, depart, emailReceipt, addStation, renameStation, retireStation } from "./services/srr.ts";
 import {
   presentationDetail,
@@ -721,8 +720,6 @@ const NON_STAFF_PATHS = [
   "/api/v1/email-banner/",
   // Images placed in a formatted email's message (D-139), fetched the same way.
   "/api/v1/email-image/",
-  // "Open in PowerPoint" (D-158): PowerPoint fetches one version by a five-minute link, with no sign-in.
-  "/api/v1/open/",
   "/ops/",
 ];
 
@@ -793,8 +790,6 @@ const TECHNICIAN_ALSO: RegExp[] = [
 /** Asking for a slide preview is a POST, and part of looking at a file in review. */
 const TECHNICIAN_ALSO_WRITES: RegExp[] = [
   /^\/api\/v1\/file-versions\/[^/]+\/preview$/,
-  // Opening a deck in the desk's PowerPoint (D-158).
-  /^\/api\/v1\/file-versions\/[^/]+\/open-link$/,
   // Ticking a file loaded on the room PC — their own rooms only, checked in the route (D-154).
   /^\/api\/v1\/room-files\/[^/]+\/(loaded|unloaded)$/,
 ];
@@ -1221,35 +1216,6 @@ app.get("/api/v1/file-versions/:versionId/download", async (req, res) => {
   );
   res.setHeader("cache-control", "private, no-store");
   return res.send(result.value.body);
-});
-
-/**
- * "Open in PowerPoint" (client review, D-158): a five-minute link to one version for PowerPoint on
- * this computer to fetch — it carries no sign-in. Issuing it is audited.
- */
-app.post("/api/v1/file-versions/:versionId/open-link", async (req, res) => {
-  const actor = actorFrom(req);
-  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
-  const result = await withScope(scopeFor(req), (tx) => issueOpenLink(tx, actor.id, String(req.params.versionId)));
-  if (!result.ok) {
-    return res.status(result.error.code === "file.not_downloadable" ? 409 : statusFor(result.error)).json(result.error);
-  }
-  res.setHeader("cache-control", "no-store");
-  return res.status(201).json(result.value);
-});
-
-/** What PowerPoint fetches: the file, while the link lasts; otherwise "not found", whatever the reason. */
-app.get("/api/v1/open/:token/:filename", async (req, res) => {
-  const file = await withSystemScope((tx) => readOpenLink(tx, String(req.params.token)));
-  if (!file) return res.status(404).json({ code: "open_link.not_found", message: "This link has expired. Open the presentation again from DXG·PM." });
-  const filename = String(req.params.filename);
-  res.setHeader("content-type", file.contentType);
-  res.setHeader(
-    "content-disposition",
-    `inline; filename="${filename.replace(/["\\\r\n]/g, "_")}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
-  );
-  res.setHeader("cache-control", "private, no-store");
-  return res.send(file.body);
 });
 
 /** Several chosen versions as one zip (`files:bulk-download`, capped — see D-079). */
