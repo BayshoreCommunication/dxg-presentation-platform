@@ -75,10 +75,7 @@ export type Principal = {
 
 export type SupportStaffRow = { user_id: string; name: string; email: string; state: "invited" | "active"; added_at: string };
 export const getSupportStaff = () => request<{ items: SupportStaffRow[]; max: number }>("/me/support-staff");
-export const addSupportStaff = (name: string, email: string) =>
-  request<SupportStaffRow>("/me/support-staff", { method: "POST", body: JSON.stringify({ name, email }) });
-export const removeSupportStaff = (userId: string) =>
-  request<{ removed: true }>(`/me/support-staff/${userId}`, { method: "DELETE" });
+
 
 /** Sign in with email and password; a staff member's password opens nothing here. */
 export const login = (email: string, password: string) =>

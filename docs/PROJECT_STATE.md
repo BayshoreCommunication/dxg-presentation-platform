@@ -3591,3 +3591,7 @@ speaker-support-staff 6/6, srr-open 3/3. **Not pushed, not deployed.** Deploy no
 the others; production events keep their Speaker Ready Room open. Remaining from the review: A5 (Preview Slides in
 local PowerPoint — to be discussed) and the production check-in page error (needs the server log).
 Local data: a test assistant `s.assistant@example.invalid` exists on Raman (remove it on Support staff, or reseed).
+
+**Same day, Travis:** Speaker support staff are added by DXG (Admins and support staff) from the Speakers screen —
+"Support staff (n)" on each speaker; the speaker's Support staff page is read-only. Walked as the admin: Raman's dialog
+lists Sam Assistant. speaker-support-staff 7/7, speakers-add-and-send and speaker-accounts green (54/54).

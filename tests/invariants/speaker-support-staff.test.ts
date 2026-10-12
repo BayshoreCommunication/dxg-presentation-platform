@@ -4,21 +4,25 @@ import type { TestContext } from "node:test";
 import { hashPassword } from "@pmp/auth";
 import { withSystemScope } from "@pmp/db";
 import { writeZip } from "../../packages/files/src/zipWrite.ts";
-import { cookieFrom } from "../helpers/signIn.ts";
+import { cookieFrom, signInStaff } from "../helpers/signIn.ts";
 import { removeTestAccounts } from "../helpers/cleanup.ts";
 
 /**
- * Speaker Support Staff (client review, D-155): a speaker gives an assistant a sign-in; the
- * assistant reaches that speaker's presentations — and submits under their name — but
+ * Speaker Support Staff (client review, D-155): DXG staff give a speaker's assistant a sign-in
+ * from the Speakers screen (the speaker only sees the list); the assistant reaches that speaker's presentations — and submits under their name — but
  * nothing else of the speaker site, and nothing of their own.
  */
 const API = process.env.API_BASE ?? "http://localhost:4000/api/v1";
 const PASSWORD = "dxg-development-password";
 const SPEAKER = "p.raman@example.invalid";
+const EVENT = "22222222-2222-4222-8222-222222222222";
 const ASSISTANT = `probe-assistant-${Date.now()}@example.invalid`;
 
 let up = false;
 let speaker = "";
+let admin = "";
+let speakerId = "";
+const staffPath = () => `/events/${EVENT}/speakers/${speakerId}/support-staff`;
 let assistant = "";
 let assistantId = "";
 
@@ -46,20 +50,27 @@ before(async () => {
   if (!up) return;
   await removeTestAccounts(["probe-assistant-"]);
   speaker = await signIn(SPEAKER);
+  admin = await signInStaff(API, "admin@example.invalid", PASSWORD);
+  const list = (await (await call(admin, "GET", `/events/${EVENT}/speakers`)).json()) as { items: { id: string; email: string | null }[] };
+  speakerId = list.items.find((row) => row.email === SPEAKER)!.id;
 });
 
 after(async () => {
   if (up) await removeTestAccounts(["probe-assistant-"]);
 });
 
-describe("a speaker gives an assistant a sign-in (D-155)", () => {
-  test("added with a temporary password, emailed; listed as invited", async (t: TestContext) => {
+describe("DXG staff give a speaker's assistant a sign-in (D-155)", () => {
+  test("added with a temporary password, emailed; the speaker sees them listed", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
-    const added = await call(speaker, "POST", "/me/support-staff", { name: "Probe Assistant", email: ASSISTANT });
+    const added = await call(admin, "POST", staffPath(), { name: "Probe Assistant", email: ASSISTANT });
     assert.equal(added.status, 201);
     assistantId = ((await added.json()) as { user_id: string }).user_id;
+    const staffList = (await (await call(admin, "GET", staffPath())).json()) as { items: { email: string; state: string }[] };
+    assert.equal(staffList.items.find((row) => row.email === ASSISTANT)?.state, "invited");
     const list = (await (await call(speaker, "GET", "/me/support-staff")).json()) as { items: { email: string; state: string }[] };
-    assert.equal(list.items.find((row) => row.email === ASSISTANT)?.state, "invited");
+    assert.equal(list.items.find((row) => row.email === ASSISTANT)?.state, "invited", "the speaker sees the list");
+    const speakers = (await (await call(admin, "GET", `/events/${EVENT}/speakers`)).json()) as { items: { id: string; support_staff: number }[] };
+    assert.ok(speakers.items.find((row) => row.id === speakerId)!.support_staff >= 1, "the Speakers screen counts them");
     const account = await withSystemScope(async (tx) =>
       (await tx.query<{ account_kind: string; must_change_password: boolean; assists: string }>(
         `SELECT account_kind, must_change_password, assists_user_id::text AS assists FROM pmp.users WHERE id = $1`,
@@ -82,10 +93,22 @@ describe("a speaker gives an assistant a sign-in (D-155)", () => {
       [SPEAKER, "support.self"],
       [ASSISTANT, "support.email_taken"],
     ] as const) {
-      const refused = await call(speaker, "POST", "/me/support-staff", { name: "Someone", email });
+      const refused = await call(admin, "POST", staffPath(), { name: "Someone", email });
       assert.notEqual(refused.status, 201, email);
       assert.equal(((await refused.json()) as { code: string }).code, code, email);
     }
+  });
+});
+
+describe("only DXG Admins and support staff add them", () => {
+  test("the speaker can't add or remove them; a technician can't either", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const bySpeaker = await call(speaker, "POST", "/me/support-staff", { name: "Self Service", email: "probe-assistant-self@example.invalid" });
+    assert.notEqual(bySpeaker.status, 201, "no adding from the speaker site");
+    assert.notEqual((await call(speaker, "DELETE", `/me/support-staff/${assistantId}`)).status, 200);
+    const technician = await signInStaff(API, "c.delgado@example.invalid", PASSWORD);
+    const byTechnician = await call(technician, "POST", staffPath(), { name: "Tech", email: "probe-assistant-tech@example.invalid" });
+    assert.equal(byTechnician.status, 403);
   });
 });
 
@@ -156,12 +179,12 @@ describe("support staff submit the speaker's content, and nothing else", () => {
       assert.equal(((await refused.json()) as { code: string }).code, "auth.support_staff_forbidden", path);
     }
     const adding = await call(assistant, "POST", "/me/support-staff", { name: "Another", email: "probe-assistant-2@example.invalid" });
-    assert.equal(adding.status, 403, "an assistant has no assistants of their own");
+    assert.notEqual(adding.status, 201, "an assistant has no assistants of their own");
   });
 
   test("removed, they can't sign in or use a session they had", async (t: TestContext) => {
     if (!up || !assistant) return t.skip("API not running");
-    assert.equal((await call(speaker, "DELETE", `/me/support-staff/${assistantId}`)).status, 200);
+    assert.equal((await call(admin, "DELETE", `${staffPath()}/${assistantId}`)).status, 200);
     assert.equal((await call(assistant, "GET", "/me/presentations")).status, 401);
     const again = await fetch(`${API}/auth/login`, {
       method: "POST",

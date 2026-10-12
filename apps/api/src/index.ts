@@ -68,7 +68,7 @@ import {
 const MFA_COOKIE = "pmp_mfa";
 /** The speaker site's sign-in page (D-148). */
 const SPEAKER_SITE = `${process.env.PORTAL_BASE ?? "http://localhost:3001"}/login`;
-import { addSupportStaff, listSupportStaff, MAX_SUPPORT_STAFF, removeSupportStaff } from "./services/speakerSupport.ts";
+import { addSupportStaff, listSupportStaff, MAX_SUPPORT_STAFF, removeSupportStaff, speakerAccountFor } from "./services/speakerSupport.ts";
 import { approvedRoomsZip, assignedTo, eventTechnicians, markLoaded, roomOfRoomFile, setRoomTechnicians, unmarkLoaded } from "./services/roomSync.ts";
 import { setSrrOpen, srrDashboard, srrReportCsv, checkIn, checkinDetail, usbIngest, slotIntake, signOff, depart, emailReceipt, addStation, renameStation, retireStation } from "./services/srr.ts";
 import {
@@ -1388,6 +1388,10 @@ app.get("/api/v1/events/:eventId/speakers", async (req, res) => {
                 WHERE u.account_kind = 'speaker' AND u.is_active AND u.deleted_at IS NULL
                   AND lower(u.email::text) = lower(sp.email::text)
                 LIMIT 1) AS account,
+              -- Their support staff (D-155): assistants hanging off that sign-in.
+              (SELECT count(*)::int FROM pmp.users a JOIN pmp.users m ON m.id = a.assists_user_id
+                WHERE a.is_active AND a.deleted_at IS NULL
+                  AND lower(m.email::text) = lower(sp.email::text)) AS support_staff,
               -- Presentations whose newest version was sent back — changes requested, rejected,
               -- or failed inspection — so the list says "Needs revision" as the portal does (D-090).
               (SELECT count(*)::int
@@ -1709,31 +1713,11 @@ app.get("/api/v1/me/presentations", async (req, res) => {
   return res.json({ speaker: { name: me.name, email: me.email }, events });
 });
 
-/* Speaker Support Staff (D-155): the speaker gives an assistant a sign-in to submit for them. */
+/* Speaker Support Staff (D-155): the speaker sees who may submit for them; DXG staff add them. */
 app.get("/api/v1/me/support-staff", async (req, res) => {
   const me = speakerAccountOf(req, res);
   if (!me) return;
   return res.json({ items: await withSystemScope((tx) => listSupportStaff(tx, me.user_id)), max: MAX_SUPPORT_STAFF });
-});
-
-app.post("/api/v1/me/support-staff", async (req, res) => {
-  const me = speakerAccountOf(req, res);
-  if (!me) return;
-  const body = (req.body ?? {}) as { name?: unknown; email?: unknown };
-  const result = await withSystemScope((tx) => addSupportStaff(tx, me, { name: body.name, email: body.email }));
-  if (!result.ok) {
-    const status = result.error.code === "support.email_taken" ? 409 : 422;
-    return res.status(status).json(result.error);
-  }
-  return res.status(201).json(result.value);
-});
-
-app.delete("/api/v1/me/support-staff/:userId", async (req, res) => {
-  const me = speakerAccountOf(req, res);
-  if (!me) return;
-  const result = await withSystemScope((tx) => removeSupportStaff(tx, me.user_id, String(req.params.userId)));
-  if (!result.ok) return res.status(404).json(result.error);
-  return res.json(result.value);
 });
 
 /** What the team told this speaker, in their site: review decisions and approvals. */
@@ -3365,6 +3349,53 @@ app.post("/api/v1/events/:eventId/speakers/:speakerId/send-link", async (req, re
     return res.status(status).json(result.error);
   }
   return res.status(201).json(result.value);
+});
+
+/*
+ * A speaker's support staff (D-155): DXG Admins and support staff list, add and remove the
+ * assistants who submit the speaker's presentations. The sign-in hangs off the speaker's own.
+ */
+app.get("/api/v1/events/:eventId/speakers/:speakerId/support-staff", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  const eventId = String(req.params.eventId);
+  const result = await withScope(scopeFor(req, eventId), async (tx) => {
+    const speaker = await speakerAccountFor(tx, actor, eventId, String(req.params.speakerId));
+    if (!speaker.ok) return speaker;
+    return { ok: true as const, value: { speaker: { name: speaker.value.name, email: speaker.value.email }, items: await listSupportStaff(tx, speaker.value.user_id), max: MAX_SUPPORT_STAFF } };
+  });
+  if (!result.ok) return res.status(result.error.code.startsWith("support.") ? 422 : statusFor(result.error)).json(result.error);
+  return res.json(result.value);
+});
+
+app.post("/api/v1/events/:eventId/speakers/:speakerId/support-staff", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  const eventId = String(req.params.eventId);
+  const body = (req.body ?? {}) as { name?: unknown; email?: unknown };
+  const result = await withScope(scopeFor(req, eventId), async (tx) => {
+    const speaker = await speakerAccountFor(tx, actor, eventId, String(req.params.speakerId));
+    if (!speaker.ok) return speaker;
+    return addSupportStaff(tx, speaker.value, { name: body.name, email: body.email }, { actorUserId: actor.id, eventId });
+  });
+  if (!result.ok) {
+    const status = result.error.code === "support.email_taken" ? 409 : result.error.code.startsWith("support.") ? 422 : statusFor(result.error);
+    return res.status(status).json(result.error);
+  }
+  return res.status(201).json(result.value);
+});
+
+app.delete("/api/v1/events/:eventId/speakers/:speakerId/support-staff/:userId", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  const eventId = String(req.params.eventId);
+  const result = await withScope(scopeFor(req, eventId), async (tx) => {
+    const speaker = await speakerAccountFor(tx, actor, eventId, String(req.params.speakerId));
+    if (!speaker.ok) return speaker;
+    return removeSupportStaff(tx, speaker.value, String(req.params.userId), { actorUserId: actor.id, eventId });
+  });
+  if (!result.ok) return res.status(result.error.code === "support.not_found" ? 404 : statusFor(result.error)).json(result.error);
+  return res.json(result.value);
 });
 
 /** Gives a speaker a persistent sign-in on this site (D-146); the password goes to their address. */

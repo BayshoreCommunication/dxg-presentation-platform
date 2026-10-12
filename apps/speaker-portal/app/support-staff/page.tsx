@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 export default async function SupportStaffPage() {
   try {
     const { items, max } = await getSupportStaff();
-    return <SupportStaff initial={items} max={max} />;
+    return <SupportStaff rows={items} max={max} />;
   } catch (caught) {
     if (caught instanceof PortalError && caught.status === 401) redirect("/login?reason=required");
     // Support staff themselves are refused this page; their one page is Manage presentations.

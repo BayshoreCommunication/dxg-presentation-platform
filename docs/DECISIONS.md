@@ -2901,3 +2901,11 @@ The review: "Speaker Ready Room activates on event day (admin-controlled on/off 
   it opens on the event day.
 - Tests: `tests/invariants/srr-open.test.ts` (3); the suites that check speakers in on their own new events open the
   room first.
+- **Addendum (Travis, same day): DXG adds them, the speaker only sees them** ("DXG-কে দিয়ে করাও, স্পিকারের পেজ শুধু
+  দেখার জন্য"). Support staff are added and removed by DXG Admins and support staff (presentation manager or above)
+  from the **Speakers** screen — a **Support staff (n)** button on each speaker opens the list and an add form:
+  `GET/POST /events/:id/speakers/:speakerId/support-staff`, `DELETE …/support-staff/:userId`. The speaker's sign-in is
+  made then if they have none (no email; their invitation issues the password, D-147). On staff screens it is called
+  **Speaker support staff**, never "Support staff", which is a DXG access level (D-151). The speaker site's Support
+  staff page lists them read-only ("ask the DXG team"); `POST/DELETE /me/support-staff` are gone. Audited on the event.
+  The sign-in email now says the DXG team set it up. Tests updated (7).

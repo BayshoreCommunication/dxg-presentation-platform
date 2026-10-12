@@ -37,13 +37,13 @@ export default function HelpPage() {
           <section className="help-guide">
             <h4 style={{ margin: "16px 0 2px" }}>Let an assistant submit for you</h4>
             <ol style={{ margin: "6px 0 0", paddingLeft: 20, fontSize: 13.5, lineHeight: 1.55 }}>
-              <li>Open Support staff in the sidebar and write your assistant&rsquo;s name and email address.</li>
+              <li>Tell the DXG team your assistant&rsquo;s name and email address; they give them a sign-in.</li>
               <li>We email them a temporary password; they choose their own when they first sign in.</li>
               <li>
                 They see your Manage presentations — upload, update and download — and nothing else. Their uploads are
                 yours, and the DXG team can see who sent them.
               </li>
-              <li>Remove them under Support staff at any time; their sign-in stops working at once.</li>
+              <li>Support staff in the sidebar lists who they are. To take one off, ask the DXG team; their sign-in stops at once.</li>
             </ol>
           </section>
         </div>
