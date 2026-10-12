@@ -164,7 +164,7 @@ export type EventRow = {
 
 export type Summary = {
   /** `venue` is null when none was recorded — the header says so rather than inventing one. */
-  event: EventRow & { timezone: string; venue: string | null };
+  event: EventRow & { timezone: string; venue: string | null; srr_open: boolean };
   total: number;
   collected: number;
   approved: number;
@@ -262,6 +262,8 @@ export type FleetRoom = {
   readiness: "ready" | "attention";
   files_current: number;
   files_total: number;
+  /** DXG Technician staff assigned to this room (D-154). */
+  technicians: { user_id: string; name: string }[];
   talks: FleetTalk[];
 };
 
@@ -271,8 +273,51 @@ export const getRiskList = (eventId: string) =>
   request<{ items: RiskItem[] }>(`/events/${eventId}/risk-list`);
 export const getReviewQueue = (eventId: string) =>
   request<{ items: QueueItem[] }>(`/events/${eventId}/review-queue`);
+/** Every talk of the event with its status (the agenda's view of files). */
+export type TalkRow = {
+  slot_id: string;
+  title: string;
+  room: string | null;
+  starts_at: string;
+  speaker: string | null;
+  version_count: number;
+  status: string;
+  status_label: string;
+};
+export const getTalks = (eventId: string) => request<{ items: TalkRow[] }>(`/events/${eventId}/talks`);
+
 export const getFleet = (eventId: string) =>
   request<{ items: FleetRoom[] }>(`/events/${eventId}/sync/fleet`);
+
+/** DXG Technician staff on the event — who a room can be given to (D-154). */
+export const getSyncTechnicians = (eventId: string) =>
+  request<{ items: { user_id: string; name: string; email: string }[] }>(`/events/${eventId}/sync/technicians`);
+
+/** Sets who works a room; the list replaces the room's technicians (D-154). */
+export const setRoomTechnicians = (eventId: string, roomId: string, userIds: string[]) =>
+  request<{ technicians: { user_id: string; name: string }[] }>(`/events/${eventId}/sync/rooms/${roomId}/technicians`, {
+    method: "PUT",
+    body: JSON.stringify({ user_ids: userIds }),
+  });
+
+/**
+ * Every approved presentation of one room, or of every room the caller works, as a zip
+ * (D-154). Fetched rather than linked, so "nothing approved yet" shows on the page instead
+ * of replacing it.
+ */
+export async function downloadApproved(eventId: string, roomId?: string): Promise<{ blob: Blob; filename: string }> {
+  const response = await fetch(
+    `${API_BASE_URL}/events/${eventId}/sync/approved.zip${roomId ? `?room=${encodeURIComponent(roomId)}` : ""}`,
+    { credentials: "include" },
+  );
+  if (!response.ok) {
+    const error = (await response.json().catch(() => ({}))) as { code?: string; message?: string };
+    throw new ApiError(error.code ?? "unknown", error.message ?? "The download could not be built.", response.status);
+  }
+  const disposition = response.headers.get("content-disposition") ?? "";
+  const filename = /filename="([^"]+)"/.exec(disposition)?.[1] ?? "approved-presentations.zip";
+  return { blob: await response.blob(), filename };
+}
 
 export type TransitionResult = {
   file_version_id: string;
@@ -292,33 +337,6 @@ export const transitionVersion = (
     body: JSON.stringify(body),
   });
 
-export type AgentScheduleRow = {
-  slot_id: string;
-  title: string;
-  speaker: string | null;
-  starts_at: string;
-  file_version_id: string | null;
-  version_number: number | null;
-  room_file_id: string | null;
-  sync_state: string | null;
-  lock_version: number | null;
-  acknowledged: boolean;
-  requires_ack: boolean;
-  launchable: boolean;
-  presented_at: string | null;
-};
-
-export type AgentView = {
-  room: { id: string; name: string };
-  event: { id: string; name: string; accent: string | null; timezone: string };
-  // The API also returns the room computer's registration and library (`agent`, `library`)
-  // for later room software; the screens don't use them (D-125).
-  schedule: AgentScheduleRow[];
-};
-
-export const getAgentView = (roomId: string) =>
-  request<AgentView>(`/rooms/${roomId}/agent-view`);
-
 /**
  * D-125: staff copy the approved file onto the room PC by hand, then tick it here. The
  * ticked copy is the one the room plays; an older one it replaces steps aside.
@@ -335,12 +353,6 @@ export const unmarkLoaded = (roomFileId: string, lockVersion: number) =>
     method: "POST",
     body: JSON.stringify({ lock_version: lockVersion }),
   });
-
-export const launchInRoom = (roomId: string, slotId: string) =>
-  request<{ launched: boolean; at?: string; reason?: string }>(
-    `/rooms/${roomId}/launch`,
-    { method: "POST", body: JSON.stringify({ slot_id: slotId }) },
-  );
 
 /* ── Speaker Ready Room ───────────────────────────────────────────────────── */
 
@@ -379,7 +391,13 @@ export type SrrDashboard = {
   expected: ExpectedArrival[];
   warnings: SrrWarning[];
   stations: SrrStation[];
+  /** The event-day switch (D-157): closed, nobody checks in. */
+  open: boolean;
 };
+
+/** Opens or closes the Speaker Ready Room (D-157). DXG Admins and support staff. */
+export const setSrrOpen = (eventId: string, open: boolean) =>
+  request<{ srr_open: boolean }>(`/events/${eventId}/srr-open`, { method: "PUT", body: JSON.stringify({ open }) });
 
 /** A Speaker Ready Room desk, set up per event (D-080). */
 export type SrrStation = {
@@ -444,7 +462,7 @@ export type CheckinDetail = {
 };
 
 export type UsbResult = {
-  ingestion_id: string;
+  ingestion_id: string | null;
   scan_result: string;
   file_version_id: string | null;
   version_number: number | null;
@@ -480,6 +498,17 @@ export const ingestUsb = (checkinId: string, body: { upload_id: string; file_nam
     `/srr/checkins/${checkinId}/usb-ingestions`,
     { method: "POST", body: JSON.stringify(body) },
   );
+
+/** Local intake without a check-in: staff upload a speaker's file from the Speaker Ready Room (D-153). */
+export const ingestForSlot = (
+  eventId: string,
+  slotId: string,
+  body: { upload_id: string; file_name: string; reason: string },
+) =>
+  request<UsbResult>(`/events/${eventId}/srr/slots/${slotId}/intake`, { method: "POST", body: JSON.stringify(body) });
+
+/** The check-in / checkout report, as a CSV download (D-153). */
+export const srrReportUrl = (eventId: string) => `${API_BASE_URL}/events/${eventId}/srr/report.csv`;
 
 export const signOffCheckin = (checkinId: string, fileVersionId: string) =>
   request<{ receipt: NonNullable<CheckinDetail["receipt"]> }>(
@@ -613,7 +642,24 @@ export type SpeakerRow = {
   last_email: { status: string; at: string; to: string; count: number } | null;
   /** The speaker's persistent sign-in (D-146): none, invited (temporary password unchanged) or active. */
   account: "invited" | "active" | null;
+  /** Speaker support staff on that sign-in (D-156). */
+  support_staff: number;
 };
+
+/* ── a speaker's support staff (D-156): assistants who submit their presentations ── */
+
+export type SupportStaffRow = { user_id: string; name: string; email: string; state: "invited" | "active"; added_at: string };
+export const getSpeakerSupportStaff = (eventId: string, speakerId: string) =>
+  request<{ speaker: { name: string; email: string }; items: SupportStaffRow[]; max: number }>(
+    `/events/${eventId}/speakers/${speakerId}/support-staff`,
+  );
+export const addSpeakerSupportStaff = (eventId: string, speakerId: string, name: string, email: string) =>
+  request<SupportStaffRow>(`/events/${eventId}/speakers/${speakerId}/support-staff`, {
+    method: "POST",
+    body: JSON.stringify({ name, email }),
+  });
+export const removeSpeakerSupportStaff = (eventId: string, speakerId: string, userId: string) =>
+  request<{ removed: true }>(`/events/${eventId}/speakers/${speakerId}/support-staff/${userId}`, { method: "DELETE" });
 
 export type DuplicatePair = {
   a_id: string;
@@ -1412,6 +1458,10 @@ export const getEventFiles = (eventId: string, query: FileQuery = {}) => {
   const suffix = params.toString();
   return request<EventFiles>(`/events/${eventId}/files${suffix ? `?${suffix}` : ""}`);
 };
+
+/** A five-minute link to one version, for PowerPoint on this computer to open (D-158). */
+export const getOpenLink = (versionId: string) =>
+  request<{ path: string; filename: string; expires_at: string }>(`/file-versions/${versionId}/open-link`, { method: "POST" });
 
 /** A plain link: a top-level navigation carries the session cookie, like the archive's. */
 export const fileDownloadUrl = (versionId: string) => `${API_BASE_URL}/file-versions/${versionId}/download`;

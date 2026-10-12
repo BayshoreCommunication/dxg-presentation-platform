@@ -420,8 +420,8 @@ function cantDownload(version: { processing_state: string; downloadable: boolean
 
 const SOURCE_LABEL: Record<string, string> = {
   portal: "Speaker portal",
-  srr_usb: "Speaker Ready Room · USB",
-  srr_manual: "Speaker Ready Room",
+  srr_usb: "Speaker Ready Room · Local intake",
+  srr_manual: "Speaker Ready Room · Local intake",
   system: "System",
 };
 
@@ -716,6 +716,7 @@ function FileDrawer({
             </span>
           )}
           <Link className="btn" href={`/events/${eventId}/talks/${row.slot_id}`}>
+            <Icon name="eye" />
             Open talk
           </Link>
         </div>

@@ -11,6 +11,7 @@ import { BrandAssetField, assetFrom } from "@/components/BrandAssetField";
 import { ImportView } from "@/components/ImportView";
 import { DateField, today } from "@/components/DateTimeField";
 import { WhyNot } from "@/components/WhyNot";
+import { Icon } from "@/components/Icon";
 import { timeZoneOptions } from "@pmp/format";
 
 /** Tomorrow on this computer, `YYYY-MM-DD` — the earliest an event may start (D-101). */
@@ -329,6 +330,7 @@ export function CreateEventWizard({
                   })
                 }
               >
+                <Icon name={draft ? "check" : "add"} />
                 {draft ? "Continue ›" : "Create draft ›"}
               </button>
             )}
@@ -373,6 +375,7 @@ export function CreateEventWizard({
                   })
                 }
               >
+                <Icon name="save" />
                 Save &amp; continue ›
               </button>
             )}
@@ -416,6 +419,7 @@ export function CreateEventWizard({
                   })
                 }
               >
+                <Icon name="play" />
                 Activate event
               </button>
             )}

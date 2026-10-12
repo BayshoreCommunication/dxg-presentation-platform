@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Icon } from "@/components/Icon";
 
 /**
  * The link from an older email carried an access code (D-016). Speakers now sign in with
@@ -16,7 +17,8 @@ export default function TokenLink() {
           to you by the DXG team — if you can&rsquo;t find them, ask the team who invited you and they will send
           them again.
         </div>
-        <Link className="btn pri" style={{ width: "100%", display: "block", textAlign: "center" }} href="/login">
+        <Link className="btn pri" style={{ width: "100%", display: "flex", textAlign: "center" }} href="/login">
+          <Icon name="login" />
           Go to sign in
         </Link>
       </div>

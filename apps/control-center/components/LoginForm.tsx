@@ -6,6 +6,7 @@ import { login, verifyMfa, ApiError } from "@/lib/api";
 import { landingFor } from "@/lib/landing";
 import { PasswordField } from "@/components/PasswordField";
 import { SECURITY } from "@pmp/format";
+import { Icon } from "@/components/Icon";
 
 const REASONS: Record<string, string> = {
   expired: "Your session expired. Please sign in again.",
@@ -107,6 +108,7 @@ export function LoginForm({ next, reason }: { next: string; reason: string | nul
               disabled={busy}
               type="submit"
             >
+              <Icon name="check" />
               {busy ? "Checking…" : "Verify"}
             </button>
             <div style={{ textAlign: "center", fontSize: 12.5, color: "var(--dim)", marginTop: 12 }}>
@@ -140,6 +142,7 @@ export function LoginForm({ next, reason }: { next: string; reason: string | nul
         <PasswordField id="password" label="Password" value={password} onChange={setPassword} autoComplete="current-password" />
 
         <button className="btn pri" style={{ width: "100%", padding: 9 }} disabled={busy} type="submit">
+          <Icon name="login" />
           {busy ? "Signing in…" : "Sign in"}
         </button>
 

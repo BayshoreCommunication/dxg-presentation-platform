@@ -20,6 +20,7 @@ import {
   localClock,
   localDate,
 } from "@/components/AgendaEditor";
+import { Icon } from "@/components/Icon";
 
 type Tab = "overview" | "agenda" | "speakers";
 
@@ -228,7 +229,8 @@ function AgendaPanel({
         {canEdit && !newSession && (
           <div style={{ marginTop: 10 }}>
             <button type="button" className="btn" onClick={() => setOpen("new-session")}>
-              + Add a session by hand
+              <Icon name="add" />
+              Add a session by hand
             </button>
           </div>
         )}
@@ -250,7 +252,8 @@ function AgendaPanel({
         />
         {canEdit && (
           <button type="button" className="btn pri" onClick={() => toggle("new-session")}>
-            + Add session
+            <Icon name="add" />
+            Add session
           </button>
         )}
       </div>
@@ -481,7 +484,8 @@ function PresentationRow({
             <span className="note">No speaker assigned yet</span>
             {canEdit && (
               <button type="button" className="btn ag-add" onClick={() => toggle(`presenter:${item.slot_id}`)}>
-                + Add presenter
+                <Icon name="add" />
+                Add presenter
               </button>
             )}
           </div>

@@ -10,7 +10,7 @@ Phase 0 (discovery & technical validation). No application code yet. The Phase 1
 
 ## Stack
 
-Node.js/TypeScript throughout: Express API (+ BullMQ worker, outbox dispatcher), Next.js 16 frontends, PostgreSQL (RLS), Redis, versioned S3 + KMS, Electron Windows Room Agent, AWS CDK. Rationale and status of each decision: `docs/DECISIONS.md`.
+Node.js/TypeScript throughout: Express API (+ BullMQ worker, outbox dispatcher), Next.js 16 frontends, PostgreSQL (RLS), Redis, versioned S3 + KMS, AWS CDK. (The Electron Room Agent was retired — D-155.) Rationale and status of each decision: `docs/DECISIONS.md`.
 
 ## Documentation map
 

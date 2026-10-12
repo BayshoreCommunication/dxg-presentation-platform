@@ -1,9 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { ExpectedArrival, SrrDashboard, SrrStation } from "@/lib/api";
-import { addStation, renameStation, retireStation, startCheckin, ApiError } from "@/lib/api";
+import { addStation, renameStation, retireStation, startCheckin, ingestForSlot, srrReportUrl, ApiError } from "@/lib/api";
+import { LocalIntake } from "@/components/LocalIntake";
+import { Toast } from "@/components/Toast";
+import { SrrSwitch } from "@/components/SrrSwitch";
+import { Icon } from "@/components/Icon";
 import { FloatingMenu, useFloatingMenu } from "@/components/FloatingMenu";
 import { CHECK, wordsFor } from "@pmp/format";
 import { Chip, SeverityChip } from "@/components/Chip";
@@ -31,18 +35,41 @@ export function SrrDashboardView({
   eventName,
   timezone,
   data,
+  canSwitch,
 }: {
   eventId: string;
   eventName: string;
   timezone: string;
   data: SrrDashboard;
+  /** May open or close the room on the event day (D-157). */
+  canSwitch: boolean;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Local intake without a check-in (D-153): staff upload or update a speaker's file here.
+  const [intakeFor, setIntakeFor] = useState<ExpectedArrival | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const closeToast = useCallback(() => setToast(null), []);
+  const uploadButton = (row: ExpectedArrival) => (
+    <button
+      type="button"
+      className="btn"
+      disabled={busy}
+      title="Upload or update this speaker's presentation — from a USB drive or this computer"
+      onClick={() => {
+        setIntakeFor(row);
+        if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+      }}
+    >
+      <Icon name="intake" />
+      Upload
+    </button>
+  );
   // Why "Check in →" is greyed, once above the list rather than on every row (R33, D-111).
-  const checkInBlocked =
-    data.stations.length === 0
+  const checkInBlocked = !data.open
+    ? "The Speaker Ready Room is closed. It opens on the event day — a DXG Admin or support staff opens it."
+    : data.stations.length === 0
       ? "Check in is off until this room has a desk. Add one under Desks above."
       : data.stations.every((station) => station.busy)
         ? "Every desk is in use. To free one, check a speaker out: open their check-in and press Check out."
@@ -70,17 +97,78 @@ export function SrrDashboardView({
   return (
     <>
       <h1 className="htitle">Speaker Ready Room · {eventName}</h1>
-      <div className="note" style={{ margin: "-8px 0 14px" }}>
-        {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: timezone })}
-        {" · "}
-        {data.stations.length === 0
-          ? "no desks set up yet"
-          : `${busyDesks} of ${data.stations.length} desk${data.stations.length === 1 ? "" : "s"} in use`}
-        {" · "}
-        {toCome.length} to check in · {signedOff} signed off
+      {/* The day's line and the check-in / checkout report (D-153) share a row; on a narrow
+          screen the button drops below the line with a gap rather than touching it. */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: "8px 12px",
+          flexWrap: "wrap",
+          margin: "-8px 0 14px",
+        }}
+      >
+        <div className="note" style={{ margin: 0 }}>
+          {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: timezone })}
+          {" · "}
+          {data.stations.length === 0
+            ? "no desks set up yet"
+            : `${busyDesks} of ${data.stations.length} desk${data.stations.length === 1 ? "" : "s"} in use`}
+          {" · "}
+          {toCome.length} to check in · {signedOff} signed off
+        </div>
+        <a className="btn" href={srrReportUrl(eventId)} download style={{ whiteSpace: "nowrap" }}>
+          <Icon name="download" /> Download check-in report (CSV)
+        </a>
       </div>
 
       {error && <div className="err">{error}</div>}
+
+      {/* The event-day switch (D-157). */}
+      <div className={data.open ? undefined : "card next-step"} style={data.open ? { margin: "0 0 12px" } : undefined}>
+        <div className={data.open ? undefined : "cbd"}>
+          {!data.open && (
+            <>
+              <div className="next-step-label">Not open yet</div>
+              <p className="next-step-body" style={{ marginTop: 0 }}>
+                The Speaker Ready Room opens on the event day. Until then you can set up desks and upload speakers&rsquo;
+                files, but no one can be checked in.
+              </p>
+            </>
+          )}
+          <SrrSwitch eventId={eventId} open={data.open} canSwitch={canSwitch} />
+        </div>
+      </div>
+
+      {intakeFor && (
+        <div className="card">
+          <div className="chd">
+            <h3>
+              Local intake · {intakeFor.speaker} — {intakeFor.title}
+            </h3>
+            <button type="button" className="btn" onClick={() => setIntakeFor(null)}>
+              <Icon name="close" />
+              Close
+            </button>
+          </div>
+          <div className="cbd">
+            <p className="note" style={{ marginTop: 0 }}>
+              Upload or update this speaker&rsquo;s presentation without checking them in — from a USB drive or a
+              file saved on this computer. It goes through the same virus check and back to review.
+            </p>
+            <LocalIntake
+              key={intakeFor.slot_id}
+              submit={(body) => ingestForSlot(eventId, intakeFor.slot_id, body)}
+              approvedNumber={intakeFor.approved_version ?? undefined}
+              onDone={(message) => {
+                setToast(message);
+                router.refresh();
+              }}
+            />
+          </div>
+        </div>
+      )}
 
       {data.stations.length === 0 && (
         <StationsCard eventId={eventId} stations={data.stations} onChanged={() => router.refresh()} />
@@ -143,7 +231,7 @@ export function SrrDashboardView({
                 <tbody>
                   {toCome.map((row) => {
                     return (
-                      <tr key={row.speaker_id}>
+                      <tr key={row.speaker_id} className="srr-row">
                         <td>
                           <b>{row.speaker}</b>
                           <span className="note">
@@ -154,11 +242,12 @@ export function SrrDashboardView({
                             {arrivalLine(row)}
                           </div>
                         </td>
-                        <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                        <td className="srr-actions">
                           <Chip status={row.status} label={row.status_label} />{" "}
+                          {uploadButton(row)}{" "}
                           <CheckInButton
                             stations={data.stations}
-                            disabled={busy}
+                            disabled={busy || !data.open}
                             onPick={(stationId) => void check(row.speaker_id, stationId)}
                           />
                         </td>
@@ -183,7 +272,7 @@ export function SrrDashboardView({
             <table>
               <tbody>
                 {left.map((row) => (
-                  <tr key={row.speaker_id}>
+                  <tr key={row.speaker_id} className="srr-row">
                     <td>
                       <b>{row.speaker}</b>
                       <span className="note">
@@ -191,11 +280,12 @@ export function SrrDashboardView({
                         · {row.signed_off_version ? `signed off v${row.signed_off_version}` : "left without signing off"}
                       </span>
                     </td>
-                    <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                    <td className="srr-actions">
+                      {uploadButton(row)}{" "}
                       <CheckInButton
                         stations={data.stations}
                         label="Check in again"
-                        disabled={busy}
+                        disabled={busy || !data.open}
                         onPick={(stationId) => void check(row.speaker_id, stationId)}
                       />
                     </td>
@@ -219,7 +309,7 @@ export function SrrDashboardView({
               <tbody>
                 {/* R31 (D-113): which talk, where and when, the problem in words, and the report. */}
                 {data.warnings.map((warning, index) => (
-                  <tr key={`${warning.slot_id}-${index}`}>
+                  <tr key={`${warning.slot_id}-${index}`} className="srr-row">
                     <td>
                       <b>{warning.speaker ?? "No speaker"}</b> · {warning.title}
                       <br />
@@ -228,12 +318,13 @@ export function SrrDashboardView({
                         {wordsFor(CHECK, warning.check_code).label}
                       </span>
                     </td>
-                    <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                    <td className="srr-actions">
                       <SeverityChip severity={warning.severity} />{" "}
                       <a
                         className="btn"
                         href={`/events/${eventId}/talks/${warning.slot_id}/inspection?v=${warning.file_version_id}`}
                       >
+                        <Icon name="eye" />
                         Open report
                       </a>
                     </td>
@@ -255,6 +346,8 @@ export function SrrDashboardView({
       {data.stations.length > 0 && (
         <StationsCard eventId={eventId} stations={data.stations} onChanged={() => router.refresh()} />
       )}
+
+      <Toast message={toast} onClose={closeToast} />
     </>
   );
 }
@@ -263,7 +356,7 @@ export function SrrDashboardView({
 function deskLine(row: ExpectedArrival): string {
   if (row.signed_off_version) return `Signed off v${row.signed_off_version} — ready to check out`;
   if (row.status === "attention") return "File held back — needs a clean copy";
-  if (row.status === "missing") return "No file yet — take it by USB";
+  if (row.status === "missing") return "No file yet — take it in with Local intake";
   if (row.status === "processing") return "File being checked";
   return "Going through the slides";
 }
@@ -272,9 +365,9 @@ function deskLine(row: ExpectedArrival): string {
 function arrivalLine(row: ExpectedArrival): string {
   switch (row.status) {
     case "missing":
-      return "No file yet — take it by USB when they arrive.";
+      return "No file yet — upload it here, or take it in with Local intake when they arrive.";
     case "attention":
-      return "Their file failed the virus check — ask for a clean copy on USB.";
+      return "Their file failed the virus check — ask for a clean copy (USB drive or saved file).";
     case "needs_revision":
       return "Changes were asked for — they may bring a new version.";
     case "processing":
@@ -298,7 +391,7 @@ function CheckInButton({
   stations,
   disabled,
   onPick,
-  label = "Check in →",
+  label = "Check in",
 }: {
   stations: SrrStation[];
   disabled: boolean;
@@ -310,7 +403,8 @@ function CheckInButton({
   if (stations.length === 0) {
     return (
       <button className="btn pri" disabled title="Add a desk under Desks first">
-        Check in →
+        <Icon name="login" />
+        Check in
       </button>
     );
   }
@@ -325,6 +419,7 @@ function CheckInButton({
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
       >
+        <Icon name="login" />
         {label}
       </button>
       <FloatingMenu open={open} trigger={trigger} menu={menu} width={220}>
@@ -407,7 +502,7 @@ function StationsCard({
           <table>
             <tbody>
               {stations.map((station) => (
-                <tr key={station.id}>
+                <tr key={station.id} className="srr-row">
                   <td>
                     {editing?.id === station.id ? (
                       <form
@@ -427,6 +522,7 @@ function StationsCard({
                           onChange={(event) => setEditing({ id: station.id, name: event.target.value })}
                         />
                         <button className="btn pri" disabled={working || !editing.name.trim()}>
+                          <Icon name="save" />
                           Save
                         </button>
                         <button type="button" className="btn" onClick={() => setEditing(null)}>
@@ -446,7 +542,7 @@ function StationsCard({
                       </>
                     )}
                   </td>
-                  <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                  <td className="srr-actions">
                     <Chip status={station.busy ? "submitted" : "canceled"} label={station.busy ? "In session" : "Free"} />{" "}
                     {editing?.id !== station.id &&
                       (confirming === station.id ? (
@@ -458,6 +554,7 @@ function StationsCard({
                               void run(() => retireStation(eventId, station.id)).then(() => setConfirming(null))
                             }
                           >
+                            <Icon name="trash" />
                             Remove {station.name}
                           </button>{" "}
                           <button className="btn" onClick={() => setConfirming(null)}>
@@ -467,6 +564,7 @@ function StationsCard({
                       ) : (
                         <>
                           <button className="btn" disabled={working} onClick={() => setEditing({ id: station.id, name: station.name })}>
+                            <Icon name="edit" />
                             Rename
                           </button>{" "}
                           <button
@@ -475,6 +573,7 @@ function StationsCard({
                             title={station.busy ? "A speaker is checked in here" : undefined}
                             onClick={() => setConfirming(station.id)}
                           >
+                            <Icon name="trash" />
                             Remove
                           </button>
                         </>
@@ -503,6 +602,7 @@ function StationsCard({
             style={{ flex: 1 }}
           />
           <button className="btn pri" disabled={working || !draft.trim()}>
+            <Icon name="add" />
             Add desk
           </button>
         </form>

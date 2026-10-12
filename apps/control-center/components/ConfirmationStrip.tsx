@@ -29,7 +29,7 @@ type Step = { title: string; short: string; state: StepState; detail: string; ne
 const WAITING_FOR_FILE: Record<string, { detail: string; next: string }> = {
   missing: {
     detail: "No file yet",
-    next: "Waiting for the speaker to upload — or take the file by USB when they check in.",
+    next: "Waiting for the speaker to upload — or take the file in with Local intake in the Speaker Ready Room.",
   },
   processing: { detail: "File checks running", next: "Nothing to do — the checks take about a minute." },
   submitted: { detail: "Waiting for a reviewer", next: "A reviewer approves it in Manage presentations." },

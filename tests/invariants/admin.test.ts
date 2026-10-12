@@ -423,7 +423,7 @@ describe("three kinds of DXG account (D-151)", () => {
     });
     assert.equal(decide.status, 403);
     assert.equal(((await json(decide)) as { code: string }).code, "auth.kind_forbidden");
-    // c.delgado is a technician (seed): the two screens and the way to them, nothing else.
+    // c.delgado is a technician (seed): the two screens, Room sync and the way to them, nothing else.
     assert.equal((await fetch(`${API}/events/${EVENT_ID}/review-queue`, { headers: { cookie: technician } })).status, 200);
     assert.equal((await fetch(`${API}/events/${EVENT_ID}/srr`, { headers: { cookie: technician } })).status, 200);
     assert.equal((await fetch(`${API}/events/${EVENT_ID}/summary`, { headers: { cookie: technician } })).status, 200);
@@ -435,7 +435,9 @@ describe("three kinds of DXG account (D-151)", () => {
       const preview = await fetch(`${API}/file-versions/${queue.items[0].file_version_id}/preview`, { method: "POST", headers: { cookie: technician } });
       assert.notEqual(preview.status, 403, "a technician may ask for a preview");
     }
-    for (const path of [`/events/${EVENT_ID}/speakers`, `/events/${EVENT_ID}/comms`, `/events/${EVENT_ID}/files`, `/events/${EVENT_ID}/sync/fleet`]) {
+    // Room sync is theirs too, for their own rooms (client review, D-154).
+    assert.equal((await fetch(`${API}/events/${EVENT_ID}/sync/fleet`, { headers: { cookie: technician } })).status, 200);
+    for (const path of [`/events/${EVENT_ID}/speakers`, `/events/${EVENT_ID}/comms`, `/events/${EVENT_ID}/files`, `/events/${EVENT_ID}/sync/technicians`]) {
       const refused = await fetch(`${API}${path}`, { headers: { cookie: technician } });
       assert.equal(refused.status, 403, path);
       assert.equal(((await json(refused)) as { code: string }).code, "auth.kind_forbidden");

@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { logout } from "@/lib/api";
+import { Icon } from "@/components/Icon";
 
 /** Really signs out, then goes to the sign-in page (D-108). */
 export function SignOutButton({ className = "btn" }: { className?: string }) {
@@ -19,6 +20,7 @@ export function SignOutButton({ className = "btn" }: { className?: string }) {
           })
       }
     >
+      <Icon name="checkout" />
       Sign out
     </button>
   );

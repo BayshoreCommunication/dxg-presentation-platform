@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { ApiError, assetUrl, removeAsset, uploadAsset } from "@/lib/api";
 import type { AssetKind, BrandAsset } from "@/lib/api";
+import { Icon } from "@/components/Icon";
 
 const COPY: Record<AssetKind, { accept: string; hint: string; choose: string }> = {
   header: {
@@ -141,13 +142,16 @@ export function BrandAssetField({
           </span>
           {kind === "template" && (
             <a className="btn" href={assetUrl(eventId, "template", asset.uploaded_at)}>
+              <Icon name="download" />
               Download
             </a>
           )}
           <button type="button" className="btn" disabled={disabled || busy !== null} onClick={() => input.current?.click()}>
+            <Icon name="intake" />
             {busy === "upload" ? "Uploading…" : "Replace"}
           </button>
           <button type="button" className="btn" disabled={disabled || busy !== null} onClick={() => void remove()}>
+            <Icon name="trash" />
             {busy === "remove" ? "Removing…" : "Remove"}
           </button>
         </div>
@@ -159,6 +163,7 @@ export function BrandAssetField({
           disabled={disabled || busy !== null}
           onClick={() => input.current?.click()}
         >
+          <Icon name="intake" />
           {busy === "upload" ? "Uploading…" : copy.choose}
         </button>
       )}

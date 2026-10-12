@@ -112,8 +112,9 @@ export const GROUPS: {
     roles: STAFF_ROLES,
     items: [
       /*
-       * Check-in and USB intake are not separate destinations: check-in opens from a
-       * speaker in the Speaker Ready Room, and USB intake from a button on check-in.
+       * Check-in and local intake are not separate destinations: check-in opens from a
+       * speaker in the Speaker Ready Room, and local intake from a button on check-in
+       * or beside the speaker there.
        * Listing them here offered two greyed-out items that led nowhere.
        */
       { label: "Speaker Ready Room", href: "/events/:id/srr", icon: "users" },
@@ -121,9 +122,8 @@ export const GROUPS: {
     ],
   },
   /*
-   * No DEVICE group (Travis, 2026-10-08, from the client's review): Room sync covers the
-   * technician's job, and the Room Agent is to go. Its screen is still reachable by address
-   * until it is removed with the rest.
+   * No DEVICE group: the Room Agent is gone (client review, D-155) — Room sync covers the
+   * technician's job.
    */
   {
     group: "ADMIN",
@@ -187,13 +187,14 @@ export function Sidebar({
   /*
    * Which screens this kind of account may open (D-151), mirroring the API's own rule:
    * support staff everything but the Speaker Ready Room and Manage presentations;
-   * technicians those two and the way to them. A DXG Admin sees all.
+   * technicians those two, Room sync and the way to them. A DXG Admin sees all.
    */
   const kind = principal?.staff_kind ?? null;
   const offeredToKind = (label: string): boolean => {
     const onsiteOrReview = label === "Speaker Ready Room" || label === "Manage presentations";
     if (kind === "support") return !onsiteOrReview;
-    if (kind === "technician") return onsiteOrReview || label === "Portfolio";
+    // Room sync too, for the rooms they are assigned to (client review, D-154).
+    if (kind === "technician") return onsiteOrReview || label === "Room sync" || label === "Portfolio";
     return true;
   };
 

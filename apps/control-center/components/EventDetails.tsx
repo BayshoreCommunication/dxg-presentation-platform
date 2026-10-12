@@ -12,6 +12,7 @@ import { DateField, today } from "@/components/DateTimeField";
 import { ColorPicker } from "@/components/ColorPicker";
 import { ReminderDaysField, reminderDaysFrom, sameDays } from "@/components/ReminderDaysField";
 import { BrandAssetField, assetFrom } from "@/components/BrandAssetField";
+import { Icon } from "@/components/Icon";
 import { formatDateRange, timeZoneLabel } from "@pmp/format";
 
 const TIMEZONE_NOTE =
@@ -324,6 +325,7 @@ export function EventDetails({
       {canEdit && (
         <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 4 }}>
           <button className="btn pri" disabled={busy || !changed} onClick={() => void save()}>
+            <Icon name="save" />
             Save changes
           </button>
           {!changed && <span className="note">Nothing changed yet.</span>}

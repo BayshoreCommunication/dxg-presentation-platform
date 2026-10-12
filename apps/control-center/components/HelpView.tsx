@@ -162,7 +162,7 @@ export const GUIDES: Section[] = [
         steps: [
           "Speaker Ready Room lists who is expected, with their three confirmations.",
           "Check in → choose a free station. Every station in use? Check a speaker out to free one.",
-          "Go through the slides with the speaker (Preview slides).",
+          "Go through the slides with the speaker: Open in PowerPoint plays the deck on this computer with its transitions, animations and video, as in the room (Quick look shows the slides in the browser).",
           "Sign off: confirm the version the speaker wants to present. Print or email them the receipt.",
           "Check out when they leave. The station is free again.",
         ],
@@ -170,11 +170,11 @@ export const GUIDES: Section[] = [
       },
       {
         id: "usb",
-        title: "Take a new version by USB",
+        title: "Take a new version (Local intake)",
         who: "Speaker Ready Room technician or above",
         steps: [
-          "On the speaker's check-in, open USB intake.",
-          "Write why there is a new version, choose the file from the USB drive, then Check & import file.",
+          "On the speaker's check-in, open Local intake — or press Upload beside the speaker in the Speaker Ready Room, without checking them in.",
+          "Write why there is a new version, choose the file — from a USB drive or saved on this computer — then Check & import file.",
           "Nothing is stored until the virus check passes. The changes against the approved version are listed.",
           "The new version goes for review like any upload; the room keeps the approved one until then.",
         ],
@@ -189,7 +189,7 @@ export const GUIDES: Section[] = [
           "A room is Ready when every talk in it is ticked loaded. Nothing on Room sync is checked automatically.",
           "Ticked one by mistake? Press Undo beside it; the talk shows as not loaded until it is ticked again.",
         ],
-        tip: "Launch in Room Agent records that a talk was presented. Opening PowerPoint on the room PC isn't connected yet.",
+        tip: "Download all on a room (or at the top, for all your rooms) brings every approved file in one zip. A presenter brought a new file? Upload new version beside their talk.",
       },
     ],
   },
@@ -307,7 +307,7 @@ export function HelpView() {
       </p>
       <input
         type="search"
-        placeholder="Search help — e.g. bounced, USB, archive, sign-in app"
+        placeholder="Search help — e.g. bounced, local intake, archive, sign-in app"
         value={query}
         onChange={(event) => setQuery(event.target.value)}
         aria-label="Search help"

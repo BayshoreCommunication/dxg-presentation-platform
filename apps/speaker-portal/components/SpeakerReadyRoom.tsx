@@ -36,6 +36,19 @@ export function SpeakerReadyRoom({ srr }: { srr: MySrr }) {
         </p>
       </div>
 
+      {/* The room opens on the event day (D-157). */}
+      {!srr.open && (
+        <div className="card next-step">
+          <div className="cbd">
+            <div className="next-step-label">Not open yet</div>
+            <p className="next-step-body" style={{ margin: 0 }}>
+              The Speaker Ready Room opens on the event day. Until then you can keep updating your presentation under Manage
+              presentations.
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="card">
         <div className="chd">
           <h3>Your status</h3>

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { QueueItem } from "@/lib/api";
 import { previewUrl, requestPreview, ApiError } from "@/lib/api";
 import { SlideViewer } from "@/components/SlideViewer";
+import { Icon } from "@/components/Icon";
 
 /**
  * The file's actual slides, for the reviewer (D-074) — replacing eight numbered
@@ -92,6 +93,7 @@ export function SlidePreview({ item }: { item: QueueItem }) {
               .finally(() => setBusy(false));
           }}
         >
+          <Icon name="refresh" />
           Try again
         </button>
       </div>

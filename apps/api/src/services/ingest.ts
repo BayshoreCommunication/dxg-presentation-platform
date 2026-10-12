@@ -36,7 +36,7 @@ export type IngestResult = {
 export type IngestFailure = { readonly code: string; readonly message: string };
 
 /**
- * The one intake path, shared by the speaker portal and SRR USB intake
+ * The one intake path, shared by the speaker portal and SRR local intake
  * (FR-FILE-002/003, FR-SRR-002). Order is fixed and not configurable:
  * assemble → verify whole-file checksum → scan → store → inspect.
  * `stored` is unreachable without a clean scan (I-2), whichever door the file

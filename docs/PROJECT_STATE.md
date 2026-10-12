@@ -3552,3 +3552,54 @@ upgraded would have left 4 / 96). All four images built locally (arm64) and star
 counts as 7.4 and identical slides. CI and `.nvmrc` on 24.21.0. Not deployed — goes out with the next
 `main` → `production` release; after it, compare ECR's scan of the new images with the 2026-10-08 numbers.
 
+
+## 2026-10-11 — Client review A1–A3: Local intake, staff upload from the SRR, check-in report (D-153)
+Remaining items from Ace Johnson's review counted with Travis: 10 items + the production check-in bug (A1–A5 SRR,
+B6–B9 Room sync/technician, C10 Speaker Support Staff). Built A1–A3 locally: "USB intake" → **Local intake** (USB
+drive or saved file) everywhere it is read; **Upload** beside each speaker on the SRR dashboard, taking a new version
+without a check-in (`POST /events/:id/srr/slots/:slotId/intake`, source `srr_manual`); **Download check-in report
+(CSV)** (`GET /events/:id/srr/report.csv`). Walked as the seeded technician (C. Delgado): Upload on Alicia Fontaine →
+v2 virus-checked, compared with v1, sent to review; the check-in's Local intake opens with the new words; the CSV lists
+Dr. Priya Raman at Station 1, "Still checked in". New suite srr-local-intake 5/5; unit 315 pass; invariants 381/382 —
+the one failure (event-files "MedTech has an approved file") fails the same without these changes (local seed data
+has drifted). Lint and type-check clean. **Not pushed, not deployed** — Travis reviews locally first.
+Note: the browser walk left a junk v2 on Alicia Fontaine's talk in the local data (`npm run db:seed` resets it).
+
+## 2026-10-11 — Client review B6–B9: technicians by room, Download all, onsite upload, Room Agent removed (D-154, D-155)
+Built locally. **B7**: migration 037 `room_assignments`; Room sync names each room's technicians and admins/support
+assign them; technicians now open Room sync and see, tick and download only their own rooms. **B6**: Download all per
+room and for all one's rooms (zip, files named by time and talk). **B8**: Upload a new version on Manage
+presentations (pick the talk) and beside each talk on Room sync, through Local intake. **B9**: Room Agent app,
+screens, API routes, device keys, heartbeat script and seed rows removed; Mark loaded kept in `roomSync.ts`; old
+tables kept. Walked as the seeded technician C. Delgado: Room sync shows Ballroom A and Room 212 only, the zip downloads,
+the technicians list is refused; Manage presentations' upload opens Local intake for a chosen talk. New suite
+room-sync-technicians 8/8; unit 291 pass (the 24 Room Agent unit tests went with it); invariants 379/382 then the
+admin expectation updated (49/49 across admin, cross-event, manual-room-loading, room-sync) — the two still failing,
+event-files and event-owned-data's station check, need seed state the local data no longer has (approved MedTech
+file; a MedTech speaker not checked in): `npm run db:seed` resets it. Lint and type-check clean. **Not pushed, not
+deployed.** Deploy note: migration 037 runs with the others; no server change otherwise.
+
+## 2026-10-12 — Client review C10 and A4: Speaker Support Staff; SRR event-day switch (D-156, D-157)
+Built locally. **C10**: migration 038; speakers add assistants on the speaker site's Support staff page (temporary
+password emailed); an assistant reaches only the speaker's Manage presentations and their uploads are the speaker's,
+recorded as sent by the assistant. Walked on :3001: Raman added "Sam Assistant"; signed in as them — one sidebar door,
+"Support staff for Dr. Priya Raman", other pages send them back. **A4**: migration 039 `events.srr_open` (existing
+events open, new ones closed); switch on the command centre and the SRR page for admins and support staff; closed →
+no check-in, intake on a check-in or sign-off (buttons off with the reason), checkout and desks still work. Walked as
+the admin: closed MedTech's room, saw the banners and disabled buttons, opened it again. New suites
+speaker-support-staff 6/6, srr-open 3/3. **Not pushed, not deployed.** Deploy note: migrations 038 and 039 run with
+the others; production events keep their Speaker Ready Room open. Remaining from the review: A5 (Preview Slides in
+local PowerPoint — to be discussed) and the production check-in page error (needs the server log).
+Local data: a test assistant `s.assistant@example.invalid` exists on Raman (remove it on Support staff, or reseed).
+
+**Same day, Travis:** Speaker support staff are added by DXG (Admins and support staff) from the Speakers screen —
+"Support staff (n)" on each speaker; the speaker's Support staff page is read-only. Walked as the admin: Raman's dialog
+lists Sam Assistant. speaker-support-staff 7/7, speakers-add-and-send and speaker-accounts green (54/54).
+
+## 2026-10-12 — Client review A5: Preview Slides opens in the computer's own PowerPoint (D-158)
+Built locally: **Open in PowerPoint** + **Quick look** on the check-in, Open in PowerPoint on Presentation detail;
+Windows/Mac hand PowerPoint a five-minute link (`ms-powerpoint:`), falling back to a download; Linux downloads.
+Migration 040 `open_links`. The link serves the file through the staff site's own address (checked via :3000) without a
+cookie. open-in-powerpoint 3/3; lint and type-check clean. **Not pushed, not deployed.** Every item of the client's
+review is now built locally; still open: the production check-in page error (needs the server log), and PowerPoint for
+the Web if DXG wants it (their Microsoft 365, their consent to send files to Microsoft).

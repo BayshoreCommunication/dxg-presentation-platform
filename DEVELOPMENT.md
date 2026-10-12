@@ -2,10 +2,11 @@
 
 Status: M0 in progress. The backend spine (domain state machines, database layer, API) and
 **All seventeen screens of the client baseline now run on real data** — the ten Control Center
-screens, the four Onsite screens, the Room Agent room view and the Client portal in the Control
-Center app, plus the Speaker portal in its own app. The product runs end to end: create an event,
+screens, the Onsite screens (Speaker Ready Room, check-in with Local intake, Room sync) and the
+Client portal in the Control Center app, plus the speaker site in its own app. The Room Agent was
+retired after the client's review (D-155): Room sync covers the technician's job. The product runs end to end: create an event,
 import an agenda, invite speakers, collect and inspect files, review and approve, run the Speaker
-Ready Room, sync and play in a room, and deliver the archive to the client.
+Ready Room, load each room by hand from Room sync, and deliver the archive to the client.
 
 What is *not* finished is behind those screens, not between them — see Notes at the bottom.
 
@@ -20,7 +21,6 @@ npm ci
 npm run db:up          # postgres :5434, redis :6380
 npm run db:migrate     # applies db/migrations in order (idempotent)
 npm run db:seed        # synthetic MedTech Forward 2026 fixture — no real content
-npm run db:heartbeat   # marks room agents as freshly online
 npm run dev            # api :4000 · control center :3000 · speaker site :3001 · mail dispatcher · worker
 ```
 
@@ -75,8 +75,8 @@ repeated as often as needed.
 1. **Portfolio** (`/`) — the event, its collection percentage and unresolved-warning count,
    all computed from the database.
 2. **Command center** (`Open →`) — KPI row, today's risk list and room readiness. Every status
-   pill is derived by `packages/domain`, the same code the API and reports use. Room readiness
-   combines file state with agent heartbeat freshness: it is computed, never asserted.
+   pill is derived by `packages/domain`, the same code the API and reports use. A room is ready
+   when every approved file in it has been ticked loaded on Room sync (D-125).
 3. **Review & approval** — pick the talk with the HEVC codec warning. The finding, its slide
    reference and the suggested fix come from `inspection_findings`. Press **A** (or the Approve
    button).
@@ -115,25 +115,23 @@ Worth demonstrating if the room is technical:
   version untouched and still `active` in the room.
 - Break the checksum — nothing is stored at all.
 
-### Room Agent (the onsite half) — the chain that justifies the product
+### Room sync (the onsite half) — the chain that justifies the product
 
-**Room Agent → Ballroom A.** This is the view a room technician has on the room machine. The
-Windows Electron client is M5 and its playback half is gated on the G0-1 PoC; the view, the data
-and the rules below are the real ones.
+**Room sync** is the technician's checklist (D-125, D-154). Admins and support staff give each
+room its DXG Technician staff (**Assign technicians** on the room); a technician sees only their
+own rooms. Sign in as `c.delgado@example.invalid` (Ballroom A, Room 212) or `t.okafor@example.invalid`
+(Room 210) to see it from their side.
 
-11. **Before anything**, the room shows `v2 · current · ready`.
-12. **Have a speaker upload a new version and DXG approve it.** Press **Manual sync** on the room
-    view: the file is downloaded and its whole-file checksum verified.
-13. **The room does not switch.** v3 sits as *update pending ack*, v2 still reads *current ·
-    ready*, and a change alert explains why. Press **Launch** at this point and the room still
-    plays v2 — the agent never resolves a "closest matching" file.
-14. **Press "Acknowledge & sync v3".** Only now does v3 become the copy the room plays, v2 moves
-    to *previous versions kept: 1* for rollback, and Room sync goes green again.
-
-That sequence is the product's core promise — a room never silently swaps an approved file — and
-it is enforced server-side, not by the screen. Signing in as a content reviewer and pressing
-acknowledge returns *"acknowledge requires one of: room_technician, presentation_manager,
-project_manager, platform_admin."*
+11. **Download all** on a room (or at the top, for every room on the page) brings every approved
+    presentation as one zip, named by start time and talk, ready to copy onto the room PC.
+12. **Mark loaded** once a file is on the room PC. Only the approved version can be ticked, and a
+    technician can tick only their own rooms. A room is *Ready* when every talk in it is ticked.
+13. **A newer version is approved.** The talk shows *load it (the room has v2)* until the new copy
+    is ticked; ticking it replaces the old one. The room is never switched without a person
+    doing it.
+14. **The presenter brings a file to the room.** **Upload new version** beside the talk (or
+    **Upload a new version** on Manage presentations) takes it in through Local intake — virus
+    check, comparison, back to review — while the room keeps the approved copy.
 
 ### Speaker Ready Room — the last-minute-change story
 
@@ -145,8 +143,8 @@ stations are busy. **Check in** a speaker to open their check-in.
 16. **Step 2 — comparison.** After a clean scan the incoming version is compared with the approved
     one: slides, embedded media, slide size, file size, each with its delta. The numbers come from
     parsing both files, not from a fixture.
-17. **Step 3 — outcome.** The new version goes to *re-approval*. Check the Room Agent view: the
-    room is still playing the approved copy. Nothing about the room changed.
+17. **Step 3 — outcome.** The new version goes to *re-approval*. Check Room sync: the room still
+    shows the approved copy as loaded. Nothing about the room changed.
 18. **Sign off.** Confirming the final onsite version produces a receipt with the version, its
     checksum, the station and the technician — and locks the talk. Open the speaker's portal link
     and try to replace the file: *"This presentation has been confirmed as the final onsite version
@@ -303,9 +301,9 @@ workflow transition and a hash-chained audit record are written — all in one t
 | `packages/domain` | Pure domain: the six lifecycles, the transition engine, derived status. No I/O. |
 | `packages/db` | Pool, RLS scope helper (`withScope`), migration runner, seed, hash-chained audit. |
 | `packages/files` | Storage driver, scanner, tier-1 inspection engine, spreadsheet reader and archive zip writer — one ZIP/OOXML implementation serves PowerPoint inspection, .xlsx import and package building, with no dependency. |
-| `apps/api` | Express 5: health, events, talks, speakers, review transition, audit verify, portal + upload, agent heartbeat. |
+| `apps/api` | Express 5: health, events, talks, speakers, review transition, audit verify, speaker site + upload, Speaker Ready Room, Room sync. |
 | `apps/dispatcher` | Drains the outbox and delivers email (file transport in development, SES at M3-5). |
-| `apps/control-center` | Next.js staff app (:3000), including the Room Agent room view. |
+| `apps/control-center` | Next.js staff app (:3000). |
 | `apps/speaker-portal` | Next.js speaker app (:3001), token auth only. |
 
 ## Notes
@@ -327,12 +325,9 @@ workflow transition and a hash-chained audit record are written — all in one t
   `stored` is unreachable without a clean verdict, and scan errors fail closed to quarantine.
 - Inspection is deterministic parsing only. Codec detection currently infers risk from the media
   container; a real codec probe arrives with the media worker (M2-4).
-- The **Room Agent screen is served by the control center** rather than the Electron client (M5).
-  It identifies as the room technician because the room machine is a different principal from a
-  staff session; device credentials arrive with M5-1. `Manual sync` runs the same sequence the
-  agent's sync engine will — read, verify checksum, then make visible — minus the network.
-- **Launching does not drive PowerPoint yet** (M5-3, gated on G0-1). The launch guard, the
-  holding-screen fallback and the launch log are real; the COM call is not there.
+- **There is no room software.** Room PCs are loaded by hand from Room sync (D-125); the Room
+  Agent (an Electron app, its screens and its API) was removed after the client's review (D-155).
+  Its old tables (`room_agents`, `sync_manifests`, `launch_logs`) stay in the database as history.
 - **Email is delivered by the outbox dispatcher.** In development it writes to `.data/mail/`; in
   production it sends through SES. The transport is chosen by `MAIL_TRANSPORT` (default: `file`
   outside production, `ses` in it).

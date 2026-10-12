@@ -8,6 +8,7 @@ import type { FindingRow, PresentationDetail, VersionRow } from "@/lib/api";
 import { waiveFinding, requestRevision, ApiError } from "@/lib/api";
 import { WhyNot } from "@/components/WhyNot";
 import { CHECK, formatBytes, INSPECTION_STATE, SEVERITY, VERSION_STATE, wordsFor } from "@pmp/format";
+import { Icon } from "@/components/Icon";
 
 /** On the event's clock (D-080) — it was pinned to New York for every event. */
 const when = (iso: string, timeZone: string) =>
@@ -64,7 +65,7 @@ function explain(finding: FindingRow): { title: string; body: string; fix?: stri
       };
     case "malware":
       return {
-        // Plain words, same as USB intake's "Virus check" (D-112).
+        // Plain words, same as local intake's "Virus check" (D-112).
         title: "Virus check failed",
         body: `The virus check flagged this file${detail.signature ? ` (${String(detail.signature)})` : ""}. It is held back and can't reach any room; any approved version is untouched.`,
       };
@@ -267,6 +268,7 @@ export function InspectionView({
                         />
                         <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
                           <button className={form.kind === "waive" ? "btn warnb" : "btn pri"} disabled={busy || !form.text.trim()}>
+                            <Icon name={form.kind === "waive" ? "check" : "send"} />
                             {form.kind === "waive" ? "Waive with this reason" : "Send to speaker"}
                           </button>
                           <button type="button" className="btn" onClick={() => setForm(null)}>
@@ -299,6 +301,7 @@ export function InspectionView({
                             })
                           }
                         >
+                          <Icon name="comment" />
                           Ask the speaker to fix this
                         </button>
                         {finding.check_code === "malware" ? (
@@ -311,6 +314,7 @@ export function InspectionView({
                             disabled={busy}
                             onClick={() => setForm({ id: finding.id, kind: "waive", text: "" })}
                           >
+                            <Icon name="check" />
                             Waive (accept anyway)
                           </button>
                         )}
@@ -337,6 +341,7 @@ export function InspectionView({
               </Link>
             )}
             <Link className="btn" href={`/events/${eventId}/talks/${detail.talk.slot_id}`}>
+              <Icon name="eye" />
               Version history
             </Link>
           </div>

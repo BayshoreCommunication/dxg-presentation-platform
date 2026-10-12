@@ -12,6 +12,8 @@ export type EventSummary = {
     timezone: string;
     /** Null when no venue has been recorded — the header says so rather than inventing one. */
     venue: string | null;
+    /** The Speaker Ready Room's event-day switch (D-157). */
+    srr_open: boolean;
   };
   collected: number;
   total: number;
@@ -93,7 +95,7 @@ export async function eventSummary(tx: pg.PoolClient, eventId: string): Promise<
      * of 3 · Doors 08:00" on every event, whatever its venue and however long it ran.
      */
     `SELECT e.id, e.name, e.starts_on::text, e.ends_on::text, e.status, e.timezone,
-            v.name AS venue
+            v.name AS venue, e.srr_open
        FROM pmp.events e
        LEFT JOIN pmp.venues v ON v.id = e.venue_id
       WHERE e.id = $1`,
@@ -261,11 +263,8 @@ export type FleetRoom = {
   readiness: "ready" | "attention";
   files_current: number;
   files_total: number;
-  /** Kept for later room software; the screens no longer show it (D-125). */
-  heartbeat_age: number | null;
-  agent_version: string | null;
-  /** When the room's computer was given its device key; null if never (D-077). */
-  key_issued_at: string | null;
+  /** DXG Technician staff assigned to this room (D-154). */
+  technicians: { user_id: string; name: string }[];
   talks: FleetTalk[];
 };
 
@@ -274,22 +273,25 @@ export type FleetRoom = {
  * approved version, whether a person has ticked it loaded on the room PC, and a link to
  * download it for copying. Room readiness is the ticks alone.
  */
-export async function syncFleet(tx: pg.PoolClient, eventId: string): Promise<FleetRoom[]> {
+export async function syncFleet(
+  tx: pg.PoolClient,
+  eventId: string,
+  /** A technician's own rooms only (D-154): set to their user id; unset for everyone else. */
+  onlyRoomsOf?: string,
+): Promise<FleetRoom[]> {
   const { rows: talkRows } = await tx.query<TalkAggRow>(TALK_AGG, [eventId]);
-  const { rows: roomRows } = await tx.query<{
-    room_id: string;
-    room: string;
-    heartbeat_age: number | null;
-    agent_version: string | null;
-    key_issued_at: string | null;
-  }>(
-    `SELECT r.id AS room_id, r.name AS room,
-            EXTRACT(EPOCH FROM (now() - ra.last_heartbeat_at))::int AS heartbeat_age,
-            ra.agent_version, ra.key_issued_at
+  const { rows: roomRows } = await tx.query<{ room_id: string; room: string }>(
+    `SELECT r.id AS room_id, r.name AS room
        FROM pmp.rooms r
-       LEFT JOIN pmp.room_agents ra ON ra.room_id = r.id AND ra.revoked_at IS NULL
       WHERE r.event_id = $1
+        AND ($2::uuid IS NULL OR EXISTS (SELECT 1 FROM pmp.room_assignments x WHERE x.room_id = r.id AND x.user_id = $2))
       ORDER BY r.name`,
+    [eventId, onlyRoomsOf ?? null],
+  );
+  const { rows: assigned } = await tx.query<{ room_id: string; user_id: string; name: string }>(
+    `SELECT x.room_id, x.user_id, u.display_name AS name
+       FROM pmp.room_assignments x JOIN pmp.users u ON u.id = x.user_id
+      WHERE x.event_id = $1 ORDER BY u.display_name`,
     [eventId],
   );
   const { rows: checklist } = await tx.query<{
@@ -343,9 +345,9 @@ export async function syncFleet(tx: pg.PoolClient, eventId: string): Promise<Fle
       readiness: deriveRoomReadiness({ upcomingTalks: snapshots }),
       files_current: snapshots.filter((talk) => deriveTalkStatus(talk) === "synchronized_onsite").length,
       files_total: snapshots.length,
-      heartbeat_age: room.heartbeat_age,
-      agent_version: room.agent_version,
-      key_issued_at: room.key_issued_at,
+      technicians: assigned
+        .filter((row) => row.room_id === room.room_id)
+        .map((row) => ({ user_id: row.user_id, name: row.name })),
       talks: checklist
         .filter((row) => row.room_id === room.room_id)
         .map((row) => {

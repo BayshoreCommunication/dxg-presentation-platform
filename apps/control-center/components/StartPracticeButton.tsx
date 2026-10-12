@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { startPracticeEvent, ApiError, PRACTICE_LIMIT } from "@/lib/api";
 import { WhyNot } from "@/components/WhyNot";
+import { Icon } from "@/components/Icon";
 
 /**
  * "Start a practice event" (D-116). Builds a realistic event of your own — made-up
@@ -32,6 +33,7 @@ export function StartPracticeButton({ open }: { open: number }) {
   return (
     <span style={{ display: "inline-flex", flexDirection: "column", alignItems: "flex-end" }}>
       <button type="button" className="btn pri" disabled={busy || full} onClick={() => void start()}>
+        <Icon name="play" />
         {busy ? "Setting up your practice event…" : "Start a practice event"}
       </button>
       <WhyNot

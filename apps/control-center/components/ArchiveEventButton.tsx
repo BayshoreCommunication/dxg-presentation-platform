@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { archiveEvent, restoreEvent, ApiError } from "@/lib/api";
+import { Icon } from "@/components/Icon";
 
 /**
  * Archive or restore one event (D-061). Archiving is reversible and deletes nothing,
@@ -57,6 +58,7 @@ export function ArchiveEventButton({
             onClick={() => void run()}
             title={`Archive "${eventName}". Nothing is deleted; it can be restored at any time.`}
           >
+            <Icon name="box" />
             {busy ? "Archiving…" : "Confirm archive"}
           </button>
           <button type="button" className="btn" disabled={busy} onClick={() => setConfirming(false)}>
@@ -70,6 +72,7 @@ export function ArchiveEventButton({
           disabled={busy}
           onClick={() => (archived ? void run() : setConfirming(true))}
         >
+          <Icon name={archived ? "refresh" : "box"} />
           {busy ? "Restoring…" : archived ? "Restore" : "Archive"}
         </button>
       )}

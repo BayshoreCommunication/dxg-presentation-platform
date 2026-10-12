@@ -123,8 +123,9 @@ async function seed(): Promise<void> {
     ]);
 
     await client.query(
-      `INSERT INTO events (id, client_id, name, starts_on, ends_on, timezone, status)
-       VALUES ($1, $2, 'MedTech Forward 2026', '2026-03-10', '2026-03-12', 'America/New_York', 'active')`,
+      // The demo's Speaker Ready Room is open, as on an event day (D-157).
+      `INSERT INTO events (id, client_id, name, starts_on, ends_on, timezone, status, srr_open)
+       VALUES ($1, $2, 'MedTech Forward 2026', '2026-03-10', '2026-03-12', 'America/New_York', 'active', true)`,
       [IDS.event, IDS.client],
     );
 
@@ -208,12 +209,14 @@ async function seed(): Promise<void> {
       );
       const roomId = roomRows[0]!.id;
 
-      await client.query(
-        `INSERT INTO room_agents (room_id, event_id, client_id, device_fingerprint, public_key,
-                                  agent_version, last_heartbeat_at)
-         VALUES ($1, $2, $3, $4, '\\x00'::bytea, '1.4.2', now())`,
-        [roomId, IDS.event, IDS.client, `${talk.room.replace(/\s+/g, "-").toUpperCase()}-01`],
-      );
+      // Room sync works by room (D-154): C. Delgado has Ballroom A and Room 212, T. Okafor Room 210.
+      const worksHere = talk.room === "Room 210" ? [IDS.roomTech] : [IDS.reviewer];
+      for (const userId of worksHere) {
+        await client.query(
+          `INSERT INTO room_assignments (user_id, room_id, event_id, client_id) VALUES ($1, $2, $3, $4)`,
+          [userId, roomId, IDS.event, IDS.client],
+        );
+      }
 
       const { rows: sessionRows } = await client.query<{ id: string }>(
         `INSERT INTO sessions (event_id, client_id, room_id, day_id, title, starts_at, ends_at)

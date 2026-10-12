@@ -20,6 +20,7 @@ import { Icon } from "@/components/Icon";
 import { InfoTip } from "@/components/InfoTip";
 import { HoverTip } from "@/components/HoverTip";
 import { WhyNot } from "@/components/WhyNot";
+import { SpeakerSupportStaffDialog } from "@/components/SpeakerSupportStaffDialog";
 import { EMAIL_STATUS, wordsFor } from "@pmp/format";
 
 /** Screen 5 — the speaker directory, its duplicates, and the chase list. */
@@ -52,6 +53,8 @@ export function SpeakersView({
   const [askRemind, setAskRemind] = useState(false);
   // D-147: sending a sign-in asks first, as every email does.
   const [askSignIn, setAskSignIn] = useState<string | null>(null);
+  // A speaker's support staff (D-156), managed in a dialog.
+  const [supportFor, setSupportFor] = useState<SpeakerRow | null>(null);
 
   // The server component re-renders on refresh; the list here is client state, so a
   // new speaker is fetched rather than waiting on a prop that `useState` would ignore.
@@ -194,6 +197,7 @@ export function SpeakersView({
                 setAskRemind(true);
               }}
             >
+              <Icon name="send" />
               Remind speakers missing files ({missing.length})
             </button>
             <button
@@ -201,7 +205,8 @@ export function SpeakersView({
               disabled={busy}
               onClick={() => setAdding(true)}
             >
-              + Add speaker
+              <Icon name="add" />
+              Add speaker
             </button>
           </span>
           <WhyNot
@@ -217,6 +222,7 @@ export function SpeakersView({
           question={`Email a reminder to ${missing.length} speaker${missing.length === 1 ? "" : "s"} missing files now?`}
           detail="Each one gets the reminder email with their sign-in details. Anyone emailed about this event in the last day, or without a working address, is skipped."
           confirmLabel="Send reminders"
+          icon="send"
           busyLabel="Sending…"
           onConfirm={async () => {
             try {
@@ -304,6 +310,7 @@ export function SpeakersView({
                         </span>
                       ) : (
                         <button className="btn" disabled={busy} onClick={() => setMergeAsk(`${pair.a_id}-${pair.b_id}`)}>
+                          <Icon name="merge" />
                           Merge…
                         </button>
                       )}
@@ -454,6 +461,7 @@ export function SpeakersView({
                             question={`Email ${row.full_name} their sign-in?`}
                             detail={`It goes to ${row.email ?? "their address"}: their talks, the sign-in link and a ${row.account === "invited" ? "new " : ""}temporary password.`}
                             confirmLabel={row.account === "invited" ? "Resend sign-in" : "Send sign-in"}
+                            icon="send"
                             busyLabel="Sending…"
                             onConfirm={() => sendSignIn(row)}
                             onClose={() => setAskSignIn(null)}
@@ -472,8 +480,19 @@ export function SpeakersView({
                           />
                         )}
                       </td>
-                      {/* One action (D-147): everything else a speaker needs is on the Agenda or in their sign-in. */}
+                      {/* Support staff (D-156) and Remove (D-147): everything else a speaker needs is on the Agenda or in their sign-in. */}
                       <td style={{ width: 1, whiteSpace: "nowrap", textAlign: "right" }}>
+                        <HoverTip label={row.email ? "Assistants who submit this speaker's presentations" : "Add an email address first"}>
+                          <button
+                            className="btn"
+                            style={ICON_BUTTON}
+                            disabled={!row.email}
+                            aria-label={`Speaker support staff for ${row.full_name}`}
+                            onClick={() => setSupportFor(row)}
+                          >
+                            <Icon name="users" /> Support staff{row.support_staff > 0 ? ` (${row.support_staff})` : ""}
+                          </button>
+                        </HoverTip>{" "}
                         <HoverTip label="Remove speaker">
                           <button
                             className="btn"
@@ -525,6 +544,18 @@ export function SpeakersView({
             } finally {
               setPending(null);
             }
+          }}
+        />
+      )}
+
+      {supportFor && (
+        <SpeakerSupportStaffDialog
+          eventId={eventId}
+          speaker={supportFor}
+          onClose={() => setSupportFor(null)}
+          onChanged={(message) => {
+            setToast(message);
+            void reload().catch(() => undefined);
           }}
         />
       )}
@@ -743,6 +774,7 @@ function AddSpeakerDialog({
               className="btn pri"
               disabled={saving || !slotId}
             >
+              <Icon name="add" />
               {saving ? "Adding…" : "Add speaker"}
             </button>
           </div>
@@ -883,6 +915,7 @@ function RemoveSpeakerDialog({
               disabled={busy}
               onClick={() => void onConfirm()}
             >
+              <Icon name="trash" />
               {busy ? "Removing…" : "Remove speaker"}
             </button>
           </div>

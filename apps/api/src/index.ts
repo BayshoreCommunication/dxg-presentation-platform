@@ -68,8 +68,10 @@ import {
 const MFA_COOKIE = "pmp_mfa";
 /** The speaker site's sign-in page (D-148). */
 const SPEAKER_SITE = `${process.env.PORTAL_BASE ?? "http://localhost:3001"}/login`;
-import { agentView, syncRoom, acknowledge, launch, markLoaded, unmarkLoaded } from "./services/agent.ts";
-import { srrDashboard, checkIn, checkinDetail, usbIngest, signOff, depart, emailReceipt, addStation, renameStation, retireStation } from "./services/srr.ts";
+import { addSupportStaff, listSupportStaff, MAX_SUPPORT_STAFF, removeSupportStaff, speakerAccountFor } from "./services/speakerSupport.ts";
+import { approvedRoomsZip, assignedTo, eventTechnicians, markLoaded, roomOfRoomFile, setRoomTechnicians, unmarkLoaded } from "./services/roomSync.ts";
+import { issueOpenLink, readOpenLink } from "./services/openLinks.ts";
+import { setSrrOpen, srrDashboard, srrReportCsv, checkIn, checkinDetail, usbIngest, slotIntake, signOff, depart, emailReceipt, addStation, renameStation, retireStation } from "./services/srr.ts";
 import {
   presentationDetail,
   findingsFor,
@@ -103,7 +105,6 @@ import {
 } from "./services/events.ts";
 import { eventAgenda } from "./services/agenda.ts";
 import { roleList, SECURITY } from "@pmp/format";
-import { agentForKey, issueDeviceKey } from "./services/deviceKeys.ts";
 import { pdfStates, queuePdfs } from "./services/pdf.ts";
 import { reminderSchedule } from "./services/reminders.ts";
 import {
@@ -715,12 +716,13 @@ const NON_STAFF_PATHS = [
   "/api/v1/me/",
   "/api/v1/client/",
   "/api/v1/webhooks/",
-  "/api/v1/agent/",
   // The event's email banner, fetched by speakers' mail clients with no sign-in (D-138).
   // A GET-only route that serves that one image and nothing else.
   "/api/v1/email-banner/",
   // Images placed in a formatted email's message (D-139), fetched the same way.
   "/api/v1/email-image/",
+  // "Open in PowerPoint" (D-158): PowerPoint fetches one version by a five-minute link, with no sign-in.
+  "/api/v1/open/",
   "/ops/",
 ];
 
@@ -779,6 +781,8 @@ const ONSITE_AND_REVIEW: RegExp[] = [
 ];
 /** What a technician may open besides the two screens: the way to them, and what a review shows. */
 const TECHNICIAN_ALSO: RegExp[] = [
+  // Room sync, for the rooms they are assigned to (client review, D-154).
+  /^\/api\/v1\/events\/[^/]+\/sync\/(fleet|approved\.zip)$/,
   /^\/api\/v1\/events$/,
   /^\/api\/v1\/events\/[^/]+$/,
   /^\/api\/v1\/events\/[^/]+\/(summary|talks|risk-list)$/,
@@ -787,7 +791,13 @@ const TECHNICIAN_ALSO: RegExp[] = [
   /^\/api\/v1\/clients$/,
 ];
 /** Asking for a slide preview is a POST, and part of looking at a file in review. */
-const TECHNICIAN_ALSO_WRITES: RegExp[] = [/^\/api\/v1\/file-versions\/[^/]+\/preview$/];
+const TECHNICIAN_ALSO_WRITES: RegExp[] = [
+  /^\/api\/v1\/file-versions\/[^/]+\/preview$/,
+  // Opening a deck in the desk's PowerPoint (D-158).
+  /^\/api\/v1\/file-versions\/[^/]+\/open-link$/,
+  // Ticking a file loaded on the room PC — their own rooms only, checked in the route (D-154).
+  /^\/api\/v1\/room-files\/[^/]+\/(loaded|unloaded)$/,
+];
 
 /**
  * What support staff may still *read* of a presentation: its detail, findings and comments,
@@ -807,7 +817,7 @@ function kindRefusal(kind: "support" | "technician", path: string, method: strin
   // A technician reads the event (GET) on the way to their screens; writes elsewhere are not theirs.
   if (method === "GET" && TECHNICIAN_ALSO.some((pattern) => pattern.test(path))) return null;
   if (TECHNICIAN_ALSO_WRITES.some((pattern) => pattern.test(path))) return null;
-  return "DXG Technician staff work the Speaker Ready Room and Manage presentations only. Ask a DXG Admin if you need more.";
+  return "DXG Technician staff work the Speaker Ready Room, Room sync and Manage presentations only. Ask a DXG Admin if you need more.";
 }
 
 
@@ -1213,6 +1223,35 @@ app.get("/api/v1/file-versions/:versionId/download", async (req, res) => {
   return res.send(result.value.body);
 });
 
+/**
+ * "Open in PowerPoint" (client review, D-158): a five-minute link to one version for PowerPoint on
+ * this computer to fetch — it carries no sign-in. Issuing it is audited.
+ */
+app.post("/api/v1/file-versions/:versionId/open-link", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  const result = await withScope(scopeFor(req), (tx) => issueOpenLink(tx, actor.id, String(req.params.versionId)));
+  if (!result.ok) {
+    return res.status(result.error.code === "file.not_downloadable" ? 409 : statusFor(result.error)).json(result.error);
+  }
+  res.setHeader("cache-control", "no-store");
+  return res.status(201).json(result.value);
+});
+
+/** What PowerPoint fetches: the file, while the link lasts; otherwise "not found", whatever the reason. */
+app.get("/api/v1/open/:token/:filename", async (req, res) => {
+  const file = await withSystemScope((tx) => readOpenLink(tx, String(req.params.token)));
+  if (!file) return res.status(404).json({ code: "open_link.not_found", message: "This link has expired. Open the presentation again from DXG·PM." });
+  const filename = String(req.params.filename);
+  res.setHeader("content-type", file.contentType);
+  res.setHeader(
+    "content-disposition",
+    `inline; filename="${filename.replace(/["\\\r\n]/g, "_")}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
+  );
+  res.setHeader("cache-control", "private, no-store");
+  return res.send(file.body);
+});
+
 /** Several chosen versions as one zip (`files:bulk-download`, capped — see D-079). */
 app.post("/api/v1/events/:eventId/:filesAndAction", async (req, res, next) => {
   const { id: resource, action } = splitAction(String(req.params.filesAndAction));
@@ -1239,110 +1278,83 @@ app.post("/api/v1/events/:eventId/:filesAndAction", async (req, res, next) => {
   return res.send(result.value.body);
 });
 
+/** The signed-in DXG Technician's user id, or null for any other account (D-154). */
+const technicianId = (req: express.Request): string | null => {
+  const principal = (req as express.Request & { principal?: Principal }).principal;
+  return principal?.kind === "staff" && principal.staff_kind === "technician" ? principal.user_id : null;
+};
+
 app.get("/api/v1/events/:eventId/sync/fleet", async (req, res) => {
   const actor = actorFrom(req);
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   const eventId = String(req.params.eventId);
+  // A technician sees the rooms they are assigned to, and only those (D-154).
   const items = await withScope(scopeFor(req, eventId), (tx) =>
-    syncFleet(tx, eventId),
+    syncFleet(tx, eventId, technicianId(req) ?? undefined),
   );
   return res.json({ items, next_cursor: null });
 });
 
-/**
- * Agent heartbeat (FR-AGT-001). Device-credential auth arrives with M5-1; for now
- * the agent identifies itself by room, which is enough to drive room readiness.
- */
-/*
- * A room computer's check-in (D-077). It must carry its device key as
- * `Authorization: Bearer <agent id>.<secret>`; the room it counts for is the key's own,
- * never a `room_id` in the body. It used to accept a bare room id, so anyone who knew
- * one could report that room online and "Rooms ready" would count it.
- */
-app.post("/api/v1/agent/heartbeat", async (req, res) => {
-  const body = (req.body ?? {}) as { agent_version?: string };
-  const key = /^Bearer\s+(.+)$/i.exec(req.headers.authorization ?? "")?.[1]?.trim();
-  const result = await withSystemScope(async (tx) => {
-    const agent = await agentForKey(tx, key);
-    if (!agent) return null;
-    await tx.query(
-      `UPDATE pmp.room_agents SET last_heartbeat_at = now(), agent_version = COALESCE($2, agent_version)
-        WHERE id = $1`,
-      [agent.id, typeof body.agent_version === "string" ? body.agent_version.slice(0, 40) : null],
-    );
-    return agent;
-  });
-  if (!result) {
-    // One answer for no key, a malformed key, an unknown agent and a wrong secret.
-    return res.status(401).json({
-      code: "agent.unauthenticated",
-      // D-112: no "device key" wording — the person at the room computer just needs to reconnect it.
-      message: "This room computer isn't connected to the event. Connect it again from Room sync.",
-    });
+/** The DXG Technician staff on the event, for giving them rooms (D-154). */
+app.get("/api/v1/events/:eventId/sync/technicians", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  const eventId = String(req.params.eventId);
+  const items = await withScope(scopeFor(req, eventId), (tx) => eventTechnicians(tx, eventId));
+  return res.json({ items });
+});
+
+/** Who works a room: the list replaces the room's technicians (D-154). Not for technicians. */
+app.put("/api/v1/events/:eventId/sync/rooms/:roomId/technicians", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  const ids = (req.body as { user_ids?: unknown })?.user_ids;
+  if (!Array.isArray(ids) || ids.some((id) => typeof id !== "string")) {
+    return res.status(400).json({ code: "request.invalid", message: "Choose the technicians for this room." });
   }
-  return res.json({ acknowledged: true, room_id: result.room_id, at: new Date().toISOString() });
-});
-
-/** Issue (or replace) the device key for a room's computer (D-077). Staff; shown once. */
-app.post("/api/v1/rooms/:roomId/device-key", async (req, res) => {
-  const actor = actorFrom(req);
-  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
-  const result = await withScope(scopeFor(req), (tx) => issueDeviceKey(tx, actor, String(req.params.roomId)));
-  if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
-  // Never cached anywhere between here and the operator's screen.
-  res.setHeader("cache-control", "no-store");
-  return res.status(201).json(result.value);
-});
-
-/* ── room agent (screen 15; M5 builds the Windows client itself) ──────────── */
-
-app.get("/api/v1/rooms/:roomId/agent-view", async (req, res) => {
-  const actor = actorFrom(req);
-  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
-  const roomId = String(req.params.roomId);
-  const view = await withScope(scopeFor(req), (tx) => agentView(tx, roomId));
-  if (!view) return res.status(404).json({ code: "agent.room_not_found", message: "This room no longer exists — it may have been removed. Refresh the page." });
-  return res.json(view);
-});
-
-app.post("/api/v1/rooms/:roomId/sync", async (req, res) => {
-  const actor = actorFrom(req);
-  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
-  const roomId = String(req.params.roomId);
-  // D-118: this copies files as a connected room PC would, so it needs one. It used to
-  // stamp a fresh heartbeat and mark files "on the room PC" for a room with no PC at all —
-  // a false "Ready to play" / "Synchronized onsite".
-  const result = await withScope(scopeFor(req), async (tx) => {
-    const { rows } = await tx.query<{ connected: boolean }>(
-      `SELECT EXISTS (SELECT 1 FROM pmp.room_agents
-                       WHERE room_id = $1 AND revoked_at IS NULL
-                         AND last_heartbeat_at > now() - interval '300 seconds') AS connected`,
-      [roomId],
-    );
-    if (!rows[0]?.connected) return null;
-    return syncRoom(tx, actor, roomId);
-  });
-  if (!result) {
-    return res.status(409).json({
-      code: "room_sync.no_room_pc",
-      message: "No room PC is connected to this room, so there is nothing to update. Files are copied when the room PC checks in.",
-    });
-  }
-  return res.json(result);
-});
-
-app.post("/api/v1/room-files/:roomFileId/acknowledge", async (req, res) => {
-  const actor = actorFrom(req);
-  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
-  const body = req.body as { lock_version?: number };
-  if (typeof body.lock_version !== "number") {
-    return res.status(400).json({ code: "request.invalid", message: "That request was incomplete. Refresh the page and try again." });
-  }
-  const result = await withScope(scopeFor(req), (tx) =>
-    acknowledge(tx, actor, String(req.params.roomFileId), body.lock_version as number),
+  const eventId = String(req.params.eventId);
+  const result = await withScope(scopeFor(req, eventId), (tx) =>
+    setRoomTechnicians(tx, actor, eventId, String(req.params.roomId), ids as string[]),
   );
-  if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+  if (!result.ok) {
+    return res.status(result.error.code === "room.not_a_technician" ? 422 : statusFor(result.error)).json(result.error);
+  }
   return res.json(result.value);
+});
+
+/**
+ * Every approved presentation of a room (`?room=<id>`) or of every room the caller works,
+ * as one zip (client review "Download All", D-154). A technician gets their own rooms only.
+ */
+app.get("/api/v1/events/:eventId/sync/approved.zip", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  const eventId = String(req.params.eventId);
+  const roomId = typeof req.query.room === "string" && req.query.room ? req.query.room : null;
+  const technician = technicianId(req);
+  const result = await withScope(scopeFor(req, eventId), async (tx) => {
+    let rooms: string[] | null = roomId ? [roomId] : null;
+    if (technician) {
+      const { rows } = await tx.query<{ room_id: string }>(
+        `SELECT room_id FROM pmp.room_assignments WHERE user_id = $1 AND event_id = $2`,
+        [technician, eventId],
+      );
+      const mine = rows.map((row) => row.room_id);
+      if (roomId && !mine.includes(roomId)) return null;
+      rooms = roomId ? [roomId] : mine;
+    }
+    return approvedRoomsZip(tx, actor.id, eventId, rooms);
+  });
+  if (result === null) {
+    return res.status(403).json({ code: "room.not_assigned", message: "This room isn't assigned to you. Ask a DXG Admin to add you to it." });
+  }
+  if (!result.ok) {
+    return res.status(result.error.code === "room.zip_too_large" || result.error.code === "room.nothing_approved" ? 422 : statusFor(result.error)).json(result.error);
+  }
+  res.setHeader("content-type", "application/zip");
+  res.setHeader("content-disposition", `attachment; filename="${result.value.filename}"`);
+  res.setHeader("cache-control", "private, no-store");
+  return res.send(result.value.body);
 });
 
 /*
@@ -1360,29 +1372,25 @@ for (const [path, apply] of [
     if (typeof body.lock_version !== "number") {
       return res.status(400).json({ code: "request.invalid", message: "That request was incomplete. Refresh the page and try again." });
     }
-    const result = await withScope(scopeFor(req), (tx) =>
-      apply(tx, actor, String(req.params.roomFileId), body.lock_version as number),
-    );
+    const technician = technicianId(req);
+    const roomFileId = String(req.params.roomFileId);
+    const result = await withScope(scopeFor(req), async (tx) => {
+      // A technician ticks files in their own rooms only (D-154).
+      if (technician) {
+        const roomId = await roomOfRoomFile(tx, roomFileId);
+        if (!roomId || !(await assignedTo(tx, technician, roomId))) return null;
+      }
+      return apply(tx, actor, roomFileId, body.lock_version as number);
+    });
+    if (result === null) {
+      return res.status(403).json({ code: "room.not_assigned", message: "This room isn't assigned to you. Ask a DXG Admin to add you to it." });
+    }
     if (!result.ok) {
       return res.status(result.error.code === "room_sync.not_approved" ? 409 : statusFor(result.error)).json(result.error);
     }
     return res.json(result.value);
   });
 }
-
-app.post("/api/v1/rooms/:roomId/launch", async (req, res) => {
-  const actor = actorFrom(req);
-  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
-  const body = req.body as { slot_id?: string };
-  if (!body.slot_id) {
-    return res.status(400).json({ code: "request.invalid", message: "Choose the presentation to open." });
-  }
-  const result = await withScope(scopeFor(req), (tx) =>
-    launch(tx, actor, { roomId: String(req.params.roomId), slotId: body.slot_id as string }),
-  );
-  if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
-  return res.json(result.value);
-});
 
 app.get("/api/v1/events/:eventId/speakers", async (req, res) => {
   const actor = actorFrom(req);
@@ -1414,6 +1422,10 @@ app.get("/api/v1/events/:eventId/speakers", async (req, res) => {
                 WHERE u.account_kind = 'speaker' AND u.is_active AND u.deleted_at IS NULL
                   AND lower(u.email::text) = lower(sp.email::text)
                 LIMIT 1) AS account,
+              -- Their support staff (D-156): assistants hanging off that sign-in.
+              (SELECT count(*)::int FROM pmp.users a JOIN pmp.users m ON m.id = a.assists_user_id
+                WHERE a.is_active AND a.deleted_at IS NULL
+                  AND lower(m.email::text) = lower(sp.email::text)) AS support_staff,
               -- Presentations whose newest version was sent back — changes requested, rejected,
               -- or failed inspection — so the list says "Needs revision" as the portal does (D-090).
               (SELECT count(*)::int
@@ -1657,8 +1669,8 @@ app.post("/api/v1/portal/uploads/:uploadId/complete", (req, res) =>
 function speakerAccountOf(
   req: express.Request,
   res: express.Response,
-  options: { allowUnchangedPassword?: boolean } = {},
-): { user_id: string; email: string; name: string; must_change_password: boolean } | null {
+  options: { allowUnchangedPassword?: boolean; allowSupportStaff?: boolean } = {},
+): { user_id: string; email: string; name: string; must_change_password: boolean; supportStaff: boolean } | null {
   const principal = (req as express.Request & { principal?: Principal }).principal;
   if (principal?.kind !== "staff") {
     res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
@@ -1673,12 +1685,30 @@ function speakerAccountOf(
     res.status(403).json({ code: "auth.password_change_required", message: "Choose your own password before continuing." });
     return null;
   }
-  return { user_id: principal.user_id, email: principal.email, name: principal.display_name, must_change_password: principal.must_change_password };
+  /*
+   * Speaker Support Staff (D-156) reach the speaker they assist — `email` and `name` are that
+   * speaker's — and only what submitting content needs: Manage presentations and their own
+   * password. Everything else on the speaker site is the speaker's own.
+   */
+  if (principal.assisting && !options.allowSupportStaff) {
+    res.status(403).json({
+      code: "auth.support_staff_forbidden",
+      message: `As ${principal.assisting.name}'s support staff you can submit their presentations under Manage presentations. The rest of the site is theirs.`,
+    });
+    return null;
+  }
+  return {
+    user_id: principal.user_id,
+    email: principal.assisting?.email ?? principal.email,
+    name: principal.assisting?.name ?? principal.display_name,
+    must_change_password: principal.must_change_password,
+    supportStaff: Boolean(principal.assisting),
+  };
 }
 
 /** Who is signed in on the speaker site (D-148). */
 app.get("/api/v1/me/session", (req, res) => {
-  const me = speakerAccountOf(req, res, { allowUnchangedPassword: true });
+  const me = speakerAccountOf(req, res, { allowUnchangedPassword: true, allowSupportStaff: true });
   if (!me) return;
   const principal = (req as express.Request & { principal?: Principal }).principal;
   return res.json({ principal });
@@ -1692,7 +1722,7 @@ app.post("/api/v1/me/logout", async (req, res) => {
 });
 
 app.post("/api/v1/me/password", async (req, res) => {
-  const me = speakerAccountOf(req, res, { allowUnchangedPassword: true });
+  const me = speakerAccountOf(req, res, { allowUnchangedPassword: true, allowSupportStaff: true });
   if (!me) return;
   const body = req.body as { current_password?: string; new_password?: string };
   if (!body.current_password || !body.new_password) {
@@ -1711,10 +1741,17 @@ app.post("/api/v1/me/password", async (req, res) => {
 });
 
 app.get("/api/v1/me/presentations", async (req, res) => {
-  const me = speakerAccountOf(req, res);
+  const me = speakerAccountOf(req, res, { allowSupportStaff: true });
   if (!me) return;
   const events = await withSystemScope((tx) => myPresentations(tx, me.email));
   return res.json({ speaker: { name: me.name, email: me.email }, events });
+});
+
+/* Speaker Support Staff (D-156): the speaker sees who may submit for them; DXG staff add them. */
+app.get("/api/v1/me/support-staff", async (req, res) => {
+  const me = speakerAccountOf(req, res);
+  if (!me) return;
+  return res.json({ items: await withSystemScope((tx) => listSupportStaff(tx, me.user_id)), max: MAX_SUPPORT_STAFF });
 });
 
 /** What the team told this speaker, in their site: review decisions and approvals. */
@@ -1763,7 +1800,7 @@ app.get("/api/v1/me/events/:eventId/srr", async (req, res) => {
 });
 
 app.post("/api/v1/me/uploads", async (req, res) => {
-  const me = speakerAccountOf(req, res);
+  const me = speakerAccountOf(req, res, { allowSupportStaff: true });
   if (!me) return;
   const body = req.body as { slot_id?: string; file_name?: string; total_bytes?: number };
   if (!body.slot_id || !body.file_name || typeof body.total_bytes !== "number") {
@@ -1785,7 +1822,7 @@ app.post("/api/v1/me/uploads", async (req, res) => {
 });
 
 app.get("/api/v1/me/uploads/:uploadId", async (req, res) => {
-  const me = speakerAccountOf(req, res);
+  const me = speakerAccountOf(req, res, { allowSupportStaff: true });
   if (!me) return;
   const uploadId = String(req.params.uploadId);
   return withSystemScope(async (tx) => {
@@ -1796,7 +1833,7 @@ app.get("/api/v1/me/uploads/:uploadId", async (req, res) => {
 });
 
 app.put("/api/v1/me/uploads/:uploadId/parts/:partNumber", async (req, res) => {
-  const me = speakerAccountOf(req, res);
+  const me = speakerAccountOf(req, res, { allowSupportStaff: true });
   if (!me) return;
   const uploadId = String(req.params.uploadId);
   const part = Number(req.params.partNumber);
@@ -1813,7 +1850,7 @@ app.put("/api/v1/me/uploads/:uploadId/parts/:partNumber", async (req, res) => {
 });
 
 app.post("/api/v1/me/uploads/:uploadId/complete", async (req, res) => {
-  const me = speakerAccountOf(req, res);
+  const me = speakerAccountOf(req, res, { allowSupportStaff: true });
   if (!me) return;
   const uploadId = String(req.params.uploadId);
   const body = req.body as { slot_id?: string; file_name?: string; sha256?: string };
@@ -1831,6 +1868,8 @@ app.post("/api/v1/me/uploads/:uploadId/complete", async (req, res) => {
       uploadId,
       slotId: owned.slotId,
       fileName: body.file_name as string,
+      // Who actually submitted it, when it was the speaker's support staff (D-156).
+      ...(me.supportStaff ? { submittedByUserId: me.user_id } : {}),
       ...(body.sha256 ? { expectedSha256: body.sha256 } : {}),
     });
     if (!result.ok) return res.status(422).json({ code: result.code, message: result.message });
@@ -1839,7 +1878,7 @@ app.post("/api/v1/me/uploads/:uploadId/complete", async (req, res) => {
 });
 
 app.get("/api/v1/me/file-versions/:versionId/download", async (req, res) => {
-  const me = speakerAccountOf(req, res);
+  const me = speakerAccountOf(req, res, { allowSupportStaff: true });
   if (!me) return;
   const versionId = String(req.params.versionId);
   return withSystemScope(async (tx) => {
@@ -1867,6 +1906,34 @@ app.get("/api/v1/events/:eventId/srr", async (req, res) => {
     srrDashboard(tx, eventId),
   );
   return res.json(view);
+});
+
+/**
+ * The Speaker Ready Room's event-day switch (D-157). Outside the `/srr` path on purpose: support
+ * staff never open the room itself (D-151), but they run the event and open it on the day.
+ */
+app.put("/api/v1/events/:eventId/srr-open", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  const open = (req.body as { open?: unknown })?.open;
+  if (typeof open !== "boolean") return res.status(400).json({ code: "request.invalid", message: "Say whether to open or close the room." });
+  const eventId = String(req.params.eventId);
+  const result = await withScope(scopeFor(req, eventId), (tx) => setSrrOpen(tx, actor, eventId, open));
+  if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+  return res.json(result.value);
+});
+
+/** The check-in / checkout report as CSV (D-153): presenter, desk, check-in and checkout times. */
+app.get("/api/v1/events/:eventId/srr/report.csv", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  const eventId = String(req.params.eventId);
+  const report = await withScope(scopeFor(req, eventId), (tx) => srrReportCsv(tx, eventId));
+  if (!report) return res.status(404).json({ code: "event.not_found", message: "This event no longer exists." });
+  const slug = report.eventName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "event";
+  res.header("content-type", "text/csv; charset=utf-8");
+  res.header("content-disposition", `attachment; filename="${slug}-speaker-ready-room-check-ins.csv"`);
+  return res.send(report.csv);
 });
 
 app.post("/api/v1/events/:eventId/srr/checkins", async (req, res) => {
@@ -1932,7 +1999,7 @@ app.get("/api/v1/srr/checkins/:checkinId", async (req, res) => {
   return res.json(detail);
 });
 
-/** Staff-side resumable upload, used by USB intake (the portal has its own). */
+/** Staff-side resumable upload, used by local intake (the portal has its own). */
 app.post("/api/v1/srr/uploads", async (req, res) => {
   const actor = actorFrom(req);
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
@@ -1955,11 +2022,37 @@ app.post("/api/v1/srr/checkins/:checkinId/usb-ingestions", async (req, res) => {
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   const body = req.body as { upload_id?: string; file_name?: string; reason?: string };
   if (!body.upload_id || !body.file_name) {
-    return res.status(400).json({ code: "request.invalid", message: "The USB file couldn't be finished. Copy it again." });
+    return res.status(400).json({ code: "request.invalid", message: "The file couldn't be finished. Choose it again." });
   }
   const result = await withScope(scopeFor(req), (tx) =>
     usbIngest(tx, actor, {
       checkinId: String(req.params.checkinId),
+      uploadId: body.upload_id as string,
+      fileName: body.file_name as string,
+      reason: body.reason ?? "",
+    }),
+  );
+  if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+  return res.json(result.value);
+});
+
+/*
+ * Local intake straight from the Speaker Ready Room (D-153): staff upload or update a
+ * speaker's presentation without checking them in first. The file goes up through
+ * `/srr/uploads` as on a check-in.
+ */
+app.post("/api/v1/events/:eventId/srr/slots/:slotId/intake", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  const body = req.body as { upload_id?: string; file_name?: string; reason?: string };
+  if (!body.upload_id || !body.file_name) {
+    return res.status(400).json({ code: "request.invalid", message: "The file couldn't be finished. Choose it again." });
+  }
+  const eventId = String(req.params.eventId);
+  const result = await withScope(scopeFor(req, eventId), (tx) =>
+    slotIntake(tx, actor, {
+      eventId,
+      slotId: String(req.params.slotId),
       uploadId: body.upload_id as string,
       fileName: body.file_name as string,
       reason: body.reason ?? "",
@@ -3290,6 +3383,53 @@ app.post("/api/v1/events/:eventId/speakers/:speakerId/send-link", async (req, re
     return res.status(status).json(result.error);
   }
   return res.status(201).json(result.value);
+});
+
+/*
+ * A speaker's support staff (D-156): DXG Admins and support staff list, add and remove the
+ * assistants who submit the speaker's presentations. The sign-in hangs off the speaker's own.
+ */
+app.get("/api/v1/events/:eventId/speakers/:speakerId/support-staff", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  const eventId = String(req.params.eventId);
+  const result = await withScope(scopeFor(req, eventId), async (tx) => {
+    const speaker = await speakerAccountFor(tx, actor, eventId, String(req.params.speakerId));
+    if (!speaker.ok) return speaker;
+    return { ok: true as const, value: { speaker: { name: speaker.value.name, email: speaker.value.email }, items: await listSupportStaff(tx, speaker.value.user_id), max: MAX_SUPPORT_STAFF } };
+  });
+  if (!result.ok) return res.status(result.error.code.startsWith("support.") ? 422 : statusFor(result.error)).json(result.error);
+  return res.json(result.value);
+});
+
+app.post("/api/v1/events/:eventId/speakers/:speakerId/support-staff", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  const eventId = String(req.params.eventId);
+  const body = (req.body ?? {}) as { name?: unknown; email?: unknown };
+  const result = await withScope(scopeFor(req, eventId), async (tx) => {
+    const speaker = await speakerAccountFor(tx, actor, eventId, String(req.params.speakerId));
+    if (!speaker.ok) return speaker;
+    return addSupportStaff(tx, speaker.value, { name: body.name, email: body.email }, { actorUserId: actor.id, eventId });
+  });
+  if (!result.ok) {
+    const status = result.error.code === "support.email_taken" ? 409 : result.error.code.startsWith("support.") ? 422 : statusFor(result.error);
+    return res.status(status).json(result.error);
+  }
+  return res.status(201).json(result.value);
+});
+
+app.delete("/api/v1/events/:eventId/speakers/:speakerId/support-staff/:userId", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  const eventId = String(req.params.eventId);
+  const result = await withScope(scopeFor(req, eventId), async (tx) => {
+    const speaker = await speakerAccountFor(tx, actor, eventId, String(req.params.speakerId));
+    if (!speaker.ok) return speaker;
+    return removeSupportStaff(tx, speaker.value, String(req.params.userId), { actorUserId: actor.id, eventId });
+  });
+  if (!result.ok) return res.status(result.error.code === "support.not_found" ? 404 : statusFor(result.error)).json(result.error);
+  return res.json(result.value);
 });
 
 /** Gives a speaker a persistent sign-in on this site (D-146); the password goes to their address. */

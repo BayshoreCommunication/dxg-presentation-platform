@@ -1,6 +1,6 @@
 /**
  * How a room is described to staff (D-108): one place, so the command centre, Room sync
- * and Room Agent say the same thing.
+ * and the room's files say the same thing.
  *
  * D-125 (Travis's call): room PCs are loaded and checked by hand, so nothing here talks
  * about whether a room PC is set up, connected or reporting. A room is Ready when every

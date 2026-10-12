@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { confirmPasswordReset, PortalError } from "@/lib/api";
 import { PasswordField } from "@/components/PasswordField";
+import { Icon } from "@/components/Icon";
 
 export function ResetPassword({ token }: { token: string }) {
   const router = useRouter();
@@ -39,7 +40,8 @@ export function ResetPassword({ token }: { token: string }) {
           <div className="err" style={{ margin: "12px 0" }}>
             This reset link is incomplete. Request a new one.
           </div>
-          <Link className="btn" style={{ width: "100%", display: "block", textAlign: "center" }} href="/forgot-password">
+          <Link className="btn" style={{ width: "100%", display: "flex", textAlign: "center" }} href="/forgot-password">
+            <Icon name="key" />
             Request a reset link
           </Link>
         </div>
@@ -64,6 +66,7 @@ export function ResetPassword({ token }: { token: string }) {
               router.refresh();
             }}
           >
+            <Icon name="login" />
             Sign in
           </button>
         </div>
@@ -84,6 +87,7 @@ export function ResetPassword({ token }: { token: string }) {
         <PasswordField id="password" label="New password" value={password} onChange={setPassword} autoComplete="new-password" meter />
         <PasswordField id="confirm" label="Confirm new password" value={confirm} onChange={setConfirm} autoComplete="new-password" matches={password} />
         <button className="btn pri" style={{ width: "100%", padding: 9 }} disabled={busy} type="submit">
+          <Icon name="key" />
           {busy ? "Saving…" : "Set new password"}
         </button>
         <div style={{ marginTop: 12, textAlign: "center", fontSize: 13 }}>

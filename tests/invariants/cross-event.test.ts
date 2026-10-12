@@ -188,7 +188,12 @@ describe("a resource named directly still belongs to its event", () => {
   test("another event's room and speakers are refused", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
     assert.ok(roomId && speakerId, "fixture: MedTech has a room and a speaker");
-    assert.equal((await asOutsider(`/rooms/${roomId}/agent-view`)).status, 403);
+    // Giving out another event's room, or downloading its files, is refused (D-154).
+    assert.equal(
+      (await asOutsider(`/events/${MEDTECH}/sync/rooms/${roomId}/technicians`, { method: "PUT", body: JSON.stringify({ user_ids: [] }) })).status,
+      403,
+    );
+    assert.equal((await asOutsider(`/events/${MEDTECH}/sync/approved.zip?room=${roomId}`)).status, 403);
     assert.equal(
       (await asOutsider(`/speakers/${speakerId}/credentials`, { method: "POST" })).status,
       403,

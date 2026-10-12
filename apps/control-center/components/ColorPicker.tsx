@@ -2,6 +2,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { Icon } from "@/components/Icon";
 
 /**
  * The event accent picker (D-092): a round palette — a ring of strong colours, an inner
@@ -257,6 +258,7 @@ export function ColorPicker({
               />
               <span style={{ flex: 1 }} />
               <button type="button" className="btn pri" onClick={() => setOpen(false)}>
+                <Icon name="check" />
                 Done
               </button>
             </div>

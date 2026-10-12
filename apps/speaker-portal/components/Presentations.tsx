@@ -6,6 +6,7 @@ import { downloadUrl } from "@/lib/api";
 import type { MyEvent, PortalTalk as MyTalk, PortalVersion as MyVersion, CompleteResult as UploadResult } from "@/lib/api";
 import { UploadPanel } from "./UploadPanel";
 import { formatBytes, formatDateRange, formatDeadline, humanize, SPEAKER_TALK_STATUS } from "@pmp/format";
+import { Icon } from "@/components/Icon";
 
 /** How an event's stored status reads to a speaker; an active one follows its dates (D-108). */
 function eventWords(event: { status: string; starts_on: string; ends_on: string; timezone: string }): { tone: string; label: string } {
@@ -347,6 +348,7 @@ export function TalkCard({
             <div className="replace-line">
               <span className="note">Need to change your slides?</span>
               <button className="btn" onClick={() => setReplacing(true)}>
+                <Icon name="intake" />
                 Upload a new version
               </button>
               <Requirements />
@@ -504,6 +506,7 @@ function ApprovedFile({ version, timezone, room, loaded }: { version: MyVersion;
           </span>
         </div>
         <a className="btn pri" href={downloadUrl(version.id)} download>
+          <Icon name="download" />
           Download
         </a>
       </div>

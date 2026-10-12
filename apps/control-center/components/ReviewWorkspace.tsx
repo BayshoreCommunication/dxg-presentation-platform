@@ -12,6 +12,7 @@ import { ConfirmInline } from "@/components/ConfirmInline";
 import { SlidePreview } from "@/components/SlidePreview";
 import { WhyNot } from "@/components/WhyNot";
 import { CHECK, formatBytes, INSPECTION_STATE, SEVERITY, VERSION_STATE, wordsFor } from "@pmp/format";
+import { Icon } from "@/components/Icon";
 
 const FINDING_COPY: Record<string, (detail: Record<string, unknown>) => string> = {
   codec: (detail) =>
@@ -29,9 +30,12 @@ export function ReviewWorkspace({
   eventId,
   initialQueue,
   initialSelectedId,
+  upload,
 }: {
   eventId: string;
   initialQueue: QueueItem[];
+  /** "Upload a new version" for any talk (D-154), shown under the title. */
+  upload?: React.ReactNode;
   /** R22 (D-113): "Open in review workspace" from an inspection report opens that file. */
   initialSelectedId?: string | null;
 }) {
@@ -196,6 +200,7 @@ export function ReviewWorkspace({
   return (
     <>
       <h1 className="htitle">Manage presentations</h1>
+      {upload}
 
       {error && <div className="err">{error}</div>}
 
@@ -293,12 +298,15 @@ export function ReviewWorkspace({
                       void decide("approve");
                     }}
                   >
+                    <Icon name="check" />
                     Approve v{selected.version_number}
                   </button>
                   <button className="btn" disabled={busy} onClick={() => setPending("request_changes")}>
+                    <Icon name="comment" />
                     Ask for changes
                   </button>
                   <button className="btn danger" disabled={busy} onClick={() => setPending("reject")}>
+                    <Icon name="close" />
                     Reject…
                   </button>
                 </div>
@@ -322,6 +330,7 @@ export function ReviewWorkspace({
                     : "Its session has no room yet, so no room PC will get it until it has one."
                 }
                 confirmLabel="Approve"
+                icon="check"
                 busyLabel="Approving…"
                 onConfirm={() => decide("approve")}
                 onClose={() => setConfirmApprove(false)}
@@ -372,6 +381,7 @@ export function ReviewWorkspace({
                     className={pending === "reject" ? "btn danger" : "btn warnb"}
                     disabled={busy || !message.trim()}
                   >
+                    <Icon name={pending === "reject" ? "close" : "comment"} />
                     {busy ? "Sending…" : pending === "reject" ? "Reject and tell the speaker" : "Ask the speaker for changes"}
                   </button>
                   <button

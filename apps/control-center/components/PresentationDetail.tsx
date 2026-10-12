@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from "react";
 import { Toast } from "@/components/Toast";
+import { OpenInPowerPoint } from "@/components/OpenInPowerPoint";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { CommentRow, PresentationDetail } from "@/lib/api";
@@ -11,6 +12,7 @@ import { ConfirmationStrip } from "@/components/ConfirmationStrip";
 import { SlideViewer } from "@/components/SlideViewer";
 import { WhyNot } from "@/components/WhyNot";
 import { COMMENT_LANE, formatBytes, SEVERITY, VERSION_STATE, wordsFor } from "@pmp/format";
+import { Icon } from "@/components/Icon";
 
 /** On the event's clock (D-080) — it was pinned to New York for every event. */
 const when = (iso: string, timeZone: string) =>
@@ -25,8 +27,8 @@ const when = (iso: string, timeZone: string) =>
 
 const SOURCE_LABEL: Record<string, string> = {
   portal: "Speaker portal",
-  srr_usb: "USB intake",
-  srr_manual: "Speaker Ready Room",
+  srr_usb: "Local intake (check-in)",
+  srr_manual: "Local intake (Speaker Ready Room)",
   system: "System",
 };
 
@@ -226,24 +228,30 @@ export function PresentationDetailView({
               aria-expanded={previewOpen}
               onClick={() => void preview()}
             >
+              <Icon name={previewOpen ? "close" : "eye"} />
               {previewOpen ? "Hide slides" : "Preview slides"}
             </button>
+            {/* The deck in this computer's own PowerPoint, with transitions, animations and video (D-158). */}
+            {latest && latest.processing_state === "stored" && <OpenInPowerPoint versionId={latest.file_version_id} />}
             {latest && (
               <Link
                 className="btn"
                 href={`/events/${eventId}/talks/${initial.talk.slot_id}/inspection?v=${latest.file_version_id}`}
               >
+                <Icon name="eye" />
                 Open inspection report
               </Link>
             )}
             <Link className="btn" href={`/events/${eventId}/review`}>
+              <Icon name="eye" />
               Review workspace
             </Link>
-            {/* R19 (D-113): USB intake lives on the speaker's check-in — go straight there
-                when they are checked in; otherwise say what to do first. */}
+            {/* R19 (D-113): local intake lives on the speaker's check-in and, since D-153, beside
+                the speaker in the Speaker Ready Room — go straight to the check-in when there is one. */}
             {initial.srr?.checkin_id ? (
               <Link className="btn" href={`/events/${eventId}/srr/${initial.srr.checkin_id}`}>
-                Replace file (USB intake)
+                <Icon name="intake" />
+                Replace file (Local intake)
               </Link>
             ) : (
               initial.speaker && (
@@ -256,8 +264,8 @@ export function PresentationDetailView({
           <WhyNot reason={previewBlocked} />
           {!initial.srr?.checkin_id && initial.speaker && (
             <p className="note" style={{ margin: "6px 0 0" }}>
-              To take a new file on a USB drive, check {initial.speaker.name} in at the Speaker Ready Room first —
-              USB intake is on their check-in.
+              To take a new file — from a USB drive or this computer — open the Speaker Ready Room and press
+              Upload beside {initial.speaker.name}.
             </p>
           )}
           {previewOpen && latest?.pdf_state === "done" && (
@@ -359,6 +367,7 @@ export function PresentationDetailView({
                               disabled={busy}
                               onClick={() => void retryPdf(row.file_version_id, row.version_number)}
                             >
+                              <Icon name="refresh" />
                               Try the PDF again
                             </button>
                           </>
@@ -375,6 +384,7 @@ export function PresentationDetailView({
                         disabled={busy}
                         onClick={() => setRollTarget({ id: row.file_version_id, n: row.version_number, reason: "" })}
                       >
+                        <Icon name="undo" />
                         Roll back to this
                       </button>
                     )}
@@ -409,6 +419,7 @@ export function PresentationDetailView({
               </div>
               <div style={{ display: "flex", gap: 8 }}>
                 <button className="btn warnb" disabled={busy || !rollTarget.reason.trim()}>
+                  <Icon name="undo" />
                   Go back to v{rollTarget.n}
                 </button>
                 <button type="button" className="btn" onClick={() => setRollTarget(null)}>

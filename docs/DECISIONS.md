@@ -2794,3 +2794,136 @@ ECR's scan of the first CI-built images (D-149) found 7–8 critical and ~40 hig
 - **To keep it this way**: bump `NODE_IMAGE` when Node 24 or Debian publish security releases; check ECR's scan
   (`aws ecr describe-image-scan-findings`) after each `production` build.
 
+
+## D-153 (2026-10-11): Local intake, staff upload from the Speaker Ready Room, check-in report — Status: ACCEPTED (Travis, from the client's review, items A1–A3)
+- **Local intake**: "USB intake" is renamed **Local intake** everywhere people read it (check-in, SRR dashboard,
+  Presentation detail, Files source, Help, status vocabulary). It takes a file from a USB drive **or** one saved on the
+  desk's computer — the browser's file picker reaches both, so nothing else changed in how the file arrives. Stored
+  names keep their first spelling (`file_versions.source = 'srr_usb'`, `usb_ingestions`, `POST
+  /srr/checkins/:id/usb-ingestions`, audit `srr.usb_ingested`); no migration. The three steps (virus check →
+  comparison → outcome) are one component, `LocalIntake`, used on a check-in and from the dashboard.
+- **Staff upload from the SRR**: each speaker on the Speaker Ready Room dashboard (still to check in, checked out) has
+  **Upload**, which opens local intake for that talk without a check-in: `POST /events/:eventId/srr/slots/:slotId/intake`
+  (file sent through `/srr/uploads` as before). Same path as every intake — scan, store, inspect, back to review; the
+  room keeps the approved copy until the new one is approved. Source `srr_manual`, audit `srr.local_intake` with the
+  reason (required, 422). The talk must belong to the event (404). Who may: whoever may open the SRR (account level +
+  place on the event, D-151) — the same as intake on a check-in, so support staff are refused by kind. A speaker on a
+  desk keeps using the check-in's own Local intake.
+- **Check-in / checkout report**: **Download check-in report (CSV)** on the SRR dashboard,
+  `GET /events/:eventId/srr/report.csv`: one row per check-in, in order — Presenter, Email, Talk, Room, Desk, Check-in,
+  Checkout ("Still checked in" while at a desk), Minutes at desk, Checked in by, Signed-off version. Times on the
+  event's clock (`YYYY-MM-DD HH:MM`, the zone named in the heading); a UTF-8 byte-order mark so Excel opens accents
+  correctly. CSV rather than .xlsx: it opens in Excel as is and needs no new dependency.
+- Tests: `tests/invariants/srr-local-intake.test.ts` (upload + update without a check-in, versions and source, audit
+  with reason, reason required, talk of another event 404, support staff refused, CSV shape and times, technician
+  may download).
+
+## D-154 (2026-10-11): Technicians work their assigned rooms; Download all; upload a new version onsite — Status: ACCEPTED (Travis, from the client's review, items B6–B8)
+- **Room assignments** (`room_assignments`, **migration 037**: user, room, event, client, who assigned; RLS like
+  every event table): on **Room sync**, admins and support staff press **Assign technicians** on a room and tick the
+  DXG Technician staff placed on the event (`GET /events/:id/sync/technicians`,
+  `PUT /events/:id/sync/rooms/:roomId/technicians` with the full list; anyone else is 422 `room.not_a_technician`).
+  Each room card names its technicians.
+- **Technicians and Room sync**: the client's review gave technicians "Speaker Ready Room and Room Sync"; D-151 had
+  only the SRR and Manage presentations. Room sync is now theirs too (sidebar and API kind gate), for **their own
+  rooms only**: the fleet lists only rooms assigned to them (none → "No rooms are assigned to you…"), Mark loaded /
+  Undo on another room is 403 `room.not_assigned`, and giving out rooms is refused by kind. Manage presentations
+  stays theirs as in D-151.
+- **Download all**: `GET /events/:id/sync/approved.zip[?room=<id>]` — every talk's approved, stored version in the
+  room (cancelled sessions left out), or in every room on the caller's page (a technician: their rooms), one zip,
+  one folder per room when there are several, each file named `MM-DD HHMM <talk> (vN).pptx` on the event's clock so
+  they sort in running order. Each file is logged as a download. Capped at 1 GB (422 `room.zip_too_large`: download
+  room by room); a room with nothing approved is 422 `room.nothing_approved`. Buttons: **Download all (n)** on each
+  room and **Download all approved [in my rooms] (n)** at the top; fetched, so an error shows on the page.
+- **Upload a new version onsite**: **Upload a new version** on Manage presentations (choose the talk, then Local
+  intake) and **Upload new version** beside each talk on Room sync — both use D-153's
+  `POST /events/:id/srr/slots/:slotId/intake` (scan → store → inspect → back to review; the room keeps the approved
+  copy until the new one is approved and ticked).
+- Seed: C. Delgado works Ballroom A and Room 212, T. Okafor Room 210. (C. Delgado's seeded role is still content
+  reviewer only, so they can see and download but not tick; a technician placed through Event assignments gets the
+  room-technician role and can.)
+- Tests: `tests/invariants/room-sync-technicians.test.ts` (8): technicians offered and others refused, own rooms only,
+  no giving out rooms, no ticking another room, zip by room and for all one's rooms, another room's zip refused,
+  nothing-approved, upload open to technicians; admin and cross-event suites updated.
+
+## D-155 (2026-10-11): The Room Agent is removed — Status: ACCEPTED (Travis, from the client's review, item B9: "Room Sync covers the full technician workflow")
+- Gone: the `apps/room-agent` workspace (Electron, its harness, autostart script and tests — Electron's 62 packages
+  leave the lock file), the control centre's Room Agent screens (`/events/:id/agent`, `/events/:id/agent/:roomId`),
+  the API's agent and room-PC routes (`POST /agent/heartbeat`, `POST /rooms/:id/device-key`,
+  `GET /rooms/:id/agent-view`, `POST /rooms/:id/sync`, `POST /room-files/:id/acknowledge`, `POST /rooms/:id/launch`;
+  `/api/v1/agent/` is no longer an open path), `services/agent.ts` and `services/deviceKeys.ts`, the
+  `db:heartbeat` script, the seed's agent rows, the fleet's heartbeat / agent version / device-key fields, the
+  "Room view →" link, its CSS, the CI type-check of the app and the Dockerfile's Electron setting. OpenAPI lists Room
+  sync's real routes instead.
+- Kept: **Mark loaded / Undo** (D-125) moved to `services/roomSync.ts` unchanged. The room-copy lifecycle in
+  `packages/domain` keeps its acknowledge / launch states (pure code, still the rules a room copy follows).
+  The tables (`room_agents`, `sync_manifests`, `launch_logs`) stay as history — nothing is dropped.
+- Superseded: D-077 (device keys), D-118, D-124 and D-128 (room view, Launch) and screen 15 of the client baseline.
+  The SRS's FR-AGT requirements and the Phase-0 PowerPoint PoC no longer apply; older planning documents (SRS, SPEC,
+  BUILD_SPEC, SCREEN_SPECS, PLAN, PHASE0_GATE, G0-1) are left as the record of what was planned.
+- Tests: `device-keys` suite removed with its routes; cross-event (the room check is now Room sync's), event-owned-data
+  and manual-room-loading (no room view or Launch) updated.
+
+## D-156 (2026-10-12): Speaker Support Staff — Status: ACCEPTED (Travis, from the client's review, item C10)
+The review: "Speaker Support Staff role added for admin assistants submitting on behalf of a presenter — junior role
+scoped to content submission under the main speaker's account."
+- **Model** (**migration 038**): `users.assists_user_id`. A support staff member is a **speaker account** (so every
+  speaker rule — own cookie, no staff route, no second factor, temporary password first — applies unchanged) that
+  assists another speaker account. Its principal carries `assisting: {user_id, name, email}`.
+- **Reach**: the assisted speaker's presentations, matched by *their* email as the speaker's own are (D-146) — never
+  the assistant's own address. Open to them: `/me/session`, `/me/password`, `/me/presentations`, the upload routes
+  and downloads. Refused (403 `auth.support_staff_forbidden`): events, agenda, Speaker Ready Room, notifications and
+  support staff. An upload they make is the speaker's version (`uploaded_by_speaker`), with `uploaded_by_user` the
+  assistant — who actually sent it.
+- **Who adds them**: the speaker, on the speaker site's new **Support staff** page (`GET/POST /me/support-staff`,
+  `DELETE /me/support-staff/:userId`): name + email, a temporary password emailed (sensitive outbox row, "Your
+  DXG·PM sign-in to submit <speaker>'s presentations"), up to 5. Refused: an address that is already any account,
+  a speaker's own address on any event, the speaker's own (`support.*`). Removing deactivates the sign-in and ends
+  its sessions. Audited against the assistant's account.
+- **Their screen**: one sidebar door (Manage presentations), "Support staff for <speaker>" in place of the event
+  switcher, no bell, a line above the page saying uploads are submitted as the speaker's, the account badge "Support
+  staff"; any other page sends them back to Manage presentations. Speaker Help has a guide.
+- An address that is a support staff sign-in is never turned into a speaker's own (`ensureSpeakerSignIn` outcome
+  `assistant`; Create sign-in refuses it).
+- Tests: `tests/invariants/speaker-support-staff.test.ts` (6).
+
+## D-157 (2026-10-12): The Speaker Ready Room opens on the event day — Status: ACCEPTED (Travis, from the client's review, item A4)
+The review: "Speaker Ready Room activates on event day (admin-controlled on/off switch)".
+- `events.srr_open` (**migration 039**): events that already existed stay **open** (nothing in use changes); new
+  events start **closed**; practice events and the seed's demo are open.
+- **Switch**: `PUT /events/:id/srr-open {open}` — DXG Admins and support staff (presentation manager or above on the
+  event); technicians work the room but don't open it. Outside the `/srr` path because support staff, who never open
+  the room itself (D-151), run the event. Shown as a chip + **Open the Speaker Ready Room** / **Close it** (asks
+  first) on the command centre and on the Speaker Ready Room page; audited `srr.opened` / `srr.closed`.
+- **Closed**: check-in, local intake on a check-in and sign-off are refused (409 `srr.closed_conflict`) and their
+  buttons are off with the reason; setting up desks, checking a speaker out, the check-in report and uploading from
+  the room (Upload / Manage presentations / Room sync, D-153/D-154) still work. The speaker's Speaker Ready Room says
+  it opens on the event day.
+- Tests: `tests/invariants/srr-open.test.ts` (3); the suites that check speakers in on their own new events open the
+  room first.
+- **Addendum (Travis, same day): DXG adds them, the speaker only sees them** ("DXG-কে দিয়ে করাও, স্পিকারের পেজ শুধু
+  দেখার জন্য"). Support staff are added and removed by DXG Admins and support staff (presentation manager or above)
+  from the **Speakers** screen — a **Support staff (n)** button on each speaker opens the list and an add form:
+  `GET/POST /events/:id/speakers/:speakerId/support-staff`, `DELETE …/support-staff/:userId`. The speaker's sign-in is
+  made then if they have none (no email; their invitation issues the password, D-147). On staff screens it is called
+  **Speaker support staff**, never "Support staff", which is a DXG access level (D-151). The speaker site's Support
+  staff page lists them read-only ("ask the DXG team"); `POST/DELETE /me/support-staff` are gone. Audited on the event.
+  The sign-in email now says the DXG team set it up. Tests updated (7).
+
+## D-158 (2026-10-12): Preview Slides opens the deck in the desk computer's own app — Status: ACCEPTED (Travis, from the client's review, item A5)
+The review: "Preview Slides should trigger the deck to open in PowerPoint locally (not in-browser preview) — in-browser
+preview won't show transitions, animations, or video." Options weighed with Travis: PowerPoint for the Web (needs the
+client's files sent to Microsoft and a Microsoft 365 tenant — left for DXG to decide), a desk app (another Room Agent),
+our own player (can't match PowerPoint). Chosen: open natively, the browser telling the desktop apart.
+- **Open in PowerPoint** on the check-in (beside Confirm, with **Quick look** = the browser's slide images) and on
+  Presentation detail. Windows and Mac: the button asks for an **open link**
+  (`POST /file-versions/:id/open-link`, staff; technicians allowed) and hands it to PowerPoint as
+  `ms-powerpoint:ofv|u|<origin>/api/v1/open/<token>/<speaker - talk - vN>.pptx`; if the page doesn't lose focus to
+  PowerPoint (or its "Open PowerPoint?" prompt) within 2.5 s, the file downloads instead (Keynote / default app).
+  Linux and anything else: the file downloads ("Open on this computer"). The button's tooltip says which; only
+  PowerPoint shows exactly what the room will.
+- **Open links** (`open_links`, **migration 040**): random token, only its hash stored, one stored version, **5
+  minutes**, several fetches allowed (PowerPoint asks more than once, each counted), no sign-in
+  (`/api/v1/open/` is an open path), served `inline` with the right content type; expired or unknown → 404. Issuing
+  is audited (`file.open_link_issued`). Old links are cleared as new ones are made. No new secret or setting.
+- Tests: `tests/invariants/open-in-powerpoint.test.ts` (3).

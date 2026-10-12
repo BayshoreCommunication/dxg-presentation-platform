@@ -55,7 +55,7 @@ type FleetTalk = {
   } | null;
   loaded_other_version: number | null;
 };
-type FleetRoom = { room_id: string; room: string; readiness: string; heartbeat_age: number | null; talks: FleetTalk[] };
+type FleetRoom = { room_id: string; room: string; readiness: string; talks: FleetTalk[] };
 
 const room = async (): Promise<FleetRoom> => {
   const { items } = (await (await call("GET", `/events/${eventId}/sync/fleet`)).json()) as { items: FleetRoom[] };
@@ -141,6 +141,8 @@ before(async () => {
       slot_id: slotId,
     })
   ).json()) as { speaker_id: string };
+  // A new event's Speaker Ready Room starts closed (D-157); open it, as on the event day.
+  assert.equal((await call("PUT", `/events/${eventId}/srr-open`, { open: true })).status, 200);
   const station = (await (await call("POST", `/events/${eventId}/srr/stations`, { name: `Loading Desk ${RUN}` })).json()) as { id: string };
   const checkin = await call("POST", `/events/${eventId}/srr/checkins`, { speaker_id: speaker.speaker_id, station_id: station.id });
   assert.equal(checkin.status, 201);
@@ -170,7 +172,6 @@ describe("room PCs are loaded and ticked by hand (D-125)", () => {
     assert.equal(await talkStatus(), "approved_delivering");
     const here = await room();
     assert.equal(here.readiness, "attention");
-    assert.equal(here.heartbeat_age, null, "no room PC has ever reported for this room");
     const row = await talk();
     assert.equal(row.approved?.file_version_id, v1);
     assert.equal(row.approved?.loaded, false);
@@ -205,7 +206,6 @@ describe("room PCs are loaded and ticked by hand (D-125)", () => {
     assert.equal(await talkStatus(), "synchronized_onsite");
     const here = await room();
     assert.equal(here.readiness, "ready");
-    assert.equal(here.heartbeat_age, null);
     // Recorded like every other room change.
     const recorded = await withSystemScope(async (tx) => {
       const { rows } = await tx.query<{ n: number }>(
@@ -216,19 +216,6 @@ describe("room PCs are loaded and ticked by hand (D-125)", () => {
       return rows[0]!.n;
     });
     assert.equal(recorded, 1);
-    // The room view's Launch rule is unchanged: the loaded copy is the launchable one.
-    const view = (await (await call("GET", `/rooms/${roomId}/agent-view`)).json()) as {
-      schedule: { slot_id: string; launchable: boolean; sync_state: string | null }[];
-    };
-    assert.equal(view.schedule.find((item) => item.slot_id === slotId)?.launchable, true);
-
-    // D-128: Launch is recorded by the person who pressed it — there is no room PC.
-    const launched = await call("POST", `/rooms/${roomId}/launch`, { slot_id: slotId });
-    assert.equal(((await launched.json()) as { launched: boolean }).launched, true);
-    const after = (await (await call("GET", `/rooms/${roomId}/agent-view`)).json()) as {
-      schedule: { slot_id: string; presented_at: string | null }[];
-    };
-    assert.ok(after.schedule.find((item) => item.slot_id === slotId)?.presented_at, "shown as presented");
   });
 
   test("a newer approval is Update pending ack until it is loaded; loading it replaces the old copy", async (t: TestContext) => {
