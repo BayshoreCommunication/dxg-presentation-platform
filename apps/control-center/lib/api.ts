@@ -645,24 +645,7 @@ export type SpeakerRow = {
   last_email: { status: string; at: string; to: string; count: number } | null;
   /** The speaker's persistent sign-in (D-146): none, invited (temporary password unchanged) or active. */
   account: "invited" | "active" | null;
-  /** Speaker support staff on that sign-in (D-156). */
-  support_staff: number;
 };
-
-/* ── a speaker's support staff (D-156): assistants who submit their presentations ── */
-
-export type SupportStaffRow = { user_id: string; name: string; email: string; state: "invited" | "active"; added_at: string };
-export const getSpeakerSupportStaff = (eventId: string, speakerId: string) =>
-  request<{ items: SupportStaffRow[]; max: number }>(
-    `/events/${eventId}/speakers/${speakerId}/support-staff`,
-  );
-export const addSpeakerSupportStaff = (eventId: string, speakerId: string, name: string, email: string) =>
-  request<SupportStaffRow>(`/events/${eventId}/speakers/${speakerId}/support-staff`, {
-    method: "POST",
-    body: JSON.stringify({ name, email }),
-  });
-export const removeSpeakerSupportStaff = (eventId: string, speakerId: string, userId: string) =>
-  request<{ removed: true }>(`/events/${eventId}/speakers/${speakerId}/support-staff/${userId}`, { method: "DELETE" });
 
 export type DuplicatePair = {
   a_id: string;

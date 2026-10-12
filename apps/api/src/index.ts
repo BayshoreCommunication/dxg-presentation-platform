@@ -68,7 +68,6 @@ import {
 const MFA_COOKIE = "pmp_mfa";
 /** The speaker site's sign-in page (D-148). */
 const SPEAKER_SITE = `${process.env.PORTAL_BASE ?? "http://localhost:3001"}/login`;
-import { addSupportStaff, listSupportStaff, MAX_SUPPORT_STAFF, removeSupportStaff, speakerAccountFor } from "./services/speakerSupport.ts";
 import { approvedRoomsZip, assignedTo, eventTechnicians, markLoaded, roomOfRoomFile, setRoomTechnicians, unmarkLoaded } from "./services/roomSync.ts";
 import { setSrrOpen, srrDashboard, srrReportCsv, checkIn, checkinDetail, usbIngest, slotIntake, signOff, depart, emailReceipt, addStation, renameStation, retireStation } from "./services/srr.ts";
 import {
@@ -751,7 +750,7 @@ app.use((req, res, next) => {
       message:
         principal?.kind === "staff" && principal.account_kind === "speaker"
           ? "This part of the platform is for DXG staff. Your presentations are under Manage presentations."
-          : "You haven't been added to an event yet.",
+          : "You aren't on any event yet. Ask a DXG Admin to add you in Event assignments.",
     });
   }
   // What each kind of DXG account may open (D-151): the client drew the line by screen.
@@ -1389,10 +1388,6 @@ app.get("/api/v1/events/:eventId/speakers", async (req, res) => {
                 WHERE u.account_kind = 'speaker' AND u.is_active AND u.deleted_at IS NULL
                   AND lower(u.email::text) = lower(sp.email::text)
                 LIMIT 1) AS account,
-              -- Their support staff (D-156): assistants hanging off that sign-in.
-              (SELECT count(*)::int FROM pmp.users a JOIN pmp.users m ON m.id = a.assists_user_id
-                WHERE a.is_active AND a.deleted_at IS NULL
-                  AND lower(m.email::text) = lower(sp.email::text)) AS support_staff,
               -- Presentations whose newest version was sent back — changes requested, rejected,
               -- or failed inspection — so the list says "Needs revision" as the portal does (D-090).
               (SELECT count(*)::int
@@ -1636,8 +1631,8 @@ app.post("/api/v1/portal/uploads/:uploadId/complete", (req, res) =>
 function speakerAccountOf(
   req: express.Request,
   res: express.Response,
-  options: { allowUnchangedPassword?: boolean; allowSupportStaff?: boolean } = {},
-): { user_id: string; email: string; name: string; must_change_password: boolean; supportStaff: boolean } | null {
+  options: { allowUnchangedPassword?: boolean } = {},
+): { user_id: string; email: string; name: string; must_change_password: boolean } | null {
   const principal = (req as express.Request & { principal?: Principal }).principal;
   if (principal?.kind !== "staff") {
     res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
@@ -1652,35 +1647,17 @@ function speakerAccountOf(
     res.status(403).json({ code: "auth.password_change_required", message: "Choose your own password before continuing." });
     return null;
   }
-  /*
-   * Speaker Support Staff (D-156) reach the speaker they assist — `email` and `name` are that
-   * speaker's — and only what submitting content needs: Manage presentations and their own
-   * password. Everything else on the speaker site is the speaker's own.
-   */
-  // The speaker they assist is gone: nothing of theirs is open any more (D-156).
-  if (principal.assisting && !principal.assisting.active) {
-    res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
-    return null;
-  }
-  if (principal.assisting && !options.allowSupportStaff) {
-    res.status(403).json({
-      code: "auth.support_staff_forbidden",
-      message: `As ${principal.assisting.name}'s support staff you can submit their presentations under Manage presentations. The rest of the site is theirs.`,
-    });
-    return null;
-  }
   return {
     user_id: principal.user_id,
-    email: principal.assisting?.email ?? principal.email,
-    name: principal.assisting?.name ?? principal.display_name,
+    email: principal.email,
+    name: principal.display_name,
     must_change_password: principal.must_change_password,
-    supportStaff: Boolean(principal.assisting),
   };
 }
 
 /** Who is signed in on the speaker site (D-148). */
 app.get("/api/v1/me/session", (req, res) => {
-  const me = speakerAccountOf(req, res, { allowUnchangedPassword: true, allowSupportStaff: true });
+  const me = speakerAccountOf(req, res, { allowUnchangedPassword: true });
   if (!me) return;
   const principal = (req as express.Request & { principal?: Principal }).principal;
   return res.json({ principal });
@@ -1694,7 +1671,7 @@ app.post("/api/v1/me/logout", async (req, res) => {
 });
 
 app.post("/api/v1/me/password", async (req, res) => {
-  const me = speakerAccountOf(req, res, { allowUnchangedPassword: true, allowSupportStaff: true });
+  const me = speakerAccountOf(req, res, { allowUnchangedPassword: true });
   if (!me) return;
   const body = req.body as { current_password?: string; new_password?: string };
   if (!body.current_password || !body.new_password) {
@@ -1713,17 +1690,10 @@ app.post("/api/v1/me/password", async (req, res) => {
 });
 
 app.get("/api/v1/me/presentations", async (req, res) => {
-  const me = speakerAccountOf(req, res, { allowSupportStaff: true });
+  const me = speakerAccountOf(req, res);
   if (!me) return;
   const events = await withSystemScope((tx) => myPresentations(tx, me.email));
   return res.json({ speaker: { name: me.name, email: me.email }, events });
-});
-
-/* Speaker Support Staff (D-156): the speaker sees who may submit for them; DXG staff add them. */
-app.get("/api/v1/me/support-staff", async (req, res) => {
-  const me = speakerAccountOf(req, res);
-  if (!me) return;
-  return res.json({ items: await withSystemScope((tx) => listSupportStaff(tx, me.user_id)), max: MAX_SUPPORT_STAFF });
 });
 
 /** What the team told this speaker, in their site: review decisions and approvals. */
@@ -1744,8 +1714,7 @@ app.post("/api/v1/me/notifications/read", async (req, res) => {
 
 /** The speaker's events, for the sidebar's switcher and the portfolio. */
 app.get("/api/v1/me/events", async (req, res) => {
-  // Support staff get the speaker's events too, for their switcher (D-156).
-  const me = speakerAccountOf(req, res, { allowSupportStaff: true });
+  const me = speakerAccountOf(req, res);
   if (!me) return;
   return res.json({ items: await withSystemScope((tx) => myEvents(tx, me.email)) });
 });
@@ -1773,7 +1742,7 @@ app.get("/api/v1/me/events/:eventId/srr", async (req, res) => {
 });
 
 app.post("/api/v1/me/uploads", async (req, res) => {
-  const me = speakerAccountOf(req, res, { allowSupportStaff: true });
+  const me = speakerAccountOf(req, res);
   if (!me) return;
   const body = req.body as { slot_id?: string; file_name?: string; total_bytes?: number };
   if (!body.slot_id || !body.file_name || typeof body.total_bytes !== "number") {
@@ -1795,7 +1764,7 @@ app.post("/api/v1/me/uploads", async (req, res) => {
 });
 
 app.get("/api/v1/me/uploads/:uploadId", async (req, res) => {
-  const me = speakerAccountOf(req, res, { allowSupportStaff: true });
+  const me = speakerAccountOf(req, res);
   if (!me) return;
   const uploadId = String(req.params.uploadId);
   return withSystemScope(async (tx) => {
@@ -1806,7 +1775,7 @@ app.get("/api/v1/me/uploads/:uploadId", async (req, res) => {
 });
 
 app.put("/api/v1/me/uploads/:uploadId/parts/:partNumber", async (req, res) => {
-  const me = speakerAccountOf(req, res, { allowSupportStaff: true });
+  const me = speakerAccountOf(req, res);
   if (!me) return;
   const uploadId = String(req.params.uploadId);
   const part = Number(req.params.partNumber);
@@ -1823,7 +1792,7 @@ app.put("/api/v1/me/uploads/:uploadId/parts/:partNumber", async (req, res) => {
 });
 
 app.post("/api/v1/me/uploads/:uploadId/complete", async (req, res) => {
-  const me = speakerAccountOf(req, res, { allowSupportStaff: true });
+  const me = speakerAccountOf(req, res);
   if (!me) return;
   const uploadId = String(req.params.uploadId);
   const body = req.body as { slot_id?: string; file_name?: string; sha256?: string };
@@ -1841,8 +1810,6 @@ app.post("/api/v1/me/uploads/:uploadId/complete", async (req, res) => {
       uploadId,
       slotId: owned.slotId,
       fileName: body.file_name as string,
-      // Who actually submitted it, when it was the speaker's support staff (D-156).
-      ...(me.supportStaff ? { submittedByUserId: me.user_id } : {}),
       ...(body.sha256 ? { expectedSha256: body.sha256 } : {}),
     });
     if (!result.ok) return res.status(422).json({ code: result.code, message: result.message });
@@ -1851,7 +1818,7 @@ app.post("/api/v1/me/uploads/:uploadId/complete", async (req, res) => {
 });
 
 app.get("/api/v1/me/file-versions/:versionId/download", async (req, res) => {
-  const me = speakerAccountOf(req, res, { allowSupportStaff: true });
+  const me = speakerAccountOf(req, res);
   if (!me) return;
   const versionId = String(req.params.versionId);
   return withSystemScope(async (tx) => {
@@ -3356,55 +3323,6 @@ app.post("/api/v1/events/:eventId/speakers/:speakerId/send-link", async (req, re
     return res.status(status).json(result.error);
   }
   return res.status(201).json(result.value);
-});
-
-/*
- * A speaker's support staff (D-156): DXG Admins and support staff list, add and remove the
- * assistants who submit the speaker's presentations. The sign-in hangs off the speaker's own.
- */
-app.get("/api/v1/events/:eventId/speakers/:speakerId/support-staff", async (req, res) => {
-  const actor = actorFrom(req);
-  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
-  const eventId = String(req.params.eventId);
-  const result = await withScope(scopeFor(req, eventId), async (tx) => {
-    const speaker = await speakerAccountFor(tx, actor, eventId, String(req.params.speakerId), { create: false });
-    if (!speaker.ok) return speaker;
-    // No sign-in yet means no support staff yet; opening the list makes nothing.
-    return { ok: true as const, value: { items: speaker.value ? await listSupportStaff(tx, speaker.value.user_id) : [], max: MAX_SUPPORT_STAFF } };
-  });
-  if (!result.ok) return res.status(result.error.code.startsWith("support.") ? 422 : statusFor(result.error)).json(result.error);
-  return res.json(result.value);
-});
-
-app.post("/api/v1/events/:eventId/speakers/:speakerId/support-staff", async (req, res) => {
-  const actor = actorFrom(req);
-  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
-  const eventId = String(req.params.eventId);
-  const body = (req.body ?? {}) as { name?: unknown; email?: unknown };
-  const result = await withScope(scopeFor(req, eventId), async (tx) => {
-    const speaker = await speakerAccountFor(tx, actor, eventId, String(req.params.speakerId));
-    if (!speaker.ok) return speaker;
-    return addSupportStaff(tx, speaker.value!, { name: body.name, email: body.email }, { actorUserId: actor.id, eventId });
-  });
-  if (!result.ok) {
-    const status = result.error.code === "support.email_taken" ? 409 : result.error.code.startsWith("support.") ? 422 : statusFor(result.error);
-    return res.status(status).json(result.error);
-  }
-  return res.status(201).json(result.value);
-});
-
-app.delete("/api/v1/events/:eventId/speakers/:speakerId/support-staff/:userId", async (req, res) => {
-  const actor = actorFrom(req);
-  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
-  const eventId = String(req.params.eventId);
-  const result = await withScope(scopeFor(req, eventId), async (tx) => {
-    const speaker = await speakerAccountFor(tx, actor, eventId, String(req.params.speakerId), { create: false });
-    if (!speaker.ok) return speaker;
-    if (!speaker.value) return { ok: false as const, error: { code: "support.not_found", message: "That person isn't on this speaker's support staff any more. Refresh the page." } };
-    return removeSupportStaff(tx, speaker.value, String(req.params.userId), { actorUserId: actor.id, eventId });
-  });
-  if (!result.ok) return res.status(result.error.code === "support.not_found" ? 404 : statusFor(result.error)).json(result.error);
-  return res.json(result.value);
 });
 
 /** Gives a speaker a persistent sign-in on this site (D-146); the password goes to their address. */

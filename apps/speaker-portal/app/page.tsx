@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Manage presentations — DXG·PM" };
 
 /**
- * Where the speaker site opens (D-146, D-148). A speaker — or their support staff — goes to Manage
+ * Where the speaker site opens (D-146, D-148). A speaker goes to Manage
  * presentations for the newest event; each event has its own, chosen in the sidebar (Travis,
  * 2026-10-12: one event at a time, not one under another).
  */
