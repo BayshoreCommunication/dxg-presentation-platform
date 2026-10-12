@@ -2927,3 +2927,8 @@ our own player (can't match PowerPoint). Chosen: open natively, the browser tell
   (`/api/v1/open/` is an open path), served `inline` with the right content type; expired or unknown → 404. Issuing
   is audited (`file.open_link_issued`). Old links are cleared as new ones are made. No new secret or setting.
 - Tests: `tests/invariants/open-in-powerpoint.test.ts` (3).
+- **Addendum (Travis, 2026-10-12, on production):** on a Mac without PowerPoint, Chrome offered "Open LibreOffice?" —
+  LibreOffice registers the `ms-powerpoint:` scheme too — and Keynote, which takes no such link, was unreachable; the
+  prompt counted as handed over, so nothing downloaded. **Download** now sits beside Open in PowerPoint on every desktop
+  (the computer's default app — Keynote here — opens the file); after a hand-over the page says "Wrong app, or nothing
+  opened? Press Download". Linux shows Download alone.

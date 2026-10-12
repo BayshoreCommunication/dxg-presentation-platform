@@ -18,7 +18,7 @@ function desktop(): Desktop {
 
 const HOW: Record<Desktop, string> = {
   windows: "Opens in PowerPoint on this computer. Without PowerPoint, the file downloads — open it from your downloads.",
-  mac: "Opens in PowerPoint on this Mac. Without PowerPoint, the file downloads and opens in Keynote or your default app.",
+  mac: "Opens in PowerPoint on this Mac. No PowerPoint (Keynote only)? Use Download instead.",
   linux: "Downloads the file; open it from your downloads (LibreOffice Impress or your default app).",
   other: "Downloads the file; open it with the presentation app on this device.",
 };
@@ -28,13 +28,15 @@ const HOW: Record<Desktop, string> = {
  * where transitions, animations and video look as they will in the room — the browser preview
  * can't show those. On Windows and Mac it hands PowerPoint a five-minute link to this one
  * version (`ms-powerpoint:ofv|u|…`); if PowerPoint doesn't take it (the page never loses focus
- * to it), the file downloads instead. Linux has no PowerPoint, so it downloads straight away.
+ * to it), the file downloads instead. **Download** sits beside it always: on a Mac, LibreOffice also
+ * claims these links and Keynote takes none, so a downloaded file (opened by the computer's
+ * default app) is how Keynote gets it. Linux has no PowerPoint: Download only.
  * Only PowerPoint shows exactly what the room will — other apps are close, not the same.
  */
 export function OpenInPowerPoint({ versionId, primary = false }: { versionId: string; primary?: boolean }) {
   // Unknown until the page is running in the browser; until then it reads as most desks are (PowerPoint).
   const [os, setOs] = useState<Desktop | null>(null);
-  const [state, setState] = useState<"idle" | "opening" | "downloaded">("idle");
+  const [state, setState] = useState<"idle" | "opening" | "handed" | "downloaded">("idle");
   const [error, setError] = useState<string | null>(null);
   useEffect(() => setOs(desktop()), []);
 
@@ -67,7 +69,9 @@ export function OpenInPowerPoint({ versionId, primary = false }: { versionId: st
       window.setTimeout(() => {
         window.removeEventListener("blur", leave);
         document.removeEventListener("visibilitychange", leave);
-        if (handedOver) setState("idle");
+        // Handed to an app — which may not be PowerPoint: LibreOffice also claims these links on
+        // a Mac, and Keynote takes none. Say so, with Download beside it for Keynote or the default app.
+        if (handedOver) setState("handed");
         else download();
       }, 2500);
     } catch (caught) {
@@ -76,12 +80,34 @@ export function OpenInPowerPoint({ versionId, primary = false }: { versionId: st
     }
   }
 
+  const noPowerPoint = os === "linux" || os === "other";
+
   return (
     <span style={{ display: "inline-flex", flexDirection: "column", gap: 4 }}>
-      <button type="button" className={primary ? "btn pri" : "btn"} disabled={state === "opening"} title={HOW[os ?? "windows"]} onClick={() => void open()}>
-        <Icon name="play" />
-        {state === "opening" ? "Opening…" : os === "linux" || os === "other" ? "Open on this computer" : "Open in PowerPoint"}
-      </button>
+      <span style={{ display: "inline-flex", gap: 8, flexWrap: "wrap" }}>
+        {!noPowerPoint && (
+          <button type="button" className={primary ? "btn pri" : "btn"} disabled={state === "opening"} title={HOW[os ?? "windows"]} onClick={() => void open()}>
+            <Icon name="play" />
+            {state === "opening" ? "Opening…" : "Open in PowerPoint"}
+          </button>
+        )}
+        {/* Always there: Keynote, LibreOffice or whichever app opens .pptx on this computer. */}
+        <button
+          type="button"
+          className={noPowerPoint && primary ? "btn pri" : "btn"}
+          title="Download the file and open it with this computer's app for presentations (Keynote, PowerPoint, LibreOffice…)"
+          onClick={download}
+        >
+          <Icon name="download" />
+          Download
+        </button>
+      </span>
+      {state === "handed" && (
+        <span className="note" style={{ maxWidth: 360 }}>
+          Opened in this computer&rsquo;s app for PowerPoint links. Wrong app, or nothing opened? Press Download and open it
+          with Keynote or PowerPoint.
+        </span>
+      )}
       {state === "downloaded" && (
         <span className="note" style={{ maxWidth: 320 }}>
           Downloaded — open it from your downloads.
