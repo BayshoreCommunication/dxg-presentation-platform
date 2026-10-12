@@ -64,7 +64,9 @@ export function HoverTip({
               left: pos?.left ?? 0,
               visibility: pos ? "visible" : "hidden",
               zIndex: 1000,
-              maxWidth: 240,
+              // As wide as the label up to 260px, then it wraps — a long label used to run out of its box.
+              width: "max-content",
+              maxWidth: 260,
               background: "var(--ink)",
               color: "var(--white)",
               borderRadius: 6,
@@ -72,7 +74,7 @@ export function HoverTip({
               fontSize: 12,
               lineHeight: 1.35,
               fontWeight: 500,
-              whiteSpace: "nowrap",
+              whiteSpace: "normal",
               pointerEvents: "none",
               boxShadow: "0 6px 20px rgba(20, 24, 27, .18)",
             }}
