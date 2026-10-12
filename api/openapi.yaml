@@ -288,12 +288,6 @@ paths:
   /events/{eventId}/srr-open:
     parameters: [{$ref: '#/components/parameters/eventId'}]
     put: {tags: [srr], summary: "The Speaker Ready Room's event-day switch, {open: boolean}; DXG Admins and support staff (D-157). While closed, check-in, intake on a check-in and sign-off are 409 srr.closed_conflict", responses: {'200': {$ref: '#/components/responses/OK'}, '403': {$ref: '#/components/responses/Error'}}}
-  /me/support-staff:
-    get: {tags: [speaker], summary: "The speaker's support staff (D-156)", responses: {'200': {$ref: '#/components/responses/OK'}}}
-    post: {tags: [speaker], summary: "Give an assistant a sign-in that submits this speaker's presentations (D-156)", responses: {'201': {$ref: '#/components/responses/Created'}, '409': {$ref: '#/components/responses/Error'}, '422': {$ref: '#/components/responses/Error'}}}
-  /me/support-staff/{userId}:
-    parameters: [{name: userId, in: path, required: true, schema: {type: string, format: uuid}}]
-    delete: {tags: [speaker], summary: "Remove a support staff member; their sign-in and sessions end (D-156)", responses: {'200': {$ref: '#/components/responses/OK'}, '404': {$ref: '#/components/responses/Error'}}}
   /events/{eventId}/srr/report.csv:
     parameters: [{$ref: '#/components/parameters/eventId'}]
     get:

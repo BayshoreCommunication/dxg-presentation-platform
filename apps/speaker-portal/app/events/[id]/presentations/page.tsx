@@ -17,7 +17,6 @@ export default async function EventPresentationsPage({ params }: { params: Promi
   try {
     const { principal } = await getSession();
     if (principal.must_change_password) redirect("/account/password?first=1");
-    // The speaker's own, or — for their support staff — the speaker's they assist.
     const { speaker, events } = await getMyPresentations();
     const event = events.find((item) => item.id === id);
     // An event they don't speak at (or no longer do): their newest, or the empty page.

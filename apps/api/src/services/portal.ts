@@ -298,8 +298,6 @@ export async function completeUpload(
     slotId: string;
     fileName: string;
     expectedSha256?: string;
-    /** The speaker's support staff who submitted it (D-156), recorded as the uploading user. */
-    submittedByUserId?: string;
   },
 ): Promise<{ ok: true; value: CompleteResult } | { ok: false; code: string; message: string }> {
   /*
@@ -317,7 +315,6 @@ export async function completeUpload(
     uploadId: input.uploadId,
     source: "portal",
     speakerId: session.speaker_id,
-    ...(input.submittedByUserId ? { actorUserId: input.submittedByUserId } : {}),
     ...(input.expectedSha256 === undefined ? {} : { expectedSha256: input.expectedSha256 }),
   });
   if (!result.ok) return { ok: false, code: result.error.code, message: result.error.message };

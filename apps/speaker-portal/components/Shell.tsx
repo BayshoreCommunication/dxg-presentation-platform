@@ -33,22 +33,10 @@ const GROUPS: { group: string; items: { label: string; href: string; icon: strin
     items: [
       { label: "Agenda", href: "/events/:id/agenda", icon: "calendar" },
       { label: "Manage presentations", href: "/events/:id/presentations", icon: "review" },
-      // Assistants who submit for the speaker (client review, D-156).
-      { label: "Support staff", href: "/support-staff", icon: "users" },
     ],
   },
   { group: "ONSITE", items: [{ label: "Speaker Ready Room", href: "/events/:id/srr", icon: "users" }] },
 ];
-
-/*
- * Speaker Support Staff (D-156) submit content for the speaker they assist, and nothing else:
- * one door — Manage presentations, for the event chosen in the switcher (the speaker's events,
- * Travis 2026-10-12) — and no bell or onsite screens.
- */
-const SUPPORT_GROUPS: typeof GROUPS = [
-  { group: "CONTROL CENTER", items: [{ label: "Manage presentations", href: "/events/:id/presentations", icon: "review" }] },
-];
-const SUPPORT_PATHS = [/^\/$/, /^\/events\/[^/]+\/presentations$/, /^\/help$/, /^\/account\/password$/];
 
 const BARE = ["/login", "/forgot-password", "/reset-password", "/account/password", "/t/"];
 
@@ -82,14 +70,6 @@ function Frame({ principal, events, children }: { principal: Principal; events: 
   const [collapsed, setCollapsed] = useState(false);
   const [narrow, setNarrow] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const assisting = principal.assisting ?? null;
-  const groups = assisting ? SUPPORT_GROUPS : GROUPS;
-
-  // Support staff have Manage presentations only; any other page sends them there.
-  useEffect(() => {
-    if (assisting && !SUPPORT_PATHS.some((path) => path.test(pathname))) router.replace("/");
-  }, [assisting, pathname, router]);
-
   useEffect(() => {
     try {
       setCollapsed(window.localStorage.getItem(SIDEBAR_KEY) === "collapsed");
@@ -124,8 +104,6 @@ function Frame({ principal, events, children }: { principal: Principal; events: 
     ? "Help"
     : pathname.startsWith("/portfolio")
       ? "Portfolio"
-      : pathname.startsWith("/support-staff")
-        ? "Support staff"
       : /\/agenda$/.test(pathname)
         ? "Agenda"
         : /\/srr$/.test(pathname)
@@ -150,23 +128,12 @@ function Frame({ principal, events, children }: { principal: Principal; events: 
           </button>
         </div>
         <div className="sidebody">
-          {/* Support staff see whose work it is, then the same event switcher (D-156). */}
-          {assisting ? (
-            <div className="evtctx" style={{ paddingBottom: 0 }}>
-              <span className="note">
-                Support staff for <b>{assisting.name}</b>
-              </span>
-            </div>
-          ) : (
-            <nav className="topnav" aria-label="Events">
-              {GROUPS.filter((entry) => entry.group === "EVENTS").map(renderGroup)}
-            </nav>
-          )}
+          <nav className="topnav" aria-label="Events">
+            {GROUPS.filter((entry) => entry.group === "EVENTS").map(renderGroup)}
+          </nav>
           <div className="evtctx">
             {events.length === 0 ? (
-              <span className="note">
-                {assisting ? "No events yet." : "No events yet — the organisers add you to an agenda."}
-              </span>
+              <span className="note">No events yet — the organisers add you to an agenda.</span>
             ) : (
               <>
                 <select
@@ -176,8 +143,8 @@ function Frame({ principal, events, children }: { principal: Principal; events: 
                     const chosen = event.target.value;
                     if (!chosen) return;
                     // Stay on the same screen, now for the chosen event.
-                    if (!assisting && /\/agenda$/.test(pathname)) router.push(`/events/${chosen}/agenda`);
-                    else if (!assisting && /\/srr$/.test(pathname)) router.push(`/events/${chosen}/srr`);
+                    if (/\/agenda$/.test(pathname)) router.push(`/events/${chosen}/agenda`);
+                    else if (/\/srr$/.test(pathname)) router.push(`/events/${chosen}/srr`);
                     else router.push(`/events/${chosen}/presentations`);
                   }}
                 >
@@ -191,7 +158,7 @@ function Frame({ principal, events, children }: { principal: Principal; events: 
               </>
             )}
           </div>
-          <nav aria-label="This site">{groups.filter((entry) => entry.group !== "EVENTS").map(renderGroup)}</nav>
+          <nav aria-label="This site">{GROUPS.filter((entry) => entry.group !== "EVENTS").map(renderGroup)}</nav>
           <AccountMenu principal={principal} />
         </div>
       </aside>
@@ -219,7 +186,7 @@ function Frame({ principal, events, children }: { principal: Principal; events: 
             </nav>
           </div>
           <div className="right">
-            {!assisting && <NotificationBell />}
+            <NotificationBell />
             <Link href="/help" className="btn help-link" title="How this screen works">
               ? Help
             </Link>
@@ -234,12 +201,6 @@ function Frame({ principal, events, children }: { principal: Principal; events: 
           </div>
         </header>
         <div className="content">
-          {assisting && (
-            <div className="note" style={{ margin: "0 0 12px" }}>
-              You are signed in as <b>{principal.display_name}</b>, support staff for <b>{assisting.name}</b>. Uploads you
-              make are submitted as theirs.
-            </div>
-          )}
           {children}
         </div>
       </main>
@@ -353,7 +314,7 @@ function AccountMenu({ principal }: { principal: Principal }) {
         </span>
         <span className="who">
           <b>{principal.display_name}</b>
-          <small>{principal.assisting ? "Support staff" : "Speaker"}</small>
+          <small>Speaker</small>
         </span>
         <span style={{ color: "var(--subtle-foreground)", display: "flex" }}>
           <Icon name="chevrons" size={12} />

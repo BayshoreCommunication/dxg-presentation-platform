@@ -3633,3 +3633,22 @@ picker names each presentation by speaker and status; the speaker site shows one
 `/events/:id/presentations`). Lint, type-check, unit 291; invariants 398/400 — the two failures need seed state the
 local data no longer has, as before. Known, not changed: an assistant reaches every event carrying the speaker's
 address (speaker accounts span clients, D-146); `open_links` (migration 040) is unused.
+
+## 2026-10-12 — Speaker Support Staff retired; technicians submit for speakers (D-159)
+Travis: support staff are not per speaker — the DXG Technician staff assigned to an event work on every speaker's
+presentations there. Removed the per-speaker assistant (Speakers button and dialog, speaker-site page and Help guide,
+the support-staff API, `assisting` on the principal); migration 041 closes existing assistant sign-ins and their
+sessions. Technicians already upload from Manage presentations on their assigned events (D-154); a new suite proves
+it for two speakers, refused before assignment and after removal, and that the old routes are 404. Local demo: a
+"Tech Summit" event (Oct 28–29, 2026 — a local event can't be in the past) with five fake speakers and a demo
+technician `tech.demo@dxg.live` assigned to it, signing in like the seeded staff.
+
+**Same day, test pass (Travis: "ei related sob test kore dekho"):** walked it with messy data — a co-presented talk,
+two speakers named Owen Brandt, a speaker with no email, a removed speaker. The technician uploaded from the real
+Manage presentations screen (Priya Shah, Nadia Ferreira, Sam NoMail: virus check, version 1, sent for review); Nadia
+sees it on the speaker site; the old `/support-staff` page and API are 404; a former assistant is refused even with
+the right password; the speaker they assisted signs in normally; a former assistant's address added as a speaker
+becomes that speaker's own sign-in and sees only their own talk. Taken off the event, the technician is refused; with
+no event left the refusal read "You haven't been added to an event yet", wrong for someone just removed — now "You
+aren't on any event yet. Ask a DXG Admin to add you in Event assignments." (API, no-access page, Help tip). Related
+suites 152/152 plus admin, practice, auth separation 53/53; lint, type-check clean.

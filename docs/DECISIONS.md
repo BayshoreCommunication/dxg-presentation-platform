@@ -2864,7 +2864,7 @@ ECR's scan of the first CI-built images (D-149) found 7–8 critical and ~40 hig
 - Tests: `device-keys` suite removed with its routes; cross-event (the room check is now Room sync's), event-owned-data
   and manual-room-loading (no room view or Launch) updated.
 
-## D-156 (2026-10-12): Speaker Support Staff — Status: ACCEPTED (Travis, from the client's review, item C10)
+## D-156 (2026-10-12): Speaker Support Staff — Status: SUPERSEDED by D-159 (Travis, from the client's review, item C10)
 The review: "Speaker Support Staff role added for admin assistants submitting on behalf of a presenter — junior role
 scoped to content submission under the main speaker's account."
 - **Model** (**migration 038**): `users.assists_user_id`. A support staff member is a **speaker account** (so every
@@ -2941,3 +2941,20 @@ our own player (can't match PowerPoint). Chosen: open natively, the browser tell
   (`/events/:id/presentations`), and the site opens on the newest. `GET /me/events` is open to them; the agenda,
   Speaker Ready Room, bell and support-staff list stay the speaker's. One assistant still assists one speaker — a PA
   for several speakers needs an address per speaker (a many-speaker assistant would be a model change, not made).
+
+## D-159 (2026-10-12): Speaker Support Staff is retired; DXG Technician staff submit for speakers — Status: ACCEPTED (Travis)
+Travis: "Support staff jeta speaker er jonno add kori seta emon hobe na" — submitting for a speaker is not one
+assistant per speaker; it is the DXG Technician staff assigned to the event, for every speaker on it. Supersedes D-156.
+- **Gone**: the Speakers screen's **Support staff** button and dialog, the speaker site's **Support staff** page and
+  its Help guide, `GET/POST/DELETE /events/:id/speakers/:id/support-staff`, `GET /me/support-staff`, the speakers
+  list's `support_staff` count, the principal's `assisting`, and `services/speakerSupport.ts`. Speaker routes serve
+  only the signed-in speaker's own work again.
+- **Existing assistants** (**migration 041**): every account with `users.assists_user_id` is deactivated and its
+  sessions end. The column stays, so versions they uploaded still name who sent them (`uploaded_by_user`); sign-in
+  refuses any account that has it, active or not. An address of a former assistant that turns out to be a speaker's
+  own still becomes that speaker's sign-in (D-156's rule kept, `assists_user_id` cleared).
+- **Who submits instead**: DXG Technician staff, placed on the event on **Event assignments** (D-151), use **Upload a
+  new version** on Manage presentations (D-154) for any presentation on that event — the same local intake (scan →
+  store → inspect → review), source `srr_manual`, a reason required, `uploaded_by_user` the technician. Nothing new
+  was needed: the event placement is the scope, and an event they are not on is refused (403). DXG Admins can too.
+- Tests: `tests/invariants/technician-submits-for-speakers.test.ts` (5) replaces `speaker-support-staff.test.ts`.

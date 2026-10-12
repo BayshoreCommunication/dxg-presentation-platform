@@ -59,7 +59,7 @@ export default async function NoAccessPage({ searchParams }: { searchParams: Pro
     <div className="card" style={{ maxWidth: 560, margin: "40px auto" }}>
       <div className="cbd">
         <h1 className="htitle" style={{ marginTop: 0 }}>
-          You haven&rsquo;t been added to an event yet
+          You aren&rsquo;t on any event yet
         </h1>
 
         <p className="note" style={{ marginTop: 14, lineHeight: 1.6 }}>

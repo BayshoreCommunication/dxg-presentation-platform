@@ -67,14 +67,7 @@ export type Principal = {
   display_name: string;
   account_kind: "staff" | "speaker";
   must_change_password: boolean;
-  /** Speaker Support Staff (D-156): the speaker this account submits for; null for a speaker. */
-  assisting?: { user_id: string; name: string; email: string } | null;
 };
-
-/* ── Speaker Support Staff (D-156) ─────────────────────────────────────────── */
-
-export type SupportStaffRow = { user_id: string; name: string; email: string; state: "invited" | "active"; added_at: string };
-export const getSupportStaff = () => request<{ items: SupportStaffRow[]; max: number }>("/me/support-staff");
 
 
 /** Sign in with email and password; a staff member's password opens nothing here. */

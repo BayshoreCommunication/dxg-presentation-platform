@@ -20,7 +20,6 @@ import { Icon } from "@/components/Icon";
 import { InfoTip } from "@/components/InfoTip";
 import { HoverTip } from "@/components/HoverTip";
 import { WhyNot } from "@/components/WhyNot";
-import { SpeakerSupportStaffDialog } from "@/components/SpeakerSupportStaffDialog";
 import { EMAIL_STATUS, wordsFor } from "@pmp/format";
 
 /** Screen 5 — the speaker directory, its duplicates, and the chase list. */
@@ -53,8 +52,6 @@ export function SpeakersView({
   const [askRemind, setAskRemind] = useState(false);
   // D-147: sending a sign-in asks first, as every email does.
   const [askSignIn, setAskSignIn] = useState<string | null>(null);
-  // A speaker's support staff (D-156), managed in a dialog.
-  const [supportFor, setSupportFor] = useState<SpeakerRow | null>(null);
 
   // The server component re-renders on refresh; the list here is client state, so a
   // new speaker is fetched rather than waiting on a prop that `useState` would ignore.
@@ -480,19 +477,12 @@ export function SpeakersView({
                           />
                         )}
                       </td>
-                      {/* Support staff (D-156) and Remove (D-147): everything else a speaker needs is on the Agenda or in their sign-in. */}
+                      {/*
+                        * Remove (D-147): everything else a speaker needs is on the Agenda or in their sign-in.
+                        * Submitting for a speaker is DXG Technician staff's job on the events they are
+                        * assigned to (D-159), so there is no per-speaker assistant here.
+                        */}
                       <td style={{ width: 1, whiteSpace: "nowrap", textAlign: "right" }}>
-                        <HoverTip label={row.email ? "Assistants who submit this speaker's presentations" : "Add an email address first"}>
-                          <button
-                            className="btn"
-                            style={ICON_BUTTON}
-                            disabled={!row.email}
-                            aria-label={`Speaker support staff for ${row.full_name}`}
-                            onClick={() => setSupportFor(row)}
-                          >
-                            <Icon name="users" /> Support staff{row.support_staff > 0 ? ` (${row.support_staff})` : ""}
-                          </button>
-                        </HoverTip>{" "}
                         <HoverTip label="Remove speaker">
                           <button
                             className="btn"
@@ -544,18 +534,6 @@ export function SpeakersView({
             } finally {
               setPending(null);
             }
-          }}
-        />
-      )}
-
-      {supportFor && (
-        <SpeakerSupportStaffDialog
-          eventId={eventId}
-          speaker={supportFor}
-          onClose={() => setSupportFor(null)}
-          onChanged={(message) => {
-            setToast(message);
-            void reload().catch(() => undefined);
           }}
         />
       )}

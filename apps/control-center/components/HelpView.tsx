@@ -70,7 +70,7 @@ export const GUIDES: Section[] = [
           "Press Next: assign them to an event, choose the event and their role (each role's description is shown), then Assign.",
           "On first sign-in they choose their own password and set up the sign-in app on their phone.",
         ],
-        tip: "Someone who can sign in but sees \"You haven't been added to an event yet\" needs a role in Event assignments.",
+        tip: "Someone who can sign in but sees \"You aren't on any event yet\" needs a role in Event assignments.",
       },
       {
         id: "invite-speakers",
