@@ -68,7 +68,7 @@ import {
 const MFA_COOKIE = "pmp_mfa";
 /** The speaker site's sign-in page (D-148). */
 const SPEAKER_SITE = `${process.env.PORTAL_BASE ?? "http://localhost:3001"}/login`;
-import { approvedRoomsZip, assignedTo, eventTechnicians, markLoaded, roomOfRoomFile, setRoomTechnicians, unmarkLoaded } from "./services/roomSync.ts";
+import { approvedRoomsZip, markLoaded, unmarkLoaded } from "./services/roomSync.ts";
 import { setSrrOpen, srrDashboard, srrReportCsv, checkIn, checkinDetail, usbIngest, slotIntake, signOff, depart, emailReceipt, addStation, renameStation, retireStation } from "./services/srr.ts";
 import {
   presentationDetail,
@@ -789,7 +789,7 @@ const TECHNICIAN_ALSO: RegExp[] = [
 /** Asking for a slide preview is a POST, and part of looking at a file in review. */
 const TECHNICIAN_ALSO_WRITES: RegExp[] = [
   /^\/api\/v1\/file-versions\/[^/]+\/preview$/,
-  // Ticking a file loaded on the room PC — their own rooms only, checked in the route (D-154).
+  // Ticking a file loaded on the room PC, in any room of their events (D-160).
   /^\/api\/v1\/room-files\/[^/]+\/(loaded|unloaded)$/,
 ];
 
@@ -1243,53 +1243,18 @@ app.post("/api/v1/events/:eventId/:filesAndAction", async (req, res, next) => {
   return res.send(result.value.body);
 });
 
-/** The signed-in DXG Technician's user id, or null for any other account (D-154). */
-const technicianId = (req: express.Request): string | null => {
-  const principal = (req as express.Request & { principal?: Principal }).principal;
-  return principal?.kind === "staff" && principal.staff_kind === "technician" ? principal.user_id : null;
-};
-
 app.get("/api/v1/events/:eventId/sync/fleet", async (req, res) => {
   const actor = actorFrom(req);
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   const eventId = String(req.params.eventId);
-  // A technician sees the rooms they are assigned to, and only those (D-154).
-  const items = await withScope(scopeFor(req, eventId), (tx) =>
-    syncFleet(tx, eventId, technicianId(req) ?? undefined),
-  );
+  // Every room of the event, for everyone on it — technicians included (D-160).
+  const items = await withScope(scopeFor(req, eventId), (tx) => syncFleet(tx, eventId));
   return res.json({ items, next_cursor: null });
 });
 
-/** The DXG Technician staff on the event, for giving them rooms (D-154). */
-app.get("/api/v1/events/:eventId/sync/technicians", async (req, res) => {
-  const actor = actorFrom(req);
-  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
-  const eventId = String(req.params.eventId);
-  const items = await withScope(scopeFor(req, eventId), (tx) => eventTechnicians(tx, eventId));
-  return res.json({ items });
-});
-
-/** Who works a room: the list replaces the room's technicians (D-154). Not for technicians. */
-app.put("/api/v1/events/:eventId/sync/rooms/:roomId/technicians", async (req, res) => {
-  const actor = actorFrom(req);
-  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
-  const ids = (req.body as { user_ids?: unknown })?.user_ids;
-  if (!Array.isArray(ids) || ids.some((id) => typeof id !== "string")) {
-    return res.status(400).json({ code: "request.invalid", message: "Choose the technicians for this room." });
-  }
-  const eventId = String(req.params.eventId);
-  const result = await withScope(scopeFor(req, eventId), (tx) =>
-    setRoomTechnicians(tx, actor, eventId, String(req.params.roomId), ids as string[]),
-  );
-  if (!result.ok) {
-    return res.status(result.error.code === "room.not_a_technician" ? 422 : statusFor(result.error)).json(result.error);
-  }
-  return res.json(result.value);
-});
-
 /**
- * Every approved presentation of a room (`?room=<id>`) or of every room the caller works,
- * as one zip (client review "Download All", D-154). A technician gets their own rooms only.
+ * Every approved presentation of a room (`?room=<id>`) or of every room on the event, as one
+ * zip (client review "Download All", D-154). Technicians get every room too (D-160).
  */
 app.get("/api/v1/events/:eventId/sync/approved.zip", async (req, res) => {
   const actor = actorFrom(req);
@@ -1297,23 +1262,9 @@ app.get("/api/v1/events/:eventId/sync/approved.zip", async (req, res) => {
   const eventId = String(req.params.eventId);
   const roomId = typeof req.query.room === "string" && req.query.room ? req.query.room : null;
   if (roomId && !UUID.test(roomId)) return res.status(404).json({ code: "room.not_found", message: "That room isn't on this event." });
-  const technician = technicianId(req);
-  const result = await withScope(scopeFor(req, eventId), async (tx) => {
-    let rooms: string[] | null = roomId ? [roomId] : null;
-    if (technician) {
-      const { rows } = await tx.query<{ room_id: string }>(
-        `SELECT room_id FROM pmp.room_assignments WHERE user_id = $1 AND event_id = $2`,
-        [technician, eventId],
-      );
-      const mine = rows.map((row) => row.room_id);
-      if (roomId && !mine.includes(roomId)) return null;
-      rooms = roomId ? [roomId] : mine;
-    }
-    return approvedRoomsZip(tx, actor.id, eventId, rooms);
-  });
-  if (result === null) {
-    return res.status(403).json({ code: "room.not_assigned", message: "This room isn't assigned to you. Ask a DXG Admin to add you to it." });
-  }
+  const result = await withScope(scopeFor(req, eventId), (tx) =>
+    approvedRoomsZip(tx, actor.id, eventId, roomId ? [roomId] : null),
+  );
   if (!result.ok) {
     return res.status(result.error.code === "room.zip_too_large" || result.error.code === "room.nothing_approved" ? 422 : statusFor(result.error)).json(result.error);
   }
@@ -1338,19 +1289,8 @@ for (const [path, apply] of [
     if (typeof body.lock_version !== "number") {
       return res.status(400).json({ code: "request.invalid", message: "That request was incomplete. Refresh the page and try again." });
     }
-    const technician = technicianId(req);
-    const roomFileId = String(req.params.roomFileId);
-    const result = await withScope(scopeFor(req), async (tx) => {
-      // A technician ticks files in their own rooms only (D-154).
-      if (technician) {
-        const roomId = await roomOfRoomFile(tx, roomFileId);
-        if (!roomId || !(await assignedTo(tx, technician, roomId))) return null;
-      }
-      return apply(tx, actor, roomFileId, body.lock_version as number);
-    });
-    if (result === null) {
-      return res.status(403).json({ code: "room.not_assigned", message: "This room isn't assigned to you. Ask a DXG Admin to add you to it." });
-    }
+    // The event comes from the room file (resolver above): anyone on that event may tick (D-160).
+    const result = await withScope(scopeFor(req), (tx) => apply(tx, actor, String(req.params.roomFileId), body.lock_version as number));
     if (!result.ok) {
       return res.status(result.error.code === "room_sync.not_approved" ? 409 : statusFor(result.error)).json(result.error);
     }

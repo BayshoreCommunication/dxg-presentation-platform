@@ -2958,3 +2958,19 @@ assistant per speaker; it is the DXG Technician staff assigned to the event, for
   store → inspect → review), source `srr_manual`, a reason required, `uploaded_by_user` the technician. Nothing new
   was needed: the event placement is the scope, and an event they are not on is refused (403). DXG Admins can too.
 - Tests: `tests/invariants/technician-submits-for-speakers.test.ts` (5) replaces `speaker-support-staff.test.ts`.
+
+## D-160 (2026-10-12): Technicians work every room of their events; Assign technicians is removed — Status: ACCEPTED (Travis)
+Travis: "assign technician eita bad deo, ami to event assignment theke to assign korei dichi, room sync er data auto
+baki gulo moto dekha jabe." Event assignments is the one place a technician is given work, as for every other
+screen (and for speakers, D-159). Changes D-154's room-by-room rule (the client's note read "technicians see their
+assigned rooms"; Travis's call is that the event is the assignment).
+- **Room sync**: a DXG Technician staff member on the event sees every room, ticks Mark loaded / Undo in any of them
+  and downloads any room, or all of them, as one zip ("Download all approved", no "in my rooms"). An event they are
+  not on is refused as before (`auth.not_on_this_event`, the room-file resolver for ticks).
+- **Gone**: the **Assign technicians** button and menu, the "Technicians: … / No technician assigned" line on each
+  room, `GET /events/:id/sync/technicians`, `PUT /events/:id/sync/rooms/:roomId/technicians`, `room.not_assigned`,
+  `room.not_a_technician`, the fleet's `technicians` field, and the seed's room assignments. The
+  `room_assignments` table (migration 037) stays as history; nothing reads or writes it.
+- Tests: `room-sync-technicians.test.ts` rewritten — technicians see the same rooms as an admin, the assignment
+  routes are 404, a technician ticks (and un-ticks) a room that used to be someone else's, an event they are not on
+  stays 403; Download all unchanged.

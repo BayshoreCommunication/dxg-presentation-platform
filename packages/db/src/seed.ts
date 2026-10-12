@@ -209,15 +209,6 @@ async function seed(): Promise<void> {
       );
       const roomId = roomRows[0]!.id;
 
-      // Room sync works by room (D-154): C. Delgado has Ballroom A and Room 212, T. Okafor Room 210.
-      const worksHere = talk.room === "Room 210" ? [IDS.roomTech] : [IDS.reviewer];
-      for (const userId of worksHere) {
-        await client.query(
-          `INSERT INTO room_assignments (user_id, room_id, event_id, client_id) VALUES ($1, $2, $3, $4)`,
-          [userId, roomId, IDS.event, IDS.client],
-        );
-      }
-
       const { rows: sessionRows } = await client.query<{ id: string }>(
         `INSERT INTO sessions (event_id, client_id, room_id, day_id, title, starts_at, ends_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,

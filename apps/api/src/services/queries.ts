@@ -263,8 +263,6 @@ export type FleetRoom = {
   readiness: "ready" | "attention";
   files_current: number;
   files_total: number;
-  /** DXG Technician staff assigned to this room (D-154). */
-  technicians: { user_id: string; name: string }[];
   talks: FleetTalk[];
 };
 
@@ -276,25 +274,13 @@ export type FleetRoom = {
 export async function syncFleet(
   tx: pg.PoolClient,
   eventId: string,
-  /** A technician's own rooms only (D-154): set to their user id; unset for everyone else. */
-  onlyRoomsOf?: string,
 ): Promise<FleetRoom[]> {
   const { rows: talkRows } = await tx.query<TalkAggRow>(TALK_AGG, [eventId]);
   const { rows: roomRows } = await tx.query<{ room_id: string; room: string }>(
     `SELECT r.id AS room_id, r.name AS room
        FROM pmp.rooms r
       WHERE r.event_id = $1
-        AND ($2::uuid IS NULL OR EXISTS (SELECT 1 FROM pmp.room_assignments x WHERE x.room_id = r.id AND x.user_id = $2))
       ORDER BY r.name`,
-    [eventId, onlyRoomsOf ?? null],
-  );
-  const { rows: assigned } = await tx.query<{ room_id: string; user_id: string; name: string }>(
-    // Only people who are still technicians on the event (D-154): one taken off it drops off its rooms.
-    `SELECT x.room_id, x.user_id, u.display_name AS name
-       FROM pmp.room_assignments x JOIN pmp.users u ON u.id = x.user_id
-      WHERE x.event_id = $1 AND u.is_active AND u.staff_kind = 'technician'
-        AND EXISTS (SELECT 1 FROM pmp.event_roles er WHERE er.user_id = u.id AND er.event_id = x.event_id)
-      ORDER BY u.display_name`,
     [eventId],
   );
   const { rows: checklist } = await tx.query<{
@@ -348,9 +334,6 @@ export async function syncFleet(
       readiness: deriveRoomReadiness({ upcomingTalks: snapshots }),
       files_current: snapshots.filter((talk) => deriveTalkStatus(talk) === "synchronized_onsite").length,
       files_total: snapshots.length,
-      technicians: assigned
-        .filter((row) => row.room_id === room.room_id)
-        .map((row) => ({ user_id: row.user_id, name: row.name })),
       talks: checklist
         .filter((row) => row.room_id === room.room_id)
         .map((row) => {

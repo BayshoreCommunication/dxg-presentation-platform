@@ -1,26 +1,25 @@
 import { test, describe, before, after } from "node:test";
 import assert from "node:assert/strict";
 import type { TestContext } from "node:test";
-import { withSystemScope } from "@pmp/db";
 import { signInStaff } from "../helpers/signIn.ts";
 
 /**
- * Room sync by room (client review, D-154): admins and support staff give rooms to DXG
- * Technician staff; a technician sees, ticks and downloads only the rooms they work; and
- * "Download all" brings a room's (or all of one's rooms') approved presentations as one zip.
+ * Room sync for DXG Technician staff (D-154, D-160): a technician placed on the event under
+ * Event assignments sees, ticks and downloads every room of it — nobody hands out rooms one by
+ * one — and nothing of an event they are not on. "Download all" brings a room's (or every
+ * room's) approved presentations as one zip.
  */
 const API = process.env.API_BASE ?? "http://localhost:4000/api/v1";
 const EVENT = "22222222-2222-4222-8222-222222222222";
 const PASSWORD = "dxg-development-password";
 const DELGADO = "33333333-3333-4333-8333-333333333332";
-const OKAFOR = "33333333-3333-4333-8333-333333333333";
-const VEGA = "33333333-3333-4333-8333-333333333331";
+const CLIENT = "11111111-1111-4111-8111-111111111111";
+const PROBE = "Room Sync Not Mine Probe";
 
 type Room = {
   room_id: string;
   room: string;
-  technicians: { user_id: string }[];
-  talks: { approved: { room_file_id: string | null; lock_version: number | null } | null }[];
+  talks: { approved: { room_file_id: string | null; lock_version: number | null; loaded: boolean } | null }[];
 };
 
 let up = false;
@@ -28,7 +27,7 @@ let admin = "";
 let delgado = "";
 let okafor = "";
 let rooms: Room[] = [];
-let before_: { room_id: string; user_id: string }[] = [];
+let probe = "";
 
 const call = (cookie: string, method: string, path: string, body?: unknown) =>
   fetch(`${API}${path}`, {
@@ -51,84 +50,62 @@ before(async () => {
   delgado = await signInStaff(API, "c.delgado@example.invalid", PASSWORD);
   okafor = await signInStaff(API, "t.okafor@example.invalid", PASSWORD);
   rooms = await fleet(admin);
-  before_ = await withSystemScope(async (tx) =>
-    (await tx.query<{ room_id: string; user_id: string }>(`SELECT room_id, user_id FROM pmp.room_assignments WHERE event_id = $1`, [EVENT])).rows,
-  );
-  // C. Delgado works Ballroom A, T. Okafor Room 210, as the seed has it.
-  for (const [name, who] of [["Ballroom A", [DELGADO]], ["Room 210", [OKAFOR]], ["Room 212", []]] as const) {
-    const response = await call(admin, "PUT", `/events/${EVENT}/sync/rooms/${room(name).room_id}/technicians`, { user_ids: who });
-    assert.equal(response.status, 200, name);
+
+  // An event neither technician is on.
+  const events = (await (await call(admin, "GET", "/events")).json()) as { items: { id: string; name: string; status: string }[] };
+  const found = events.items.find((item) => item.name === PROBE);
+  probe = found?.id ?? "";
+  if (found?.status === "archived") await call(admin, "POST", `/events/${probe}/restore`);
+  if (!probe) {
+    const created = (await (
+      await call(admin, "POST", "/events", { client_id: CLIENT, name: PROBE, venue: "Probe", timezone: "America/Chicago", starts_on: "2031-10-01", ends_on: "2031-10-01" })
+    ).json()) as { event_id: string };
+    probe = created.event_id;
+    await call(admin, "POST", `/events/${probe}/sessions`, { title: "Probe Talk", room: "Probe Room", track: "", date: "2031-10-01", start: "09:00", end: "10:00" });
   }
 });
 
 after(async () => {
-  if (!up) return;
-  // Put the rooms back as they were.
-  for (const item of rooms) {
-    const ids = before_.filter((row) => row.room_id === item.room_id).map((row) => row.user_id);
-    await call(admin, "PUT", `/events/${EVENT}/sync/rooms/${item.room_id}/technicians`, { user_ids: ids });
-  }
+  if (up && probe) await call(admin, "POST", `/events/${probe}/archive`);
 });
 
-describe("technicians work the rooms they are given (D-154)", () => {
-  test("the event's technicians are offered; a non-technician is refused", async (t: TestContext) => {
+describe("technicians on the event work every room of it (D-160)", () => {
+  test("a technician sees the same rooms as an admin", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
-    const list = (await (await call(admin, "GET", `/events/${EVENT}/sync/technicians`)).json()) as { items: { user_id: string }[] };
-    const ids = list.items.map((item) => item.user_id);
-    assert.ok(ids.includes(DELGADO) && ids.includes(OKAFOR));
-    assert.equal(ids.includes(VEGA), false, "support staff are not technicians");
-    const refused = await call(admin, "PUT", `/events/${EVENT}/sync/rooms/${room("Room 212").room_id}/technicians`, { user_ids: [VEGA] });
-    assert.equal(refused.status, 422);
-    assert.equal(((await refused.json()) as { code: string }).code, "room.not_a_technician");
+    const all = rooms.map((item) => item.room).sort();
+    assert.ok(all.length > 1, "fixture: the event has several rooms");
+    assert.deepEqual((await fleet(delgado)).map((item) => item.room).sort(), all);
+    assert.deepEqual((await fleet(okafor)).map((item) => item.room).sort(), all);
+    assert.equal("technicians" in rooms[0]!, false, "rooms no longer name technicians");
   });
 
-  test("admins see every room with its technicians; a technician sees only their own", async (t: TestContext) => {
+  test("nobody hands out rooms any more", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
-    const all = await fleet(admin);
-    assert.deepEqual(all.find((item) => item.room === "Ballroom A")!.technicians.map((person) => person.user_id), [DELGADO]);
-    const mine = await fleet(delgado);
-    assert.deepEqual(mine.map((item) => item.room), ["Ballroom A"]);
-    const his = await fleet(okafor);
-    assert.deepEqual(his.map((item) => item.room), ["Room 210"]);
+    assert.equal((await call(admin, "GET", `/events/${EVENT}/sync/technicians`)).status, 404);
+    assert.equal((await call(admin, "PUT", `/events/${EVENT}/sync/rooms/${room("Room 212").room_id}/technicians`, { user_ids: [DELGADO] })).status, 404);
   });
 
-  test("a technician can't give out rooms", async (t: TestContext) => {
-    if (!up) return t.skip("API not running");
-    for (const [method, path, body] of [
-      ["GET", `/events/${EVENT}/sync/technicians`, undefined],
-      ["PUT", `/events/${EVENT}/sync/rooms/${room("Room 212").room_id}/technicians`, { user_ids: [DELGADO] }],
-    ] as const) {
-      const response = await call(delgado, method, path, body);
-      assert.equal(response.status, 403, `${method} ${path}`);
-      assert.equal(((await response.json()) as { code: string }).code, "auth.kind_forbidden");
-    }
-  });
-
-  test("someone on a room who is no longer a technician drops off it; saving still works", async (t: TestContext) => {
-    if (!up) return t.skip("API not running");
-    const roomId = room("Room 212").room_id;
-    await withSystemScope((tx) =>
-      tx.query(
-        `INSERT INTO pmp.room_assignments (user_id, room_id, event_id, client_id)
-         SELECT $1, id, event_id, client_id FROM pmp.rooms WHERE id = $2 ON CONFLICT DO NOTHING`,
-        [VEGA, roomId],
-      ),
-    );
-    const listed = (await fleet(admin)).find((item) => item.room_id === roomId)!;
-    assert.equal(listed.technicians.some((person) => person.user_id === VEGA), false, "not shown as the room's technician");
-    const saved = await call(admin, "PUT", `/events/${EVENT}/sync/rooms/${roomId}/technicians`, { user_ids: [VEGA, DELGADO] });
-    assert.equal(saved.status, 200, "the stale name the screen still holds doesn't block the save");
-    assert.deepEqual(((await saved.json()) as { technicians: { user_id: string }[] }).technicians.map((person) => person.user_id), [DELGADO]);
-    await call(admin, "PUT", `/events/${EVENT}/sync/rooms/${roomId}/technicians`, { user_ids: [] });
-  });
-
-  test("a technician ticks files in their own rooms only", async (t: TestContext) => {
+  test("a technician ticks a file in any room of the event, and can take the tick back", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
     const copy = room("Ballroom A").talks.find((talk) => talk.approved?.room_file_id)?.approved;
     assert.ok(copy?.room_file_id, "fixture: Ballroom A has a room copy");
-    const refused = await call(okafor, "POST", `/room-files/${copy.room_file_id}/loaded`, { lock_version: copy.lock_version });
-    assert.equal(refused.status, 403);
-    assert.equal(((await refused.json()) as { code: string }).code, "room.not_assigned");
+    const loaded = (await (await call(admin, "GET", `/events/${EVENT}/sync/fleet`)).json()) as { items: Room[] };
+    const now = loaded.items.find((item) => item.room === "Ballroom A")!.talks.find((talk) => talk.approved?.room_file_id === copy.room_file_id)!.approved!;
+    // T. Okafor used to have Room 210 only; Ballroom A is theirs to tick now too.
+    const first = await call(okafor, "POST", `/room-files/${copy.room_file_id}/${now.loaded ? "unloaded" : "loaded"}`, { lock_version: now.lock_version });
+    assert.equal(first.status, 200);
+    const ticked = ((await fleet(admin)).find((item) => item.room === "Ballroom A")!.talks.find((talk) => talk.approved?.room_file_id === copy.room_file_id)!).approved!;
+    const back = await call(okafor, "POST", `/room-files/${copy.room_file_id}/${now.loaded ? "loaded" : "unloaded"}`, { lock_version: ticked.lock_version });
+    assert.equal(back.status, 200, "put back as it was");
+  });
+
+  test("an event the technician is not on stays closed", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    for (const path of [`/events/${probe}/sync/fleet`, `/events/${probe}/sync/approved.zip`]) {
+      const refused = await call(delgado, "GET", path);
+      assert.equal(refused.status, 403, path);
+      assert.equal(((await refused.json()) as { code: string }).code, "auth.not_on_this_event");
+    }
   });
 });
 
@@ -144,13 +121,10 @@ describe("Download all (D-154)", () => {
     assert.match(bytes.toString("latin1"), /\d{2}-\d{2} \d{4} Robotic Surgery Outcomes[^\n]*\(v\d+\)\.pptx/, "named by time and talk");
   });
 
-  test("a technician can't download a room that isn't theirs; no room means all of theirs", async (t: TestContext) => {
+  test("a technician downloads any room of the event, or all of them at once", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
-    const refused = await call(delgado, "GET", `/events/${EVENT}/sync/approved.zip?room=${room("Room 210").room_id}`);
-    assert.equal(refused.status, 403);
-    assert.equal(((await refused.json()) as { code: string }).code, "room.not_assigned");
-    const mine = await call(delgado, "GET", `/events/${EVENT}/sync/approved.zip`);
-    assert.equal(mine.status, 200);
+    assert.equal((await call(okafor, "GET", `/events/${EVENT}/sync/approved.zip?room=${room("Ballroom A").room_id}`)).status, 200);
+    assert.equal((await call(delgado, "GET", `/events/${EVENT}/sync/approved.zip`)).status, 200);
   });
 
   test("a room address that isn't a room is not found, not a server error", async (t: TestContext) => {
