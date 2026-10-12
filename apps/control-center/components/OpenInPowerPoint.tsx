@@ -84,7 +84,7 @@ export function OpenInPowerPoint({ versionId, primary = false }: { versionId: st
       </button>
       {state === "downloaded" && (
         <span className="note" style={{ maxWidth: 320 }}>
-          Downloaded — open it from your downloads.{os === "windows" || os === "mac" ? " (PowerPoint didn't open it.)" : ""}
+          Downloaded — open it from your downloads.
         </span>
       )}
       {error && <span className="err">{error}</span>}
