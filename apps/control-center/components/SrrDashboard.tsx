@@ -88,7 +88,9 @@ export function SrrDashboardView({
   }
 
   // Grouped by what is happening now (D-121): at a desk, still to check in, been and gone.
-  const atDesk = new Map(data.expected.filter((row) => row.checkin_id).map((row) => [row.speaker, row]));
+  // By visit, not by name: two speakers can share a name, and a speaker taken off their
+  // session is no longer in `expected` but may still be sitting at a desk.
+  const atDesk = new Map(data.expected.filter((row) => row.checkin_id).map((row) => [row.checkin_id, row]));
   const toCome = data.expected.filter((row) => !row.checkin_id && !row.checked_out);
   const left = data.expected.filter((row) => !row.checkin_id && row.checked_out);
   const busyDesks = data.stations.filter((station) => station.busy).length;
@@ -186,16 +188,16 @@ export function SrrDashboardView({
           ) : (
             <div className="desk-grid">
               {data.stations.map((station) => {
-                const row = station.speaker ? atDesk.get(station.speaker) : undefined;
+                const row = station.checkin_id ? atDesk.get(station.checkin_id) : undefined;
                 return (
                   <div key={station.id} className={`desk${station.busy ? " busy" : ""}`}>
                     <div className="desk-name">{station.name}</div>
                     {station.busy ? (
                       <>
                         <div className="desk-who">{station.speaker ?? "A speaker"}</div>
-                        <div className="note">{row ? deskLine(row) : "In session"}</div>
-                        {row?.checkin_id && (
-                          <a className="btn pri" style={{ marginTop: 8 }} href={`/events/${eventId}/srr/${row.checkin_id}`}>
+                        <div className="note">{row ? deskLine(row) : "Not on a session any more — open to check them out"}</div>
+                        {station.checkin_id && (
+                          <a className="btn pri" style={{ marginTop: 8 }} href={`/events/${eventId}/srr/${station.checkin_id}`}>
                             Open →
                           </a>
                         )}

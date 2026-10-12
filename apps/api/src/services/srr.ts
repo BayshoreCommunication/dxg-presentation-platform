@@ -155,6 +155,8 @@ export type SrrStation = {
   name: string;
   technician: string | null;
   speaker: string | null;
+  /** The visit at this desk, so the desk opens it whoever the speaker is (D-153 follow-up). */
+  checkin_id: string | null;
   busy: boolean;
   lock_version: number;
 };
@@ -166,7 +168,7 @@ export type SrrStation = {
 export async function eventStations(tx: pg.PoolClient, eventId: string): Promise<SrrStation[]> {
   const { rows } = await tx.query<SrrStation>(
     `SELECT st.id, st.name AS station, st.name, st.lock_version,
-            open.technician, open.speaker, open.id IS NOT NULL AS busy
+            open.technician, open.speaker, open.id AS checkin_id, open.id IS NOT NULL AS busy
        FROM pmp.srr_stations st
        LEFT JOIN LATERAL (
          SELECT c.id, u.display_name AS technician, sp.full_name AS speaker
@@ -419,7 +421,12 @@ export async function checkIn(
 export type CheckinDetail = {
   checkin: { id: string; station: string | null; checked_in_at: string; technician: string; departed_at: string | null };
   speaker: { id: string; name: string };
-  talk: { slot_id: string; title: string; room: string | null; starts_at: string; final_locked: boolean; status: string; status_label: string };
+  /**
+   * The talk the speaker gives. `slot_id` is null when they are no longer on one — removed
+   * from the event or taken off their session while at a desk — so the visit can still be
+   * opened and checked out.
+   */
+  talk: { slot_id: string | null; title: string; room: string | null; starts_at: string; final_locked: boolean; status: string; status_label: string };
   /** Who approved it and where its room copies are, for the confirmation strip (D-113). */
   approved: (VersionFacts & { approved_by?: string | null; approved_at?: string | null; room_states?: string[] }) | null;
   latest: (VersionFacts & { file_version_id: string; review_state: string; processing_state: string }) | null;
@@ -451,12 +458,12 @@ export async function checkinDetail(tx: pg.PoolClient, checkinId: string): Promi
     technician: string;
     speaker_id: string;
     speaker_name: string;
-    slot_id: string;
-    title: string;
+    slot_id: string | null;
+    title: string | null;
     room: string | null;
-    starts_at: string;
-    final_locked: boolean;
-    session_state: string;
+    starts_at: string | null;
+    final_locked: boolean | null;
+    session_state: string | null;
     versions: { processing: string; inspection: string; review: string }[] | null;
     room_copies: { state: string; requiresAck: boolean; acknowledged: boolean }[] | null;
   }>(
@@ -472,23 +479,28 @@ export async function checkinDetail(tx: pg.PoolClient, checkinId: string): Promi
        FROM pmp.srr_checkins c
        JOIN pmp.users u ON u.id = c.technician_id
        JOIN pmp.speakers sp ON sp.id = c.speaker_id
-       JOIN pmp.speaker_assignments sa ON sa.speaker_id = sp.id
-       JOIN pmp.slots s ON s.id = sa.slot_id
-       JOIN pmp.sessions se ON se.id = s.session_id
+       -- Left joins: a speaker taken off their session (or the event) while at a desk still
+       -- has a visit to open and close. With more than one talk, the next one comes first.
+       LEFT JOIN pmp.speaker_assignments sa ON sa.speaker_id = sp.id
+       LEFT JOIN pmp.slots s ON s.id = sa.slot_id
+       LEFT JOIN pmp.sessions se ON se.id = s.session_id
        LEFT JOIN pmp.rooms r ON r.id = se.room_id
       WHERE c.id = $1
+      ORDER BY (se.starts_at IS NULL), se.starts_at
       LIMIT 1`,
     [checkinId],
   );
   const row = rows[0];
   if (!row) return null;
 
-  const status = deriveTalkStatus({
-    sessionState: row.session_state as never,
-    eventArchived: false,
-    versions: (row.versions ?? []) as never,
-    roomCopies: (row.room_copies ?? []) as never,
-  });
+  const status = row.slot_id
+    ? deriveTalkStatus({
+        sessionState: row.session_state as never,
+        eventArchived: false,
+        versions: (row.versions ?? []) as never,
+        roomCopies: (row.room_copies ?? []) as never,
+      })
+    : "canceled";
 
   const { rows: approvedRows } = await tx.query<{
     id: string;
@@ -576,12 +588,12 @@ export async function checkinDetail(tx: pg.PoolClient, checkinId: string): Promi
     speaker: { id: row.speaker_id, name: row.speaker_name },
     talk: {
       slot_id: row.slot_id,
-      title: row.title,
+      title: row.title ?? "No talk — no longer on a session at this event",
       room: row.room,
-      starts_at: row.starts_at,
-      final_locked: row.final_locked,
+      starts_at: row.starts_at ?? row.checked_in_at,
+      final_locked: row.final_locked ?? false,
       status,
-      status_label: TALK_STATUS_LABEL[status],
+      status_label: row.slot_id ? TALK_STATUS_LABEL[status] : "No talk",
     },
     approved,
     latest:
@@ -756,6 +768,10 @@ export async function usbIngest(
 
   const detail = await checkinDetail(tx, input.checkinId);
   if (!detail) return err({ code: "srr.checkin_not_found", message: "This check-in no longer exists — it may have been removed. Refresh the page." });
+  if (!detail.talk.slot_id) {
+    return err({ code: "srr.no_talk_conflict", message: "This speaker is no longer on a session, so there is no talk to take a file in for. Check them out." });
+  }
+  const slotId = detail.talk.slot_id;
 
   const { rows: scope } = await tx.query<{ event_id: string; client_id: string }>(
     `SELECT event_id, client_id FROM pmp.srr_checkins WHERE id = $1`,
@@ -765,7 +781,7 @@ export async function usbIngest(
   return takeLocalFile(tx, actor, {
     eventId: scope[0]!.event_id,
     clientId: scope[0]!.client_id,
-    slotId: detail.talk.slot_id,
+    slotId,
     checkinId: input.checkinId,
     uploadId: input.uploadId,
     fileName: input.fileName,
@@ -848,6 +864,10 @@ export async function signOff(
   const detail = await checkinDetail(tx, input.checkinId);
   if (!detail) return err({ code: "srr.checkin_not_found", message: "This check-in no longer exists — it may have been removed. Refresh the page." });
 
+  if (!detail.talk.slot_id) {
+    return err({ code: "srr.no_talk_conflict", message: "This speaker is no longer on a session, so there is nothing to sign off. Check them out." });
+  }
+
   const { rows: version } = await tx.query<{
     id: string;
     version_number: number;
@@ -856,9 +876,11 @@ export async function signOff(
     event_id: string;
     client_id: string;
   }>(
-    `SELECT id, version_number, sha256, processing_state, event_id, client_id
-       FROM pmp.file_versions WHERE id = $1`,
-    [input.fileVersionId],
+    // The version must be one of this talk's: a sign-off binds the speaker to their own file.
+    `SELECT fv.id, fv.version_number, fv.sha256, fv.processing_state, fv.event_id, fv.client_id
+       FROM pmp.file_versions fv JOIN pmp.files f ON f.id = fv.file_id
+      WHERE fv.id = $1 AND f.slot_id = $2`,
+    [input.fileVersionId, detail.talk.slot_id],
   );
   if (!version[0]) return err({ code: "srr.version_not_found", message: "This version no longer exists — it may have been removed. Refresh the page." });
   if (!(await srrIsOpen(tx, version[0].event_id))) return err(SRR_CLOSED);

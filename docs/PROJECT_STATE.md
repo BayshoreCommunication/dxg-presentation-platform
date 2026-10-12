@@ -3603,3 +3603,15 @@ Migration 040 `open_links`. The link serves the file through the staff site's ow
 cookie. open-in-powerpoint 3/3; lint and type-check clean. **Not pushed, not deployed.** Every item of the client's
 review is now built locally; still open: the production check-in page error (needs the server log), and PowerPoint for
 the Web if DXG wants it (their Microsoft 365, their consent to send files to Microsoft).
+
+## 2026-10-12 — A desk stuck "In session"; the check-in page's "Application error" (production)
+Travis on production: a desk showed "Akib · In session" with no Open, and nothing could free it. Cause: the desk found
+its speaker in the expected list *by name*; a speaker taken off their session (or removed) is not in that list, so the
+desk had no link — and their check-in page crashed, because `checkinDetail` inner-joined the talk and answered 404,
+which the page did not catch. This is very likely the production "Application error: server-side exception"
+(digest 3320129401) on `/events/<id>/srr/<checkinId>`. Fixed: the check-in detail left-joins the talk (`talk.slot_id`
+null when there is none — nothing to take in or sign off, Check out works); each desk carries its visit's
+`checkin_id` and opens it directly (also fixes two speakers with the same name sharing a desk card); removing a
+speaker checks them out; a missing check-in shows "This check-in no longer exists" instead of crashing; sign-off now
+refuses a version that is not the talk's. New suite srr-desk-without-talk 3/3; SRR, review, loading, agenda and
+speakers suites 73/73.

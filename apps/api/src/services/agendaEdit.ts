@@ -719,6 +719,10 @@ export async function removeSpeaker(
     `DELETE FROM pmp.speaker_assignments WHERE speaker_id = $1 RETURNING slot_id`,
     [speakerId],
   );
+  // A speaker removed while at a desk is checked out, so the desk is free again.
+  await tx.query(`UPDATE pmp.srr_checkins SET departed_at = now(), lock_version = lock_version + 1 WHERE speaker_id = $1 AND departed_at IS NULL`, [
+    speakerId,
+  ]);
   await tx.query(`UPDATE pmp.speaker_tokens SET revoked_at = now() WHERE speaker_id = $1 AND revoked_at IS NULL`, [
     speakerId,
   ]);

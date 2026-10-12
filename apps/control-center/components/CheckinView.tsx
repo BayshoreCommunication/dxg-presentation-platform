@@ -91,13 +91,17 @@ export function CheckinView({
     [refresh],
   );
 
+  // No talk any more (taken off their session while at a desk): nothing to take in or sign off.
+  const hasTalk = detail.talk.slot_id !== null;
   // Closed (D-157), nothing is signed off or taken in here; checking out still works.
-  const signable = srrOpen && detail.latest && detail.latest.processing_state === "stored";
+  const signable = srrOpen && hasTalk && detail.latest && detail.latest.processing_state === "stored";
   const [confirmCheckout, setConfirmCheckout] = useState(false);
   const latestNumber = detail.latest?.version_number;
   const approvedNumber = detail.approved?.version_number;
   // Why the newest file can't be signed off, in words a technician can act on (D-108).
-  const blockedReason = !detail.latest
+  const blockedReason = !hasTalk
+    ? `${detail.speaker.name} is no longer on a session at this event, so there is nothing to go through. Check them out to free ${detail.checkin.station ?? "the desk"}.`
+    : !detail.latest
     ? "The speaker hasn't uploaded a presentation yet. Bring their file in with Local intake below — from a USB drive or this computer."
     : detail.latest.processing_state === "quarantined"
       ? `v${latestNumber} failed the virus check and can't be used. Ask the speaker for a clean copy and bring it in with Local intake below.`
@@ -227,7 +231,7 @@ export function CheckinView({
     </button>
   );
   const openUsb = (
-    <button type="button" className="btn pri" disabled={!srrOpen} onClick={() => setIntakeOpen(true)}>
+    <button type="button" className="btn pri" disabled={!srrOpen || !hasTalk} onClick={() => setIntakeOpen(true)}>
       <Icon name="intake" />
       Take the file (Local intake)
     </button>
@@ -242,10 +246,12 @@ export function CheckinView({
       {detail.latest && detail.latest.processing_state === "stored" && (
         <OpenInPowerPoint versionId={detail.latest.file_version_id} />
       )}
-      <a className="btn" href={`/events/${eventId}/talks/${detail.talk.slot_id}`} target="_blank" rel="noopener">
-        <Icon name="eye" />
-        Quick look
-      </a>
+      {hasTalk && (
+        <a className="btn" href={`/events/${eventId}/talks/${detail.talk.slot_id}`} target="_blank" rel="noopener">
+          <Icon name="eye" />
+          Quick look
+        </a>
+      )}
     </>
   );
   const who = detail.speaker.name;
@@ -263,7 +269,7 @@ export function CheckinView({
         ) : null,
       }
     : blockedReason
-      ? { title: blockedReason, actions: <>{!detail.latest || detail.latest.processing_state === "quarantined" ? openUsb : null}{checkOut}</> }
+      ? { title: blockedReason, actions: <>{hasTalk && (!detail.latest || detail.latest.processing_state === "quarantined") ? openUsb : null}{checkOut}</> }
       : newerAfterReceipt
         ? {
             title: `A newer version (v${latestNumber}) came in after ${who} signed off.`,
@@ -387,7 +393,7 @@ export function CheckinView({
           type="button"
           className={intakeOpen ? "btn" : "btn pri"}
           aria-expanded={intakeOpen}
-          disabled={!srrOpen && !intakeOpen}
+          disabled={(!srrOpen || !hasTalk) && !intakeOpen}
           onClick={() => setIntakeOpen((open) => !open)}
         >
           <Icon name={intakeOpen ? "close" : "intake"} />
