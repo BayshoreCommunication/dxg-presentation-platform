@@ -269,6 +269,19 @@ export const listEvents = () => request<{ items: EventRow[] }>("/events");
 export const getSummary = (eventId: string) => request<Summary>(`/events/${eventId}/summary`);
 export const getRiskList = (eventId: string) =>
   request<{ items: RiskItem[] }>(`/events/${eventId}/risk-list`);
+/** Every talk's newest approved version, in running order (D-163). */
+export type ApprovedPresentation = {
+  slot_id: string;
+  title: string;
+  speaker: string | null;
+  room: string | null;
+  starts_at: string;
+  file_version_id: string;
+  version_number: number;
+  original_filename: string;
+  approved_at: string | null;
+};
+export const getApproved = (eventId: string) => request<{ items: ApprovedPresentation[] }>(`/events/${eventId}/approved`);
 export const getReviewQueue = (eventId: string) =>
   request<{ items: QueueItem[] }>(`/events/${eventId}/review-queue`);
 /** Every talk of the event with its status (the agenda's view of files). */

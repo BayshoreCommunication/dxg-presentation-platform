@@ -1,6 +1,7 @@
 import { test, describe, before, after } from "node:test";
 import assert from "node:assert/strict";
 import type { TestContext } from "node:test";
+import { withSystemScope } from "@pmp/db";
 import { signInStaff } from "../helpers/signIn.ts";
 import { removeTestAccounts, removeTestEvents } from "../helpers/cleanup.ts";
 import { createStaffAccount } from "../helpers/account.ts";
@@ -400,15 +401,27 @@ after(async () => {
 describe("three kinds of DXG account (D-151)", () => {
   const EVENT_ID = "22222222-2222-4222-8222-222222222222";
 
-  test("support staff never open the Speaker Ready Room or Manage presentations; technicians open nothing else", async (t: TestContext) => {
+  test("support staff never open the Speaker Ready Room but review on Manage presentations; technicians open nothing else", async (t: TestContext) => {
     if (!up || !presentationManager) return t.skip("API not running");
     const technician = await signInStaff(API, "c.delgado@example.invalid", PASSWORD);
-    // m.vega is support staff (seed): the event is theirs, the two screens are not.
-    for (const path of [`/events/${EVENT_ID}/review-queue`, `/events/${EVENT_ID}/srr`]) {
-      const refused = await fetch(`${API}${path}`, { headers: { cookie: presentationManager } });
-      assert.equal(refused.status, 403, path);
-      assert.equal(((await json(refused)) as { code: string }).code, "auth.kind_forbidden");
-    }
+    // m.vega is support staff (seed): the event is theirs, the Speaker Ready Room is not.
+    const room = await fetch(`${API}/events/${EVENT_ID}/srr`, { headers: { cookie: presentationManager } });
+    assert.equal(room.status, 403);
+    assert.equal(((await json(room)) as { code: string }).code, "auth.kind_forbidden");
+    // Since D-163 they review on Manage presentations: the queue opens, and a decision reaches the
+    // review rules rather than being refused by kind.
+    assert.equal((await fetch(`${API}/events/${EVENT_ID}/review-queue`, { headers: { cookie: presentationManager } })).status, 200);
+    // A real version of the event, so a refusal would be the kind rule and not "not found". The
+    // stale lock version (0) means nothing changes whoever asks.
+    const anyVersion = await withSystemScope(async (tx) =>
+      (await tx.query<{ id: string }>(`SELECT id FROM pmp.file_versions WHERE event_id = $1 AND lock_version > 0 LIMIT 1`, [EVENT_ID])).rows[0]!.id,
+    );
+    const sendBack = await fetch(`${API}/file-versions/${anyVersion}:transition`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: presentationManager },
+      body: JSON.stringify({ action: "request_changes", lock_version: 0, note: "probe" }),
+    });
+    assert.notEqual(((await json(sendBack)) as { code: string }).code, "auth.kind_forbidden", "support staff may ask for changes");
     assert.equal((await fetch(`${API}/events/${EVENT_ID}/speakers`, { headers: { cookie: presentationManager } })).status, 200);
     // Support staff may look at a talk (the Files screen and the agenda open one) but not decide on it.
     const talks = (await json(await fetch(`${API}/events/${EVENT_ID}/talks`, { headers: { cookie: presentationManager } }))) as {
@@ -423,7 +436,7 @@ describe("three kinds of DXG account (D-151)", () => {
     });
     assert.equal(decide.status, 403);
     assert.equal(((await json(decide)) as { code: string }).code, "auth.kind_forbidden");
-    // c.delgado is a technician (seed): the two screens, Room sync and the way to them, nothing else.
+    // c.delgado is a technician (seed): the two screens and the way to them, nothing else.
     assert.equal((await fetch(`${API}/events/${EVENT_ID}/review-queue`, { headers: { cookie: technician } })).status, 200);
     assert.equal((await fetch(`${API}/events/${EVENT_ID}/srr`, { headers: { cookie: technician } })).status, 200);
     assert.equal((await fetch(`${API}/events/${EVENT_ID}/summary`, { headers: { cookie: technician } })).status, 200);
@@ -435,9 +448,26 @@ describe("three kinds of DXG account (D-151)", () => {
       const preview = await fetch(`${API}/file-versions/${queue.items[0].file_version_id}/preview`, { method: "POST", headers: { cookie: technician } });
       assert.notEqual(preview.status, 403, "a technician may ask for a preview");
     }
-    // Room sync is theirs too, for their own rooms (client review, D-154).
-    assert.equal((await fetch(`${API}/events/${EVENT_ID}/sync/fleet`, { headers: { cookie: technician } })).status, 200);
-    for (const path of [`/events/${EVENT_ID}/speakers`, `/events/${EVENT_ID}/comms`, `/events/${EVENT_ID}/files`, `/events/${EVENT_ID}/sync/technicians`]) {
+    // The approved presentations are listed for them on Manage presentations (D-163) …
+    assert.equal((await fetch(`${API}/events/${EVENT_ID}/approved`, { headers: { cookie: technician } })).status, 200);
+    // … they approve, but asking for changes and rejecting are support staff's and admins'.
+    for (const action of ["request_changes", "reject"]) {
+      const refused = await fetch(`${API}/file-versions/${anyVersion}:transition`, {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie: technician },
+        body: JSON.stringify({ action, lock_version: 0, note: "probe", reason: "probe" }),
+      });
+      assert.equal(refused.status, 403, action);
+      assert.equal(((await json(refused)) as { code: string }).code, "auth.kind_forbidden", action);
+    }
+    const revision = await fetch(`${API}/file-versions/${anyVersion}/request-revision`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: technician },
+      body: JSON.stringify({ finding_id: "x", note: "probe" }),
+    });
+    assert.equal(revision.status, 403, "nor ask from a finding");
+    // Room sync is no longer theirs (D-163).
+    for (const path of [`/events/${EVENT_ID}/speakers`, `/events/${EVENT_ID}/comms`, `/events/${EVENT_ID}/files`, `/events/${EVENT_ID}/sync/fleet`, `/events/${EVENT_ID}/sync/approved.zip`]) {
       const refused = await fetch(`${API}${path}`, { headers: { cookie: technician } });
       assert.equal(refused.status, 403, path);
       assert.equal(((await json(refused)) as { code: string }).code, "auth.kind_forbidden");

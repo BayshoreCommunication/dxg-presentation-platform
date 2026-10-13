@@ -13,9 +13,10 @@ export default async function InspectionPage({
 }) {
   const { id, slotId } = await params;
   const { v } = await searchParams;
-  const readOnly = await getSession()
-    .then((session) => session.principal.staff_kind === "support")
-    .catch(() => false);
+  // Technicians waive (it goes with approving), support staff ask the speaker; admins both (D-163).
+  const kind = await getSession()
+    .then((session) => session.principal.staff_kind)
+    .catch(() => null);
   const detail = await guard(getPresentation(slotId), `/events/${id}/talks/${slotId}/inspection`);
   const version =
     detail.versions.find((row) => row.file_version_id === v) ?? detail.versions[0] ?? null;
@@ -23,6 +24,13 @@ export default async function InspectionPage({
     ? (await guard(getFindings(version.file_version_id), `/events/${id}/talks/${slotId}/inspection`)).items
     : [];
   return (
-    <InspectionView eventId={id} detail={detail} version={version} initialFindings={findings} readOnly={readOnly} />
+    <InspectionView
+      eventId={id}
+      detail={detail}
+      version={version}
+      initialFindings={findings}
+      canAskSpeaker={kind !== "technician"}
+      canWaive={kind !== "support"}
+    />
   );
 }

@@ -3003,3 +3003,21 @@ client note ("DXG Admin: full access", "speakers and DXG staff can upload … fr
   back, download and tick Mark loaded.
 - Tests: `srr-local-intake` adds "a DXG Admin is refused" across all four routes; suites that take a file in on a
   probe event now place the seeded technician on it (`tests/helpers/technician.ts`) and upload as them.
+
+## D-163 (2026-10-13): Technicians approve; support staff and admins send back; Room sync is not the technicians' — Status: ACCEPTED (Travis)
+Travis: "as a DXG technician staff he can only approve presentation see and … upload new version. DXG technician
+staff cannot ask for changes and reject — this can staff and admin DXG", "remove room sync in DXG technician staff",
+and "already presentation approve gulo technician dekhtay parbe".
+- **Technicians** on Manage presentations: see the queue, approve (and waive a finding, which goes with approving),
+  upload a new version (D-162). **Ask for changes**, **Reject** and the inspection page's "Ask the speaker to fix
+  this" are hidden, and the API refuses them (`:transition` with `request_changes` / `reject`, and
+  `request-revision`: 403 `auth.kind_forbidden`). Roll back stays an admin's (hidden for technicians too).
+- **Approved list**: Manage presentations ends with **Approved · n** — every talk's newest approved version in running
+  order, with room, version, file name and Download (`GET /events/:id/approved`, open to technicians).
+- **Support staff** now open Manage presentations: the queue, approve, ask for changes, reject, comments, and "Ask
+  the speaker to fix this" — not upload (D-162), not waive or roll back. The Speaker Ready Room stays closed to them.
+- **Room sync**: gone from the technician's sidebar and refused by the API (fleet, zip, Mark loaded). DXG Admins and
+  support staff run it (D-160 still holds for them: every room of the event).
+- Tests: admin (support reviews, technician send-back refused, Room sync refused), room-sync-technicians rewritten
+  for support staff, technician-submits (a technician approves; the approved file is listed; send-back refused; an
+  admin asks), speaker-accounts' revision request now made by support staff.

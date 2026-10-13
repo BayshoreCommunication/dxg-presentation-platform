@@ -20,6 +20,7 @@ const SPEAKER = "p.raman@example.invalid";
 let up = false;
 let admin = "";
 let reviewer = "";
+let support = "";
 let speaker = "";
 
 const json = async (response: Response) => (await response.json()) as Record<string, unknown>;
@@ -37,6 +38,8 @@ before(async () => {
   if (!up) return;
   admin = await signInStaff(API, "admin@example.invalid", PASSWORD);
   reviewer = await signInStaff(API, "c.delgado@example.invalid", PASSWORD);
+  // Asking a speaker for changes is support staff's and admins' (D-163): m.vega is support staff.
+  support = await signInStaff(API, "m.vega@example.invalid", PASSWORD);
   const signedIn = await fetch(`${API}/auth/login`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -141,7 +144,7 @@ describe("what the team decides reaches the speaker inside the site (2026-10-11)
 
     const asked = await fetch(`${API}/file-versions/${uploaded.file_version_id}/request-revision`, {
       method: "POST",
-      headers: headers(reviewer),
+      headers: headers(support),
       body: JSON.stringify({ note: "Please use the 16:9 template and embed the video." }),
     });
     assert.equal(asked.status, 200, `request-revision ${asked.status} ${await asked.text()}`);

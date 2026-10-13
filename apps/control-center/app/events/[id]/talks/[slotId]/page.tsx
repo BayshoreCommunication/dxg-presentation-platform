@@ -11,9 +11,9 @@ export default async function PresentationPage({
 }) {
   const { id, slotId } = await params;
   // No room list any more: it only fed R7's room-PC freshness, dropped in D-125.
-  // Support staff (D-151) may look at a talk but not decide on it.
+  // Rolling back is a DXG Admin's: support staff (D-151) and technicians (D-163) look.
   const readOnly = await getSession()
-    .then((session) => session.principal.staff_kind === "support")
+    .then((session) => session.principal.staff_kind === "support" || session.principal.staff_kind === "technician")
     .catch(() => false);
   const detail = await guard(getPresentation(slotId), `/events/${id}/talks/${slotId}`);
   const latest = detail.versions[0];
