@@ -23,8 +23,8 @@ export default async function NoAccessPage({ searchParams }: { searchParams: Pro
             That screen is not part of your access level
           </h1>
           <p className="note" style={{ marginTop: 14, lineHeight: 1.6 }}>
-            DXG Support staff run the event — everything except the Speaker Ready Room and Manage
-            presentations. DXG Technician staff work those two screens only. A DXG Admin can change an
+            DXG Support staff run the event. DXG Technician staff work the Speaker Ready Room and Manage
+            presentations only. A DXG Admin can change an
             account&rsquo;s access level on Staff accounts.
           </p>
           <div style={{ display: "flex", gap: 10, marginTop: 18 }}>

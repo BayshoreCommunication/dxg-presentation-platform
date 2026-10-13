@@ -134,8 +134,9 @@ export function StaffAccounts({ initial, me }: { initial: StaffRow[]; me: string
       <div className="note" style={{ margin: "-8px 0 14px" }}>
         There is no signup. Accounts are created here, and every account sets up a sign-in app on
         their phone before it can use the platform. DXG Admins see every event and every account.
-        DXG Support staff run the events they are assigned to — everything except the Speaker Ready
-        Room and Manage presentations; DXG Technician staff see only those two.
+        DXG Support staff run the events they are assigned to — everything there except taking in a
+        speaker&rsquo;s file; DXG Technician staff work the Speaker Ready Room and Manage presentations,
+        approving and taking in files.
       </div>
 
       {error && <div className="err">{error}</div>}
