@@ -3704,3 +3704,10 @@ address, or who already got *this reminder* in the last 24 hours (another email,
 not hold it back — so the old "anyone emailed about this event in the last day" was wrong). Travis's call: the
 dialog says only "Email a reminder to n speakers missing files now? Each one gets the reminder email with their
 sign-in details."; who was skipped and why is in the toast after sending. Demo speakers removed, demo event archived.
+
+## 2026-10-13 — Open the deck in each desktop's own app (D-167)
+Windows: Open in PowerPoint hands the deck to PowerPoint (browser prompt), falling back to a download. Mac: Open in
+Keynote downloads and Keynote opens it (no website can open Keynote directly; the PowerPoint link on a Mac without
+PowerPoint opened an empty LibreOffice — tried). Linux: Open in LibreOffice, a download. Download beside it on every
+desktop; phones get Download only (a detection bug — a phone read as a Mac — found and fixed). Checked in the
+browser on the check-in and Presentation detail; open-in-powerpoint 4/4. PowerPoint on Windows not tried here.

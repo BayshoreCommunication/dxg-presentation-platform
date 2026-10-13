@@ -3062,3 +3062,28 @@ Reject button's red text looked faded.
   `globals.css`, which share these blocks.
 - Checked by hand on a practice event: Ask for changes (v1 → changes_requested), Reject (v2 → rejected), Approve
   (v1 → approved); practice emails held with status `practice`.
+
+## D-167 (2026-10-13): Open the deck in each desktop's own app, with Download beside it — Status: ACCEPTED (Travis)
+Travis: "open in powerpoint ekhane click korbe auto niye ekbare mac er jonno keynote ar windows er joono powerpoint ba
+default … pashe ekta download button thakbe. amra ekbar korchilam o abar koro." Reverses D-158's second addendum
+(download only).
+- **Windows: "Open in PowerPoint"** asks for a five-minute open link and hands it over as
+  `ms-powerpoint:ofv|u|<origin>/api/v1/open/<token>/<speaker - talk - vN>.pptx`; the browser asks "Open PowerPoint?";
+  if nothing takes it within 2.5 s the file downloads. After a hand-over: "Opened in PowerPoint. Nothing opened? Press
+  Download."
+- **Mac: "Open in Keynote"** downloads the version and the Mac's default app (Keynote) opens it. No website can hand
+  Keynote a file — it takes no link — and the PowerPoint link is not offered on a Mac: tried on a desk Mac without
+  PowerPoint (2026-10-13), LibreOffice answered it and opened its start screen with no file. Chrome's "Always open
+  files of this type", ticked once, makes the download open by itself; the button's tooltip and the note after it say so.
+- **Linux: "Open in LibreOffice"**, the same as a Mac (download; LibreOffice Impress opens it).
+- **Download** beside it on every desktop (Travis asked for it, though on a Mac or Linux it does what Open does).
+  Phones and tablets show Download alone — checked before the desktop, since a phone's platform field can read like
+  a Mac's (found with a phone emulation).
+- Restored from D-158's first addendum: `services/openLinks.ts`, `POST /file-versions/:id/open-link` (staff;
+  technicians allowed), `GET /api/v1/open/:token/:filename` (no sign-in, an open path), the `open_links` table
+  (migration 040, kept since).
+- Tests: `open-in-powerpoint.test.ts` back (the link serves the file without a sign-in, more than once, audited;
+  expired or made-up links 404; no link without a sign-in) plus technicians and support staff get a link. The link
+  fetched through the staff site's own address (as the browser builds it) returns the deck. Desktop detection checked
+  against Windows (Chrome, Edge, Firefox), Mac (Chrome, Safari), Ubuntu, Android, iPhone and iPad user agents.
+  **Not tested:** PowerPoint on Windows taking the link (no Windows machine here) — check it on a Windows desk.
