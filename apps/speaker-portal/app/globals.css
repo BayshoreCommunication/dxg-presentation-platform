@@ -39,7 +39,7 @@
   --font-sans:"Inter",ui-sans-serif,system-ui,sans-serif;
 
   /* status tints (Kravio has none; derived from its success/destructive and Tailwind's amber/indigo) */
-  --amber:#d97706; --amber-text:#b45309; --indigo:#6366f1;
+  --amber:#d97706; --amber-text:#b45309; --destructive-text:#b91c1c; --indigo:#6366f1;
 
   /* client-baseline names, aliased onto the palette above */
   --blue:var(--primary); --blueDark:var(--primary);
@@ -226,7 +226,7 @@ td b,td strong{color:var(--foreground);font-weight:500}
 .btn.good:hover{border-color:var(--success)}
 .btn.warnb{color:var(--amber-text)}
 .btn.warnb:hover{border-color:var(--amber)}
-.btn.danger{color:var(--destructive)}
+.btn.danger{color:var(--destructive-text)}
 .btn.danger:hover{border-color:var(--destructive)}
 .btn:disabled{opacity:.5;cursor:default;pointer-events:none}
 .btn:focus-visible,aside nav a:focus-visible{outline:none;box-shadow:var(--focus-ring)}
@@ -851,7 +851,7 @@ input[type=time]:invalid,input[type=date]:invalid{border-color:var(--block)}
   --secondary:#262626; --secondary-foreground:#d4d4d4;
   --muted:#1a1a1a; --muted-foreground:#a3a3a3; --subtle-foreground:#737373; --cell-foreground:#e5e5e5;
   --accent:#262626; --accent-foreground:#fff;
-  --success:#22c55e; --destructive:#ef4444; --amber:#f59e0b; --amber-text:#f59e0b; --indigo:#818cf8;
+  --success:#22c55e; --destructive:#ef4444; --amber:#f59e0b; --amber-text:#f59e0b; --destructive-text:#ef4444; --indigo:#818cf8;
   --border:#2a2a2a; --input:#2a2a2a; --ring:#525252;
   --hover-border:#3f3f3f; --hover-bg:#141414; --hover-row:#141414;
   --gradient-primary:linear-gradient(#fff,#fff);

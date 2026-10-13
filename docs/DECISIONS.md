@@ -3049,3 +3049,16 @@ Manage presentations: "waiting for review kno dekhay, approve v1 kno? ekhane to 
   Ready Room except taking files in.
 - Tests: `technician-submits` (no queue, every decision refused; an admin approves and the technician sees and
   downloads it), `admin` (technician queue and approve refused), `speaker-accounts` reads the queue as support staff.
+
+## D-166 (2026-10-13): Approve asks first on the button too; Reject's red is darker — Status: ACCEPTED (Travis)
+Travis, reviewing on a practice event: the Approve button acted at once while only the A shortcut asked, and the
+Reject button's red text looked faded.
+- **Manage presentations → Your decision**: clicking **Approve vN** now opens the same inline confirmation as the
+  A shortcut ("Approve vN of “title” by speaker?"); nothing is approved until **Approve** is pressed there.
+  Opening Ask for changes or Reject (button or R) closes that confirmation, and Approve closes their message form,
+  so only one decision is open at a time.
+- **Danger buttons**: `.btn.danger` text uses a new `--destructive-text` token, #b91c1c in light (6.5:1 on white;
+  #ef4444 was 3.8:1, below the 4.5:1 text minimum). Dark theme keeps #ef4444. Same change in both apps'
+  `globals.css`, which share these blocks.
+- Checked by hand on a practice event: Ask for changes (v1 → changes_requested), Reject (v2 → rejected), Approve
+  (v1 → approved); practice emails held with status `practice`.
