@@ -3696,3 +3696,11 @@ clean.
 The technician's Manage presentations is now Upload a new version and the Approved list only; the queue and every
 review decision are refused them. Seen as the demo technician on Tech Summit: Upload and "Approved · 1" (Priya Shah,
 Download v1), nothing else. Related suites 147/147, unit 291, lint and type-check clean.
+
+## 2026-10-13 — Reminder dialog wording
+Travis found the Speakers screen's reminder confirmation confusing. Walked it on a local demo event with seven kinds of
+speaker: it emails those in a session with no file; it skips anyone with no address, a bounced address, a DXG staff
+address, or who already got *this reminder* in the last 24 hours (another email, such as a sign-in sent today, does
+not hold it back — so the old "anyone emailed about this event in the last day" was wrong). Travis's call: the
+dialog says only "Email a reminder to n speakers missing files now? Each one gets the reminder email with their
+sign-in details."; who was skipped and why is in the toast after sending. Demo speakers removed, demo event archived.
