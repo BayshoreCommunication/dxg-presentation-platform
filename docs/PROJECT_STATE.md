@@ -3711,3 +3711,10 @@ Keynote downloads and Keynote opens it (no website can open Keynote directly; th
 PowerPoint opened an empty LibreOffice — tried). Linux: Open in LibreOffice, a download. Download beside it on every
 desktop; phones get Download only (a detection bug — a phone read as a Mac — found and fixed). Checked in the
 browser on the check-in and Presentation detail; open-in-powerpoint 4/4. PowerPoint on Windows not tried here.
+
+## 2026-10-13 — DXG·PM Opener for Mac (D-168)
+A small Mac helper so "Open in Keynote" opens the deck directly (browser prompt, then the Mac's default app), as
+PowerPoint does on Windows. Built in `tools/mac-opener` as a macOS package (installs into Applications and registers the link itself), served by
+the API, offered on the page. From a clean state on this Mac: installed, and a real open link was fetched and opened
+in the default app; unsafe links refused. Unsigned, a downloaded package needs Privacy & Security → Open Anyway once;
+an Apple Developer ID would remove that. open-in-powerpoint 5/5, unit 291, lint and type-check clean.

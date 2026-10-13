@@ -1,0 +1,16 @@
+#!/bin/bash
+# DXG·PM Opener installer (D-168): make the dxgpm-open: link known at once, for the person signed in
+# at this Mac — the installer runs as root, and Launch Services keeps one list per user.
+APP=""
+for candidate in "$2/DXG·PM Opener.app" "/Applications/DXG·PM Opener.app" "$HOME/Applications/DXG·PM Opener.app"; do
+  if [ -d "$candidate" ]; then APP="$candidate"; break; fi
+done
+[ -n "$APP" ] || exit 0
+LSR=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
+USER_AT_MAC="$(stat -f%Su /dev/console)"
+if [ "$(id -u)" = "0" ] && [ -n "$USER_AT_MAC" ] && [ "$USER_AT_MAC" != "root" ]; then
+  launchctl asuser "$(id -u "$USER_AT_MAC")" sudo -u "$USER_AT_MAC" "$LSR" -f "$APP" || true
+else
+  "$LSR" -f "$APP" || true
+fi
+exit 0

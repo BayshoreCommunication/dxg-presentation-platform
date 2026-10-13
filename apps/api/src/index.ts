@@ -1,4 +1,5 @@
 import express from "express";
+import { fileURLToPath } from "node:url";
 import { assertProductionConfig, rateLimiter } from "./config.ts";
 import { withScope, withSystemScope, getPool, verifyAuditChain, appendAudit as appendAuditRecord } from "@pmp/db";
 import type { Actor, DomainError, EventRole, Result, ReviewAction } from "@pmp/domain";
@@ -722,6 +723,8 @@ const NON_STAFF_PATHS = [
   "/api/v1/email-image/",
   // "Open in PowerPoint" (D-158, D-167): the desk's app fetches one version by a five-minute link, with no sign-in.
   "/api/v1/open/",
+  // The Mac opener's installer (D-168): a public download, nothing in it is secret.
+  "/api/v1/downloads/",
   "/ops/",
 ];
 
@@ -1278,6 +1281,22 @@ app.get("/api/v1/open/:token/:filename", async (req, res) => {
   );
   res.setHeader("cache-control", "private, no-store");
   return res.send(file.body);
+});
+
+/** The Mac opener's installer, from the repository (`tools/mac-opener/dist`). */
+const MAC_OPENER_PKG = fileURLToPath(new URL("../../../tools/mac-opener/dist/DXG-PM-Opener.pkg", import.meta.url));
+
+/**
+ * DXG·PM Opener for Mac (D-168): the small app that lets "Open in Keynote" hand a deck straight to
+ * the Mac's app for presentations. Built by `tools/mac-opener/build.sh`; served as it is.
+ */
+app.get("/api/v1/downloads/dxgpm-opener-mac.pkg", (_req, res) => {
+  res.setHeader("content-type", "application/octet-stream");
+  res.setHeader("content-disposition", 'attachment; filename="DXG-PM-Opener.pkg"');
+  res.setHeader("cache-control", "public, max-age=300");
+  return res.sendFile(MAC_OPENER_PKG, (error) => {
+    if (error && !res.headersSent) res.status(404).json({ code: "download.not_found", message: "The Mac opener isn't available on this server." });
+  });
 });
 
 /** Several chosen versions as one zip (`files:bulk-download`, capped — see D-079). */
