@@ -3087,3 +3087,40 @@ default … pashe ekta download button thakbe. amra ekbar korchilam o abar koro.
   fetched through the staff site's own address (as the browser builds it) returns the deck. Desktop detection checked
   against Windows (Chrome, Edge, Firefox), Mac (Chrome, Safari), Ubuntu, Android, iPhone and iPad user agents.
   **Not tested:** PowerPoint on Windows taking the link (no Windows machine here) — check it on a Windows desk.
+
+## D-168 (2026-10-13): DXG·PM Opener for Mac — Open in Keynote opens the deck directly — Status: ACCEPTED (Travis)
+Travis, after D-167: Windows shows the browser's "Open …?" prompt, a Mac only downloads; is LibreOffice an option?
+Tried on this Mac: LibreOffice 26.2 registers `ms-powerpoint:`, `vnd.libreoffice.command:` and
+`vnd.sun.star.webdav:`, launches for each — and sends **no request** for the file (a logging server saw none); given
+the same address on its command line it fetches and opens the deck. Keynote takes no link at all. So a browser cannot
+open a deck in Keynote or LibreOffice on a Mac; Travis chose a small helper app: "eita koro".
+- **DXG·PM Opener** (`tools/mac-opener`): an AppleScript applet registering `dxgpm-open:`. `open.sh` accepts only
+  DXG·PM open links (`https://pmp.av-rfpilot.com/api/v1/open/…`; `localhost` / `127.0.0.1` for development) and only
+  presentation files (.pptx .ppt .ppsx .pps .potx .key .pdf), strips folders and leading dots from the name, fetches
+  to `~/Downloads/DXG-PM/` and opens it with the Mac's default app. Refusals say why in a dialog.
+- **Installer: a macOS package** (Travis: "install ki auto hobe na?" — no web page can install software; a package
+  is the shortest way). `build.sh` builds the applet in a temporary folder (so this Mac never keeps a stray handler),
+  ad-hoc signs it and wraps it with `pkgbuild` + `productbuild` (`pkg/distribution.xml`, `pkg/postinstall`) into
+  `dist/DXG-PM-Opener.pkg`, committed (`.gitignore` exception) and served at
+  `GET /api/v1/downloads/dxgpm-opener-mac.pkg` (open path). It installs into Applications and its postinstall
+  registers `dxgpm-open:` for the person signed in at the Mac, so nothing has to be opened first. Unsigned, a
+  downloaded package is refused by Gatekeeper ("no usable signature", macOS 27): the Mac's Privacy & Security
+  "Open Anyway" lets it run. An Apple Developer ID (Application + Installer certificates) and notarization remove
+  that step; an MDM (Jamf, Intune) can push the package to every desk with no one at it.
+- **On a Mac**, "Open in Keynote" now hands the five-minute open link to the opener (`dxgpm-open:<url>`); the browser
+  asks "Open DXG·PM Opener?". Nothing takes it within 2.5 s → the file downloads and the page says "To open straight
+  in Keynote next time, install DXG·PM Opener". Otherwise "First time on this Mac? install DXG·PM Opener (once per
+  Mac)." sits under the buttons. Windows and Linux unchanged from D-167.
+- A new production domain needs adding to `open.sh` and a rebuild.
+- **Addendum (Travis, same day): tidier, and the offer goes away.** The buttons are items of the page's own row, and
+  what there is to say ("Opening in…", "Downloaded…", the install offer, an error) is one line under the whole row
+  (`flex-basis: 100%`), so Confirm · Open · Download · Quick look · Check out stay one even line. Once the opener has
+  taken a link in a browser, that browser remembers it (`localStorage` `dxgpm.macOpener`) and stops offering the
+  installer; if a later click finds no opener, the file downloads, the note is cleared and the offer comes back.
+- Tested here: the opener refuses other hosts, look-alike hosts, other API paths, `file:`, .command/.app/.zshrc and
+  dead links. From a clean Mac (every copy unregistered — "No application knows how to open URL dxgpm-open:…"), the
+  package installed (into the user's Applications, no password) and registered the link with nothing opened; a real
+  open link then fetched the deck to `~/Downloads/DXG-PM/` and macOS opened it in the default app (PowerPoint on this
+  Mac). The installer route serves the package without a sign-in; `open-in-powerpoint` 5/5. The test browser pane doesn't pass custom links to
+  macOS, so there the download fallback and the install offer were seen; the prompt itself is for a real Chrome or
+  Safari on a desk Mac. This conflicts with the client's removal of desk apps (D-155) only in kind — tell them.

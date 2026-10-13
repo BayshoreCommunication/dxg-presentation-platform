@@ -79,3 +79,15 @@ describe("everyone at the desk can open it (D-167)", () => {
     }
   });
 });
+
+describe("DXG·PM Opener for Mac (D-168)", () => {
+  test("its installer downloads without a sign-in, as a macOS package", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const response = await fetch(`${API}/downloads/dxgpm-opener-mac.pkg`);
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get("content-disposition") ?? "", /attachment; filename="DXG-PM-Opener\.pkg"/);
+    const bytes = Buffer.from(await response.arrayBuffer());
+    assert.equal(bytes.subarray(0, 4).toString(), "xar!", "a flat installer package");
+    assert.ok(bytes.length > 100_000);
+  });
+});
