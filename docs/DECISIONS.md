@@ -3072,7 +3072,9 @@ be someone who isn't one.
   assignments), the person checking in first and marked "you" when they are one. Required — the API refuses a check-in
   without one (`srr.technician_required`), with someone who isn't a technician on the event
   (`srr.technician_not_found`), or on an event with no technician (`srr.no_technicians`; the button is greyed and says
-  a DXG Admin adds one under Event assignments). A practice event has no technicians, so there its owner can be chosen.
+  a DXG Admin adds one under Event assignments). Only DXG Technician staff — never an admin or support staff, on a
+  practice event too (Travis: "Dxg technition will be assigned not the admin or staff"); to practise check-in, assign a
+  technician to the practice event.
 - `technician_id` now holds the chosen technician; who pressed Check in stays in the audit (`srr.checked_in`, which
   also records `technician_id`). Everything that already showed "technician" (receipt, report, desks, the speaker's
   own view) now shows the right person.

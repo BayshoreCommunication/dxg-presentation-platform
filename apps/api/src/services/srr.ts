@@ -1061,17 +1061,15 @@ export async function emailReceipt(
 export type SrrTechnician = { id: string; name: string };
 
 /**
- * Who a check-in may name as the speaker's technician: DXG Technician staff on this event. A
- * practice event has none (only the person practising is on it), so there it is its owner.
+ * Who a check-in may name as the speaker's technician: DXG Technician staff on this event — never
+ * an admin or support staff, a practice event included (assign a technician to it to practise).
  */
 export async function eventTechnicianChoices(tx: pg.PoolClient, eventId: string): Promise<SrrTechnician[]> {
   const { rows } = await tx.query<SrrTechnician>(
-    `SELECT DISTINCT u.id, u.display_name AS name
+    `SELECT u.id, u.display_name AS name
        FROM pmp.users u
-      WHERE u.is_active AND u.deleted_at IS NULL
-        AND (    (u.staff_kind = 'technician'
-                  AND EXISTS (SELECT 1 FROM pmp.event_roles er WHERE er.event_id = $1 AND er.user_id = u.id))
-              OR u.id = (SELECT e.practice_owner FROM pmp.events e WHERE e.id = $1 AND e.is_practice))
+      WHERE u.is_active AND u.deleted_at IS NULL AND u.staff_kind = 'technician'
+        AND EXISTS (SELECT 1 FROM pmp.event_roles er WHERE er.event_id = $1 AND er.user_id = u.id)
       ORDER BY name`,
     [eventId],
   );

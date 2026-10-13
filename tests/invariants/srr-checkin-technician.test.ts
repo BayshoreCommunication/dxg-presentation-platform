@@ -129,6 +129,17 @@ describe("a check-in names the speaker's technician (D-168)", () => {
     assert.deepEqual(audited.map((row) => row.detail), [{ from: DELGADO_ID, to: secondId }]);
   });
 
+  test("never an admin or support staff — the person practising isn't offered on a practice event", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const practice = (await (await call("POST", "/practice-events")).json()) as { event_id: string };
+    try {
+      const room = (await (await call("GET", `/events/${practice.event_id}/srr`)).json()) as { technicians: unknown[] };
+      assert.deepEqual(room.technicians, [], "the admin who started it is not a technician");
+    } finally {
+      await call("POST", `/events/${practice.event_id}/archive`);
+    }
+  });
+
   test("not after the speaker has checked out", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
     assert.ok(checkinId, "needs the check-in above");
