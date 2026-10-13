@@ -413,15 +413,19 @@ describe("three kinds of DXG account (D-151)", () => {
     // Since D-163 they review on Manage presentations: the queue opens, and a decision reaches the
     // review rules rather than being refused by kind.
     assert.equal((await fetch(`${API}/events/${EVENT_ID}/review-queue`, { headers: { cookie: presentationManager } })).status, 200);
-    // A real version of the event, so a refusal would be the kind rule and not "not found". The
-    // stale lock version (0) means nothing changes whoever asks.
+    // A real version of the event, so a refusal would be the kind rule and not "not found". A lock
+    // version one past the current one is always stale, so nothing changes whoever asks (a fresh
+    // seed has every version at 0, so looking for "lock_version > 0" found none in CI).
     const anyVersion = await withSystemScope(async (tx) =>
-      (await tx.query<{ id: string }>(`SELECT id FROM pmp.file_versions WHERE event_id = $1 AND lock_version > 0 LIMIT 1`, [EVENT_ID])).rows[0]!.id,
+      (await tx.query<{ id: string; lock_version: number }>(
+        `SELECT id, lock_version FROM pmp.file_versions WHERE event_id = $1 LIMIT 1`,
+        [EVENT_ID],
+      )).rows[0]!,
     );
-    const sendBack = await fetch(`${API}/file-versions/${anyVersion}:transition`, {
+    const sendBack = await fetch(`${API}/file-versions/${anyVersion.id}:transition`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie: presentationManager },
-      body: JSON.stringify({ action: "request_changes", lock_version: 0, note: "probe" }),
+      body: JSON.stringify({ action: "request_changes", lock_version: anyVersion.lock_version + 1, note: "probe" }),
     });
     assert.notEqual(((await json(sendBack)) as { code: string }).code, "auth.kind_forbidden", "support staff may ask for changes");
     assert.equal((await fetch(`${API}/events/${EVENT_ID}/speakers`, { headers: { cookie: presentationManager } })).status, 200);
@@ -455,7 +459,7 @@ describe("three kinds of DXG account (D-151)", () => {
     const noQueue = await fetch(`${API}/events/${EVENT_ID}/review-queue`, { headers: { cookie: technician } });
     assert.equal(noQueue.status, 403, "the queue");
     for (const action of ["approve", "request_changes", "reject"]) {
-      const refused = await fetch(`${API}/file-versions/${anyVersion}:transition`, {
+      const refused = await fetch(`${API}/file-versions/${anyVersion.id}:transition`, {
         method: "POST",
         headers: { "content-type": "application/json", cookie: technician },
         body: JSON.stringify({ action, lock_version: 0, note: "probe", reason: "probe" }),
@@ -463,7 +467,7 @@ describe("three kinds of DXG account (D-151)", () => {
       assert.equal(refused.status, 403, action);
       assert.equal(((await json(refused)) as { code: string }).code, "auth.kind_forbidden", action);
     }
-    const revision = await fetch(`${API}/file-versions/${anyVersion}/request-revision`, {
+    const revision = await fetch(`${API}/file-versions/${anyVersion.id}/request-revision`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie: technician },
       body: JSON.stringify({ finding_id: "x", note: "probe" }),
