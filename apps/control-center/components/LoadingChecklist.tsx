@@ -35,7 +35,7 @@ export function LoadingChecklist({
   timezone: string;
   rooms: FleetRoom[];
   canLoad: boolean;
-  /** Taking in a new version is the onsite team's (D-151): support staff don't see Upload. */
+  /** Taking in a new version is DXG Technician staff's alone (D-162). */
   canUpload?: boolean;
 }) {
   const router = useRouter();

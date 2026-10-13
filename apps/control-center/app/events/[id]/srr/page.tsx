@@ -24,6 +24,7 @@ export default async function SrrPage({ params }: { params: Promise<{ id: string
       timezone={summary.event.timezone}
       data={data}
       canSwitch={canSwitch}
+      canUpload={principal.staff_kind === "technician"}
     />
   );
 }

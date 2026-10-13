@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import type { TestContext } from "node:test";
 import { withSystemScope } from "@pmp/db";
 import { signInStaff } from "../helpers/signIn.ts";
+import { technicianOn } from "../helpers/technician.ts";
 
 /**
  * A speaker taken off their session while sitting at a Speaker Ready Room desk (found on
@@ -22,10 +23,10 @@ let eventId = "";
 const speakers: string[] = [];
 const stations: string[] = [];
 
-const call = (method: string, path: string, body?: unknown) =>
+const call = (method: string, path: string, body?: unknown, cookie = admin) =>
   fetch(`${API}${path}`, {
     method,
-    headers: { "content-type": "application/json", cookie: admin },
+    headers: { "content-type": "application/json", cookie },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
 
@@ -85,7 +86,8 @@ describe("a desk whose speaker has no talk any more", () => {
     assert.equal(detail.status, 200, "it used to be 404, which crashed the page");
     const body = (await detail.json()) as { talk: { slot_id: string | null } };
     assert.equal(body.talk.slot_id, null);
-    const intake = await call("POST", `/srr/checkins/${checkinId}/usb-ingestions`, { upload_id: "x", file_name: "x.pptx", reason: "probe" });
+    const technician = await technicianOn(API, admin, eventId);
+    const intake = await call("POST", `/srr/checkins/${checkinId}/usb-ingestions`, { upload_id: "x", file_name: "x.pptx", reason: "probe" }, technician);
     assert.equal(intake.status, 409, "nothing to take a file in for");
     assert.equal((await call("POST", `/srr/checkins/${checkinId}/depart`)).status, 200, "and the desk can be freed");
   });

@@ -1879,16 +1879,33 @@ app.get("/api/v1/srr/checkins/:checkinId", async (req, res) => {
   return res.json(detail);
 });
 
+/**
+ * Taking in a file for a speaker — Manage presentations, Room sync, the Speaker Ready Room and
+ * a check-in's Local intake — is DXG Technician staff's alone (D-162, Travis): not DXG Admins,
+ * not support staff. Speakers keep uploading their own on the speaker site.
+ */
+function technicianOnly(req: express.Request, res: express.Response): boolean {
+  const principal = (req as express.Request & { principal?: Principal }).principal;
+  if (principal?.kind === "staff" && principal.staff_kind === "technician") return true;
+  res.status(403).json({
+    code: "auth.technician_only",
+    message: "Only DXG Technician staff take in a speaker's file. Ask the event's technician, or the speaker can upload it on their own site.",
+  });
+  return false;
+}
+
 /** Staff-side resumable upload, used by local intake (the portal has its own). */
 app.post("/api/v1/srr/uploads", async (req, res) => {
   const actor = actorFrom(req);
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  if (!technicianOnly(req, res)) return;
   return res.status(201).json({ upload_id: randomUUID(), part_size: 5 * 1024 * 1024 });
 });
 
 app.put("/api/v1/srr/uploads/:uploadId/parts/:partNumber", async (req, res) => {
   const actor = actorFrom(req);
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  if (!technicianOnly(req, res)) return;
   const body = req.body as Buffer;
   if (!Buffer.isBuffer(body) || body.length === 0) {
     return res.status(400).json({ code: "request.invalid", message: "Part of the file didn't arrive. Try the upload again." });
@@ -1900,6 +1917,7 @@ app.put("/api/v1/srr/uploads/:uploadId/parts/:partNumber", async (req, res) => {
 app.post("/api/v1/srr/checkins/:checkinId/usb-ingestions", async (req, res) => {
   const actor = actorFrom(req);
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  if (!technicianOnly(req, res)) return;
   const body = req.body as { upload_id?: string; file_name?: string; reason?: string };
   if (!body.upload_id || !body.file_name) {
     return res.status(400).json({ code: "request.invalid", message: "The file couldn't be finished. Choose it again." });
@@ -1924,6 +1942,7 @@ app.post("/api/v1/srr/checkins/:checkinId/usb-ingestions", async (req, res) => {
 app.post("/api/v1/events/:eventId/srr/slots/:slotId/intake", async (req, res) => {
   const actor = actorFrom(req);
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  if (!technicianOnly(req, res)) return;
   const body = req.body as { upload_id?: string; file_name?: string; reason?: string };
   if (!body.upload_id || !body.file_name) {
     return res.status(400).json({ code: "request.invalid", message: "The file couldn't be finished. Choose it again." });

@@ -4,6 +4,7 @@ import type { TestContext } from "node:test";
 import { writeZip } from "../../packages/files/src/zipWrite.ts";
 import { withSystemScope } from "@pmp/db";
 import { signInStaff } from "../helpers/signIn.ts";
+import { technicianOn } from "../helpers/technician.ts";
 
 /**
  * Only a file that passed its virus scan and finished inspection is reviewed or approved
@@ -20,6 +21,8 @@ const EICAR = "X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$
 
 let up = false;
 let admin = "";
+/** The technician who takes the files in (D-162). */
+let technician = "";
 let eventId = "";
 let checkinId = "";
 let infected = "";
@@ -35,17 +38,19 @@ const call = (method: string, path: string, body?: unknown) =>
 
 /** Brings a file in the way the Speaker Ready Room does: a USB upload, scanned and inspected. */
 async function usbFile(bytes: Buffer, fileName: string): Promise<{ file_version_id: string; scan_result: string }> {
-  const { upload_id } = (await (await call("POST", "/srr/uploads", {})).json()) as { upload_id: string };
+  const asTechnician = { "content-type": "application/json", cookie: technician };
+  const begun = await fetch(`${API}/srr/uploads`, { method: "POST", headers: asTechnician, body: "{}" });
+  const { upload_id } = (await begun.json()) as { upload_id: string };
   const part = await fetch(`${API}/srr/uploads/${upload_id}/parts/1`, {
     method: "PUT",
-    headers: { cookie: admin, "content-type": "application/octet-stream" },
+    headers: { cookie: technician, "content-type": "application/octet-stream" },
     body: bytes,
   });
   assert.equal(part.status, 200);
-  const response = await call("POST", `/srr/checkins/${checkinId}/usb-ingestions`, {
-    upload_id,
-    file_name: fileName,
-    reason: "review eligibility probe",
+  const response = await fetch(`${API}/srr/checkins/${checkinId}/usb-ingestions`, {
+    method: "POST",
+    headers: asTechnician,
+    body: JSON.stringify({ upload_id, file_name: fileName, reason: "review eligibility probe" }),
   });
   assert.equal(response.status, 200);
   return (await response.json()) as { file_version_id: string; scan_result: string };
@@ -108,6 +113,7 @@ before(async () => {
   const checkin = await call("POST", `/events/${eventId}/srr/checkins`, { speaker_id: speaker.speaker_id, station_id: station.id });
   assert.equal(checkin.status, 201);
   checkinId = ((await checkin.json()) as { checkin_id: string }).checkin_id;
+  technician = await technicianOn(API, admin, eventId);
 
   const bad = await usbFile(Buffer.from(EICAR), "infected.pptx");
   assert.equal(bad.scan_result, "infected", "the EICAR signature must be caught by the scanner");
