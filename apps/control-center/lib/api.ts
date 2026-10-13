@@ -1445,6 +1445,10 @@ export const getEventFiles = (eventId: string, query: FileQuery = {}) => {
   return request<EventFiles>(`/events/${eventId}/files${suffix ? `?${suffix}` : ""}`);
 };
 
+/** A five-minute link to one version, for the presentation app on this computer to open (D-158, D-167). */
+export const getOpenLink = (versionId: string) =>
+  request<{ path: string; filename: string; expires_at: string }>(`/file-versions/${versionId}/open-link`, { method: "POST" });
+
 /** A plain link: a top-level navigation carries the session cookie, like the archive's. */
 export const fileDownloadUrl = (versionId: string) => `${API_BASE_URL}/file-versions/${versionId}/download`;
 
