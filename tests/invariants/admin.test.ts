@@ -439,11 +439,10 @@ describe("three kinds of DXG account (D-151)", () => {
     assert.equal(decide.status, 403);
     assert.equal(((await json(decide)) as { code: string }).code, "auth.kind_forbidden");
     // c.delgado is a technician (seed): the two screens and the way to them, nothing else.
-    assert.equal((await fetch(`${API}/events/${EVENT_ID}/review-queue`, { headers: { cookie: technician } })).status, 200);
     assert.equal((await fetch(`${API}/events/${EVENT_ID}/srr`, { headers: { cookie: technician } })).status, 200);
     assert.equal((await fetch(`${API}/events/${EVENT_ID}/summary`, { headers: { cookie: technician } })).status, 200);
     // Looking at a file in review asks for its slide preview (a POST): that is their job too.
-    const queue = (await json(await fetch(`${API}/events/${EVENT_ID}/review-queue`, { headers: { cookie: technician } }))) as {
+    const queue = (await json(await fetch(`${API}/events/${EVENT_ID}/review-queue`, { headers: { cookie: admin } }))) as {
       items: { file_version_id: string }[];
     };
     if (queue.items[0]) {
@@ -452,8 +451,10 @@ describe("three kinds of DXG account (D-151)", () => {
     }
     // The approved presentations are listed for them on Manage presentations (D-163) …
     assert.equal((await fetch(`${API}/events/${EVENT_ID}/approved`, { headers: { cookie: technician } })).status, 200);
-    // … they approve, but asking for changes and rejecting are support staff's and admins'.
-    for (const action of ["request_changes", "reject"]) {
+    // … but they don't review (D-165): no queue, no approving, asking for changes or rejecting.
+    const noQueue = await fetch(`${API}/events/${EVENT_ID}/review-queue`, { headers: { cookie: technician } });
+    assert.equal(noQueue.status, 403, "the queue");
+    for (const action of ["approve", "request_changes", "reject"]) {
       const refused = await fetch(`${API}/file-versions/${anyVersion}:transition`, {
         method: "POST",
         headers: { "content-type": "application/json", cookie: technician },

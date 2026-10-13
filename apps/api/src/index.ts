@@ -810,6 +810,14 @@ const SUPPORT_REVIEW: RegExp[] = [
  */
 const SUPPORT_SRR: RegExp[] = [/^\/api\/v1\/events\/[^/]+\/srr(\/|$)/, /^\/api\/v1\/srr\//];
 
+const TECHNICIAN_NO_REVIEW: RegExp[] = [
+  /^\/api\/v1\/events\/[^/]+\/review-queue$/,
+  /^\/api\/v1\/file-versions\/[^/]+(:transition|\/request-revision)$/,
+];
+const TECHNICIAN_READ_ONLY: RegExp[] = [/^\/api\/v1\/findings\//, /^\/api\/v1\/slots\//, /^\/api\/v1\/file-versions\/[^/]+\/comments$/];
+const TECHNICIAN_REVIEW_REFUSAL =
+  "DXG Technician staff see the approved presentations and take in new files. Reviewing — approving, asking for changes, rejecting — is for DXG Support staff and DXG Admins.";
+
 function kindRefusal(kind: "support" | "technician", path: string, method: string): string | null {
   const onsiteOrReview = ONSITE_AND_REVIEW.some((pattern) => pattern.test(path));
   if (kind === "support") {
@@ -817,9 +825,16 @@ function kindRefusal(kind: "support" | "technician", path: string, method: strin
     if (method === "GET" && SUPPORT_READS.some((pattern) => pattern.test(path))) return null;
     if (SUPPORT_REVIEW.some((pattern) => pattern.test(path))) return null;
     if (SUPPORT_SRR.some((pattern) => pattern.test(path))) return null;
-    return "Waiving a finding and rolling back a version are for DXG Technician staff and DXG Admins.";
+    return "Waiving a finding and rolling back a version are for DXG Admins.";
   }
-  if (onsiteOrReview) return null;
+  if (onsiteOrReview) {
+    // Technicians see the approved presentations, take files in and run the Speaker Ready Room;
+    // reviewing — the queue, approve, ask for changes, reject, notes, waiving — is support
+    // staff's and admins' (D-165). They still read a talk, its findings and comments.
+    if (TECHNICIAN_NO_REVIEW.some((pattern) => pattern.test(path))) return TECHNICIAN_REVIEW_REFUSAL;
+    if (method !== "GET" && TECHNICIAN_READ_ONLY.some((pattern) => pattern.test(path))) return TECHNICIAN_REVIEW_REFUSAL;
+    return null;
+  }
   // A technician reads the event (GET) on the way to their screens; writes elsewhere are not theirs.
   if (method === "GET" && TECHNICIAN_ALSO.some((pattern) => pattern.test(path))) return null;
   if (TECHNICIAN_ALSO_WRITES.some((pattern) => pattern.test(path))) return null;
@@ -1099,9 +1114,6 @@ const splitAction = (segment: string): { id: string; action: string } => {
     : { id: segment.slice(0, index), action: segment.slice(index + 1) };
 };
 
-const TECHNICIAN_DECISION_REFUSAL =
-  "DXG Technician staff approve presentations. Asking the speaker for changes or rejecting a file is for DXG Support staff and DXG Admins.";
-
 app.post("/api/v1/file-versions/:versionAndAction", async (req, res) => {
   const { id: versionId, action: customMethod } = splitAction(String(req.params.versionAndAction));
   if (customMethod !== "transition") {
@@ -1116,12 +1128,6 @@ app.post("/api/v1/file-versions/:versionAndAction", async (req, res) => {
       code: "request.invalid",
       message: "That request was incomplete. Refresh the page and try again.",
     });
-  }
-
-  // A technician approves; asking for changes and rejecting are support staff's and admins' (D-163).
-  const principal = (req as express.Request & { principal?: Principal }).principal;
-  if (principal?.kind === "staff" && principal.staff_kind === "technician" && (body.action === "request_changes" || body.action === "reject")) {
-    return res.status(403).json({ code: "auth.kind_forbidden", message: TECHNICIAN_DECISION_REFUSAL });
   }
 
   try {
@@ -2182,10 +2188,6 @@ app.post("/api/v1/file-versions/:versionId/comments", async (req, res) => {
 app.post("/api/v1/file-versions/:versionId/request-revision", async (req, res) => {
   const actor = actorFrom(req);
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
-  const principal = (req as express.Request & { principal?: Principal }).principal;
-  if (principal?.kind === "staff" && principal.staff_kind === "technician") {
-    return res.status(403).json({ code: "auth.kind_forbidden", message: TECHNICIAN_DECISION_REFUSAL });
-  }
   const body = req.body as { finding_id?: string; note?: string };
   if (!body.note) {
     return res.status(400).json({ code: "request.invalid", message: "Write a note to the speaker saying what to change." });

@@ -13,7 +13,7 @@ export default async function InspectionPage({
 }) {
   const { id, slotId } = await params;
   const { v } = await searchParams;
-  // Technicians waive (it goes with approving), support staff ask the speaker; admins both (D-163).
+  // Support staff ask the speaker; admins ask and waive; technicians read (D-165).
   const kind = await getSession()
     .then((session) => session.principal.staff_kind)
     .catch(() => null);
@@ -30,7 +30,7 @@ export default async function InspectionPage({
       version={version}
       initialFindings={findings}
       canAskSpeaker={kind !== "technician"}
-      canWaive={kind !== "support"}
+      canWaive={kind !== "support" && kind !== "technician"}
     />
   );
 }

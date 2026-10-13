@@ -284,7 +284,7 @@ describe("uploads and downloads stay within the speaker's own talks", () => {
     }
 
     // Someone else's version — a reviewer can see every version; the speaker cannot fetch one that is not theirs.
-    const queue = (await json(await fetch(`${API}/events/${EVENT}/review-queue`, { headers: { cookie: reviewer } }))) as {
+    const queue = (await json(await fetch(`${API}/events/${EVENT}/review-queue`, { headers: { cookie: support } }))) as {
       items: { file_version_id: string; slot_id: string }[];
     };
     const other = queue.items.find((item) => item.slot_id !== talk.slot_id);

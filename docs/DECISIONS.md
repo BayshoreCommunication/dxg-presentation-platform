@@ -3035,3 +3035,17 @@ about uploading there: "upload shudhu technician".
 - Tests: `srr-open` adds support staff switching, setting up a desk, checking in and out and downloading the report on
   a probe event, refused Local intake; `srr-local-intake` and `admin` now expect the room open to them and uploads
   refused.
+
+## D-165 (2026-10-13): Technicians see approved presentations and take files in; they don't review — Status: ACCEPTED (Travis)
+Corrects D-163, which read "he can only approve presentation see" as "can approve". Travis, on the technician's
+Manage presentations: "waiting for review kno dekhay, approve v1 kno? ekhane to already approve gulo e dekhabe".
+- **Technician's Manage presentations**: **Upload a new version** and the **Approved** list (Download) — no queue, no
+  review workspace. The API refuses them the queue, every review transition (claim, approve, ask for changes,
+  reject), `request-revision`, waiving, roll back and writing comments (403 `auth.kind_forbidden`); they still read a
+  talk, its findings and comments.
+- **Reviewing** (approve, ask for changes, reject) is DXG Support staff's and DXG Admins'. Waiving a finding and
+  rolling back stay DXG Admins'.
+- Unchanged from D-162–D-164: technicians take files in; Room sync is not theirs; support staff run the Speaker
+  Ready Room except taking files in.
+- Tests: `technician-submits` (no queue, every decision refused; an admin approves and the technician sees and
+  downloads it), `admin` (technician queue and approve refused), `speaker-accounts` reads the queue as support staff.
