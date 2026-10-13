@@ -1855,6 +1855,7 @@ app.get("/api/v1/events/:eventId/srr/report.csv", async (req, res) => {
 app.post("/api/v1/events/:eventId/srr/checkins", async (req, res) => {
   const actor = actorFrom(req);
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  if (!technicianOnly(req, res, DESK_TECHNICIAN_ONLY)) return;
   const body = req.body as { speaker_id?: string; station_id?: string; technician_id?: string };
   if (!body.speaker_id) {
     return res.status(400).json({ code: "request.invalid", message: "Choose the speaker to check in." });
@@ -1922,15 +1923,23 @@ app.get("/api/v1/srr/checkins/:checkinId", async (req, res) => {
  * a check-in's Local intake — is DXG Technician staff's alone (D-162, Travis): not DXG Admins,
  * not support staff. Speakers keep uploading their own on the speaker site.
  */
-function technicianOnly(req: express.Request, res: express.Response): boolean {
+function technicianOnly(
+  req: express.Request,
+  res: express.Response,
+  message = "Only DXG Technician staff take in a speaker's file. Ask the event's technician, or the speaker can upload it on their own site.",
+): boolean {
   const principal = (req as express.Request & { principal?: Principal }).principal;
   if (principal?.kind === "staff" && principal.staff_kind === "technician") return true;
-  res.status(403).json({
-    code: "auth.technician_only",
-    message: "Only DXG Technician staff take in a speaker's file. Ask the event's technician, or the speaker can upload it on their own site.",
-  });
+  res.status(403).json({ code: "auth.technician_only", message });
   return false;
 }
+
+/**
+ * The desk's work — checking a speaker in, their confirmation, the receipt email, checking out and
+ * a hand-over — is DXG Technician staff's (D-168). Admins and support staff follow along.
+ */
+const DESK_TECHNICIAN_ONLY =
+  "Only DXG Technician staff work the desk — checking speakers in and out, their confirmation and the receipt. Ask the event's technician.";
 
 /** Staff-side resumable upload, used by local intake (the portal has its own). */
 app.post("/api/v1/srr/uploads", async (req, res) => {
@@ -2002,6 +2011,7 @@ app.post("/api/v1/events/:eventId/srr/slots/:slotId/intake", async (req, res) =>
 app.post("/api/v1/srr/checkins/:checkinId/sign-off", async (req, res) => {
   const actor = actorFrom(req);
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  if (!technicianOnly(req, res, DESK_TECHNICIAN_ONLY)) return;
   const body = req.body as { file_version_id?: string };
   if (!body.file_version_id) {
     return res.status(400).json({ code: "request.invalid", message: "Choose the version the speaker is signing off." });
@@ -2020,6 +2030,7 @@ app.post("/api/v1/srr/checkins/:checkinId/sign-off", async (req, res) => {
 app.post("/api/v1/srr/checkins/:checkinId/receipt/email", async (req, res) => {
   const actor = actorFrom(req);
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  if (!technicianOnly(req, res, DESK_TECHNICIAN_ONLY)) return;
   const result = await withScope(scopeFor(req), (tx) => emailReceipt(tx, actor, String(req.params.checkinId)));
   if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
   return res.json(result.value);
@@ -2029,6 +2040,7 @@ app.post("/api/v1/srr/checkins/:checkinId/receipt/email", async (req, res) => {
 app.put("/api/v1/srr/checkins/:checkinId/technician", async (req, res) => {
   const actor = actorFrom(req);
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  if (!technicianOnly(req, res, DESK_TECHNICIAN_ONLY)) return;
   const technicianId = (req.body as { technician_id?: unknown })?.technician_id;
   const result = await withScope(scopeFor(req), (tx) =>
     changeTechnician(tx, actor, String(req.params.checkinId), typeof technicianId === "string" ? technicianId : undefined),
@@ -2040,6 +2052,7 @@ app.put("/api/v1/srr/checkins/:checkinId/technician", async (req, res) => {
 app.post("/api/v1/srr/checkins/:checkinId/depart", async (req, res) => {
   const actor = actorFrom(req);
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  if (!technicianOnly(req, res, DESK_TECHNICIAN_ONLY)) return;
   const result = await withScope(scopeFor(req), (tx) =>
     depart(tx, actor, String(req.params.checkinId)),
   );

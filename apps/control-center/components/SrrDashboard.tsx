@@ -73,7 +73,9 @@ export function SrrDashboardView({
     </button>
   );
   // Why "Check in →" is greyed, once above the list rather than on every row (R33, D-111).
-  const checkInBlocked = !data.open
+  const checkInBlocked = !canUpload
+    ? "Only DXG Technicians check speakers in and work the desks. You can follow along here."
+    : !data.open
     ? "The Speaker Ready Room is closed. It opens on the event day — a DXG Admin or support staff opens it."
     : data.stations.length === 0
       ? "Check in is off until this room has a desk. Add one under Desks above."
@@ -259,7 +261,7 @@ export function SrrDashboardView({
                             stations={data.stations}
                             technicians={data.technicians}
                             meId={meId}
-                            disabled={busy || !data.open}
+                            disabled={busy || !data.open || !canUpload}
                             onPick={(stationId, technicianId) => void check(row.speaker_id, stationId, technicianId)}
                           />
                         </td>
@@ -299,7 +301,7 @@ export function SrrDashboardView({
                         technicians={data.technicians}
                         meId={meId}
                         label="Check in again"
-                        disabled={busy || !data.open}
+                        disabled={busy || !data.open || !canUpload}
                         onPick={(stationId, technicianId) => void check(row.speaker_id, stationId, technicianId)}
                       />
                     </td>

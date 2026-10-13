@@ -4,12 +4,13 @@ import type { TestContext } from "node:test";
 import { withSystemScope } from "@pmp/db";
 import { signInStaff } from "../helpers/signIn.ts";
 import { removeTestAccounts } from "../helpers/cleanup.ts";
-import { DELGADO_ID, placeTechnician } from "../helpers/technician.ts";
+import { DELGADO_ID, technicianOn } from "../helpers/technician.ts";
 
 /**
  * Checking a speaker in names the technician who helps them at the desk (D-168): one of the
- * event's DXG Technician staff, chosen — no longer whoever pressed Check in. The technician
- * can be handed over while the speaker is at the desk, and each hand-over is audited.
+ * event's DXG Technician staff, chosen. The desk's work — check-in, the speaker's confirmation,
+ * the receipt email, a hand-over, check-out — is DXG Technician staff's; admins and support
+ * staff follow along. A hand-over is audited.
  */
 const API = process.env.API_BASE ?? "http://localhost:4000/api/v1";
 const CLIENT = "11111111-1111-4111-8111-111111111111";
@@ -26,6 +27,7 @@ let speakerId = "";
 let stationId = "";
 let secondId = "";
 let checkinId = "";
+let technician = "";
 
 const call = (method: string, path: string, body?: unknown, cookie = admin) =>
   fetch(`${API}${path}`, {
@@ -69,53 +71,68 @@ after(async () => {
 });
 
 describe("a check-in names the speaker's technician (D-168)", () => {
-  test("with no technician on the event, nobody can be checked in", async (t: TestContext) => {
+  test("with no technician on the event, the room offers nobody", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
     const room = (await (await call("GET", `/events/${eventId}/srr`)).json()) as { technicians: unknown[] };
     assert.deepEqual(room.technicians, []);
+  });
+
+  test("the desk is the technicians': an admin can't check a speaker in", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    technician = await technicianOn(API, admin, eventId);
     const refused = await call("POST", `/events/${eventId}/srr/checkins`, { speaker_id: speakerId, station_id: stationId, technician_id: DELGADO_ID });
-    assert.equal(await code(refused), "srr.no_technicians");
+    assert.equal(refused.status, 403);
+    assert.equal(await code(refused), "auth.technician_only");
   });
 
   test("the technician is required, and must be one of the event's technicians", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
-    await placeTechnician(API, admin, eventId);
     const room = (await (await call("GET", `/events/${eventId}/srr`)).json()) as { technicians: { id: string }[] };
-    assert.deepEqual(room.technicians.map((technician) => technician.id), [DELGADO_ID], "the event's technicians, nobody else");
+    assert.deepEqual(room.technicians.map((choice) => choice.id), [DELGADO_ID], "the event's technicians, nobody else");
 
-    const none = await call("POST", `/events/${eventId}/srr/checkins`, { speaker_id: speakerId, station_id: stationId });
+    const none = await call("POST", `/events/${eventId}/srr/checkins`, { speaker_id: speakerId, station_id: stationId }, technician);
     assert.equal(await code(none), "srr.technician_required");
-    // Support staff are on the seed event, not this one, and aren't technicians anyway.
-    const support = await call("POST", `/events/${eventId}/srr/checkins`, { speaker_id: speakerId, station_id: stationId, technician_id: VEGA_ID });
+    // Support staff aren't technicians (and M. Vega isn't on this event anyway).
+    const support = await call("POST", `/events/${eventId}/srr/checkins`, { speaker_id: speakerId, station_id: stationId, technician_id: VEGA_ID }, technician);
     assert.equal(support.status, 404);
     assert.equal(await code(support), "srr.technician_not_found");
     // A technician not placed on this event.
-    const elsewhere = await call("POST", `/events/${eventId}/srr/checkins`, { speaker_id: speakerId, station_id: stationId, technician_id: secondId });
+    const elsewhere = await call("POST", `/events/${eventId}/srr/checkins`, { speaker_id: speakerId, station_id: stationId, technician_id: secondId }, technician);
     assert.equal(await code(elsewhere), "srr.technician_not_found");
   });
 
-  test("the chosen technician is recorded — not the person who pressed Check in", async (t: TestContext) => {
+  test("the chosen technician is recorded; an admin follows but can't act", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
-    const checkin = await call("POST", `/events/${eventId}/srr/checkins`, { speaker_id: speakerId, station_id: stationId, technician_id: DELGADO_ID });
+    const checkin = await call("POST", `/events/${eventId}/srr/checkins`, { speaker_id: speakerId, station_id: stationId, technician_id: DELGADO_ID }, technician);
     assert.equal(checkin.status, 201);
     checkinId = ((await checkin.json()) as { checkin_id: string }).checkin_id;
+    // Anyone on the event can follow the check-in; the admin reads it here.
     const detail = (await (await call("GET", `/srr/checkins/${checkinId}`)).json()) as {
       checkin: { technician: string; technician_id: string };
-      technicians: { id: string }[];
     };
-    assert.equal(detail.checkin.technician_id, DELGADO_ID, "the admin checked them in; Delgado helps them");
+    assert.equal(detail.checkin.technician_id, DELGADO_ID);
     assert.equal(detail.checkin.technician, "C. Delgado");
+    // …but can't act at the desk: confirming, the receipt email, a hand-over, checking out.
+    for (const refused of [
+      await call("POST", `/srr/checkins/${checkinId}/sign-off`, { file_version_id: "x" }),
+      await call("POST", `/srr/checkins/${checkinId}/receipt/email`),
+      await call("PUT", `/srr/checkins/${checkinId}/technician`, { technician_id: DELGADO_ID }),
+      await call("POST", `/srr/checkins/${checkinId}/depart`),
+    ]) {
+      assert.equal(refused.status, 403, refused.url);
+      assert.equal(await code(refused), "auth.technician_only", refused.url);
+    }
   });
 
   test("handed over to another of the event's technicians, audited; anyone else refused", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
     assert.ok(checkinId, "needs the check-in above");
-    const notHere = await call("PUT", `/srr/checkins/${checkinId}/technician`, { technician_id: secondId });
+    const notHere = await call("PUT", `/srr/checkins/${checkinId}/technician`, { technician_id: secondId }, technician);
     assert.equal(await code(notHere), "srr.technician_not_found", "not on the event yet");
 
     const placed = await call("POST", `/admin/users/${secondId}/events`, { event_id: eventId, assign: true });
     assert.ok(placed.ok, "fixture: the second technician joins the event");
-    const changed = await call("PUT", `/srr/checkins/${checkinId}/technician`, { technician_id: secondId });
+    const changed = await call("PUT", `/srr/checkins/${checkinId}/technician`, { technician_id: secondId }, technician);
     assert.equal(changed.status, 200);
     const detail = (await (await call("GET", `/srr/checkins/${checkinId}`)).json()) as { checkin: { technician_id: string } };
     assert.equal(detail.checkin.technician_id, secondId);
@@ -143,8 +160,8 @@ describe("a check-in names the speaker's technician (D-168)", () => {
   test("not after the speaker has checked out", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
     assert.ok(checkinId, "needs the check-in above");
-    assert.equal((await call("POST", `/srr/checkins/${checkinId}/depart`)).status, 200);
-    const late = await call("PUT", `/srr/checkins/${checkinId}/technician`, { technician_id: DELGADO_ID });
+    assert.equal((await call("POST", `/srr/checkins/${checkinId}/depart`, undefined, technician)).status, 200);
+    const late = await call("PUT", `/srr/checkins/${checkinId}/technician`, { technician_id: DELGADO_ID }, technician);
     assert.equal(await code(late), "srr.already_departed");
   });
 });

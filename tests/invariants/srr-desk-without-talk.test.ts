@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import type { TestContext } from "node:test";
 import { withSystemScope } from "@pmp/db";
 import { signInStaff } from "../helpers/signIn.ts";
-import { DELGADO_ID, placeTechnician, technicianOn } from "../helpers/technician.ts";
+import { DELGADO_ID, technicianOn } from "../helpers/technician.ts";
 
 /**
  * A speaker taken off their session while sitting at a Speaker Ready Room desk (found on
@@ -62,9 +62,10 @@ describe("a desk whose speaker has no talk any more", () => {
   test("each desk links to its own visit, even when two speakers share a name", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
     const ids: string[] = [];
-    await placeTechnician(API, admin, eventId);
+    // The desk is the technician's (D-168): they check the speakers in.
+    const technician = await technicianOn(API, admin, eventId);
     for (const [i, speaker] of speakers.entries()) {
-      const checkin = await call("POST", `/events/${eventId}/srr/checkins`, { speaker_id: speaker, station_id: stations[i], technician_id: DELGADO_ID });
+      const checkin = await call("POST", `/events/${eventId}/srr/checkins`, { speaker_id: speaker, station_id: stations[i], technician_id: DELGADO_ID }, technician);
       assert.equal(checkin.status, 201);
       ids.push(((await checkin.json()) as { checkin_id: string }).checkin_id);
     }
@@ -90,7 +91,7 @@ describe("a desk whose speaker has no talk any more", () => {
     const technician = await technicianOn(API, admin, eventId);
     const intake = await call("POST", `/srr/checkins/${checkinId}/usb-ingestions`, { upload_id: "x", file_name: "x.pptx", reason: "probe" }, technician);
     assert.equal(intake.status, 409, "nothing to take a file in for");
-    assert.equal((await call("POST", `/srr/checkins/${checkinId}/depart`)).status, 200, "and the desk can be freed");
+    assert.equal((await call("POST", `/srr/checkins/${checkinId}/depart`, undefined, technician)).status, 200, "and the desk can be freed");
   });
 
   test("removing a speaker who is at a desk checks them out", async (t: TestContext) => {

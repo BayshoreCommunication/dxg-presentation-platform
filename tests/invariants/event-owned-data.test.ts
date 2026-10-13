@@ -98,9 +98,12 @@ describe("Speaker Ready Room stations belong to the event", () => {
     const speaker = dashboard.expected.find((row) => !row.checkin_id);
     assert.ok(speaker, "fixture: a speaker not checked in");
 
+    // Checking in is the technicians' (D-168); C. Delgado is on the seed event.
+    const technician = await signInStaff(API, "c.delgado@example.invalid", PASSWORD);
     const none = await call(`/events/${MEDTECH}/srr/checkins`, {
       method: "POST",
       body: JSON.stringify({ speaker_id: speaker.speaker_id }),
+      headers: { cookie: technician },
     });
     assert.equal(none.status, 400, "there is no default station any more");
 
@@ -109,6 +112,7 @@ describe("Speaker Ready Room stations belong to the event", () => {
     const wrongEvent = await call(`/events/${MEDTECH}/srr/checkins`, {
       method: "POST",
       body: JSON.stringify({ speaker_id: speaker.speaker_id, station_id: foreignStation.id }),
+      headers: { cookie: technician },
     });
     assert.equal(wrongEvent.status, 404, "another event's desk is not a desk here");
   });

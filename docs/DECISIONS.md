@@ -3085,5 +3085,20 @@ be someone who isn't one.
   security the planner walked every speaker × talk × session pair (18 s per load on the seed event, also on main).
   It is now a `LEFT JOIN LATERAL … LIMIT 1` for the one speaker, with the same "next talk that hasn't ended" order:
   ~30 ms.
-- Tests: `srr-checkin-technician` (5); the suites that check in (`manual-room-loading`, `review-eligibility`,
-  `srr-desk-without-talk`, `srr-open`, `srr-local-intake`) place the seeded technician and name them.
+- **The desk is the technicians'** (Travis: "isn't the actions of all button will be perform by the technition?").
+  Checking in, the speaker's confirmation, the receipt email, a hand-over and checking out are DXG Technician staff's —
+  `403 auth.technician_only` for anyone else. Admins and support staff open the room and its check-ins and follow along
+  (slides, Open in PowerPoint, Print receipt) with a note naming the technician; the buttons are not shown to them.
+  Narrows D-164: support staff still switch the room, set up desks and get the report.
+- **Confirm is the speaker's, not a second approval** (Travis: "we already approved … why need to confirm again").
+  Approve = a reviewer says the file is fine; this step records the speaker's own "this is the one", locks the talk and
+  makes the receipt. The button reads **Speaker confirms vN**, and when vN is approved the text says so: "vN is already
+  approved by a reviewer. Now <speaker> confirms it's the version they'll present …".
+- **The visit's details, open** (Travis: "show the details info, like who approved and emphasise the name of the
+  technician"): the check-in's second card leads with **Technician** — the name large, Change for a hand-over, the desk
+  and check-in time — then the three steps with who approved, who confirmed and the room copy, and when. They were
+  folded under "Details". The header names the technician in bold; the strip's "Next:" line is left out there
+  (`hideNext`), since "What to do now" says it.
+- Tests: `srr-checkin-technician` (7); the suites that check in (`manual-room-loading`, `review-eligibility`,
+  `srr-desk-without-talk`, `srr-open`, `srr-local-intake`, `event-owned-data`) act as the seeded technician; `srr-open`'s
+  support-staff test now expects check-in and check-out refused.
