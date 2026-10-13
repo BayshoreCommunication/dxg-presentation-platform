@@ -191,7 +191,10 @@ export function ReviewWorkspace({
       if (event.metaKey || event.ctrlKey || event.altKey) return;
       if ((event.key === "a" || event.key === "A") && !approveBlocked && !busy) setConfirmApprove(true);
       // R opens the message form rather than acting: a revision needs a reason.
-      if (event.key === "r" || event.key === "R") setPending("request_changes");
+      if (event.key === "r" || event.key === "R") {
+        setConfirmApprove(false);
+        setPending("request_changes");
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -294,18 +297,33 @@ export function ReviewWorkspace({
                     disabled={busy || approveBlocked !== null}
                     title={approveBlocked ?? undefined}
                     onClick={() => {
-                      setConfirmApprove(false);
-                      void decide("approve");
+                      // Asks first, like the A shortcut (D-162).
+                      setPending(null);
+                      setConfirmApprove(true);
                     }}
                   >
                     <Icon name="check" />
                     Approve v{selected.version_number}
                   </button>
-                  <button className="btn" disabled={busy} onClick={() => setPending("request_changes")}>
+                  <button
+                    className="btn"
+                    disabled={busy}
+                    onClick={() => {
+                      setConfirmApprove(false);
+                      setPending("request_changes");
+                    }}
+                  >
                     <Icon name="comment" />
                     Ask for changes
                   </button>
-                  <button className="btn danger" disabled={busy} onClick={() => setPending("reject")}>
+                  <button
+                    className="btn danger"
+                    disabled={busy}
+                    onClick={() => {
+                      setConfirmApprove(false);
+                      setPending("reject");
+                    }}
+                  >
                     <Icon name="close" />
                     Reject…
                   </button>
