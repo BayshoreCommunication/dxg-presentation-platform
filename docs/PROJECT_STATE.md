@@ -3684,3 +3684,10 @@ and no upload. Walked as the demo technician (Approve and Upload only; approving
 Approved · 1; sidebar without Room sync) and as M. Vega (Approve, Ask for changes, Reject; no upload; Room sync, no
 Speaker Ready Room). Unit 291; invariants 397/399 with worker and dispatcher running, then speaker-accounts fixed
 (14/14) — the one left is event-files' known seed gap. Lint and type-check clean.
+
+## 2026-10-13 — Support staff run the Speaker Ready Room (D-164)
+Support staff open the Speaker Ready Room with every operation except Upload and Local intake (technicians only).
+Walked as M. Vega on MedTech: sidebar has Speaker Ready Room, the switch, Check in and the CSV report are there, no
+Upload. Unit 291; invariants 398/400 with worker and dispatcher — event-files (known seed gap) and comment-lanes,
+which passes on its own (3/3): it races another suite over the seeded speaker's latest version. Lint and type-check
+clean.

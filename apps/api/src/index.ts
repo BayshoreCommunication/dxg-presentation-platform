@@ -803,6 +803,12 @@ const SUPPORT_REVIEW: RegExp[] = [
   /^\/api\/v1\/events\/[^/]+\/review-queue$/,
   /^\/api\/v1\/file-versions\/[^/]+(:transition|\/request-revision|\/comments)$/,
 ];
+/**
+ * The Speaker Ready Room is support staff's too (D-164): the switch, desks, check-in, sign-off,
+ * receipt, check-out and the report. Taking a file in stays the technicians' — `technicianOnly`
+ * refuses the upload routes on its own.
+ */
+const SUPPORT_SRR: RegExp[] = [/^\/api\/v1\/events\/[^/]+\/srr(\/|$)/, /^\/api\/v1\/srr\//];
 
 function kindRefusal(kind: "support" | "technician", path: string, method: string): string | null {
   const onsiteOrReview = ONSITE_AND_REVIEW.some((pattern) => pattern.test(path));
@@ -810,7 +816,8 @@ function kindRefusal(kind: "support" | "technician", path: string, method: strin
     if (!onsiteOrReview) return null;
     if (method === "GET" && SUPPORT_READS.some((pattern) => pattern.test(path))) return null;
     if (SUPPORT_REVIEW.some((pattern) => pattern.test(path))) return null;
-    return "The Speaker Ready Room is for DXG Technician staff and DXG Admins.";
+    if (SUPPORT_SRR.some((pattern) => pattern.test(path))) return null;
+    return "Waiving a finding and rolling back a version are for DXG Technician staff and DXG Admins.";
   }
   if (onsiteOrReview) return null;
   // A technician reads the event (GET) on the way to their screens; writes elsewhere are not theirs.

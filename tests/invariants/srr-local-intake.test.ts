@@ -187,17 +187,13 @@ describe("local intake from the Speaker Ready Room, without a check-in (D-153)",
     }
   });
 
-  test("support staff are refused, as they are the whole Speaker Ready Room (D-151)", async (t: TestContext) => {
+  test("support staff run the Speaker Ready Room (D-164) but don't take a file in (D-162)", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
     const support = await signInStaff(API, "m.vega@example.invalid", PASSWORD);
-    for (const [method, path] of [
-      ["POST", `/events/${SEED_EVENT}/srr/slots/${slotId}/intake`],
-      ["GET", `/events/${SEED_EVENT}/srr/report.csv`],
-    ] as const) {
-      const response = await call(method, path, method === "POST" ? { upload_id: "x", file_name: "x.pptx", reason: "r" } : undefined, support);
-      assert.equal(response.status, 403, `${method} ${path}`);
-      assert.equal(((await response.json()) as { code: string }).code, "auth.kind_forbidden");
-    }
+    assert.equal((await call("GET", `/events/${SEED_EVENT}/srr/report.csv`, undefined, support)).status, 200, "the report");
+    const intake = await call("POST", `/events/${SEED_EVENT}/srr/slots/${slotId}/intake`, { upload_id: "x", file_name: "x.pptx", reason: "r" }, support);
+    assert.equal(intake.status, 403);
+    assert.equal(((await intake.json()) as { code: string }).code, "auth.technician_only");
   });
 });
 
