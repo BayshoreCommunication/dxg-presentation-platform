@@ -4,6 +4,7 @@ import type { TestContext } from "node:test";
 import { writeZip } from "../../packages/files/src/zipWrite.ts";
 import { withSystemScope } from "@pmp/db";
 import { signInStaff } from "../helpers/signIn.ts";
+import { technicianOn } from "../helpers/technician.ts";
 
 /**
  * The Speaker Ready Room after the client's review (D-153): "local intake" takes a file
@@ -21,10 +22,13 @@ const RUN = Date.now();
 
 let up = false;
 let admin = "";
+/** The technician who takes the files in (D-162). */
+let technician = "";
 let eventId = "";
 let slotId = "";
 let speakerName = "";
 let deskName = "";
+let visitId = "";
 
 const call = (method: string, path: string, body?: unknown, cookie = admin) =>
   fetch(`${API}${path}`, {
@@ -41,10 +45,10 @@ const deck = () =>
   ]);
 
 async function uploaded(bytes: Buffer): Promise<string> {
-  const { upload_id } = (await (await call("POST", "/srr/uploads", {})).json()) as { upload_id: string };
+  const { upload_id } = (await (await call("POST", "/srr/uploads", {}, technician)).json()) as { upload_id: string };
   const part = await fetch(`${API}/srr/uploads/${upload_id}/parts/1`, {
     method: "PUT",
-    headers: { cookie: admin, "content-type": "application/octet-stream" },
+    headers: { cookie: technician, "content-type": "application/octet-stream" },
     body: bytes,
   });
   assert.equal(part.status, 200);
@@ -70,6 +74,7 @@ before(async () => {
     ).json()) as { event_id: string };
     eventId = created.event_id;
   }
+  technician = await technicianOn(API, admin, eventId);
 
   const title = `Local Intake Talk ${RUN}`;
   assert.equal(
@@ -98,6 +103,7 @@ before(async () => {
   const checkin = await call("POST", `/events/${eventId}/srr/checkins`, { speaker_id: speaker.speaker_id, station_id: station.id });
   assert.equal(checkin.status, 201);
   const { checkin_id } = (await checkin.json()) as { checkin_id: string };
+  visitId = checkin_id;
   assert.equal((await call("POST", `/srr/checkins/${checkin_id}/depart`)).status, 200);
 });
 
@@ -113,7 +119,7 @@ describe("local intake from the Speaker Ready Room, without a check-in (D-153)",
       upload_id: await uploaded(deck()),
       file_name: "saved-on-desk.pptx",
       reason: "speaker brought the file on a laptop",
-    });
+    }, technician);
     assert.equal(first.status, 200);
     const body = (await first.json()) as { scan_result: string; version_number: number; file_version_id: string; ingestion_id: string | null };
     assert.equal(body.scan_result, "clean");
@@ -124,7 +130,7 @@ describe("local intake from the Speaker Ready Room, without a check-in (D-153)",
         upload_id: await uploaded(deck()),
         file_name: "saved-on-desk-v2.pptx",
         reason: "closing slide added",
-      })
+      }, technician)
     ).json()) as { version_number: number; file_version_id: string; compared_with: { version_number: number; basis: string } | null };
     assert.equal(second.version_number, body.version_number + 1, "an update is the next version");
     assert.deepEqual(second.compared_with, { version_number: body.version_number, basis: "previous" });
@@ -155,7 +161,7 @@ describe("local intake from the Speaker Ready Room, without a check-in (D-153)",
       upload_id: await uploaded(deck()),
       file_name: "x.pptx",
       reason: "  ",
-    });
+    }, technician);
     assert.equal(noReason.status, 422);
     assert.equal(((await noReason.json()) as { code: string }).code, "srr.reason_required");
 
@@ -163,8 +169,22 @@ describe("local intake from the Speaker Ready Room, without a check-in (D-153)",
       upload_id: await uploaded(deck()),
       file_name: "x.pptx",
       reason: "wrong event",
-    });
+    }, technician);
     assert.equal(otherEvent.status, 404);
+  });
+
+  test("a DXG Admin is refused: taking in a speaker's file is the technician's (D-162)", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    for (const [method, path] of [
+      ["POST", "/srr/uploads"],
+      ["PUT", "/srr/uploads/00000000-0000-4000-8000-000000000000/parts/1"],
+      ["POST", `/events/${eventId}/srr/slots/${slotId}/intake`],
+      ["POST", `/srr/checkins/${visitId}/usb-ingestions`],
+    ] as const) {
+      const response = await call(method, path, { upload_id: "x", file_name: "x.pptx", reason: "admin probe" });
+      assert.equal(response.status, 403, `${method} ${path}`);
+      assert.equal(((await response.json()) as { code: string }).code, "auth.technician_only", `${method} ${path}`);
+    }
   });
 
   test("support staff are refused, as they are the whole Speaker Ready Room (D-151)", async (t: TestContext) => {

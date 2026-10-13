@@ -52,12 +52,15 @@ export function CheckinView({
   timezone,
   initial,
   srrOpen = true,
+  canUpload = false,
 }: {
   eventId: string;
   timezone: string;
   initial: CheckinDetail;
   /** The event-day switch (D-157): closed, no intake or sign-off here — only checking out. */
   srrOpen?: boolean;
+  /** Taking in a file for a speaker is DXG Technician staff's alone (D-162). */
+  canUpload?: boolean;
 }) {
   const router = useRouter();
   const [detail, setDetail] = useState(initial);
@@ -387,26 +390,28 @@ export function CheckinView({
         </div>
       </div>
 
-      {/* ── Local intake (screen 13), opened from check-in ───────────────── */}
-      <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "18px 0 10px" }}>
-        <button
-          type="button"
-          className={intakeOpen ? "btn" : "btn pri"}
-          aria-expanded={intakeOpen}
-          disabled={(!srrOpen || !hasTalk) && !intakeOpen}
-          onClick={() => setIntakeOpen((open) => !open)}
-        >
-          <Icon name={intakeOpen ? "close" : "intake"} />
-          {intakeOpen ? "Close local intake" : "Local intake"}
-        </button>
-        <span className="note">
-          {intakeOpen
-            ? "Check the file for viruses, compare it with the approved version, then accept."
-            : "The speaker brought a new version — on a USB drive or saved on this computer? Bring it in here."}
-        </span>
-      </div>
+      {/* ── Local intake (screen 13), opened from check-in — technicians only (D-162) ── */}
+      {canUpload && (
+        <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "18px 0 10px" }}>
+          <button
+            type="button"
+            className={intakeOpen ? "btn" : "btn pri"}
+            aria-expanded={intakeOpen}
+            disabled={(!srrOpen || !hasTalk) && !intakeOpen}
+            onClick={() => setIntakeOpen((open) => !open)}
+          >
+            <Icon name={intakeOpen ? "close" : "intake"} />
+            {intakeOpen ? "Close local intake" : "Local intake"}
+          </button>
+          <span className="note">
+            {intakeOpen
+              ? "Check the file for viruses, compare it with the approved version, then accept."
+              : "The speaker brought a new version — on a USB drive or saved on this computer? Bring it in here."}
+          </span>
+        </div>
+      )}
 
-      {intakeOpen && (
+      {canUpload && intakeOpen && (
         <LocalIntake
           submit={(body) => ingestUsb(detail.checkin.id, body)}
           approvedNumber={approvedNumber}

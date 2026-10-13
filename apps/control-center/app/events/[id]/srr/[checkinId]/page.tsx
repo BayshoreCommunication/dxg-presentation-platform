@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ApiError, getCheckin, getSummary } from "@/lib/api";
+import { ApiError, getCheckin, getSession, getSummary } from "@/lib/api";
 import { CheckinView } from "@/components/CheckinView";
 import { guard } from "@/lib/guard";
 
@@ -11,13 +11,14 @@ export default async function CheckinPage({
   params: Promise<{ id: string; checkinId: string }>;
 }) {
   const { id, checkinId } = await params;
-  const [detail, summary] = await guard(
+  const [detail, summary, session] = await guard(
     Promise.all([
       // A check-in that no longer exists says so; it used to crash the page ("Application error").
       getCheckin(checkinId).catch((caught: unknown) =>
         caught instanceof ApiError && caught.status === 404 ? null : Promise.reject(caught),
       ),
       getSummary(id),
+      getSession(),
     ]),
     `/events/${id}/srr/${checkinId}`,
   );
@@ -34,5 +35,13 @@ export default async function CheckinPage({
       </div>
     );
   }
-  return <CheckinView eventId={id} timezone={summary.event.timezone} initial={detail} srrOpen={summary.event.srr_open} />;
+  return (
+    <CheckinView
+      eventId={id}
+      timezone={summary.event.timezone}
+      initial={detail}
+      srrOpen={summary.event.srr_open}
+      canUpload={session.principal.staff_kind === "technician"}
+    />
+  );
 }

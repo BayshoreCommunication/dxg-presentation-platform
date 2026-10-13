@@ -3667,3 +3667,12 @@ email and refuses an Organization that is an address (dialog and API). Speaker s
 release permission, schedule import, co-presenter uploads, technician submits) 113/113 against a local API; walked the
 dialog: the empty-email case is stopped by the browser's required field, the address-under-Organization case shows
 the message, nothing is created. Lint and type-check clean. Local note: Docker had stopped; restarted it.
+
+## 2026-10-13 — Only technicians take in a speaker's file (D-162)
+Admins no longer upload for speakers anywhere (Manage presentations, Room sync, Speaker Ready Room, check-in Local
+intake); the four staff upload routes are technician-only and the buttons show only to technicians. Checked as admin
+(none of the buttons) and as the demo technician (all three pages show them). Unit 291/291; invariants 387/397 on a
+local API on port 4100 — the failures were the environment: CORS (the test expects origin :3000; with
+STAFF_BASE=http://localhost:3100 it passes), worker and dispatcher not running (started them: practice event and
+worker pass, the worker after draining a 35-file preview backlog), and event-files' known seed gap. Lint and
+type-check clean.

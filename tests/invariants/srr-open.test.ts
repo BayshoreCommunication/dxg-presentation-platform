@@ -2,6 +2,7 @@ import { test, describe, before, after } from "node:test";
 import assert from "node:assert/strict";
 import type { TestContext } from "node:test";
 import { signInStaff } from "../helpers/signIn.ts";
+import { technicianOn } from "../helpers/technician.ts";
 
 /**
  * The Speaker Ready Room's event-day switch (client review, D-157): a new event's room
@@ -88,7 +89,9 @@ describe("a new event's Speaker Ready Room starts closed (D-157)", () => {
     assert.equal((await call("PUT", `/events/${eventId}/srr-open`, { open: false })).status, 200);
     const signOff = await call("POST", `/srr/checkins/${checkin_id}/sign-off`, { file_version_id: "00000000-0000-4000-8000-000000000000" });
     assert.notEqual(signOff.status, 200, "no sign-off while closed");
-    const intake = await call("POST", `/srr/checkins/${checkin_id}/usb-ingestions`, { upload_id: "x", file_name: "x.pptx", reason: "probe" });
+    // Taking a file in is the technician's (D-162); closed, even they are stopped.
+    const technician = await technicianOn(API, admin, eventId);
+    const intake = await call("POST", `/srr/checkins/${checkin_id}/usb-ingestions`, { upload_id: "x", file_name: "x.pptx", reason: "probe" }, technician);
     assert.equal(intake.status, 409);
     assert.equal(await code(intake), "srr.closed_conflict");
     assert.equal((await call("POST", `/srr/checkins/${checkin_id}/depart`)).status, 200, "a speaker at a desk can still leave");
