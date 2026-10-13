@@ -593,6 +593,12 @@ export async function addSpeaker(
   const organization = input.organization?.trim() ?? "";
   const slotId = input.slot_id?.trim() || null;
   if (!name) return err({ code: "agenda.incomplete", message: "A speaker needs a name." });
+  // Added here, a speaker is invited by email, so the address is required (Travis, 2026-10-13).
+  // The agenda and the spreadsheet import may still name a presenter without one.
+  if (!typedEmail) return err({ code: "agenda.incomplete", message: "A speaker needs an email address — their sign-in is sent there." });
+  if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(organization)) {
+    return err({ code: "agenda.incomplete", message: "The organization looks like an email address. Put the address under Email." });
+  }
   const checked = await checkedEmail(typedEmail);
   if (!checked.ok) return checked;
   const email = checked.value;
