@@ -182,8 +182,8 @@ export function roleList(roles: readonly string[]): string {
 /** The three kinds of DXG account (D-151), as the screens name them. */
 export const ACCOUNT_KIND: Readonly<Record<string, Words>> = {
   root_admin: { label: "DXG Admin", meaning: "Every event, plus staff accounts and assignments." },
-  support: { label: "DXG Support staff", meaning: "Runs the events they are assigned to — everything except the Speaker Ready Room and Manage presentations." },
-  technician: { label: "DXG Technician staff", meaning: "The Speaker Ready Room and Manage presentations on the events they are assigned to, nothing else." },
+  support: { label: "DXG Support staff", meaning: "Runs the events they are assigned to — everything there except taking in a speaker's file." },
+  technician: { label: "DXG Technician staff", meaning: "The Speaker Ready Room and Manage presentations on the events they are assigned to: approves presentations and takes in speakers' files." },
   client: { label: "Client access", meaning: "The client's own people: a live, read-only view of the events they are placed on, and the archive when it is ready." },
 };
 

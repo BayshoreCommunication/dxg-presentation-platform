@@ -98,3 +98,26 @@ describe("a new event's Speaker Ready Room starts closed (D-157)", () => {
     assert.equal((await call("GET", `/events/${eventId}/srr/report.csv`)).status, 200, "the report still downloads");
   });
 });
+
+describe("support staff run the Speaker Ready Room (D-164)", () => {
+  test("they switch it, set up a desk, check a speaker in and out and get the report — but take no file in", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    // M. Vega (seeded DXG Support staff), placed on this event the way DXG does it.
+    const placed = await call("POST", "/admin/users/33333333-3333-4333-8333-333333333331/events", { event_id: eventId, assign: true });
+    assert.equal(placed.status, 200);
+    const support = await signInStaff(API, "m.vega@example.invalid", PASSWORD);
+    assert.equal((await call("GET", `/events/${eventId}/srr`, undefined, support)).status, 200);
+    assert.equal((await call("PUT", `/events/${eventId}/srr-open`, { open: true }, support)).status, 200, "the switch");
+    const desk = await call("POST", `/events/${eventId}/srr/stations`, { name: `Support Desk ${RUN}` }, support);
+    assert.equal(desk.status, 201, "a desk");
+    const checkin = await call("POST", `/events/${eventId}/srr/checkins`, { speaker_id: speakerId, station_id: ((await desk.json()) as { id: string }).id }, support);
+    assert.equal(checkin.status, 201, "check-in");
+    const { checkin_id } = (await checkin.json()) as { checkin_id: string };
+    assert.equal((await call("GET", `/srr/checkins/${checkin_id}`, undefined, support)).status, 200, "the check-in page");
+    const intake = await call("POST", `/srr/checkins/${checkin_id}/usb-ingestions`, { upload_id: "x", file_name: "x.pptx", reason: "probe" }, support);
+    assert.equal(intake.status, 403);
+    assert.equal(await code(intake), "auth.technician_only", "Local intake stays the technicians'");
+    assert.equal((await call("POST", `/srr/checkins/${checkin_id}/depart`, undefined, support)).status, 200, "check-out");
+    assert.equal((await call("GET", `/events/${eventId}/srr/report.csv`, undefined, support)).status, 200, "the report");
+  });
+});

@@ -401,13 +401,15 @@ after(async () => {
 describe("three kinds of DXG account (D-151)", () => {
   const EVENT_ID = "22222222-2222-4222-8222-222222222222";
 
-  test("support staff never open the Speaker Ready Room but review on Manage presentations; technicians open nothing else", async (t: TestContext) => {
+  test("support staff run the Speaker Ready Room and review on Manage presentations; technicians open nothing else", async (t: TestContext) => {
     if (!up || !presentationManager) return t.skip("API not running");
     const technician = await signInStaff(API, "c.delgado@example.invalid", PASSWORD);
-    // m.vega is support staff (seed): the event is theirs, the Speaker Ready Room is not.
-    const room = await fetch(`${API}/events/${EVENT_ID}/srr`, { headers: { cookie: presentationManager } });
-    assert.equal(room.status, 403);
-    assert.equal(((await json(room)) as { code: string }).code, "auth.kind_forbidden");
+    // m.vega is support staff (seed): the event is theirs, the Speaker Ready Room too (D-164) —
+    // but not taking a speaker's file in (D-162).
+    assert.equal((await fetch(`${API}/events/${EVENT_ID}/srr`, { headers: { cookie: presentationManager } })).status, 200);
+    const upload = await fetch(`${API}/srr/uploads`, { method: "POST", headers: { "content-type": "application/json", cookie: presentationManager }, body: "{}" });
+    assert.equal(upload.status, 403);
+    assert.equal(((await json(upload)) as { code: string }).code, "auth.technician_only");
     // Since D-163 they review on Manage presentations: the queue opens, and a decision reaches the
     // review rules rather than being refused by kind.
     assert.equal((await fetch(`${API}/events/${EVENT_ID}/review-queue`, { headers: { cookie: presentationManager } })).status, 200);

@@ -3022,7 +3022,21 @@ and "already presentation approve gulo technician dekhtay parbe".
   for support staff, technician-submits (a technician approves; the approved file is listed; send-back refused; an
   admin asks), speaker-accounts' revision request now made by support staff.
 
-## D-164 (2026-10-13): Approve asks first on the button too; Reject's red is darker — Status: ACCEPTED (Travis)
+## D-164 (2026-10-13): Support staff run the Speaker Ready Room too — Status: ACCEPTED (Travis)
+Travis: "DXG support staff o Speaker ready room dekhtay parbe ar all operation o ja ja ache se korte parbe"; asked
+about uploading there: "upload shudhu technician".
+- Support staff open the Speaker Ready Room and do everything on it — the event-day switch, desks, check-in, the
+  check-in page (Open in PowerPoint, Quick look, Confirm as final, receipt), check-out and the CSV report — except
+  **Upload** and a check-in's **Local intake**, which stay the technicians' (D-162; `technicianOnly` refuses them,
+  403 `auth.technician_only`, and the buttons are hidden).
+- With D-163 support staff now open every screen of their events; the kind gate refuses them only waiving a finding
+  and rolling back a version.
+- The role wording follows: Staff accounts, the access-level list (`STAFF_KINDS` vocabulary) and the no-access page.
+- Tests: `srr-open` adds support staff switching, setting up a desk, checking in and out and downloading the report on
+  a probe event, refused Local intake; `srr-local-intake` and `admin` now expect the room open to them and uploads
+  refused.
+
+## D-165 (2026-10-13): Approve asks first on the button too; Reject's red is darker — Status: ACCEPTED (Travis)
 Travis, reviewing on a practice event: the Approve button acted at once while only the A shortcut asked, and the
 Reject button's red text looked faded.
 - **Manage presentations → Your decision**: clicking **Approve vN** now opens the same inline confirmation as the
