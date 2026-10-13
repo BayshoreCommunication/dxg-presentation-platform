@@ -54,7 +54,7 @@ export function CheckinView({
   initial,
   srrOpen = true,
   canUpload = false,
-  canAct = false,
+  canConfirm = false,
 }: {
   eventId: string;
   timezone: string;
@@ -64,10 +64,10 @@ export function CheckinView({
   /** Taking in a file for a speaker is DXG Technician staff's alone (D-162). */
   canUpload?: boolean;
   /**
-   * The desk's actions — confirming, the receipt email, checking out, a hand-over — are DXG
-   * Technician staff's (D-168). Admins and support staff follow along: slides and printing only.
+   * Recording the speaker's confirmation is the technician's (D-168). The receipt, checking out and
+   * a hand-over are anyone's at the desk; DXG staff checked the speaker in and assigned them.
    */
-  canAct?: boolean;
+  canConfirm?: boolean;
 }) {
   const router = useRouter();
   const [detail, setDetail] = useState(initial);
@@ -267,8 +267,8 @@ export function CheckinView({
     </>
   );
   const who = detail.speaker.name;
-  // Followers (admins, support staff) see the page without the desk's buttons (D-168).
-  const act = (node: React.ReactNode) => (canAct ? node : null);
+  // Only the technician records the speaker's confirmation (D-168).
+  const confirmButton = (label: string) => (canConfirm ? signOffButton(label) : null);
 
   /** The one thing to do now, in the order a technician meets the cases (D-120). */
   const next: { title: string; body?: string; actions: React.ReactNode; showApprovalNote?: boolean } = departed
@@ -278,21 +278,21 @@ export function CheckinView({
         actions: detail.receipt ? (
           <>
             {printReceipt}
-            {act(emailReceipt)}
+            {emailReceipt}
           </>
         ) : null,
       }
     : blockedReason
-      ? { title: blockedReason, actions: <>{canUpload && hasTalk && (!detail.latest || detail.latest.processing_state === "quarantined") ? openUsb : null}{act(checkOut)}</> }
+      ? { title: blockedReason, actions: <>{canUpload && hasTalk && (!detail.latest || detail.latest.processing_state === "quarantined") ? openUsb : null}{checkOut}</> }
       : newerAfterReceipt
         ? {
             title: `A newer version (v${latestNumber}) came in after ${who} signed off.`,
             body: "Go through it with them. If it's right, confirm it as their final version.",
             actions: (
               <>
-                {act(signOffButton(`Speaker confirms v${latestNumber}`))}
+                {confirmButton(`Speaker confirms v${latestNumber}`)}
                 {preview}
-                {act(checkOut)}
+                {checkOut}
               </>
             ),
             showApprovalNote: true,
@@ -308,8 +308,8 @@ export function CheckinView({
               actions: (
                 <>
                   {printReceipt}
-                  {act(emailReceipt)}
-                  {act(checkOut)}
+                  {emailReceipt}
+                  {checkOut}
                 </>
               ),
             }
@@ -319,8 +319,8 @@ export function CheckinView({
                 body: "If nothing has changed, they're all set — check them out. To give them a new receipt, confirm it again.",
                 actions: (
                   <>
-                    {act(checkOut)}
-                    {act(signOffButton(`Speaker confirms v${earlier.version_number} again`))}
+                    {checkOut}
+                    {confirmButton(`Speaker confirms v${earlier.version_number} again`)}
                     {preview}
                   </>
                 ),
@@ -335,9 +335,9 @@ export function CheckinView({
                     : `If they're right, ${who} confirms v${latestNumber} as the version they'll present. That locks it — they can't replace it from the portal, any change comes through this desk — and gives them a receipt to print or email.`,
                 actions: (
                   <>
-                    {act(signOffButton(`Speaker confirms v${latestNumber}`))}
+                    {confirmButton(`Speaker confirms v${latestNumber}`)}
                     {preview}
-                    {act(checkOut)}
+                    {checkOut}
                   </>
                 ),
                 showApprovalNote: true,
@@ -384,10 +384,9 @@ export function CheckinView({
             </p>
           )}
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>{next.actions}</div>
-          {!canAct && !departed && (
+          {!canConfirm && !departed && !detail.receipt && hasTalk && (
             <p className="note" style={{ marginBottom: 0 }}>
-              Only DXG Technicians act at the desk — <b>{detail.checkin.technician}</b> is helping {who}. You can follow along
-              here: look through the slides, or print the receipt once there is one.
+              <b>{detail.checkin.technician}</b> goes through the slides with {who} and records their confirmation.
             </p>
           )}
           <WhyNot reason={checkoutBlocked && !departed ? checkoutBlocked : null} />
@@ -406,7 +405,7 @@ export function CheckinView({
               <div className="next-step-label">Technician</div>
               <div style={{ fontSize: 18, fontWeight: 600, lineHeight: 1.3 }}>
                 {detail.checkin.technician}
-                {canAct && !departed && detail.technicians.length > 1 && !changingTechnician && (
+                {!departed && detail.technicians.length > 1 && !changingTechnician && (
                   <>
                     {" "}
                     <button

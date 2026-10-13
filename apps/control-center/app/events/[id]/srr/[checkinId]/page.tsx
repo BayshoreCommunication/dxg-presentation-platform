@@ -42,7 +42,7 @@ export default async function CheckinPage({
       initial={detail}
       srrOpen={summary.event.srr_open}
       canUpload={session.principal.staff_kind === "technician"}
-      canAct={session.principal.staff_kind === "technician"}
+      canConfirm={session.principal.staff_kind === "technician"}
     />
   );
 }

@@ -110,9 +110,9 @@ before(async () => {
   // A new event's Speaker Ready Room starts closed (D-157); open it, as on the event day.
   assert.equal((await call("PUT", `/events/${eventId}/srr-open`, { open: true })).status, 200);
   const station = (await (await call("POST", `/events/${eventId}/srr/stations`, { name: `Desk ${RUN}` })).json()) as { id: string };
-  // The desk is the technician's (D-168): they check the speaker in, confirm and check out.
+  // DXG staff check the speaker in and assign the technician; the technician records the confirmation (D-168).
   technician = await technicianOn(API, admin, eventId);
-  const checkin = await call("POST", `/events/${eventId}/srr/checkins`, { speaker_id: speaker.speaker_id, station_id: station.id, technician_id: DELGADO_ID }, technician);
+  const checkin = await call("POST", `/events/${eventId}/srr/checkins`, { speaker_id: speaker.speaker_id, station_id: station.id, technician_id: DELGADO_ID });
   assert.equal(checkin.status, 201);
   checkinId = ((await checkin.json()) as { checkin_id: string }).checkin_id;
 
@@ -270,7 +270,7 @@ describe("a sign-off stands when the speaker checks in again (D-119)", () => {
     assert.equal((await call("POST", `/srr/checkins/${checkinId}/depart`, undefined, technician)).status, 200);
 
     const station = (await (await call("POST", `/events/${eventId}/srr/stations`, { name: `Desk again ${RUN}` })).json()) as { id: string };
-    const again = await call("POST", `/events/${eventId}/srr/checkins`, { speaker_id: first.speaker.id, station_id: station.id, technician_id: DELGADO_ID }, technician);
+    const again = await call("POST", `/events/${eventId}/srr/checkins`, { speaker_id: first.speaker.id, station_id: station.id, technician_id: DELGADO_ID });
     assert.equal(again.status, 201);
     const secondId = ((await again.json()) as { checkin_id: string }).checkin_id;
 

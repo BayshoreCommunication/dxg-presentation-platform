@@ -1855,7 +1855,7 @@ app.get("/api/v1/events/:eventId/srr/report.csv", async (req, res) => {
 app.post("/api/v1/events/:eventId/srr/checkins", async (req, res) => {
   const actor = actorFrom(req);
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
-  if (!technicianOnly(req, res, DESK_TECHNICIAN_ONLY)) return;
+  if (!deskStaffOnly(req, res, CHECK_IN_STAFF_ONLY)) return;
   const body = req.body as { speaker_id?: string; station_id?: string; technician_id?: string };
   if (!body.speaker_id) {
     return res.status(400).json({ code: "request.invalid", message: "Choose the speaker to check in." });
@@ -1878,6 +1878,7 @@ app.post("/api/v1/events/:eventId/srr/checkins", async (req, res) => {
 app.post("/api/v1/events/:eventId/srr/stations", async (req, res) => {
   const actor = actorFrom(req);
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  if (!deskStaffOnly(req, res, DESKS_STAFF_ONLY)) return;
   const eventId = String(req.params.eventId);
   const result = await withScope(scopeFor(req, eventId), (tx) =>
     addStation(tx, actor, eventId, (req.body as { name?: unknown })?.name),
@@ -1889,6 +1890,7 @@ app.post("/api/v1/events/:eventId/srr/stations", async (req, res) => {
 app.patch("/api/v1/events/:eventId/srr/stations/:stationId", async (req, res) => {
   const actor = actorFrom(req);
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  if (!deskStaffOnly(req, res, DESKS_STAFF_ONLY)) return;
   const eventId = String(req.params.eventId);
   const result = await withScope(scopeFor(req, eventId), (tx) =>
     renameStation(tx, actor, eventId, String(req.params.stationId), (req.body as { name?: unknown })?.name),
@@ -1900,6 +1902,7 @@ app.patch("/api/v1/events/:eventId/srr/stations/:stationId", async (req, res) =>
 app.delete("/api/v1/events/:eventId/srr/stations/:stationId", async (req, res) => {
   const actor = actorFrom(req);
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  if (!deskStaffOnly(req, res, DESKS_STAFF_ONLY)) return;
   const eventId = String(req.params.eventId);
   const result = await withScope(scopeFor(req, eventId), (tx) =>
     retireStation(tx, actor, eventId, String(req.params.stationId)),
@@ -1935,11 +1938,22 @@ function technicianOnly(
 }
 
 /**
- * The desk's work — checking a speaker in, their confirmation, the receipt email, checking out and
- * a hand-over — is DXG Technician staff's (D-168). Admins and support staff follow along.
+ * At the desk (D-168): DXG staff — admins and support staff — set up the desks, check the speaker
+ * in and assign the technician; the technician goes through the slides and records the speaker's
+ * confirmation. The receipt email, a hand-over and checking out are either's.
  */
-const DESK_TECHNICIAN_ONLY =
-  "Only DXG Technician staff work the desk — checking speakers in and out, their confirmation and the receipt. Ask the event's technician.";
+const SPEAKER_CONFIRMS_TECHNICIAN_ONLY =
+  "Only the DXG Technician helping the speaker records their confirmation. Ask the event's technician.";
+
+function deskStaffOnly(req: express.Request, res: express.Response, message: string): boolean {
+  const principal = (req as express.Request & { principal?: Principal }).principal;
+  if (principal?.kind === "staff" && (principal.staff_kind === "support" || principal.staff_kind === "root_admin")) return true;
+  res.status(403).json({ code: "auth.staff_only", message });
+  return false;
+}
+const CHECK_IN_STAFF_ONLY =
+  "DXG staff check speakers in and assign their technician. Ask a DXG Admin or support staff at the Speaker Ready Room.";
+const DESKS_STAFF_ONLY = "DXG staff set up the Speaker Ready Room's desks. Ask a DXG Admin or support staff.";
 
 /** Staff-side resumable upload, used by local intake (the portal has its own). */
 app.post("/api/v1/srr/uploads", async (req, res) => {
@@ -2011,7 +2025,7 @@ app.post("/api/v1/events/:eventId/srr/slots/:slotId/intake", async (req, res) =>
 app.post("/api/v1/srr/checkins/:checkinId/sign-off", async (req, res) => {
   const actor = actorFrom(req);
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
-  if (!technicianOnly(req, res, DESK_TECHNICIAN_ONLY)) return;
+  if (!technicianOnly(req, res, SPEAKER_CONFIRMS_TECHNICIAN_ONLY)) return;
   const body = req.body as { file_version_id?: string };
   if (!body.file_version_id) {
     return res.status(400).json({ code: "request.invalid", message: "Choose the version the speaker is signing off." });
@@ -2030,7 +2044,6 @@ app.post("/api/v1/srr/checkins/:checkinId/sign-off", async (req, res) => {
 app.post("/api/v1/srr/checkins/:checkinId/receipt/email", async (req, res) => {
   const actor = actorFrom(req);
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
-  if (!technicianOnly(req, res, DESK_TECHNICIAN_ONLY)) return;
   const result = await withScope(scopeFor(req), (tx) => emailReceipt(tx, actor, String(req.params.checkinId)));
   if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
   return res.json(result.value);
@@ -2040,7 +2053,6 @@ app.post("/api/v1/srr/checkins/:checkinId/receipt/email", async (req, res) => {
 app.put("/api/v1/srr/checkins/:checkinId/technician", async (req, res) => {
   const actor = actorFrom(req);
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
-  if (!technicianOnly(req, res, DESK_TECHNICIAN_ONLY)) return;
   const technicianId = (req.body as { technician_id?: unknown })?.technician_id;
   const result = await withScope(scopeFor(req), (tx) =>
     changeTechnician(tx, actor, String(req.params.checkinId), typeof technicianId === "string" ? technicianId : undefined),
@@ -2052,7 +2064,6 @@ app.put("/api/v1/srr/checkins/:checkinId/technician", async (req, res) => {
 app.post("/api/v1/srr/checkins/:checkinId/depart", async (req, res) => {
   const actor = actorFrom(req);
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
-  if (!technicianOnly(req, res, DESK_TECHNICIAN_ONLY)) return;
   const result = await withScope(scopeFor(req), (tx) =>
     depart(tx, actor, String(req.params.checkinId)),
   );

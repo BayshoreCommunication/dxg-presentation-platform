@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import type { TestContext } from "node:test";
 import { withSystemScope } from "@pmp/db";
 import { signInStaff } from "../helpers/signIn.ts";
-import { DELGADO_ID, technicianOn } from "../helpers/technician.ts";
+import { DELGADO_ID, placeTechnician, technicianOn } from "../helpers/technician.ts";
 
 /**
  * A speaker taken off their session while sitting at a Speaker Ready Room desk (found on
@@ -62,10 +62,10 @@ describe("a desk whose speaker has no talk any more", () => {
   test("each desk links to its own visit, even when two speakers share a name", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
     const ids: string[] = [];
-    // The desk is the technician's (D-168): they check the speakers in.
-    const technician = await technicianOn(API, admin, eventId);
+    // DXG staff check the speakers in and assign the technician (D-168).
+    await placeTechnician(API, admin, eventId);
     for (const [i, speaker] of speakers.entries()) {
-      const checkin = await call("POST", `/events/${eventId}/srr/checkins`, { speaker_id: speaker, station_id: stations[i], technician_id: DELGADO_ID }, technician);
+      const checkin = await call("POST", `/events/${eventId}/srr/checkins`, { speaker_id: speaker, station_id: stations[i], technician_id: DELGADO_ID });
       assert.equal(checkin.status, 201);
       ids.push(((await checkin.json()) as { checkin_id: string }).checkin_id);
     }

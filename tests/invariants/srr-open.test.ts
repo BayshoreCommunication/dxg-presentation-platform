@@ -2,7 +2,7 @@ import { test, describe, before, after } from "node:test";
 import assert from "node:assert/strict";
 import type { TestContext } from "node:test";
 import { signInStaff } from "../helpers/signIn.ts";
-import { DELGADO_ID, technicianOn } from "../helpers/technician.ts";
+import { DELGADO_ID, placeTechnician, technicianOn } from "../helpers/technician.ts";
 
 /**
  * The Speaker Ready Room's event-day switch (client review, D-157): a new event's room
@@ -67,9 +67,9 @@ describe("a new event's Speaker Ready Room starts closed (D-157)", () => {
     const desk = await call("POST", `/events/${eventId}/srr/stations`, { name: "Desk 1" });
     assert.equal(desk.status, 201, "setting up before the day is fine");
     stationId = ((await desk.json()) as { id: string }).id;
-    // Checked as the technician, who would check them in (D-168), so it's the switch that refuses.
-    const technician = await technicianOn(API, admin, eventId);
-    const refused = await call("POST", `/events/${eventId}/srr/checkins`, { speaker_id: speakerId, station_id: stationId, technician_id: DELGADO_ID }, technician);
+    // A technician on the event, so it's the switch that refuses and nothing else (D-168).
+    await placeTechnician(API, admin, eventId);
+    const refused = await call("POST", `/events/${eventId}/srr/checkins`, { speaker_id: speakerId, station_id: stationId, technician_id: DELGADO_ID });
     assert.equal(refused.status, 409);
     assert.equal(await code(refused), "srr.closed_conflict");
   });
@@ -85,7 +85,7 @@ describe("a new event's Speaker Ready Room starts closed (D-157)", () => {
     if (!up) return t.skip("API not running");
     assert.equal((await call("PUT", `/events/${eventId}/srr-open`, { open: true })).status, 200);
     const technician = await technicianOn(API, admin, eventId);
-    const checkin = await call("POST", `/events/${eventId}/srr/checkins`, { speaker_id: speakerId, station_id: stationId, technician_id: DELGADO_ID }, technician);
+    const checkin = await call("POST", `/events/${eventId}/srr/checkins`, { speaker_id: speakerId, station_id: stationId, technician_id: DELGADO_ID });
     assert.equal(checkin.status, 201);
     const { checkin_id } = (await checkin.json()) as { checkin_id: string };
 
@@ -101,8 +101,8 @@ describe("a new event's Speaker Ready Room starts closed (D-157)", () => {
   });
 });
 
-describe("support staff run the Speaker Ready Room (D-164) — the desk itself is the technicians' (D-168)", () => {
-  test("they switch it, set up a desk, follow a check-in and get the report — but don't check in, out or take a file in", async (t: TestContext) => {
+describe("support staff run the Speaker Ready Room (D-164, D-168)", () => {
+  test("they switch it, set up a desk, check a speaker in and out and get the report — but take no file in and record no confirmation", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
     // M. Vega (seeded DXG Support staff), placed on this event the way DXG does it.
     const placed = await call("POST", "/admin/users/33333333-3333-4333-8333-333333333331/events", { event_id: eventId, assign: true });
@@ -113,20 +113,22 @@ describe("support staff run the Speaker Ready Room (D-164) — the desk itself i
     const desk = await call("POST", `/events/${eventId}/srr/stations`, { name: `Support Desk ${RUN}` }, support);
     assert.equal(desk.status, 201, "a desk");
     const deskId = ((await desk.json()) as { id: string }).id;
-    const refused = await call("POST", `/events/${eventId}/srr/checkins`, { speaker_id: speakerId, station_id: deskId, technician_id: DELGADO_ID }, support);
-    assert.equal(refused.status, 403);
-    assert.equal(await code(refused), "auth.technician_only", "checking in is the technicians'");
     const technician = await technicianOn(API, admin, eventId);
-    const checkin = await call("POST", `/events/${eventId}/srr/checkins`, { speaker_id: speakerId, station_id: deskId, technician_id: DELGADO_ID }, technician);
-    assert.equal(checkin.status, 201, "the technician checks them in");
+    // Technicians neither set up desks nor check speakers in (D-168).
+    const techDesk = await call("POST", `/events/${eventId}/srr/stations`, { name: `Tech Desk ${RUN}` }, technician);
+    assert.equal(await code(techDesk), "auth.staff_only", "desks are staff's");
+    const techCheckin = await call("POST", `/events/${eventId}/srr/checkins`, { speaker_id: speakerId, station_id: deskId, technician_id: DELGADO_ID }, technician);
+    assert.equal(await code(techCheckin), "auth.staff_only", "checking in is staff's");
+    const checkin = await call("POST", `/events/${eventId}/srr/checkins`, { speaker_id: speakerId, station_id: deskId, technician_id: DELGADO_ID }, support);
+    assert.equal(checkin.status, 201, "support staff check in and assign the technician");
     const { checkin_id } = (await checkin.json()) as { checkin_id: string };
     assert.equal((await call("GET", `/srr/checkins/${checkin_id}`, undefined, support)).status, 200, "the check-in page");
     const intake = await call("POST", `/srr/checkins/${checkin_id}/usb-ingestions`, { upload_id: "x", file_name: "x.pptx", reason: "probe" }, support);
     assert.equal(intake.status, 403);
     assert.equal(await code(intake), "auth.technician_only", "Local intake stays the technicians'");
-    const out = await call("POST", `/srr/checkins/${checkin_id}/depart`, undefined, support);
-    assert.equal(await code(out), "auth.technician_only", "checking out is the technicians' too");
-    assert.equal((await call("POST", `/srr/checkins/${checkin_id}/depart`, undefined, technician)).status, 200, "the technician checks them out");
+    const confirm = await call("POST", `/srr/checkins/${checkin_id}/sign-off`, { file_version_id: "x" }, support);
+    assert.equal(await code(confirm), "auth.technician_only", "the speaker's confirmation is recorded by the technician");
+    assert.equal((await call("POST", `/srr/checkins/${checkin_id}/depart`, undefined, support)).status, 200, "check-out");
     assert.equal((await call("GET", `/events/${eventId}/srr/report.csv`, undefined, support)).status, 200, "the report");
   });
 });

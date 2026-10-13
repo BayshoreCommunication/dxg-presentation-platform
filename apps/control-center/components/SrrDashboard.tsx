@@ -73,8 +73,9 @@ export function SrrDashboardView({
     </button>
   );
   // Why "Check in →" is greyed, once above the list rather than on every row (R33, D-111).
-  const checkInBlocked = !canUpload
-    ? "Only DXG Technicians check speakers in and work the desks. You can follow along here."
+  // DXG staff check speakers in and assign the technician; technicians take it from there (D-168).
+  const checkInBlocked = canUpload
+    ? "DXG staff check speakers in and assign you as their technician. Open a speaker at a desk to go through the slides."
     : !data.open
     ? "The Speaker Ready Room is closed. It opens on the event day — a DXG Admin or support staff opens it."
     : data.stations.length === 0
@@ -183,7 +184,7 @@ export function SrrDashboardView({
       )}
 
       {data.stations.length === 0 && (
-        <StationsCard eventId={eventId} stations={data.stations} onChanged={() => router.refresh()} />
+        <StationsCard eventId={eventId} stations={data.stations} canEdit={!canUpload} onChanged={() => router.refresh()} />
       )}
 
       {/* ── At the desks now: one card per desk (D-121) ─────────────────────────── */}
@@ -261,7 +262,7 @@ export function SrrDashboardView({
                             stations={data.stations}
                             technicians={data.technicians}
                             meId={meId}
-                            disabled={busy || !data.open || !canUpload}
+                            disabled={busy || !data.open || canUpload}
                             onPick={(stationId, technicianId) => void check(row.speaker_id, stationId, technicianId)}
                           />
                         </td>
@@ -301,7 +302,7 @@ export function SrrDashboardView({
                         technicians={data.technicians}
                         meId={meId}
                         label="Check in again"
-                        disabled={busy || !data.open || !canUpload}
+                        disabled={busy || !data.open || canUpload}
                         onPick={(stationId, technicianId) => void check(row.speaker_id, stationId, technicianId)}
                       />
                     </td>
@@ -360,7 +361,7 @@ export function SrrDashboardView({
         top, because then it *is* the job.
       */}
       {data.stations.length > 0 && (
-        <StationsCard eventId={eventId} stations={data.stations} onChanged={() => router.refresh()} />
+        <StationsCard eventId={eventId} stations={data.stations} canEdit={!canUpload} onChanged={() => router.refresh()} />
       )}
 
       <Toast message={toast} onClose={closeToast} />
@@ -506,10 +507,13 @@ function CheckInButton({
 function StationsCard({
   eventId,
   stations,
+  canEdit,
   onChanged,
 }: {
   eventId: string;
   stations: SrrStation[];
+  /** DXG staff set up the desks; technicians see them (D-168). */
+  canEdit: boolean;
   onChanged: () => void;
 }) {
   const [draft, setDraft] = useState("");
@@ -537,7 +541,7 @@ function StationsCard({
     <div className="card">
       <div className="chd">
         <h3>Desks · {stations.length}</h3>
-        <span className="m">where speakers check in — rename or remove them here</span>
+        <span className="m">{canEdit ? "where speakers check in — rename or remove them here" : "where speakers check in — DXG staff set them up"}</span>
       </div>
       <div className="cbd" style={{ padding: "0 0 4px" }}>
         {error && (
@@ -552,7 +556,11 @@ function StationsCard({
           </div>
         )}
         {stations.length === 0 ? (
-          <div className="empty">No desks yet. Add each desk this room has — speakers are checked in at one.</div>
+          <div className="empty">
+            {canEdit
+              ? "No desks yet. Add each desk this room has — speakers are checked in at one."
+              : "No desks yet. DXG staff add them before speakers are checked in."}
+          </div>
         ) : (
           <table>
             <tbody>
@@ -599,7 +607,8 @@ function StationsCard({
                   </td>
                   <td className="srr-actions">
                     <Chip status={station.busy ? "submitted" : "canceled"} label={station.busy ? "In session" : "Free"} />{" "}
-                    {editing?.id !== station.id &&
+                    {canEdit &&
+                      editing?.id !== station.id &&
                       (confirming === station.id ? (
                         <>
                           <button
@@ -639,6 +648,7 @@ function StationsCard({
             </tbody>
           </table>
         )}
+        {canEdit && (
         <form
           style={{ display: "flex", gap: 8, padding: "12px 14px 10px", borderTop: "1px solid rgba(0,0,0,.06)" }}
           onSubmit={(event) => {
@@ -661,6 +671,7 @@ function StationsCard({
             Add desk
           </button>
         </form>
+        )}
       </div>
     </div>
   );

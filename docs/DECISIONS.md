@@ -3085,11 +3085,13 @@ be someone who isn't one.
   security the planner walked every speaker × talk × session pair (18 s per load on the seed event, also on main).
   It is now a `LEFT JOIN LATERAL … LIMIT 1` for the one speaker, with the same "next talk that hasn't ended" order:
   ~30 ms.
-- **The desk is the technicians'** (Travis: "isn't the actions of all button will be perform by the technition?").
-  Checking in, the speaker's confirmation, the receipt email, a hand-over and checking out are DXG Technician staff's —
-  `403 auth.technician_only` for anyone else. Admins and support staff open the room and its check-ins and follow along
-  (slides, Open in PowerPoint, Print receipt) with a note naming the technician; the buttons are not shown to them.
-  Narrows D-164: support staff still switch the room, set up desks and get the report.
+- **Who does what at the desk** (Travis: "desk will be created by the dxg staff not technition and also the check in
+  also be done by dxg staff and will assign a techition"). **DXG staff** — admins and support staff — set up the desks
+  and check the speaker in, assigning the technician (`403 auth.staff_only` for a technician). **The technician**
+  goes through the slides and records the speaker's confirmation (`403 auth.technician_only` for anyone else; the
+  button is not shown to staff, who see "<technician> goes through the slides with <speaker> and records their
+  confirmation"). The receipt email, a hand-over and checking out are either's. Taking a file in stays the
+  technician's (D-162). (A first cut made the whole desk technician-only; Travis corrected it the same day.)
 - **Confirm is the speaker's, not a second approval** (Travis: "we already approved … why need to confirm again").
   Approve = a reviewer says the file is fine; this step records the speaker's own "this is the one", locks the talk and
   makes the receipt. The button reads **Speaker confirms vN**, and when vN is approved the text says so: "vN is already
@@ -3099,6 +3101,7 @@ be someone who isn't one.
   and check-in time — then the three steps with who approved, who confirmed and the room copy, and when. They were
   folded under "Details". The header names the technician in bold; the strip's "Next:" line is left out there
   (`hideNext`), since "What to do now" says it.
-- Tests: `srr-checkin-technician` (7); the suites that check in (`manual-room-loading`, `review-eligibility`,
-  `srr-desk-without-talk`, `srr-open`, `srr-local-intake`, `event-owned-data`) act as the seeded technician; `srr-open`'s
-  support-staff test now expects check-in and check-out refused.
+- Tests: `srr-checkin-technician` (7: staff-only check-in and desks, technician-only confirmation, the choice rules,
+  hand-over, practice events); the suites that check in place the seeded technician on their event and name them, and
+  record confirmations as them; `srr-open`'s support-staff test checks in and out as support staff and expects a
+  technician refused at check-in and desks, and support staff refused at the confirmation.
