@@ -3062,3 +3062,26 @@ Reject button's red text looked faded.
   `globals.css`, which share these blocks.
 - Checked by hand on a practice event: Ask for changes (v1 → changes_requested), Reject (v2 → rejected), Approve
   (v1 → approved); practice emails held with status `practice`.
+
+## D-168 (2026-10-13): A check-in names the technician who helps the speaker — Status: ACCEPTED (Travis)
+Travis: "in the speaker ready room, when we assign a desk for the presenter, we need to assign a technician who will
+help the speaker to ready the presentation file." Until now `srr_checkins.technician_id` was whoever pressed Check in —
+since D-164 that can be support staff or an admin, so the "technician" on the visit, the receipt and the report could
+be someone who isn't one.
+- **Check in** asks "At which desk?" and then "Who helps them at <desk>?": the event's DXG Technician staff (event
+  assignments), the person checking in first and marked "you" when they are one. Required — the API refuses a check-in
+  without one (`srr.technician_required`), with someone who isn't a technician on the event
+  (`srr.technician_not_found`), or on an event with no technician (`srr.no_technicians`; the button is greyed and says
+  a DXG Admin adds one under Event assignments). A practice event has no technicians, so there its owner can be chosen.
+- `technician_id` now holds the chosen technician; who pressed Check in stays in the audit (`srr.checked_in`, which
+  also records `technician_id`). Everything that already showed "technician" (receipt, report, desks, the speaker's
+  own view) now shows the right person.
+- **Hand-over**: the check-in's header reads "at <desk> · with <technician>", with **Change** when the event has more
+  than one technician (`PUT /srr/checkins/:id/technician`); refused after checkout; audited as
+  `srr.technician_changed` {from, to}.
+- **Check-in page speed**: `checkinDetail` found the speaker's talk through a chain of left joins; under row-level
+  security the planner walked every speaker × talk × session pair (18 s per load on the seed event, also on main).
+  It is now a `LEFT JOIN LATERAL … LIMIT 1` for the one speaker, with the same "next talk that hasn't ended" order:
+  ~30 ms.
+- Tests: `srr-checkin-technician` (5); the suites that check in (`manual-room-loading`, `review-eligibility`,
+  `srr-desk-without-talk`, `srr-open`, `srr-local-intake`) place the seeded technician and name them.

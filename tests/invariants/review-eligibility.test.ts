@@ -4,7 +4,7 @@ import type { TestContext } from "node:test";
 import { writeZip } from "../../packages/files/src/zipWrite.ts";
 import { withSystemScope } from "@pmp/db";
 import { signInStaff } from "../helpers/signIn.ts";
-import { technicianOn } from "../helpers/technician.ts";
+import { DELGADO_ID, placeTechnician, technicianOn } from "../helpers/technician.ts";
 
 /**
  * Only a file that passed its virus scan and finished inspection is reviewed or approved
@@ -110,7 +110,8 @@ before(async () => {
   // A new event's Speaker Ready Room starts closed (D-157); open it, as on the event day.
   assert.equal((await call("PUT", `/events/${eventId}/srr-open`, { open: true })).status, 200);
   const station = (await (await call("POST", `/events/${eventId}/srr/stations`, { name: `Desk ${RUN}` })).json()) as { id: string };
-  const checkin = await call("POST", `/events/${eventId}/srr/checkins`, { speaker_id: speaker.speaker_id, station_id: station.id });
+  await placeTechnician(API, admin, eventId);
+  const checkin = await call("POST", `/events/${eventId}/srr/checkins`, { speaker_id: speaker.speaker_id, station_id: station.id, technician_id: DELGADO_ID });
   assert.equal(checkin.status, 201);
   checkinId = ((await checkin.json()) as { checkin_id: string }).checkin_id;
   technician = await technicianOn(API, admin, eventId);
@@ -269,7 +270,7 @@ describe("a sign-off stands when the speaker checks in again (D-119)", () => {
     assert.equal((await call("POST", `/srr/checkins/${checkinId}/depart`)).status, 200);
 
     const station = (await (await call("POST", `/events/${eventId}/srr/stations`, { name: `Desk again ${RUN}` })).json()) as { id: string };
-    const again = await call("POST", `/events/${eventId}/srr/checkins`, { speaker_id: first.speaker.id, station_id: station.id });
+    const again = await call("POST", `/events/${eventId}/srr/checkins`, { speaker_id: first.speaker.id, station_id: station.id, technician_id: DELGADO_ID });
     assert.equal(again.status, 201);
     const secondId = ((await again.json()) as { checkin_id: string }).checkin_id;
 

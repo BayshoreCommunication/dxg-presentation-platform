@@ -6,7 +6,7 @@ import { withSystemScope } from "@pmp/db";
 import { signInStaff } from "../helpers/signIn.ts";
 import { createStaffAccount, grantRole } from "../helpers/account.ts";
 import { removeTestAccounts } from "../helpers/cleanup.ts";
-import { technicianOn } from "../helpers/technician.ts";
+import { DELGADO_ID, placeTechnician, technicianOn } from "../helpers/technician.ts";
 
 /**
  * Room PCs are loaded and checked by hand (D-125, Travis's call). DXG staff copy each
@@ -147,7 +147,8 @@ before(async () => {
   // A new event's Speaker Ready Room starts closed (D-157); open it, as on the event day.
   assert.equal((await call("PUT", `/events/${eventId}/srr-open`, { open: true })).status, 200);
   const station = (await (await call("POST", `/events/${eventId}/srr/stations`, { name: `Loading Desk ${RUN}` })).json()) as { id: string };
-  const checkin = await call("POST", `/events/${eventId}/srr/checkins`, { speaker_id: speaker.speaker_id, station_id: station.id });
+  await placeTechnician(API, admin, eventId);
+  const checkin = await call("POST", `/events/${eventId}/srr/checkins`, { speaker_id: speaker.speaker_id, station_id: station.id, technician_id: DELGADO_ID });
   assert.equal(checkin.status, 201);
   checkinId = ((await checkin.json()) as { checkin_id: string }).checkin_id;
   technician = await technicianOn(API, admin, eventId);

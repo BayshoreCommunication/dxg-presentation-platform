@@ -4,7 +4,7 @@ import type { TestContext } from "node:test";
 import { writeZip } from "../../packages/files/src/zipWrite.ts";
 import { withSystemScope } from "@pmp/db";
 import { signInStaff } from "../helpers/signIn.ts";
-import { technicianOn } from "../helpers/technician.ts";
+import { DELGADO_ID, technicianOn } from "../helpers/technician.ts";
 
 /**
  * The Speaker Ready Room after the client's review (D-153): "local intake" takes a file
@@ -100,7 +100,7 @@ before(async () => {
   // A new event's Speaker Ready Room starts closed (D-157); open it, as on the event day.
   assert.equal((await call("PUT", `/events/${eventId}/srr-open`, { open: true })).status, 200);
   const station = (await (await call("POST", `/events/${eventId}/srr/stations`, { name: deskName })).json()) as { id: string };
-  const checkin = await call("POST", `/events/${eventId}/srr/checkins`, { speaker_id: speaker.speaker_id, station_id: station.id });
+  const checkin = await call("POST", `/events/${eventId}/srr/checkins`, { speaker_id: speaker.speaker_id, station_id: station.id, technician_id: DELGADO_ID });
   assert.equal(checkin.status, 201);
   const { checkin_id } = (await checkin.json()) as { checkin_id: string };
   visitId = checkin_id;

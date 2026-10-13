@@ -48,7 +48,13 @@ export type SrrWarning = {
 export async function srrDashboard(
   tx: pg.PoolClient,
   eventId: string,
-): Promise<{ expected: ExpectedArrival[]; warnings: SrrWarning[]; stations: SrrStation[]; open: boolean }> {
+): Promise<{
+  expected: ExpectedArrival[];
+  warnings: SrrWarning[];
+  stations: SrrStation[];
+  open: boolean;
+  technicians: SrrTechnician[];
+}> {
   const { rows } = await tx.query<{
     speaker_id: string;
     speaker: string;
@@ -143,7 +149,13 @@ export async function srrDashboard(
     [eventId],
   );
 
-  return { expected, warnings, stations: await eventStations(tx, eventId), open: await srrIsOpen(tx, eventId) };
+  return {
+    expected,
+    warnings,
+    stations: await eventStations(tx, eventId),
+    open: await srrIsOpen(tx, eventId),
+    technicians: await eventTechnicianChoices(tx, eventId),
+  };
 }
 
 /* ── Speaker Ready Room stations (D-080) ─────────────────────────────────── */
@@ -369,7 +381,7 @@ export async function setSrrOpen(
 export async function checkIn(
   tx: pg.PoolClient,
   actor: Actor,
-  input: { eventId: string; speakerId: string; stationId: string | undefined },
+  input: { eventId: string; speakerId: string; stationId: string | undefined; technicianId: string | undefined },
 ): Promise<Result<{ checkin_id: string }, DomainError>> {
   // Closed until the event day (D-157): no one checks in.
   if (!(await srrIsOpen(tx, input.eventId))) return err(SRR_CLOSED);
@@ -398,11 +410,14 @@ export async function checkIn(
       message: "That station is not set up for this event. Add it under Stations first.",
     });
   }
+  // And the technician who helps them there (D-168) — no longer whoever pressed Check in.
+  const technician = await technicianChoice(tx, input.eventId, input.technicianId);
+  if (!technician.ok) return err(technician.error);
 
   const { rows } = await tx.query<{ id: string }>(
     `INSERT INTO pmp.srr_checkins (event_id, client_id, speaker_id, technician_id, station, station_id)
      VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
-    [input.eventId, speaker[0].client_id, input.speakerId, actor.id, station.name, station.id],
+    [input.eventId, speaker[0].client_id, input.speakerId, technician.value.id, station.name, station.id],
   );
 
   await appendAudit(tx, {
@@ -412,14 +427,23 @@ export async function checkIn(
     action: "srr.checked_in",
     subjectType: "srr_checkin",
     subjectId: rows[0]!.id,
-    detail: { speaker_id: input.speakerId, station: station.name, station_id: station.id },
+    detail: { speaker_id: input.speakerId, station: station.name, station_id: station.id, technician_id: technician.value.id },
   });
 
   return ok({ checkin_id: rows[0]!.id });
 }
 
 export type CheckinDetail = {
-  checkin: { id: string; station: string | null; checked_in_at: string; technician: string; departed_at: string | null };
+  checkin: {
+    id: string;
+    station: string | null;
+    checked_in_at: string;
+    technician: string;
+    technician_id: string;
+    departed_at: string | null;
+  };
+  /** Who may take this speaker over (D-168): the event's technicians. */
+  technicians: SrrTechnician[];
   speaker: { id: string; name: string };
   /**
    * The talk the speaker gives. `slot_id` is null when they are no longer on one — removed
@@ -456,6 +480,8 @@ export async function checkinDetail(tx: pg.PoolClient, checkinId: string): Promi
     checked_in_at: string;
     departed_at: string | null;
     technician: string;
+    technician_id: string;
+    event_id: string;
     speaker_id: string;
     speaker_name: string;
     slot_id: string | null;
@@ -468,28 +494,36 @@ export async function checkinDetail(tx: pg.PoolClient, checkinId: string): Promi
     room_copies: { state: string; requiresAck: boolean; acknowledged: boolean }[] | null;
   }>(
     `SELECT c.id, c.station, c.checked_in_at, c.departed_at, u.display_name AS technician,
+            c.technician_id, c.event_id,
             sp.id AS speaker_id, sp.full_name AS speaker_name,
-            s.id AS slot_id, s.title, r.name AS room, se.starts_at, s.final_locked, se.session_state,
+            talk.slot_id, talk.title, talk.room, talk.starts_at, talk.final_locked, talk.session_state,
             (SELECT json_agg(json_build_object('processing', fv.processing_state,
                                                'inspection', fv.inspection_state,
                                                'review', fv.review_state) ORDER BY fv.version_number)
                FROM pmp.file_versions fv JOIN pmp.files f ON f.id = fv.file_id
-              WHERE f.slot_id = s.id) AS versions,
-            ${approvedRoomCopiesSql("s.id")} AS room_copies
+              WHERE f.slot_id = talk.slot_id) AS versions,
+            ${approvedRoomCopiesSql("talk.slot_id")} AS room_copies
        FROM pmp.srr_checkins c
        JOIN pmp.users u ON u.id = c.technician_id
        JOIN pmp.speakers sp ON sp.id = c.speaker_id
-       -- Left joins: a speaker taken off their session (or the event) while at a desk still
+       -- A left join: a speaker taken off their session (or the event) while at a desk still
        -- has a visit to open and close. With more than one talk, the next one comes first.
-       LEFT JOIN pmp.speaker_assignments sa ON sa.speaker_id = sp.id
-       LEFT JOIN pmp.slots s ON s.id = sa.slot_id
-       LEFT JOIN pmp.sessions se ON se.id = s.session_id
-       LEFT JOIN pmp.rooms r ON r.id = se.room_id
-      WHERE c.id = $1
-      -- Their next talk that hasn't ended (else their last): a file taken in today belongs to
-      -- today's talk, not to one they gave yesterday.
-      ORDER BY (se.starts_at IS NULL), (se.ends_at < now()), CASE WHEN se.ends_at < now() THEN se.starts_at END DESC, se.starts_at
-      LIMIT 1`,
+       -- Looked up per visit (LATERAL): as a chain of left joins, row-level security kept the
+       -- planner from narrowing to this speaker first, and it walked every speaker × talk ×
+       -- session pair — 18 s on the seed event (D-168).
+       LEFT JOIN LATERAL (
+         SELECT s.id AS slot_id, s.title, r.name AS room, se.starts_at, s.final_locked, se.session_state
+           FROM pmp.speaker_assignments sa
+           JOIN pmp.slots s ON s.id = sa.slot_id
+           LEFT JOIN pmp.sessions se ON se.id = s.session_id
+           LEFT JOIN pmp.rooms r ON r.id = se.room_id
+          WHERE sa.speaker_id = c.speaker_id
+          -- Their next talk that hasn't ended (else their last): a file taken in today belongs to
+          -- today's talk, not to one they gave yesterday.
+          ORDER BY (se.starts_at IS NULL), (se.ends_at < now()), CASE WHEN se.ends_at < now() THEN se.starts_at END DESC, se.starts_at
+          LIMIT 1
+       ) talk ON true
+      WHERE c.id = $1`,
     [checkinId],
   );
   const row = rows[0];
@@ -586,7 +620,9 @@ export async function checkinDetail(tx: pg.PoolClient, checkinId: string): Promi
       checked_in_at: row.checked_in_at,
       departed_at: row.departed_at,
       technician: row.technician,
+      technician_id: row.technician_id,
     },
+    technicians: await eventTechnicianChoices(tx, row.event_id),
     speaker: { id: row.speaker_id, name: row.speaker_name },
     talk: {
       slot_id: row.slot_id,
@@ -1018,6 +1054,88 @@ export async function emailReceipt(
     detail: { to: row.email, version_number: receipt.version_number, communication_id: comm[0]!.id },
   });
   return ok({ emailed_to: row.email });
+}
+
+/* ── the speaker's technician (D-168) ──────────────────────────────────────── */
+
+export type SrrTechnician = { id: string; name: string };
+
+/**
+ * Who a check-in may name as the speaker's technician: DXG Technician staff on this event. A
+ * practice event has none (only the person practising is on it), so there it is its owner.
+ */
+export async function eventTechnicianChoices(tx: pg.PoolClient, eventId: string): Promise<SrrTechnician[]> {
+  const { rows } = await tx.query<SrrTechnician>(
+    `SELECT DISTINCT u.id, u.display_name AS name
+       FROM pmp.users u
+      WHERE u.is_active AND u.deleted_at IS NULL
+        AND (    (u.staff_kind = 'technician'
+                  AND EXISTS (SELECT 1 FROM pmp.event_roles er WHERE er.event_id = $1 AND er.user_id = u.id))
+              OR u.id = (SELECT e.practice_owner FROM pmp.events e WHERE e.id = $1 AND e.is_practice))
+      ORDER BY name`,
+    [eventId],
+  );
+  return rows;
+}
+
+async function technicianChoice(
+  tx: pg.PoolClient,
+  eventId: string,
+  technicianId: string | undefined,
+): Promise<Result<SrrTechnician, DomainError>> {
+  const choices = await eventTechnicianChoices(tx, eventId);
+  if (choices.length === 0) {
+    return err({
+      code: "srr.no_technicians",
+      message: "No DXG Technician is on this event yet. A DXG Admin adds one under Event assignments.",
+    });
+  }
+  if (!technicianId) {
+    return err({ code: "srr.technician_required", message: "Choose the technician who helps the speaker." });
+  }
+  const chosen = choices.find((choice) => choice.id === technicianId);
+  if (!chosen) {
+    return err({
+      code: "srr.technician_not_found",
+      message: "That person isn't a technician on this event. Choose one from the list.",
+    });
+  }
+  return ok(chosen);
+}
+
+/** Hands a speaker at a desk to another technician (D-168) — a shift change, say. */
+export async function changeTechnician(
+  tx: pg.PoolClient,
+  actor: Actor,
+  checkinId: string,
+  technicianId: string | undefined,
+): Promise<Result<{ technician: SrrTechnician }, DomainError>> {
+  const { rows: visit } = await tx.query<{ event_id: string; client_id: string; technician_id: string; departed_at: string | null }>(
+    `SELECT event_id, client_id, technician_id, departed_at FROM pmp.srr_checkins WHERE id = $1`,
+    [checkinId],
+  );
+  if (!visit[0]) return err({ code: "srr.checkin_not_found", message: "This check-in no longer exists. Refresh the page." });
+  if (visit[0].departed_at) {
+    return err({ code: "srr.already_departed", message: "This speaker has checked out. Check them in again to change the technician." });
+  }
+  const technician = await technicianChoice(tx, visit[0].event_id, technicianId);
+  if (!technician.ok) return err(technician.error);
+  if (technician.value.id === visit[0].technician_id) return ok({ technician: technician.value });
+
+  await tx.query(
+    `UPDATE pmp.srr_checkins SET technician_id = $2, lock_version = lock_version + 1 WHERE id = $1`,
+    [checkinId, technician.value.id],
+  );
+  await appendAudit(tx, {
+    partitionId: visit[0].event_id,
+    clientId: visit[0].client_id,
+    actorUserId: actor.id,
+    action: "srr.technician_changed",
+    subjectType: "srr_checkin",
+    subjectId: checkinId,
+    detail: { from: visit[0].technician_id, to: technician.value.id },
+  });
+  return ok({ technician: technician.value });
 }
 
 export async function depart(

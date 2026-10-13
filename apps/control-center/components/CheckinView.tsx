@@ -5,6 +5,7 @@ import { Toast } from "@/components/Toast";
 import { useRouter } from "next/navigation";
 import type { CheckinDetail } from "@/lib/api";
 import {
+  changeCheckinTechnician,
   getCheckin,
   ingestUsb,
   signOffCheckin,
@@ -71,6 +72,8 @@ export function CheckinView({
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const closeToast = useCallback(() => setToast(null), []);
+  // Handing the speaker to another technician (D-168), opened from "Change" in the header.
+  const [changingTechnician, setChangingTechnician] = useState(false);
 
   const refresh = useCallback(async () => {
     setDetail(await getCheckin(detail.checkin.id));
@@ -336,7 +339,56 @@ export function CheckinView({
       <p className="note" style={{ marginTop: 0 }}>
         {detail.talk.title} · {detail.talk.room ?? "No room"} · {when(detail.talk.starts_at, timezone)}
         {!departed && detail.checkin.station ? ` · at ${detail.checkin.station}` : ""}
+        {/* The technician helping them (D-168), and a hand-over at a shift change. */}
+        {!departed && (
+          <>
+            {" "}· with {detail.checkin.technician}
+            {detail.technicians.length > 1 && !changingTechnician && (
+              <>
+                {" "}
+                <button
+                  type="button"
+                  className="linkish"
+                  disabled={busy}
+                  onClick={() => setChangingTechnician(true)}
+                >
+                  Change
+                </button>
+              </>
+            )}
+          </>
+        )}
       </p>
+      {changingTechnician && !departed && (
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", margin: "0 0 12px" }}>
+          <label htmlFor="checkin-technician" className="note">
+            Technician
+          </label>
+          <select
+            id="checkin-technician"
+            defaultValue={detail.checkin.technician_id}
+            disabled={busy}
+            onChange={(event) => {
+              const chosen = detail.technicians.find((technician) => technician.id === event.target.value);
+              if (!chosen || chosen.id === detail.checkin.technician_id) return;
+              setChangingTechnician(false);
+              void run(async () => {
+                await changeCheckinTechnician(detail.checkin.id, chosen.id);
+                return `${chosen.name} is now helping ${detail.speaker.name}.`;
+              });
+            }}
+          >
+            {detail.technicians.map((technician) => (
+              <option key={technician.id} value={technician.id}>
+                {technician.name}
+              </option>
+            ))}
+          </select>
+          <button type="button" className="btn" disabled={busy} onClick={() => setChangingTechnician(false)}>
+            Cancel
+          </button>
+        </div>
+      )}
 
       {error && <div className="err">{error}</div>}
       {!srrOpen && (

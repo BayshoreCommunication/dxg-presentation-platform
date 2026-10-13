@@ -69,7 +69,7 @@ const MFA_COOKIE = "pmp_mfa";
 /** The speaker site's sign-in page (D-148). */
 const SPEAKER_SITE = `${process.env.PORTAL_BASE ?? "http://localhost:3001"}/login`;
 import { approvedRoomsZip, markLoaded, unmarkLoaded } from "./services/roomSync.ts";
-import { setSrrOpen, srrDashboard, srrReportCsv, checkIn, checkinDetail, usbIngest, slotIntake, signOff, depart, emailReceipt, addStation, renameStation, retireStation } from "./services/srr.ts";
+import { setSrrOpen, srrDashboard, srrReportCsv, checkIn, checkinDetail, changeTechnician, usbIngest, slotIntake, signOff, depart, emailReceipt, addStation, renameStation, retireStation } from "./services/srr.ts";
 import {
   presentationDetail,
   findingsFor,
@@ -1855,16 +1855,18 @@ app.get("/api/v1/events/:eventId/srr/report.csv", async (req, res) => {
 app.post("/api/v1/events/:eventId/srr/checkins", async (req, res) => {
   const actor = actorFrom(req);
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
-  const body = req.body as { speaker_id?: string; station_id?: string };
+  const body = req.body as { speaker_id?: string; station_id?: string; technician_id?: string };
   if (!body.speaker_id) {
     return res.status(400).json({ code: "request.invalid", message: "Choose the speaker to check in." });
   }
-  // No default station (D-080): the check-in names the desk the speaker is actually at.
+  // No default station (D-080): the check-in names the desk the speaker is actually at, and the
+  // technician who helps them there (D-168).
   const result = await withScope(scopeFor(req), (tx) =>
     checkIn(tx, actor, {
       eventId: String(req.params.eventId),
       speakerId: body.speaker_id as string,
       stationId: typeof body.station_id === "string" ? body.station_id : undefined,
+      technicianId: typeof body.technician_id === "string" ? body.technician_id : undefined,
     }),
   );
   if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
@@ -2019,6 +2021,18 @@ app.post("/api/v1/srr/checkins/:checkinId/receipt/email", async (req, res) => {
   const actor = actorFrom(req);
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   const result = await withScope(scopeFor(req), (tx) => emailReceipt(tx, actor, String(req.params.checkinId)));
+  if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+  return res.json(result.value);
+});
+
+/** Hands the speaker at a desk to another technician on the event (D-168). */
+app.put("/api/v1/srr/checkins/:checkinId/technician", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  const technicianId = (req.body as { technician_id?: unknown })?.technician_id;
+  const result = await withScope(scopeFor(req), (tx) =>
+    changeTechnician(tx, actor, String(req.params.checkinId), typeof technicianId === "string" ? technicianId : undefined),
+  );
   if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
   return res.json(result.value);
 });
