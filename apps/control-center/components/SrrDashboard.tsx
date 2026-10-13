@@ -36,6 +36,7 @@ export function SrrDashboardView({
   timezone,
   data,
   canSwitch,
+  canUpload,
 }: {
   eventId: string;
   eventName: string;
@@ -43,6 +44,8 @@ export function SrrDashboardView({
   data: SrrDashboard;
   /** May open or close the room on the event day (D-157). */
   canSwitch: boolean;
+  /** Taking in a file for a speaker is DXG Technician staff's alone (D-162). */
+  canUpload: boolean;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -246,7 +249,7 @@ export function SrrDashboardView({
                         </td>
                         <td className="srr-actions">
                           <Chip status={row.status} label={row.status_label} />{" "}
-                          {uploadButton(row)}{" "}
+                          {canUpload && <>{uploadButton(row)} </>}
                           <CheckInButton
                             stations={data.stations}
                             disabled={busy || !data.open}
@@ -283,7 +286,7 @@ export function SrrDashboardView({
                       </span>
                     </td>
                     <td className="srr-actions">
-                      {uploadButton(row)}{" "}
+                      {canUpload && <>{uploadButton(row)} </>}
                       <CheckInButton
                         stations={data.stations}
                         label="Check in again"

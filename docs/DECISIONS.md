@@ -2989,7 +2989,22 @@ screen had no email — the address had gone into Organization — so no sign-in
   refused and nothing created; its fixtures now pass an email, and the "no email" send-link case names its presenter
   on the agenda.
 
-## D-162 (2026-10-13): Approve asks first on the button too; Reject's red is darker — Status: ACCEPTED (Travis)
+## D-162 (2026-10-13): Only DXG Technician staff take in a file for a speaker — Status: ACCEPTED (Travis)
+Travis: "tahole eita dxg admin kno upload korte parteche eita dxg technician korte parbe" — and, asked where:
+technicians and speakers upload, DXG Admins do not, everywhere, including a check-in's Local intake. Differs from the
+client note ("DXG Admin: full access", "speakers and DXG staff can upload … from the Speaker Ready Room").
+- **Server** (`technicianOnly` in `index.ts`, 403 `auth.technician_only`): `POST /srr/uploads`,
+  `PUT /srr/uploads/:id/parts/:n`, `POST /events/:id/srr/slots/:slotId/intake` and
+  `POST /srr/checkins/:id/usb-ingestions` — the one path every staff-side upload takes. DXG Admins and support staff
+  are refused; support staff were already refused the Speaker Ready Room and Manage presentations by kind.
+- **Screens**: Manage presentations' **Upload a new version**, Room sync's **Upload new version**, the Speaker Ready
+  Room's **Upload** and a check-in's **Local intake** show only for DXG Technician staff.
+- **Unchanged**: speakers upload their own on the speaker site (`/me/uploads`); admins still review, approve, roll
+  back, download and tick Mark loaded.
+- Tests: `srr-local-intake` adds "a DXG Admin is refused" across all four routes; suites that take a file in on a
+  probe event now place the seeded technician on it (`tests/helpers/technician.ts`) and upload as them.
+
+## D-163 (2026-10-13): Approve asks first on the button too; Reject's red is darker — Status: ACCEPTED (Travis)
 Travis, reviewing on a practice event: the Approve button acted at once while only the A shortcut asked, and the
 Reject button's red text looked faded.
 - **Manage presentations → Your decision**: clicking **Approve vN** now opens the same inline confirmation as the

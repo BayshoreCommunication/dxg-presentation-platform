@@ -297,7 +297,7 @@ export function ReviewWorkspace({
                     disabled={busy || approveBlocked !== null}
                     title={approveBlocked ?? undefined}
                     onClick={() => {
-                      // Asks first, like the A shortcut (D-162).
+                      // Asks first, like the A shortcut (D-163).
                       setPending(null);
                       setConfirmApprove(true);
                     }}

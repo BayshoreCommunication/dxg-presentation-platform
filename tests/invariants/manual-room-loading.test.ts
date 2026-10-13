@@ -6,6 +6,7 @@ import { withSystemScope } from "@pmp/db";
 import { signInStaff } from "../helpers/signIn.ts";
 import { createStaffAccount, grantRole } from "../helpers/account.ts";
 import { removeTestAccounts } from "../helpers/cleanup.ts";
+import { technicianOn } from "../helpers/technician.ts";
 
 /**
  * Room PCs are loaded and checked by hand (D-125, Travis's call). DXG staff copy each
@@ -25,6 +26,8 @@ const REVIEWER_EMAIL = `probe-loading-reviewer-${RUN}@example.invalid`;
 
 let up = false;
 let admin = "";
+/** The technician who takes the files in (D-162). */
+let technician = "";
 let reviewer = "";
 let eventId = "";
 let checkinId = "";
@@ -72,14 +75,14 @@ async function approvedVersion(label: string): Promise<string> {
     { name: "ppt/presentation.xml", body: Buffer.from('<p:presentation><p:sldSz cx="12192000" cy="6858000"/></p:presentation>') },
     { name: "ppt/slides/slide1.xml", body: Buffer.from(`<p:sld><!-- ${label} ${RUN} --></p:sld>`) },
   ]);
-  const { upload_id } = (await (await call("POST", "/srr/uploads", {})).json()) as { upload_id: string };
+  const { upload_id } = (await (await as(technician)("POST", "/srr/uploads", {})).json()) as { upload_id: string };
   const part = await fetch(`${API}/srr/uploads/${upload_id}/parts/1`, {
     method: "PUT",
-    headers: { cookie: admin, "content-type": "application/octet-stream" },
+    headers: { cookie: technician, "content-type": "application/octet-stream" },
     body: deck,
   });
   assert.equal(part.status, 200);
-  const ingested = await call("POST", `/srr/checkins/${checkinId}/usb-ingestions`, {
+  const ingested = await as(technician)("POST", `/srr/checkins/${checkinId}/usb-ingestions`, {
     upload_id,
     file_name: `${label}.pptx`,
     reason: "manual room loading probe",
@@ -147,6 +150,7 @@ before(async () => {
   const checkin = await call("POST", `/events/${eventId}/srr/checkins`, { speaker_id: speaker.speaker_id, station_id: station.id });
   assert.equal(checkin.status, 201);
   checkinId = ((await checkin.json()) as { checkin_id: string }).checkin_id;
+  technician = await technicianOn(API, admin, eventId);
 
   const account = await createStaffAccount(API, admin, {
     email: REVIEWER_EMAIL,

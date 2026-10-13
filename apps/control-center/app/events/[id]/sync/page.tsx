@@ -54,7 +54,7 @@ export default async function RoomSyncPage({ params }: { params: Promise<{ id: s
         timezone={summary.event.timezone}
         rooms={items}
         canLoad={canLoad}
-        canUpload={principal.staff_kind !== "support"}
+        canUpload={principal.staff_kind === "technician"}
       />
     </>
   );
