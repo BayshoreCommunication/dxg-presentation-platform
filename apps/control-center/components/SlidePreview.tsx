@@ -58,6 +58,7 @@ export function SlidePreview({ item }: { item: QueueItem }) {
           url={src}
           versionId={item.file_version_id}
           title={`${item.title}, version ${item.version_number}`}
+          caption={`${item.speaker ?? "No speaker"} · ${item.title} · v${item.version_number}`}
         />
         <div className="note" style={{ marginTop: 4 }}>
           Rendered from the uploaded file — fonts can differ slightly from PowerPoint; a slide&rsquo;s video plays
