@@ -3691,3 +3691,8 @@ Walked as M. Vega on MedTech: sidebar has Speaker Ready Room, the switch, Check 
 Upload. Unit 291; invariants 398/400 with worker and dispatcher — event-files (known seed gap) and comment-lanes,
 which passes on its own (3/3): it races another suite over the seeded speaker's latest version. Lint and type-check
 clean.
+
+## 2026-10-13 — Technicians don't review (D-165, corrects D-163)
+The technician's Manage presentations is now Upload a new version and the Approved list only; the queue and every
+review decision are refused them. Seen as the demo technician on Tech Summit: Upload and "Approved · 1" (Priya Shah,
+Download v1), nothing else. Related suites 147/147, unit 291, lint and type-check clean.

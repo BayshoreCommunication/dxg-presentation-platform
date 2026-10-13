@@ -151,33 +151,38 @@ describe("DXG Technician staff submit for every speaker on their events (D-159)"
       assert.equal(row.source, "srr_manual");
       assert.equal(row.uploaded_by_user, DELGADO, "who sent it is recorded");
     }
-    // They appear in Manage presentations' queue, where the technician works.
-    const queue = (await (await call(delgado, "GET", `/events/${eventId}/review-queue`)).json()) as { items: { file_version_id?: string; id?: string }[] };
+    // They wait in Manage presentations' queue, for support staff or an admin to review (D-165).
+    const queue = (await (await call(admin, "GET", `/events/${eventId}/review-queue`)).json()) as { items: { file_version_id?: string; id?: string }[] };
     const ids = queue.items.map((item) => item.file_version_id ?? item.id);
     for (const version of versions) assert.ok(ids.includes(version), "in the review queue");
     submitted = versions;
   });
 
-  test("they approve, and the approved file is listed for them; asking for changes and rejecting are not theirs (D-163)", async (t: TestContext) => {
+  test("they don't review; once an admin approves, the file is listed for them (D-165)", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
     const lock = async (id: string) =>
       withSystemScope(async (tx) => (await tx.query<{ lock_version: number }>(`SELECT lock_version FROM pmp.file_versions WHERE id = $1`, [id])).rows[0]!.lock_version);
     const [first, second] = submitted;
     assert.ok(first && second, "fixture: two versions from the previous test");
-    for (const action of ["claim", "approve"]) {
-      const response = await call(delgado, "POST", `/file-versions/${first}:transition`, { action, lock_version: await lock(first) });
-      assert.equal(response.status, 200, action);
-    }
-    const listed = (await (await call(delgado, "GET", `/events/${eventId}/approved`)).json()) as { items: { file_version_id: string; speaker: string | null }[] };
-    assert.ok(listed.items.some((item) => item.file_version_id === first), "the approved version is listed");
-    assert.equal(listed.items.some((item) => item.file_version_id === second), false, "one waiting for review is not");
-    await call(delgado, "POST", `/file-versions/${second}:transition`, { action: "claim", lock_version: await lock(second) });
-    for (const action of ["request_changes", "reject"]) {
-      const refused = await call(delgado, "POST", `/file-versions/${second}:transition`, { action, lock_version: await lock(second), note: "probe", reason: "probe" });
+    // No queue, no decision of any kind.
+    assert.equal((await call(delgado, "GET", `/events/${eventId}/review-queue`)).status, 403, "the queue");
+    for (const action of ["claim", "approve", "request_changes", "reject"]) {
+      const refused = await call(delgado, "POST", `/file-versions/${first}:transition`, { action, lock_version: await lock(first), note: "probe", reason: "probe" });
       assert.equal(refused.status, 403, action);
+      assert.equal(((await refused.json()) as { code: string }).code, "auth.kind_forbidden", action);
     }
+    // An admin approves the first and asks for changes on the second.
+    for (const action of ["claim", "approve"]) {
+      assert.equal((await call(admin, "POST", `/file-versions/${first}:transition`, { action, lock_version: await lock(first) })).status, 200, action);
+    }
+    await call(admin, "POST", `/file-versions/${second}:transition`, { action: "claim", lock_version: await lock(second) });
     const asked = await call(admin, "POST", `/file-versions/${second}:transition`, { action: "request_changes", lock_version: await lock(second), note: "Please add the closing slide." });
     assert.equal(asked.status, 200, "an admin asks for changes");
+    const listed = (await (await call(delgado, "GET", `/events/${eventId}/approved`)).json()) as { items: { file_version_id: string }[] };
+    assert.ok(listed.items.some((item) => item.file_version_id === first), "the approved version is listed for the technician");
+    assert.equal(listed.items.some((item) => item.file_version_id === second), false, "one sent back is not");
+    const download = await call(delgado, "GET", `/file-versions/${first}/download`);
+    assert.equal(download.status, 200, "and they download it");
   });
 
   test("taken off the event, they are refused again", async (t: TestContext) => {
