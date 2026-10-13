@@ -16,21 +16,35 @@ export default async function ReviewPage({
 }) {
   const { id } = await params;
   const { v } = await searchParams;
-  const [{ items }, talks, summary, session, approved] = await guard(
-    Promise.all([getReviewQueue(id), getTalks(id), getSummary(id), getSession(), getApproved(id)]),
+  const session = await guard(getSession(), `/events/${id}/review`);
+
+  /*
+   * DXG Technician staff see the approved presentations and take in new files (D-162, D-165);
+   * reviewing — the queue and its decisions — is support staff's and admins'.
+   */
+  if (session.principal.staff_kind === "technician") {
+    const [talks, summary, approved] = await guard(
+      Promise.all([getTalks(id), getSummary(id), getApproved(id)]),
+      `/events/${id}/review`,
+    );
+    return (
+      <>
+        <h1 className="htitle">Manage presentations</h1>
+        <UploadNewVersion eventId={id} talks={talks.items} timezone={summary.event.timezone} />
+        <ApprovedPresentations eventId={id} items={approved.items} timezone={summary.event.timezone} />
+      </>
+    );
+  }
+
+  const [{ items }, summary, approved] = await guard(
+    Promise.all([getReviewQueue(id), getSummary(id), getApproved(id)]),
     `/events/${id}/review`,
   );
-  // Taking in a file for a speaker is DXG Technician staff's alone (D-162).
-  const canUpload = session.principal.staff_kind === "technician";
-  // A technician approves; asking for changes and rejecting are support staff's and admins' (D-163).
-  const canSendBack = session.principal.staff_kind !== "technician";
   return (
     <ReviewWorkspace
       eventId={id}
       initialQueue={items}
       initialSelectedId={v ?? null}
-      upload={canUpload ? <UploadNewVersion eventId={id} talks={talks.items} timezone={summary.event.timezone} /> : null}
-      canSendBack={canSendBack}
       approved={<ApprovedPresentations eventId={id} items={approved.items} timezone={summary.event.timezone} />}
     />
   );

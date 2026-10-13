@@ -107,9 +107,9 @@ export function InspectionView({
   detail: PresentationDetail;
   version: VersionRow | null;
   initialFindings: FindingRow[];
-  /** Asking the speaker to fix a finding: support staff and admins, not technicians (D-163). */
+  /** Asking the speaker to fix a finding: support staff and admins, not technicians (D-165). */
   canAskSpeaker?: boolean;
-  /** Waiving (accepting anyway) goes with approving: technicians and admins, not support staff. */
+  /** Waiving (accepting anyway): DXG Admins (D-165). */
   canWaive?: boolean;
 }) {
   const router = useRouter();
@@ -290,7 +290,7 @@ export function InspectionView({
                         />
                       </form>
                     ) : !canAskSpeaker && !canWaive ? (
-                      <span className="note">A DXG Admin decides this in Manage presentations.</span>
+                      <span className="note">A DXG Support staff member or Admin decides this in Manage presentations.</span>
                     ) : (
                       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                         {canAskSpeaker && (

@@ -30,18 +30,12 @@ export function ReviewWorkspace({
   eventId,
   initialQueue,
   initialSelectedId,
-  upload,
   approved,
-  canSendBack = true,
 }: {
   eventId: string;
   initialQueue: QueueItem[];
-  /** "Upload a new version" for any talk (D-154), shown under the title — technicians only (D-162). */
-  upload?: React.ReactNode;
   /** The event's approved presentations, below the queue (D-163). */
   approved?: React.ReactNode;
-  /** Ask for changes and Reject: support staff and admins, not technicians, who approve (D-163). */
-  canSendBack?: boolean;
   /** R22 (D-113): "Open in review workspace" from an inspection report opens that file. */
   initialSelectedId?: string | null;
 }) {
@@ -197,19 +191,18 @@ export function ReviewWorkspace({
       if (event.metaKey || event.ctrlKey || event.altKey) return;
       if ((event.key === "a" || event.key === "A") && !approveBlocked && !busy) setConfirmApprove(true);
       // R opens the message form rather than acting: a revision needs a reason.
-      if (canSendBack && (event.key === "r" || event.key === "R")) {
+      if (event.key === "r" || event.key === "R") {
         setConfirmApprove(false);
         setPending("request_changes");
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [approveBlocked, busy, canSendBack]);
+  }, [approveBlocked, busy]);
 
   return (
     <>
       <h1 className="htitle">Manage presentations</h1>
-      {upload}
 
       {error && <div className="err">{error}</div>}
 
@@ -217,12 +210,8 @@ export function ReviewWorkspace({
         <div className="chd">
           <h3>Waiting for review · {queue.length}</h3>
           <span className="m">
-            oldest first · <span className="kbd">A</span> approve (asks first)
-            {canSendBack && (
-              <>
-                {" "}· <span className="kbd">R</span> ask for changes
-              </>
-            )}
+            oldest first · <span className="kbd">A</span> approve (asks first) ·{" "}
+            <span className="kbd">R</span> ask for changes
           </span>
         </div>
         <div className="cbd" style={{ padding: "0 0 4px" }}>
@@ -307,7 +296,7 @@ export function ReviewWorkspace({
                     disabled={busy || approveBlocked !== null}
                     title={approveBlocked ?? undefined}
                     onClick={() => {
-                      // Asks first, like the A shortcut (D-165).
+                      // Asks first, like the A shortcut (D-166).
                       setPending(null);
                       setConfirmApprove(true);
                     }}
@@ -315,32 +304,28 @@ export function ReviewWorkspace({
                     <Icon name="check" />
                     Approve v{selected.version_number}
                   </button>
-                  {canSendBack && (
-                    <>
-                      <button
-                        className="btn"
-                        disabled={busy}
-                        onClick={() => {
-                          setConfirmApprove(false);
-                          setPending("request_changes");
-                        }}
-                      >
-                        <Icon name="comment" />
-                        Ask for changes
-                      </button>
-                      <button
-                        className="btn danger"
-                        disabled={busy}
-                        onClick={() => {
-                          setConfirmApprove(false);
-                          setPending("reject");
-                        }}
-                      >
-                        <Icon name="close" />
-                        Reject…
-                      </button>
-                    </>
-                  )}
+                  <button
+                    className="btn"
+                    disabled={busy}
+                    onClick={() => {
+                      setConfirmApprove(false);
+                      setPending("request_changes");
+                    }}
+                  >
+                    <Icon name="comment" />
+                    Ask for changes
+                  </button>
+                  <button
+                    className="btn danger"
+                    disabled={busy}
+                    onClick={() => {
+                      setConfirmApprove(false);
+                      setPending("reject");
+                    }}
+                  >
+                    <Icon name="close" />
+                    Reject…
+                  </button>
                 </div>
                 {/* The shared reason line (D-111). */}
                 <WhyNot reason={approveBlocked} />
@@ -348,14 +333,7 @@ export function ReviewWorkspace({
                   <Link href={`/events/${eventId}/talks/${selected.slot_id}/inspection?v=${selected.file_version_id}`}>
                     Full check report for v{selected.version_number} →
                   </Link>
-                  {" · "}Shortcuts: <span className="kbd">A</span> approve
-                  {canSendBack ? (
-                    <>
-                      {" "}· <span className="kbd">R</span> ask for changes
-                    </>
-                  ) : (
-                    " · something to change? A DXG Support staff member or Admin asks the speaker."
-                  )}
+                  {" · "}Shortcuts: <span className="kbd">A</span> approve · <span className="kbd">R</span> ask for changes
                 </div>
               </div>
             </div>
