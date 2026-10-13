@@ -3004,13 +3004,31 @@ client note ("DXG Admin: full access", "speakers and DXG staff can upload … fr
 - Tests: `srr-local-intake` adds "a DXG Admin is refused" across all four routes; suites that take a file in on a
   probe event now place the seeded technician on it (`tests/helpers/technician.ts`) and upload as them.
 
-## D-163 (2026-10-13): Approve asks first on the button too; Reject's red is darker — Status: ACCEPTED (Travis)
+## D-163 (2026-10-13): Technicians approve; support staff and admins send back; Room sync is not the technicians' — Status: ACCEPTED (Travis)
+Travis: "as a DXG technician staff he can only approve presentation see and … upload new version. DXG technician
+staff cannot ask for changes and reject — this can staff and admin DXG", "remove room sync in DXG technician staff",
+and "already presentation approve gulo technician dekhtay parbe".
+- **Technicians** on Manage presentations: see the queue, approve (and waive a finding, which goes with approving),
+  upload a new version (D-162). **Ask for changes**, **Reject** and the inspection page's "Ask the speaker to fix
+  this" are hidden, and the API refuses them (`:transition` with `request_changes` / `reject`, and
+  `request-revision`: 403 `auth.kind_forbidden`). Roll back stays an admin's (hidden for technicians too).
+- **Approved list**: Manage presentations ends with **Approved · n** — every talk's newest approved version in running
+  order, with room, version, file name and Download (`GET /events/:id/approved`, open to technicians).
+- **Support staff** now open Manage presentations: the queue, approve, ask for changes, reject, comments, and "Ask
+  the speaker to fix this" — not upload (D-162), not waive or roll back. The Speaker Ready Room stays closed to them.
+- **Room sync**: gone from the technician's sidebar and refused by the API (fleet, zip, Mark loaded). DXG Admins and
+  support staff run it (D-160 still holds for them: every room of the event).
+- Tests: admin (support reviews, technician send-back refused, Room sync refused), room-sync-technicians rewritten
+  for support staff, technician-submits (a technician approves; the approved file is listed; send-back refused; an
+  admin asks), speaker-accounts' revision request now made by support staff.
+
+## D-164 (2026-10-13): Approve asks first on the button too; Reject's red is darker — Status: ACCEPTED (Travis)
 Travis, reviewing on a practice event: the Approve button acted at once while only the A shortcut asked, and the
 Reject button's red text looked faded.
 - **Manage presentations → Your decision**: clicking **Approve vN** now opens the same inline confirmation as the
   A shortcut ("Approve vN of “title” by speaker?"); nothing is approved until **Approve** is pressed there.
-  Opening Ask for changes or Reject (button or R) closes that confirmation, and Approve closes their message form,
-  so only one decision is open at a time.
+  Opening Ask for changes or Reject (button or R; only for those who may send back, D-163) closes that
+  confirmation, and Approve closes their message form, so only one decision is open at a time.
 - **Danger buttons**: `.btn.danger` text uses a new `--destructive-text` token, #b91c1c in light (6.5:1 on white;
   #ef4444 was 3.8:1, below the 4.5:1 text minimum). Dark theme keeps #ef4444. Same change in both apps'
   `globals.css`, which share these blocks.

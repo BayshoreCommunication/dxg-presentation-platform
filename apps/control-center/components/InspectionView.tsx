@@ -100,14 +100,17 @@ export function InspectionView({
   detail,
   version,
   initialFindings,
-  readOnly = false,
+  canAskSpeaker = true,
+  canWaive = true,
 }: {
   eventId: string;
   detail: PresentationDetail;
   version: VersionRow | null;
   initialFindings: FindingRow[];
-  /** Support staff (D-151) look; waiving and sending to the speaker are not theirs. */
-  readOnly?: boolean;
+  /** Asking the speaker to fix a finding: support staff and admins, not technicians (D-163). */
+  canAskSpeaker?: boolean;
+  /** Waiving (accepting anyway) goes with approving: technicians and admins, not support staff. */
+  canWaive?: boolean;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -286,25 +289,27 @@ export function InspectionView({
                           }
                         />
                       </form>
-                    ) : readOnly ? (
-                      <span className="note">A technician or DXG Admin decides this in Manage presentations.</span>
+                    ) : !canAskSpeaker && !canWaive ? (
+                      <span className="note">A DXG Admin decides this in Manage presentations.</span>
                     ) : (
                       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                        <button
-                          className="btn"
-                          disabled={busy}
-                          onClick={() =>
-                            setForm({
-                              id: finding.id,
-                              kind: "revision",
-                              text: `${copy.title}: ${copy.body}${copy.fix ? ` ${copy.fix}` : ""}`,
-                            })
-                          }
-                        >
-                          <Icon name="comment" />
-                          Ask the speaker to fix this
-                        </button>
-                        {finding.check_code === "malware" ? (
+                        {canAskSpeaker && (
+                          <button
+                            className="btn"
+                            disabled={busy}
+                            onClick={() =>
+                              setForm({
+                                id: finding.id,
+                                kind: "revision",
+                                text: `${copy.title}: ${copy.body}${copy.fix ? ` ${copy.fix}` : ""}`,
+                              })
+                            }
+                          >
+                            <Icon name="comment" />
+                            Ask the speaker to fix this
+                          </button>
+                        )}
+                        {!canWaive ? null : finding.check_code === "malware" ? (
                           <span className="note">
                             A virus finding can&rsquo;t be waived — the speaker needs to provide a clean file.
                           </span>

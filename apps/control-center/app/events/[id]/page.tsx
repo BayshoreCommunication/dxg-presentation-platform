@@ -51,8 +51,8 @@ export default async function CommandCenterPage({
   const { tab } = await searchParams;
   /*
    * A technician's event is the Speaker Ready Room and Manage presentations (D-151); the
-   * command centre is support staff's, so they are sent on. Support staff see it without
-   * the review queue, which the API refuses them.
+   * command centre is support staff's, so they are sent on. Support staff review on Manage
+   * presentations too (D-163).
    */
   const session = await guard(getSession(), `/events/${id}`);
   const kind = session.principal.staff_kind;
@@ -211,13 +211,11 @@ export default async function CommandCenterPage({
             the screen is for and how many are waiting, so an empty one is visible
             before anyone clicks.
           */}
-          {kind !== "support" && (
-            <Link href={`/events/${id}/review`} className="btn pri">
-              {review.items.length > 0
-                ? `Manage presentations (${review.items.length}) →`
-                : "Manage presentations · none waiting"}
-            </Link>
-          )}
+          <Link href={`/events/${id}/review`} className="btn pri">
+            {review.items.length > 0
+              ? `Manage presentations (${review.items.length}) →`
+              : "Manage presentations · none waiting"}
+          </Link>
         </div>
       </div>
 

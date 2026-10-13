@@ -4,10 +4,10 @@ import type { TestContext } from "node:test";
 import { signInStaff } from "../helpers/signIn.ts";
 
 /**
- * Room sync for DXG Technician staff (D-154, D-160): a technician placed on the event under
- * Event assignments sees, ticks and downloads every room of it — nobody hands out rooms one by
- * one — and nothing of an event they are not on. "Download all" brings a room's (or every
- * room's) approved presentations as one zip.
+ * Room sync (D-154, D-160, D-163): DXG Admins and support staff see, tick and download every
+ * room of their events — nobody hands out rooms one by one. DXG Technician staff no longer
+ * open it (D-163); they find the approved presentations on Manage presentations. "Download
+ * all" brings a room's (or every room's) approved presentations as one zip.
  */
 const API = process.env.API_BASE ?? "http://localhost:4000/api/v1";
 const EVENT = "22222222-2222-4222-8222-222222222222";
@@ -25,7 +25,7 @@ type Room = {
 let up = false;
 let admin = "";
 let delgado = "";
-let okafor = "";
+let vega = "";
 let rooms: Room[] = [];
 let probe = "";
 
@@ -48,7 +48,7 @@ before(async () => {
   if (!up) return;
   admin = await signInStaff(API, "admin@example.invalid", PASSWORD);
   delgado = await signInStaff(API, "c.delgado@example.invalid", PASSWORD);
-  okafor = await signInStaff(API, "t.okafor@example.invalid", PASSWORD);
+  vega = await signInStaff(API, "m.vega@example.invalid", PASSWORD);
   rooms = await fleet(admin);
 
   // An event neither technician is on.
@@ -69,14 +69,28 @@ after(async () => {
   if (up && probe) await call(admin, "POST", `/events/${probe}/archive`);
 });
 
-describe("technicians on the event work every room of it (D-160)", () => {
-  test("a technician sees the same rooms as an admin", async (t: TestContext) => {
+describe("Room sync is the support staff's and admins', not the technicians' (D-163)", () => {
+  test("support staff see the same rooms as an admin", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
     const all = rooms.map((item) => item.room).sort();
     assert.ok(all.length > 1, "fixture: the event has several rooms");
-    assert.deepEqual((await fleet(delgado)).map((item) => item.room).sort(), all);
-    assert.deepEqual((await fleet(okafor)).map((item) => item.room).sort(), all);
+    assert.deepEqual((await fleet(vega)).map((item) => item.room).sort(), all);
     assert.equal("technicians" in rooms[0]!, false, "rooms no longer name technicians");
+  });
+
+  test("a technician is refused Room sync: the list, the zip and the ticks", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const copy = room("Ballroom A").talks.find((talk) => talk.approved?.room_file_id)?.approved;
+    assert.ok(copy?.room_file_id, "fixture: Ballroom A has a room copy");
+    for (const [method, path, body] of [
+      ["GET", `/events/${EVENT}/sync/fleet`, undefined],
+      ["GET", `/events/${EVENT}/sync/approved.zip`, undefined],
+      ["POST", `/room-files/${copy.room_file_id}/loaded`, { lock_version: copy.lock_version }],
+    ] as const) {
+      const refused = await call(delgado, method, path, body);
+      assert.equal(refused.status, 403, `${method} ${path}`);
+      assert.equal(((await refused.json()) as { code: string }).code, "auth.kind_forbidden", `${method} ${path}`);
+    }
   });
 
   test("nobody hands out rooms any more", async (t: TestContext) => {
@@ -85,24 +99,21 @@ describe("technicians on the event work every room of it (D-160)", () => {
     assert.equal((await call(admin, "PUT", `/events/${EVENT}/sync/rooms/${room("Room 212").room_id}/technicians`, { user_ids: [DELGADO] })).status, 404);
   });
 
-  test("a technician ticks a file in any room of the event, and can take the tick back", async (t: TestContext) => {
+  test("support staff tick a file loaded, and can take the tick back", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
-    const copy = room("Ballroom A").talks.find((talk) => talk.approved?.room_file_id)?.approved;
-    assert.ok(copy?.room_file_id, "fixture: Ballroom A has a room copy");
-    const loaded = (await (await call(admin, "GET", `/events/${EVENT}/sync/fleet`)).json()) as { items: Room[] };
-    const now = loaded.items.find((item) => item.room === "Ballroom A")!.talks.find((talk) => talk.approved?.room_file_id === copy.room_file_id)!.approved!;
-    // T. Okafor used to have Room 210 only; Ballroom A is theirs to tick now too.
-    const first = await call(okafor, "POST", `/room-files/${copy.room_file_id}/${now.loaded ? "unloaded" : "loaded"}`, { lock_version: now.lock_version });
+    const copy = room("Ballroom A").talks.find((talk) => talk.approved?.room_file_id)!.approved!;
+    const now = (await fleet(admin)).find((item) => item.room === "Ballroom A")!.talks.find((talk) => talk.approved?.room_file_id === copy.room_file_id)!.approved!;
+    const first = await call(vega, "POST", `/room-files/${copy.room_file_id}/${now.loaded ? "unloaded" : "loaded"}`, { lock_version: now.lock_version });
     assert.equal(first.status, 200);
     const ticked = ((await fleet(admin)).find((item) => item.room === "Ballroom A")!.talks.find((talk) => talk.approved?.room_file_id === copy.room_file_id)!).approved!;
-    const back = await call(okafor, "POST", `/room-files/${copy.room_file_id}/${now.loaded ? "loaded" : "unloaded"}`, { lock_version: ticked.lock_version });
+    const back = await call(vega, "POST", `/room-files/${copy.room_file_id}/${now.loaded ? "loaded" : "unloaded"}`, { lock_version: ticked.lock_version });
     assert.equal(back.status, 200, "put back as it was");
   });
 
-  test("an event the technician is not on stays closed", async (t: TestContext) => {
+  test("an event they are not on stays closed", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
     for (const path of [`/events/${probe}/sync/fleet`, `/events/${probe}/sync/approved.zip`]) {
-      const refused = await call(delgado, "GET", path);
+      const refused = await call(vega, "GET", path);
       assert.equal(refused.status, 403, path);
       assert.equal(((await refused.json()) as { code: string }).code, "auth.not_on_this_event");
     }
@@ -112,7 +123,7 @@ describe("technicians on the event work every room of it (D-160)", () => {
 describe("Download all (D-154)", () => {
   test("a room's approved presentations come as one zip", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
-    const response = await call(delgado, "GET", `/events/${EVENT}/sync/approved.zip?room=${room("Ballroom A").room_id}`);
+    const response = await call(admin, "GET", `/events/${EVENT}/sync/approved.zip?room=${room("Ballroom A").room_id}`);
     assert.equal(response.status, 200);
     assert.equal(response.headers.get("content-type"), "application/zip");
     assert.match(response.headers.get("content-disposition") ?? "", /^attachment; filename="approved-ballroom-a-\d{4}-\d{2}-\d{2}\.zip"$/);
@@ -121,10 +132,10 @@ describe("Download all (D-154)", () => {
     assert.match(bytes.toString("latin1"), /\d{2}-\d{2} \d{4} Robotic Surgery Outcomes[^\n]*\(v\d+\)\.pptx/, "named by time and talk");
   });
 
-  test("a technician downloads any room of the event, or all of them at once", async (t: TestContext) => {
+  test("support staff download any room of the event, or all of them at once", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
-    assert.equal((await call(okafor, "GET", `/events/${EVENT}/sync/approved.zip?room=${room("Ballroom A").room_id}`)).status, 200);
-    assert.equal((await call(delgado, "GET", `/events/${EVENT}/sync/approved.zip`)).status, 200);
+    assert.equal((await call(vega, "GET", `/events/${EVENT}/sync/approved.zip?room=${room("Ballroom A").room_id}`)).status, 200);
+    assert.equal((await call(vega, "GET", `/events/${EVENT}/sync/approved.zip`)).status, 200);
   });
 
   test("a room address that isn't a room is not found, not a server error", async (t: TestContext) => {
