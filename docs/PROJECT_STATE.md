@@ -3676,3 +3676,11 @@ local API on port 4100 — the failures were the environment: CORS (the test exp
 STAFF_BASE=http://localhost:3100 it passes), worker and dispatcher not running (started them: practice event and
 worker pass, the worker after draining a 35-file preview backlog), and event-files' known seed gap. Lint and
 type-check clean.
+
+## 2026-10-13 — Technicians approve only; support staff review; Room sync off for technicians (D-163)
+Technicians: approve, waive, upload, and a new Approved list on Manage presentations; no Ask for changes / Reject, no
+Room sync. Support staff: Manage presentations review (approve, ask for changes, reject), still no Speaker Ready Room
+and no upload. Walked as the demo technician (Approve and Upload only; approving Priya Shah's file moved it to
+Approved · 1; sidebar without Room sync) and as M. Vega (Approve, Ask for changes, Reject; no upload; Room sync, no
+Speaker Ready Room). Unit 291; invariants 397/399 with worker and dispatcher running, then speaker-accounts fixed
+(14/14) — the one left is event-files' known seed gap. Lint and type-check clean.

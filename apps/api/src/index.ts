@@ -6,7 +6,7 @@ import { atLeast, hasAnyRole } from "@pmp/domain";
 import { listTalks } from "./services/talks.ts";
 import { ASSET_KINDS, putAsset, removeAsset, assetOf, readAsset } from "./services/brandAssets.ts";
 import type { AssetKind, AssetRecord } from "./services/brandAssets.ts";
-import { eventSummary, riskList, reviewQueue, syncFleet } from "./services/queries.ts";
+import { approvedPresentations, eventSummary, riskList, reviewQueue, syncFleet } from "./services/queries.ts";
 import { eventFiles, downloadVersion, bulkDownload, versionMedia, versionMediaEntry } from "./services/files.ts";
 import type { FileQuery } from "./services/files.ts";
 import {
@@ -775,10 +775,13 @@ const ONSITE_AND_REVIEW: RegExp[] = [
   /^\/api\/v1\/findings\//,
   /^\/api\/v1\/slots\//,
 ];
-/** What a technician may open besides the two screens: the way to them, and what a review shows. */
+/**
+ * What a technician may open besides the two screens: the way to them, and what a review shows.
+ * Room sync is no longer theirs (D-163); the approved presentations are listed on Manage
+ * presentations instead.
+ */
 const TECHNICIAN_ALSO: RegExp[] = [
-  // Room sync, for the rooms they are assigned to (client review, D-154).
-  /^\/api\/v1\/events\/[^/]+\/sync\/(fleet|approved\.zip)$/,
+  /^\/api\/v1\/events\/[^/]+\/approved$/,
   /^\/api\/v1\/events$/,
   /^\/api\/v1\/events\/[^/]+$/,
   /^\/api\/v1\/events\/[^/]+\/(summary|talks|risk-list)$/,
@@ -787,31 +790,33 @@ const TECHNICIAN_ALSO: RegExp[] = [
   /^\/api\/v1\/clients$/,
 ];
 /** Asking for a slide preview is a POST, and part of looking at a file in review. */
-const TECHNICIAN_ALSO_WRITES: RegExp[] = [
-  /^\/api\/v1\/file-versions\/[^/]+\/preview$/,
-  // Ticking a file loaded on the room PC, in any room of their events (D-160).
-  /^\/api\/v1\/room-files\/[^/]+\/(loaded|unloaded)$/,
-];
+const TECHNICIAN_ALSO_WRITES: RegExp[] = [/^\/api\/v1\/file-versions\/[^/]+\/preview$/];
 
 /**
- * What support staff may still *read* of a presentation: its detail, findings and comments,
- * since the Files screen, the agenda and the room list all open a talk. The decisions — approve,
- * ask for changes, reject, comment, waive, roll back — stay refused; the screen hides them.
+ * What support staff open of a presentation: its detail, findings and comments (the Files
+ * screen, the agenda and the room list all open a talk), and since D-163 Manage presentations'
+ * review — the queue, approve, ask for changes, reject and comments. Waiving, rolling back and
+ * taking a file in stay refused (the last is the technicians', D-162).
  */
 const SUPPORT_READS: RegExp[] = [/^\/api\/v1\/slots\/[^/]+$/, /^\/api\/v1\/file-versions\/[^/]+\/(findings|comments)$/];
+const SUPPORT_REVIEW: RegExp[] = [
+  /^\/api\/v1\/events\/[^/]+\/review-queue$/,
+  /^\/api\/v1\/file-versions\/[^/]+(:transition|\/request-revision|\/comments)$/,
+];
 
 function kindRefusal(kind: "support" | "technician", path: string, method: string): string | null {
   const onsiteOrReview = ONSITE_AND_REVIEW.some((pattern) => pattern.test(path));
   if (kind === "support") {
     if (!onsiteOrReview) return null;
     if (method === "GET" && SUPPORT_READS.some((pattern) => pattern.test(path))) return null;
-    return "The Speaker Ready Room and Manage presentations are for DXG Technician staff and DXG Admins.";
+    if (SUPPORT_REVIEW.some((pattern) => pattern.test(path))) return null;
+    return "The Speaker Ready Room is for DXG Technician staff and DXG Admins.";
   }
   if (onsiteOrReview) return null;
   // A technician reads the event (GET) on the way to their screens; writes elsewhere are not theirs.
   if (method === "GET" && TECHNICIAN_ALSO.some((pattern) => pattern.test(path))) return null;
   if (TECHNICIAN_ALSO_WRITES.some((pattern) => pattern.test(path))) return null;
-  return "DXG Technician staff work the Speaker Ready Room, Room sync and Manage presentations only. Ask a DXG Admin if you need more.";
+  return "DXG Technician staff work the Speaker Ready Room and Manage presentations only. Ask a DXG Admin if you need more.";
 }
 
 
@@ -1087,6 +1092,9 @@ const splitAction = (segment: string): { id: string; action: string } => {
     : { id: segment.slice(0, index), action: segment.slice(index + 1) };
 };
 
+const TECHNICIAN_DECISION_REFUSAL =
+  "DXG Technician staff approve presentations. Asking the speaker for changes or rejecting a file is for DXG Support staff and DXG Admins.";
+
 app.post("/api/v1/file-versions/:versionAndAction", async (req, res) => {
   const { id: versionId, action: customMethod } = splitAction(String(req.params.versionAndAction));
   if (customMethod !== "transition") {
@@ -1101,6 +1109,12 @@ app.post("/api/v1/file-versions/:versionAndAction", async (req, res) => {
       code: "request.invalid",
       message: "That request was incomplete. Refresh the page and try again.",
     });
+  }
+
+  // A technician approves; asking for changes and rejecting are support staff's and admins' (D-163).
+  const principal = (req as express.Request & { principal?: Principal }).principal;
+  if (principal?.kind === "staff" && principal.staff_kind === "technician" && (body.action === "request_changes" || body.action === "reject")) {
+    return res.status(403).json({ code: "auth.kind_forbidden", message: TECHNICIAN_DECISION_REFUSAL });
   }
 
   try {
@@ -1241,6 +1255,15 @@ app.post("/api/v1/events/:eventId/:filesAndAction", async (req, res, next) => {
   res.setHeader("content-disposition", `attachment; filename="${result.value.filename}"`);
   res.setHeader("cache-control", "private, no-store");
   return res.send(result.value.body);
+});
+
+/** The event's approved presentations, for Manage presentations (D-163). */
+app.get("/api/v1/events/:eventId/approved", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  const eventId = String(req.params.eventId);
+  const items = await withScope(scopeFor(req, eventId), (tx) => approvedPresentations(tx, eventId));
+  return res.json({ items });
 });
 
 app.get("/api/v1/events/:eventId/sync/fleet", async (req, res) => {
@@ -2152,6 +2175,10 @@ app.post("/api/v1/file-versions/:versionId/comments", async (req, res) => {
 app.post("/api/v1/file-versions/:versionId/request-revision", async (req, res) => {
   const actor = actorFrom(req);
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  const principal = (req as express.Request & { principal?: Principal }).principal;
+  if (principal?.kind === "staff" && principal.staff_kind === "technician") {
+    return res.status(403).json({ code: "auth.kind_forbidden", message: TECHNICIAN_DECISION_REFUSAL });
+  }
   const body = req.body as { finding_id?: string; note?: string };
   if (!body.note) {
     return res.status(400).json({ code: "request.invalid", message: "Write a note to the speaker saying what to change." });

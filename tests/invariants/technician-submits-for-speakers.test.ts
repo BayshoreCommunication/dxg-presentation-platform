@@ -27,6 +27,7 @@ let up = false;
 let admin = "";
 let delgado = "";
 let eventId = "";
+let submitted: string[] = [];
 const talks: { slotId: string; speaker: string }[] = [];
 
 const call = (cookie: string, method: string, path: string, body?: unknown) =>
@@ -154,6 +155,29 @@ describe("DXG Technician staff submit for every speaker on their events (D-159)"
     const queue = (await (await call(delgado, "GET", `/events/${eventId}/review-queue`)).json()) as { items: { file_version_id?: string; id?: string }[] };
     const ids = queue.items.map((item) => item.file_version_id ?? item.id);
     for (const version of versions) assert.ok(ids.includes(version), "in the review queue");
+    submitted = versions;
+  });
+
+  test("they approve, and the approved file is listed for them; asking for changes and rejecting are not theirs (D-163)", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const lock = async (id: string) =>
+      withSystemScope(async (tx) => (await tx.query<{ lock_version: number }>(`SELECT lock_version FROM pmp.file_versions WHERE id = $1`, [id])).rows[0]!.lock_version);
+    const [first, second] = submitted;
+    assert.ok(first && second, "fixture: two versions from the previous test");
+    for (const action of ["claim", "approve"]) {
+      const response = await call(delgado, "POST", `/file-versions/${first}:transition`, { action, lock_version: await lock(first) });
+      assert.equal(response.status, 200, action);
+    }
+    const listed = (await (await call(delgado, "GET", `/events/${eventId}/approved`)).json()) as { items: { file_version_id: string; speaker: string | null }[] };
+    assert.ok(listed.items.some((item) => item.file_version_id === first), "the approved version is listed");
+    assert.equal(listed.items.some((item) => item.file_version_id === second), false, "one waiting for review is not");
+    await call(delgado, "POST", `/file-versions/${second}:transition`, { action: "claim", lock_version: await lock(second) });
+    for (const action of ["request_changes", "reject"]) {
+      const refused = await call(delgado, "POST", `/file-versions/${second}:transition`, { action, lock_version: await lock(second), note: "probe", reason: "probe" });
+      assert.equal(refused.status, 403, action);
+    }
+    const asked = await call(admin, "POST", `/file-versions/${second}:transition`, { action: "request_changes", lock_version: await lock(second), note: "Please add the closing slide." });
+    assert.equal(asked.status, 200, "an admin asks for changes");
   });
 
   test("taken off the event, they are refused again", async (t: TestContext) => {

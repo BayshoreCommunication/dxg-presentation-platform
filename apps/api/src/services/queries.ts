@@ -365,3 +365,43 @@ export async function syncFleet(
     };
   });
 }
+
+export type ApprovedPresentation = {
+  slot_id: string;
+  title: string;
+  speaker: string | null;
+  room: string | null;
+  starts_at: string;
+  file_version_id: string;
+  version_number: number;
+  original_filename: string;
+  approved_at: string | null;
+};
+
+/**
+ * Every talk's approved version (the newest approved one), in running order — what DXG
+ * Technician staff see on Manage presentations now that Room sync is not theirs (D-163).
+ * Cancelled sessions are left out.
+ */
+export async function approvedPresentations(tx: pg.PoolClient, eventId: string): Promise<ApprovedPresentation[]> {
+  const { rows } = await tx.query<ApprovedPresentation>(
+    `SELECT s.id AS slot_id, s.title, se.starts_at, r.name AS room,
+            (SELECT string_agg(sp.full_name, ' & ' ORDER BY sp.full_name)
+               FROM pmp.speaker_assignments sa JOIN pmp.speakers sp ON sp.id = sa.speaker_id
+              WHERE sa.slot_id = s.id AND sa.replaced_by IS NULL AND sp.removed_at IS NULL) AS speaker,
+            fv.id AS file_version_id, fv.version_number, fv.original_filename, fv.approved_at
+       FROM pmp.slots s
+       JOIN pmp.sessions se ON se.id = s.session_id
+       LEFT JOIN pmp.rooms r ON r.id = se.room_id
+       JOIN LATERAL (
+         SELECT fva.id, fva.version_number, fva.original_filename, fva.approved_at
+           FROM pmp.file_versions fva JOIN pmp.files fa ON fa.id = fva.file_id
+          WHERE fa.slot_id = s.id AND fva.review_state = 'approved'
+          ORDER BY fva.version_number DESC LIMIT 1
+       ) fv ON true
+      WHERE s.event_id = $1 AND se.session_state <> 'canceled'
+      ORDER BY se.starts_at, s.title`,
+    [eventId],
+  );
+  return rows;
+}
