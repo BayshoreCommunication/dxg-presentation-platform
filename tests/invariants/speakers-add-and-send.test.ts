@@ -99,7 +99,7 @@ const landedOn = new Map<string, string>();
 async function newSpeaker(label: string, input: { email?: string } = {}): Promise<string> {
   const response = await call(admin, "POST", `/events/${sendEventId}/speakers`, {
     name: `Link Probe ${label} ${RUN}`,
-    email: input.email ?? "",
+    email: input.email ?? `link.${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.${RUN}@example.invalid`,
     organization: "",
     slot_id: sendSlot,
   });
@@ -320,11 +320,26 @@ describe("adding a speaker (D-085)", () => {
     assert.equal(badEmail.status, 422);
   });
 
+  test("an email is required, and an address typed under Organization is caught (2026-10-13)", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const before = (await speakers(addEventId)).length;
+    for (const [label, body] of [
+      ["no email", { name: "No Email Probe", email: "  ", organization: "", slot_id: addSlots[0] }],
+      ["email under Organization", { name: "farialaiba575", email: "", organization: "farialaiba575@example.invalid", slot_id: addSlots[0] }],
+      ["both, but Organization is an address", { name: "Org Probe", email: "org.probe@example.invalid", organization: "org.probe@example.invalid", slot_id: addSlots[0] }],
+    ] as const) {
+      const response = await call(admin, "POST", `/events/${addEventId}/speakers`, body);
+      assert.equal(response.status, 422, label);
+      assert.equal(await codeOf(response), "agenda.incomplete", label);
+    }
+    assert.equal((await speakers(addEventId)).length, before, "nothing was created");
+  });
+
   test("a presentation from another event is not found", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
     const response = await call(admin, "POST", `/events/${addEventId}/speakers`, {
       name: "Wrong Talk Probe",
-      email: "",
+      email: `wrong.talk.${RUN}@example.invalid`,
       organization: "",
       slot_id: sendSlot,
     });
@@ -477,7 +492,13 @@ describe("emailing the upload link (D-086)", () => {
 
   test("a speaker with no email address is refused with a reason", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
-    const speakerId = await newSpeaker("NoEmail");
+    // Add speaker requires an email now; the agenda can still name a presenter without one.
+    const name = `Link Probe NoEmail ${RUN}`;
+    const named = await call(admin, "POST", `/events/${sendEventId}/presentations/${sendSlot}/presenters`, { name, email: "" });
+    assert.equal(named.status, 201, "fixture: a presenter named on the agenda");
+    const listed = (await (await call(admin, "GET", `/events/${sendEventId}/speakers`)).json()) as { items: { id: string; full_name: string }[] };
+    const speakerId = listed.items.find((row) => row.full_name === name)!.id;
+    runSpeakers.push(speakerId);
     const response = await sendLink(speakerId);
     assert.equal(response.status, 422);
     assert.equal(await codeOf(response), "comms.no_email");

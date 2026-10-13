@@ -3660,3 +3660,10 @@ gone (`room_assignments` kept as history). Walked locally as the demo technician
 Room 2 all listed, no assignment controls. room-sync-technicians rewritten (5 + Download all 4); with manual room
 loading, admin, cross-event, event scope, technician-submits and SRR local intake 72/72; unit 291; lint and
 type-check clean. Not pushed — Travis reviews locally first.
+
+## 2026-10-13 — Add speaker requires name and email (D-161)
+Production showed a speaker added with no email — the address typed under Organization. Add speaker now requires an
+email and refuses an Organization that is an address (dialog and API). Speaker suites (add-and-send, agenda edit,
+release permission, schedule import, co-presenter uploads, technician submits) 113/113 against a local API; walked the
+dialog: the empty-email case is stopped by the browser's required field, the address-under-Organization case shows
+the message, nothing is created. Lint and type-check clean. Local note: Docker had stopped; restarted it.

@@ -2974,3 +2974,17 @@ assigned rooms"; Travis's call is that the event is the assignment).
 - Tests: `room-sync-technicians.test.ts` rewritten — technicians see the same rooms as an admin, the assignment
   routes are 404, a technician ticks (and un-ticks) a room that used to be someone else's, an event they are not on
   stays 403; Download all unchanged.
+
+## D-161 (2026-10-13): Add speaker needs a name and an email — Status: ACCEPTED (Travis)
+Travis, on production: "email dei nai kinto add korlo kno? name email required." A speaker added on the Speakers
+screen had no email — the address had gone into Organization — so no sign-in could be sent.
+- **Add speaker** (`POST /events/:id/speakers`, the Speakers screen's dialog): the email is required (422
+  `agenda.incomplete`, "A speaker needs an email address — their sign-in is sent there."), and an Organization that
+  is an email address is refused ("The organization looks like an email address. Put the address under Email.").
+  The dialog checks both before sending and marks Email required.
+- **Unchanged**: the agenda's add-presenter and the spreadsheet import may still name a presenter without an email
+  (a programme is often known before its addresses); Send sign-in keeps refusing those until an address is added.
+- Existing speakers without an email stay as they are: correct one with Remove and Add speaker again.
+- Tests: `speakers-add-and-send` — no email, an address under Organization (both empty-email and with an email)
+  refused and nothing created; its fixtures now pass an email, and the "no email" send-link case names its presenter
+  on the agenda.

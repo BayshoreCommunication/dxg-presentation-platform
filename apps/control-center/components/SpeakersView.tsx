@@ -598,6 +598,15 @@ function AddSpeakerDialog({
       setError("A speaker needs a name.");
       return;
     }
+    // Their sign-in goes to this address, so it is required here (Travis, 2026-10-13).
+    if (!email.trim()) {
+      setError("A speaker needs an email address — their sign-in is sent there.");
+      return;
+    }
+    if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(organization.trim())) {
+      setError("The organization looks like an email address. Put the address under Email.");
+      return;
+    }
     if (!slotId) {
       setError("Choose the session this speaker is presenting in.");
       return;
@@ -676,6 +685,7 @@ function AddSpeakerDialog({
               value={email}
               onChange={(event) => setEmail(event.target.value)}
               placeholder="Needed to send their sign-in"
+              required
             />
           </div>
           <div className="field">
