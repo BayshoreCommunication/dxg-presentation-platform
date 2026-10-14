@@ -3167,3 +3167,13 @@ be someone who isn't one.
   hand-over, practice events); the suites that check in place the seeded technician on their event and name them, and
   record confirmations as them; `srr-open`'s support-staff test checks in and out as support staff and expects a
   technician refused at check-in and desks, and support staff refused at the confirmation.
+
+## D-170 (2026-10-13): Manage presentations says whose file is open — Status: ACCEPTED (Travis)
+Travis, on the review workspace: "improvise this section so that it's easier to understand which slide is open on
+which presenter". The queue only shaded the open row, and the workspace header named the speaker but not the talk.
+- **Queue**: the open row has a bar on its left edge and a **Viewing** tag; every row also shows its version, room
+  and time (event zone), so two talks that read alike are told apart. `aria-current` marks the open row.
+- **Workspace header**: "Now reviewing", then **<speaker> — <talk>**, then version · file name · size · room · time.
+- **Slide viewer**: the toolbar carries "<speaker> · <talk> · vN" beside the slide count (`SlideViewer` `caption`,
+  passed by the review workspace only), so it stays in view in full screen. The toolbar now wraps on a narrow screen —
+  at phone width Full screen was cut off at the right edge (on main too).

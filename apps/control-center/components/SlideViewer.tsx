@@ -15,7 +15,18 @@ import { Icon } from "@/components/Icon";
  * as a 5-slide one. Arrow keys, Page Up/Down, Home and End move between slides while
  * the viewer has focus.
  */
-export function SlideViewer({ url, title, versionId }: { url: string; title: string; versionId?: string }) {
+export function SlideViewer({
+  url,
+  title,
+  versionId,
+  caption,
+}: {
+  url: string;
+  title: string;
+  versionId?: string;
+  /** Whose deck this is, beside the slide count — kept in view in full screen too. */
+  caption?: string;
+}) {
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
   /*
    * The deck's embedded videos and sounds, by slide. The PDF the slides are drawn
@@ -164,6 +175,7 @@ export function SlideViewer({ url, title, versionId }: { url: string; title: str
       <div
         style={{
           display: "flex",
+          flexWrap: "wrap",
           alignItems: "center",
           gap: 8,
           padding: "6px 10px",
@@ -180,7 +192,17 @@ export function SlideViewer({ url, title, versionId }: { url: string; title: str
         <button type="button" className="btn" style={{ padding: "2px 10px" }} disabled={!count || current >= count} onClick={() => go(current + 1)} aria-label="Next slide">
           ›
         </button>
-        <span style={{ flex: 1 }} />
+        {caption ? (
+          <span
+            className="note"
+            title={caption}
+            style={{ flex: "1 1 160px", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", margin: 0 }}
+          >
+            {caption}
+          </span>
+        ) : (
+          <span style={{ flex: 1 }} />
+        )}
         <button
           type="button"
           className="btn"
