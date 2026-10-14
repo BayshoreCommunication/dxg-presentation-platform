@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSummary, getRiskList, getFleet, getDraft, getSession, getAgenda, getSpeakers, getReviewQueue, ApiError } from "@/lib/api";
 import { Chip } from "@/components/Chip";
+import { RemindSpeaker } from "@/components/RemindSpeaker";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { EventTabs } from "@/components/EventTabs";
 import { ROOM_LABEL, roomLoadedLine } from "@/lib/roomWords";
@@ -44,10 +45,16 @@ const ACTION_GROUPS: ActionGroup[] = [
   },
 ];
 /** Where an action label leads (D-177): the screen where that action is done. */
-function actionHref(go: ActionGo, eventId: string, slotId: string): string {
+function actionHref(go: ActionGo, eventId: string, slotId: string, speakerId: string | null): string {
   switch (go) {
-    case "speakers":
-      return `/events/${eventId}?tab=speakers`;
+    case "comms":
+      // The reminder, opened for this speaker alone (D-177).
+      return speakerId ? `/events/${eventId}/comms?remind=${speakerId}` : `/events/${eventId}/comms`;
+    case "comms_new_version":
+      // …the "new version needed" one, for a speaker who has uploaded (D-178).
+      return speakerId
+        ? `/events/${eventId}/comms?remind=${speakerId}&reminder=new_version`
+        : `/events/${eventId}/comms`;
     case "review":
       return `/events/${eventId}/review`;
     case "sync":
@@ -82,25 +89,25 @@ function roomReasons(talks: { status: string; speaker: string | null; title: str
  * Which group a talk's status falls in, the action as a short label (shown on the row, D-177),
  * and the one thing to do in full (the label's hover text).
  */
-type ActionGo = "speakers" | "review" | "sync" | "agenda" | "talk";
+type ActionGo = "comms" | "comms_new_version" | "review" | "sync" | "agenda" | "talk";
 const ACTION_FOR: Record<string, { group: string; label: string; todo: string; go: ActionGo }> = {
   missing: {
     group: "speaker",
     label: "Get the file",
     todo: "Nothing uploaded yet — remind the speaker to upload, or take the file in at the Speaker Ready Room.",
-    go: "speakers",
+    go: "comms",
   },
   needs_revision: {
     group: "speaker",
     label: "Get the new version",
     todo: "Changes were asked for — waiting for the speaker's new version.",
-    go: "speakers",
+    go: "comms_new_version",
   },
   attention: {
     group: "speaker",
     label: "Get a clean copy",
     todo: "The file failed the virus check — ask the speaker for a clean copy.",
-    go: "speakers",
+    go: "comms_new_version",
   },
   submitted: { group: "review", label: "Review the file", todo: "Review the file and approve it, or ask for changes.", go: "review" },
   processing: {
@@ -337,18 +344,31 @@ export default async function CommandCenterPage({
                               </span>
                               <Chip status={item.status} label={item.status_label} />
                             </Link>
-                            {/* The action as a label, and what it means in full beside it (D-177). */}
-                            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginTop: 6 }}>
-                              {/* The label opens the screen where the action is done. */}
-                              <Link
-                                className="chip c-info"
-                                style={{ fontWeight: 600 }}
-                                href={actionHref(ACTION_FOR[item.status]!.go, id, item.slot_id)}
-                              >
-                                → {ACTION_FOR[item.status]!.label}
-                              </Link>
-                              <span className="note">{ACTION_FOR[item.status]!.todo}</span>
-                            </div>
+                            {/* The action as a label, and what it means in full beside it (D-177). A
+                                speaker action sends the reminder right here (D-180); the others open
+                                the screen where they're done. */}
+                            {ACTION_FOR[item.status]!.go.startsWith("comms") && item.speaker_id ? (
+                              <RemindSpeaker
+                                eventId={id}
+                                speakerId={item.speaker_id}
+                                speakerName={item.speaker ?? "the speaker"}
+                                label={ACTION_FOR[item.status]!.label}
+                                todo={ACTION_FOR[item.status]!.todo}
+                                newVersion={ACTION_FOR[item.status]!.go === "comms_new_version"}
+                                practice={summary.event.is_practice === true}
+                              />
+                            ) : (
+                              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginTop: 6 }}>
+                                <Link
+                                  className="chip c-info"
+                                  style={{ fontWeight: 600 }}
+                                  href={actionHref(ACTION_FOR[item.status]!.go, id, item.slot_id, item.speaker_id)}
+                                >
+                                  → {ACTION_FOR[item.status]!.label}
+                                </Link>
+                                <span className="note">{ACTION_FOR[item.status]!.todo}</span>
+                              </div>
+                            )}
                           </td>
                         </tr>
                       ))}

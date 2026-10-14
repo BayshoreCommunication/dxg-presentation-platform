@@ -14,6 +14,8 @@ export type EventSummary = {
     venue: string | null;
     /** The Speaker Ready Room's event-day switch (D-157). */
     srr_open: boolean;
+    /** A practice event (D-116): its mail is recorded, never sent — the overview says so (D-180). */
+    is_practice: boolean;
   };
   collected: number;
   total: number;
@@ -95,7 +97,7 @@ export async function eventSummary(tx: pg.PoolClient, eventId: string): Promise<
      * of 3 · Doors 08:00" on every event, whatever its venue and however long it ran.
      */
     `SELECT e.id, e.name, e.starts_on::text, e.ends_on::text, e.status, e.timezone,
-            v.name AS venue, e.srr_open
+            v.name AS venue, e.srr_open, e.is_practice
        FROM pmp.events e
        LEFT JOIN pmp.venues v ON v.id = e.venue_id
       WHERE e.id = $1`,
@@ -139,6 +141,8 @@ export type RiskItem = {
   room: string | null;
   starts_at: string;
   speaker: string | null;
+  /** So "Get the file" can open a reminder for this speaker alone (D-177). */
+  speaker_id: string | null;
   title: string;
   status: string;
   status_label: string;
@@ -150,11 +154,14 @@ export type RiskItem = {
  * the list; there is no room PC report to second-guess it with any more.
  */
 export async function riskList(tx: pg.PoolClient, eventId: string): Promise<RiskItem[]> {
-  const { rows } = await tx.query<TalkAggRow & { starts_at: string; title: string; speaker: string | null }>(
+  const { rows } = await tx.query<TalkAggRow & { starts_at: string; title: string; speaker: string | null; speaker_id: string | null }>(
     `SELECT agg.*, se.starts_at, s.title,
             (SELECT sp.full_name FROM pmp.speaker_assignments sa
                JOIN pmp.speakers sp ON sp.id = sa.speaker_id
-              WHERE sa.slot_id = s.id LIMIT 1) AS speaker
+              WHERE sa.slot_id = s.id LIMIT 1) AS speaker,
+            (SELECT sp.id FROM pmp.speaker_assignments sa
+               JOIN pmp.speakers sp ON sp.id = sa.speaker_id
+              WHERE sa.slot_id = s.id LIMIT 1) AS speaker_id
        FROM (${TALK_AGG}) agg
        JOIN pmp.slots s ON s.id = agg.slot_id
        JOIN pmp.sessions se ON se.id = s.session_id
@@ -171,6 +178,7 @@ export async function riskList(tx: pg.PoolClient, eventId: string): Promise<Risk
         room: row.room_name,
         starts_at: row.starts_at,
         speaker: row.speaker,
+        speaker_id: row.speaker_id,
         title: row.title,
         status,
         status_label: TALK_STATUS_LABEL[status],

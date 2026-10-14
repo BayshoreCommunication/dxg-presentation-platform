@@ -3250,5 +3250,64 @@ to the room PC and tick Loaded on Room sync." The day, time and room are no long
 the row still opens it). Groups, counts and links stay as D-174.
 - **Addendum (same day): the action label is a link** (Travis: "when I click 'get the new version', it doesn't
   redirect anywhere"). Each label opens where that action is done: the speaker actions (Get the file, Get the new
-  version, Get a clean copy) → the Speakers tab; Review the file → Manage presentations; Load on room PC / Load the
+  version, Get a clean copy) → Communications, where the reminder is sent (Travis's follow-up; the Speakers tab had no
+  way to remind); Review the file → Manage presentations; Load on room PC / Load the
   newer version → Room sync; Set a room → the Agenda tab; Wait for the checks → the talk's Presentation detail.
+- **Addendum: a reminder for that speaker** (Travis: "make it open the reminder for that speaker"). The speaker labels
+  open `/events/:id/comms?remind=<speaker id>`: Communications selects the reminder template and narrows to that
+  speaker — the preview as they'd receive it, "Goes to: <name> only", "Audience · 1 (<name> only)" and **Send to
+  <name>** — with "Show everyone missing a file" back to the usual list. A speaker asked for changes or whose file
+  failed the virus check isn't "missing a file", so they come from the full speaker list. The send carries
+  `speaker_ids` (`POST /events/:id/comms/send`, at most 100): only those speakers, and every guard still applies
+  (address, bounce, staff address, resend cooldown); an empty list sends to nobody. The risk list gives each talk's
+  `speaker_id` for the link. Tests: `comms-one-speaker` (3).
+  Note: the reminder template's wording ("We don't have your presentation yet") fits a missing file; for a speaker asked
+  for a new version, edit the text before sending, or save a second reminder template.
+
+## D-178 (2026-10-14): A second reminder: "Reminder — new version needed" — Status: ACCEPTED (Travis)
+Travis: "create a reminder template for new version needed". The missing-file reminder ("We don't have your
+presentation yet") was the only one, and D-177's "Get the new version" opened it for a speaker who had uploaded.
+- **The template**, seeded on every event beside the other two (`DEFAULT_TEMPLATES`): "Reminder — new version needed",
+  subject "{{event_name}}: please send a new version of your presentation by {{deadline}}" — "We need a new version of
+  your presentation for … Please upload it by {{deadline}} … Manage presentations shows our note on what to change,
+  and is where you upload the new version." Editable like the others.
+- **Existing events** get it from **migration 042** (only where it's missing; re-running changes nothing; the text is
+  the default's word for word).
+- **Its audience** is speakers asked for changes or whose file failed the virus check (`new_version` on
+  `GET /comms`; `audience: "new_version"` on `POST /comms/send`). Communications says "Goes to: Speakers asked for a new
+  version, or whose file failed the virus check". It's a reminder, so it can go again after the cooldown.
+- **Action needed**: "Get the new version" and "Get a clean copy" open it for that speaker
+  (`?remind=<id>&reminder=new_version`); "Get the file" keeps the missing-file reminder.
+- **The automatic reminders** use the missing-file reminder by name, never this one (they used to take the first
+  template with "reminder" in its name); so does the Speakers screen's "remind those without files".
+- Tests: `comms-new-version` (3); `automatic-reminders`, `comms-one-speaker`, `comms-cadence`, `speakers-add-and-send`
+  pass.
+
+## D-179 (2026-10-14): A speaker's password is emailed once, when their sign-in is made — Status: ACCEPTED (Travis)
+Travis: "user password only sent when we will create a new user. not every time we send them the credentials". Every
+email with `{{sign_in}}` (invitation, both reminders, the automatic reminders) used to reissue a new temporary
+password for any speaker who hadn't chosen their own, and mail it — so each reminder replaced the last password.
+- **Batches** (invitation, reminders, automatic reminders): a temporary password only when the send makes the sign-in.
+  A speaker who already has one gets: "Sign in … with this email address and your password — the one we sent you when
+  your sign-in was made, or your own if you've changed it. Can't find it? Use 'Forgotten your password?' on the
+  sign-in page." Their password is left as it is (`ensureSpeakerSignIn` `reissue: false` → outcome `pending`).
+- **"Send sign-in"** on the Speakers screen exists to send it again, so it still issues a fresh temporary password
+  (`reissuePassword: true`); so does the explicit "issue sign-in" email.
+- **Communications' preview** shows what each template usually carries: the sample password in the invitation, the
+  no-password wording in the reminders; the merge field reads "Sign-in details (link; a temporary password only when
+  their sign-in is new)". A practice event's stored emails follow the same rule.
+- Password reset works for a speaker who never used their temporary password, so "Forgotten your password?" is a real
+  way back.
+- Tests: `comms-password-once` (3): first invitation carries one; a later reminder carries none and the hash is
+  unchanged; Send sign-in issues a fresh one. `cross-event`, `speaker-accounts` and `technician-submits` fail locally
+  with or without this change (local seed drift).
+
+## D-180 (2026-10-14): Action needed sends the reminder in place — Status: ACCEPTED (Travis)
+Travis: "instead of redirecting to the communication page, show the send reminder button when clicking 'get the new
+version'". The speaker actions on Action needed — Get the file, Get the new version, Get a clean copy — no longer
+leave the page: the label opens "Send “<reminder>” to <speaker>?" with **Send reminder**, Cancel, and "Preview or edit
+in Communications →" (D-177's link, kept one click away). The reminder is the missing-file one for Get the file and
+"Reminder — new version needed" (D-178) for the other two; the send names that speaker only, so every guard applies,
+and the result is said in place ("Reminder sent to …", "Not sent — already emailed this in the last 24 hours", and on
+a practice event "Recorded for … — a practice event never sends"). The other actions (Review the file, Load on room PC,
+Set a room) still open their screens. The event summary now returns `is_practice` for that wording.

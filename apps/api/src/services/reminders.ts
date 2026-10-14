@@ -1,7 +1,7 @@
 import type pg from "pg";
 import { withSystemScope } from "@pmp/db";
 import type { Actor } from "@pmp/domain";
-import { ensureTemplates, sendBatch } from "./comms.ts";
+import { ensureTemplates, MISSING_REMINDER_NAME, NEW_VERSION_REMINDER_NAME, sendBatch } from "./comms.ts";
 
 /**
  * Automatic upload reminders (D-096, FR-COM-002: "configurable event reminder cadence;
@@ -179,7 +179,11 @@ export async function runDueReminders(
     // The most recent day due is sent; any earlier ones were missed and are folded into it.
     const [send, ...missed] = [...due].sort((a, b) => a.daysBefore - b.daysBefore);
     const templates = await ensureTemplates(tx, event.id);
-    const template = templates.find((row) => /reminder/i.test(row.name));
+    // The missing-file reminder (D-178): not "new version needed", which is for speakers who
+    // have uploaded. Any other reminder-named template only if that one was renamed.
+    const template =
+      templates.find((row) => row.name === MISSING_REMINDER_NAME) ??
+      templates.find((row) => /reminder/i.test(row.name) && row.name !== NEW_VERSION_REMINDER_NAME);
 
     let outcome: "sent" | "failed" = "failed";
     let queued = 0;
