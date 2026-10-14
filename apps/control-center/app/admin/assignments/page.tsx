@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { listStaff, listEvents, ApiError } from "@/lib/api";
+import { getAssignmentHistory, listStaff, listEvents, ApiError } from "@/lib/api";
 import { EventAssignments } from "@/components/EventAssignments";
 
 export const dynamic = "force-dynamic";
@@ -17,8 +17,8 @@ export default async function EventAssignmentsPage({
   // A14 (D-113): `?assign=<user id>` comes from "Next: assign them to an event" on Staff accounts.
   const { assign } = await searchParams;
   try {
-    const [staff, events] = await Promise.all([listStaff(), listEvents()]);
-    return <EventAssignments initial={staff.items} events={events.items} assign={assign} />;
+    const [staff, events, history] = await Promise.all([listStaff(), listEvents(), getAssignmentHistory()]);
+    return <EventAssignments initial={staff.items} events={events.items} history={history.items} assign={assign} />;
   } catch (caught) {
     if (caught instanceof ApiError && caught.status === 401) {
       redirect("/login?next=%2Fadmin%2Fassignments&reason=required");
