@@ -11,7 +11,7 @@ import { CommentsPanel } from "@/components/CommentsPanel";
 import { ConfirmInline } from "@/components/ConfirmInline";
 import { SlidePreview } from "@/components/SlidePreview";
 import { WhyNot } from "@/components/WhyNot";
-import { CHECK, formatBytes, INSPECTION_STATE, SEVERITY, VERSION_STATE, wordsFor } from "@pmp/format";
+import { CHECK, formatBytes, formatSessionTime, INSPECTION_STATE, SEVERITY, VERSION_STATE, wordsFor } from "@pmp/format";
 import { Icon } from "@/components/Icon";
 
 const FINDING_COPY: Record<string, (detail: Record<string, unknown>) => string> = {
@@ -31,8 +31,11 @@ export function ReviewWorkspace({
   initialQueue,
   initialSelectedId,
   approved,
+  timezone,
 }: {
   eventId: string;
+  /** The event's zone, for each talk's time (rows and the workspace header). */
+  timezone: string;
   initialQueue: QueueItem[];
   /** The event's approved presentations, below the queue (D-163). */
   approved?: React.ReactNode;
@@ -224,12 +227,24 @@ export function ReviewWorkspace({
                   <tr
                     key={item.file_version_id}
                     className={`rb ${item.file_version_id === selectedId ? "sel" : ""}`}
+                    aria-current={item.file_version_id === selectedId ? "true" : undefined}
                     onClick={() => setSelectedId(item.file_version_id)}
                   >
+                    {/* Which presenter's file is open below: the row is marked and says so. */}
                     <td>
                       <b>{item.speaker ?? "No speaker"}</b> · {item.title}
+                      <div className="note" style={{ margin: "2px 0 0" }}>
+                        v{item.version_number} · {item.room ?? "No room"} · {formatSessionTime(item.starts_at, timezone)}
+                      </div>
                     </td>
-                    <td style={{ textAlign: "right" }}>
+                    <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                      {item.file_version_id === selectedId && (
+                        <>
+                          <span className="chip c-info">
+                            <Icon name="eye" /> Viewing
+                          </span>{" "}
+                        </>
+                      )}
                       {/* The worst open problem, not the first (often a lowercase "info") (D-108),
                           in shared words with how many (R24, D-110). */}
                       {CHECKING.includes(item.inspection_state) ? (
@@ -260,11 +275,17 @@ export function ReviewWorkspace({
 
       {selected && (
         <div className="card">
-          <div className="chd">
-            <h3>Review workspace · {selected.speaker}</h3>
-            <span className="m">
-              v{selected.version_number} · {formatBytes(selected.size_bytes)} · {selected.room}
-            </span>
+          {/* Whose file this is, in full: presenter, talk, version and file, room and time. */}
+          <div className="chd" style={{ display: "block" }}>
+            <div className="next-step-label">Now reviewing</div>
+            <h3 style={{ margin: 0 }}>
+              {selected.speaker ?? "No speaker"} — {selected.title}
+            </h3>
+            <div className="note" style={{ margin: "2px 0 0" }}>
+              v{selected.version_number}
+              {selected.original_filename ? ` · ${selected.original_filename}` : ""} · {formatBytes(selected.size_bytes)} ·{" "}
+              {selected.room ?? "No room"} · {formatSessionTime(selected.starts_at, timezone)}
+            </div>
           </div>
           <div className="cbd">
             {/* The real slides (D-074); eight numbered placeholders used to sit here. */}

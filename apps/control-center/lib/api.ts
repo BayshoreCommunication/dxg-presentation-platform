@@ -393,7 +393,12 @@ export type SrrDashboard = {
   stations: SrrStation[];
   /** The event-day switch (D-157): closed, nobody checks in. */
   open: boolean;
+  /** Who a check-in may name as the speaker's technician (D-169). */
+  technicians: SrrTechnician[];
 };
+
+/** A technician on the event who can help a speaker at a desk (D-169). */
+export type SrrTechnician = { id: string; name: string };
 
 /** Opens or closes the Speaker Ready Room (D-157). DXG Admins and support staff. */
 export const setSrrOpen = (eventId: string, open: boolean) =>
@@ -434,7 +439,16 @@ export type VersionFacts = {
 };
 
 export type CheckinDetail = {
-  checkin: { id: string; station: string | null; checked_in_at: string; technician: string; departed_at: string | null };
+  checkin: {
+    id: string;
+    station: string | null;
+    checked_in_at: string;
+    technician: string;
+    technician_id: string;
+    departed_at: string | null;
+  };
+  /** Who may take this speaker over (D-169). */
+  technicians: SrrTechnician[];
   speaker: { id: string; name: string };
   talk: {
     /** Null when the speaker is no longer on a session — the visit can still be checked out. */
@@ -481,11 +495,21 @@ export const getSrrDashboard = (eventId: string) =>
 export const getCheckin = (checkinId: string) =>
   request<CheckinDetail>(`/srr/checkins/${checkinId}`);
 
-export const startCheckin = (eventId: string, speakerId: string, stationId: string) =>
+export const startCheckin = (eventId: string, speakerId: string, stationId: string, technicianId: string) =>
   request<{ checkin_id: string }>(
     `/events/${eventId}/srr/checkins`,
-    { method: "POST", body: JSON.stringify({ speaker_id: speakerId, station_id: stationId }) },
+    {
+      method: "POST",
+      body: JSON.stringify({ speaker_id: speakerId, station_id: stationId, technician_id: technicianId }),
+    },
   );
+
+/** Hands the speaker at a desk to another technician (D-169). */
+export const changeCheckinTechnician = (checkinId: string, technicianId: string) =>
+  request<{ technician: SrrTechnician }>(`/srr/checkins/${checkinId}/technician`, {
+    method: "PUT",
+    body: JSON.stringify({ technician_id: technicianId }),
+  });
 
 export const beginSrrUpload = () =>
   request<{ upload_id: string; part_size: number }>(`/srr/uploads`, { method: "POST" });

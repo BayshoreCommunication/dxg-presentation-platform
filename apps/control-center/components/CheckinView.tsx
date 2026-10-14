@@ -5,6 +5,7 @@ import { Toast } from "@/components/Toast";
 import { useRouter } from "next/navigation";
 import type { CheckinDetail } from "@/lib/api";
 import {
+  changeCheckinTechnician,
   getCheckin,
   ingestUsb,
   signOffCheckin,
@@ -53,6 +54,7 @@ export function CheckinView({
   initial,
   srrOpen = true,
   canUpload = false,
+  canConfirm = false,
 }: {
   eventId: string;
   timezone: string;
@@ -61,6 +63,11 @@ export function CheckinView({
   srrOpen?: boolean;
   /** Taking in a file for a speaker is DXG Technician staff's alone (D-162). */
   canUpload?: boolean;
+  /**
+   * Recording the speaker's confirmation is the technician's (D-169). The receipt, checking out and
+   * a hand-over are anyone's at the desk; DXG staff checked the speaker in and assigned them.
+   */
+  canConfirm?: boolean;
 }) {
   const router = useRouter();
   const [detail, setDetail] = useState(initial);
@@ -71,6 +78,8 @@ export function CheckinView({
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const closeToast = useCallback(() => setToast(null), []);
+  // Handing the speaker to another technician (D-169), opened from "Change" in the header.
+  const [changingTechnician, setChangingTechnician] = useState(false);
 
   const refresh = useCallback(async () => {
     setDetail(await getCheckin(detail.checkin.id));
@@ -173,7 +182,7 @@ export function CheckinView({
       onClick={() =>
         void run(async () => {
           const { receipt } = await signOffCheckin(detail.checkin.id, detail.latest!.file_version_id);
-          return `Confirmed v${receipt.version_number} as the final version — the speaker can no longer replace it from the portal`;
+          return `${detail.speaker.name} confirmed v${receipt.version_number} — locked, and the receipt is ready`;
         })
       }
     >
@@ -186,8 +195,8 @@ export function CheckinView({
   const approvalNote =
     signable && latestNumber !== approvedNumber
       ? approvedNumber
-        ? `v${latestNumber} hasn't been approved by a reviewer yet. You can still confirm it as the speaker's final version; the room keeps playing v${approvedNumber} until v${latestNumber} is approved.`
-        : `v${latestNumber} hasn't been approved by a reviewer yet. You can still confirm it as the speaker's final version; nothing plays in the room until it is approved.`
+        ? `v${latestNumber} hasn't been approved by a reviewer yet. The speaker can still confirm it; the room keeps playing v${approvedNumber} until v${latestNumber} is approved.`
+        : `v${latestNumber} hasn't been approved by a reviewer yet. The speaker can still confirm it; nothing plays in the room until it is approved.`
       : null;
 
   const departed = detail.checkin.departed_at !== null;
@@ -258,6 +267,8 @@ export function CheckinView({
     </>
   );
   const who = detail.speaker.name;
+  // Only the technician records the speaker's confirmation (D-169).
+  const confirmButton = (label: string) => (canConfirm ? signOffButton(label) : null);
 
   /** The one thing to do now, in the order a technician meets the cases (D-120). */
   const next: { title: string; body?: string; actions: React.ReactNode; showApprovalNote?: boolean } = departed
@@ -272,14 +283,14 @@ export function CheckinView({
         ) : null,
       }
     : blockedReason
-      ? { title: blockedReason, actions: <>{hasTalk && (!detail.latest || detail.latest.processing_state === "quarantined") ? openUsb : null}{checkOut}</> }
+      ? { title: blockedReason, actions: <>{canUpload && hasTalk && (!detail.latest || detail.latest.processing_state === "quarantined") ? openUsb : null}{checkOut}</> }
       : newerAfterReceipt
         ? {
             title: `A newer version (v${latestNumber}) came in after ${who} signed off.`,
             body: "Go through it with them. If it's right, confirm it as their final version.",
             actions: (
               <>
-                {signOffButton(`Confirm v${latestNumber}`)}
+                {confirmButton(`Speaker confirms v${latestNumber}`)}
                 {preview}
                 {checkOut}
               </>
@@ -309,17 +320,22 @@ export function CheckinView({
                 actions: (
                   <>
                     {checkOut}
-                    {signOffButton(`Confirm v${earlier.version_number} again`)}
+                    {confirmButton(`Speaker confirms v${earlier.version_number} again`)}
                     {preview}
                   </>
                 ),
               }
             : {
                 title: `Go through the slides with ${who}.`,
-                body: `If they're right, confirm v${latestNumber} as their final version. After that the speaker can't replace it from the portal — any change comes through this desk. You'll get a receipt to print or email.`,
+                // Not a second approval (D-169): the reviewer approved the file; this records the
+                // speaker's own "yes, this is the one", which locks it and makes their receipt.
+                body:
+                  approvedNumber === latestNumber
+                    ? `v${latestNumber} is already approved by a reviewer. Now ${who} confirms it's the version they'll present: that locks it — they can't replace it from the portal, any change comes through this desk — and gives them a receipt to print or email.`
+                    : `If they're right, ${who} confirms v${latestNumber} as the version they'll present. That locks it — they can't replace it from the portal, any change comes through this desk — and gives them a receipt to print or email.`,
                 actions: (
                   <>
-                    {signOffButton(`Confirm v${latestNumber} as final`)}
+                    {confirmButton(`Speaker confirms v${latestNumber}`)}
                     {preview}
                     {checkOut}
                   </>
@@ -332,10 +348,16 @@ export function CheckinView({
       <h1 className="htitle" style={{ marginBottom: 4 }}>
         {detail.speaker.name}
       </h1>
-      {/* One line of context; the rest is under "Details" (D-120). */}
+      {/* One line of context; the visit's details are in the card below (D-169). */}
       <p className="note" style={{ marginTop: 0 }}>
         {detail.talk.title} · {detail.talk.room ?? "No room"} · {when(detail.talk.starts_at, timezone)}
         {!departed && detail.checkin.station ? ` · at ${detail.checkin.station}` : ""}
+        {/* The technician helping them (D-169), named in full below with the hand-over. */}
+        {!departed && (
+          <>
+            {" "}· with <b style={{ color: "var(--foreground)" }}>{detail.checkin.technician}</b>
+          </>
+        )}
       </p>
 
       {error && <div className="err">{error}</div>}
@@ -362,31 +384,88 @@ export function CheckinView({
             </p>
           )}
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>{next.actions}</div>
+          {!canConfirm && !departed && !detail.receipt && hasTalk && (
+            <p className="note" style={{ marginBottom: 0 }}>
+              <b>{detail.checkin.technician}</b> goes through the slides with {who} and records their confirmation.
+            </p>
+          )}
           <WhyNot reason={checkoutBlocked && !departed ? checkoutBlocked : null} />
         </div>
       </div>
 
-      {/* The three confirmations as one line (D-120). */}
+      {/*
+        The visit's details, open (D-169): who is helping the speaker — named large, with the
+        hand-over — then who approved the file, who confirmed it and the room copy, with times.
+        They used to sit folded under "Details".
+      */}
       <div className="card">
-        <div className="cbd" style={{ padding: "10px 14px" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+        <div className="cbd" style={{ padding: "12px 14px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "flex-start" }}>
             <div>
-              <div className="next-step-label">Progress</div>
-              <ConfirmationStrip compact facts={stripFacts} />
+              <div className="next-step-label">Technician</div>
+              <div style={{ fontSize: 18, fontWeight: 600, lineHeight: 1.3 }}>
+                {detail.checkin.technician}
+                {!departed && detail.technicians.length > 1 && !changingTechnician && (
+                  <>
+                    {" "}
+                    <button
+                      type="button"
+                      className="linkish"
+                      style={{ fontSize: 13, fontWeight: 400 }}
+                      disabled={busy}
+                      onClick={() => setChangingTechnician(true)}
+                    >
+                      Change
+                    </button>
+                  </>
+                )}
+              </div>
+              <div className="note" style={{ margin: "2px 0 0" }}>
+                {detail.checkin.station ?? "No desk"} · checked in {when(detail.checkin.checked_in_at, timezone)}
+                {departed && detail.checkin.departed_at ? ` · checked out ${when(detail.checkin.departed_at, timezone)}` : ""}
+              </div>
+              {changingTechnician && !departed && (
+                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginTop: 8 }}>
+                  <label htmlFor="checkin-technician" className="note" style={{ margin: 0 }}>
+                    Hand over to
+                  </label>
+            <select
+              id="checkin-technician"
+              defaultValue={detail.checkin.technician_id}
+              disabled={busy}
+              onChange={(event) => {
+                const chosen = detail.technicians.find((technician) => technician.id === event.target.value);
+                if (!chosen || chosen.id === detail.checkin.technician_id) return;
+                setChangingTechnician(false);
+                void run(async () => {
+                  await changeCheckinTechnician(detail.checkin.id, chosen.id);
+                  return `${chosen.name} is now helping ${detail.speaker.name}.`;
+                });
+              }}
+            >
+              {detail.technicians.map((technician) => (
+                <option key={technician.id} value={technician.id}>
+                  {technician.name}
+                </option>
+              ))}
+            </select>
+            <button type="button" className="btn" disabled={busy} onClick={() => setChangingTechnician(false)}>
+              Cancel
+            </button>
+                </div>
+              )}
             </div>
             <Chip status={detail.talk.status} label={detail.talk.status_label} />
           </div>
-          <details style={{ marginTop: 8 }}>
-            <summary className="note" style={{ cursor: "pointer" }}>
-              Details
-            </summary>
-            <ConfirmationStrip facts={stripFacts} />
-            <div className="note">
-              Checked in {when(detail.checkin.checked_in_at, timezone)} · {detail.checkin.station ?? "no station"} ·
-              technician {detail.checkin.technician}
-              {detail.talk.final_locked ? " · final version locked (changes come through this desk)" : ""}
+          <div className="next-step-label" style={{ marginTop: 14 }}>
+            Progress
+          </div>
+          <ConfirmationStrip facts={stripFacts} hideNext />
+          {detail.talk.final_locked && (
+            <div className="note" style={{ marginBottom: 0 }}>
+              Final version locked — changes come through this desk.
             </div>
-          </details>
+          )}
         </div>
       </div>
 

@@ -25,6 +25,7 @@ export default async function SrrPage({ params }: { params: Promise<{ id: string
       data={data}
       canSwitch={canSwitch}
       canUpload={principal.staff_kind === "technician"}
+      meId={principal.user_id}
     />
   );
 }
