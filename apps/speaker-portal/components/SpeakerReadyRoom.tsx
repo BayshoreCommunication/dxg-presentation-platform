@@ -1,9 +1,4 @@
-"use client";
-
-import { useCallback } from "react";
-import { useRouter } from "next/navigation";
 import type { MySrr } from "@/lib/api";
-import { TalkCard } from "./Presentations";
 import { formatDateRange } from "@pmp/format";
 
 const when = (iso: string, timeZone: string) =>
@@ -11,14 +6,10 @@ const when = (iso: string, timeZone: string) =>
 
 /**
  * The Speaker Ready Room as a speaker sees it: where it is and how it works, whether they
- * have checked in and what they signed off, and their presentations for this event — to
- * look over, or replace with a final version, before they go in.
+ * have checked in and what they signed off. Presentation files and updates live under
+ * Manage presentations.
  */
 export function SpeakerReadyRoom({ srr }: { srr: MySrr }) {
-  const router = useRouter();
-  const reload = useCallback(async () => {
-    router.refresh();
-  }, [router]);
   const open = srr.checkins.find((visit) => !visit.departed_at);
   const latestSignOff = srr.sign_offs[0];
   const tz = srr.event.timezone;
@@ -109,17 +100,6 @@ export function SpeakerReadyRoom({ srr }: { srr: MySrr }) {
           )}
         </div>
       </div>
-
-      <h2 className="htitle" style={{ fontSize: 18, margin: "22px 0 10px" }}>
-        Your presentations for this event
-      </h2>
-      <p className="note" style={{ margin: "0 0 10px", maxWidth: "62ch" }}>
-        Look them over before you come in. A new version uploaded here goes to the DXG team for review; once you have signed
-        off onsite, the presentation is final.
-      </p>
-      {srr.talks.map((talk) => (
-        <TalkCard key={talk.slot_id} talk={talk} eventName={srr.event.name} timezone={tz} deadline={null} readOnly={false} onChange={reload} />
-      ))}
     </>
   );
 }
