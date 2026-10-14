@@ -273,8 +273,8 @@ export function StaffAccounts({ initial, me }: { initial: StaffRow[]; me: string
         There is no signup. Accounts are created here, and every account sets up a sign-in app on
         their phone before it can use the platform. DXG Admins see every event and every account.
         DXG Support staff run the events they are assigned to — everything there except taking in a
-        speaker&rsquo;s file; DXG Technician staff work the Speaker Ready Room and Manage presentations,
-        approving and taking in files.
+        speaker&rsquo;s file; DXG Technician staff work the Speaker Ready Room, Manage presentations and
+        Room sync — approving, taking in files and loading the room PCs.
       </div>
 
       {error && <div className="err">{error}</div>}
