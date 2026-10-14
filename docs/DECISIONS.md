@@ -3186,5 +3186,6 @@ to the room PC and tick Loaded on Room sync." The day, time and room are no long
 the row still opens it). Groups, counts and links stay as D-174.
 - **Addendum (same day): the action label is a link** (Travis: "when I click 'get the new version', it doesn't
   redirect anywhere"). Each label opens where that action is done: the speaker actions (Get the file, Get the new
-  version, Get a clean copy) → the Speakers tab; Review the file → Manage presentations; Load on room PC / Load the
+  version, Get a clean copy) → Communications, where the reminder is sent (Travis's follow-up; the Speakers tab had no
+  way to remind); Review the file → Manage presentations; Load on room PC / Load the
   newer version → Room sync; Set a room → the Agenda tab; Wait for the checks → the talk's Presentation detail.

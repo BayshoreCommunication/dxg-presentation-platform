@@ -46,8 +46,8 @@ const ACTION_GROUPS: ActionGroup[] = [
 /** Where an action label leads (D-177): the screen where that action is done. */
 function actionHref(go: ActionGo, eventId: string, slotId: string): string {
   switch (go) {
-    case "speakers":
-      return `/events/${eventId}?tab=speakers`;
+    case "comms":
+      return `/events/${eventId}/comms`;
     case "review":
       return `/events/${eventId}/review`;
     case "sync":
@@ -82,25 +82,25 @@ function roomReasons(talks: { status: string; speaker: string | null; title: str
  * Which group a talk's status falls in, the action as a short label (shown on the row, D-177),
  * and the one thing to do in full (the label's hover text).
  */
-type ActionGo = "speakers" | "review" | "sync" | "agenda" | "talk";
+type ActionGo = "comms" | "review" | "sync" | "agenda" | "talk";
 const ACTION_FOR: Record<string, { group: string; label: string; todo: string; go: ActionGo }> = {
   missing: {
     group: "speaker",
     label: "Get the file",
     todo: "Nothing uploaded yet — remind the speaker to upload, or take the file in at the Speaker Ready Room.",
-    go: "speakers",
+    go: "comms",
   },
   needs_revision: {
     group: "speaker",
     label: "Get the new version",
     todo: "Changes were asked for — waiting for the speaker's new version.",
-    go: "speakers",
+    go: "comms",
   },
   attention: {
     group: "speaker",
     label: "Get a clean copy",
     todo: "The file failed the virus check — ask the speaker for a clean copy.",
-    go: "speakers",
+    go: "comms",
   },
   submitted: { group: "review", label: "Review the file", todo: "Review the file and approve it, or ask for changes.", go: "review" },
   processing: {
