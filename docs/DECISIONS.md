@@ -3180,6 +3180,7 @@ excepted — and the card only said "0 of 2 talks loaded · Not ready".
 Travis: "show only the speaker name and the title with the label, and show the action in an action label" (the layout
 chosen: name, title and status on one line, the action below). Each row is now **Speaker** — Talk with its status
 label, and under it a short action label — "→ Get the file", "→ Get the new version", "→ Get a clean copy",
-"→ Review the file", "→ Wait for the checks", "→ Load on room PC", "→ Load the newer version", "→ Set a room" — whose
-hover text is the full instruction. The day, time and room are no longer on the row (Presentation detail has them;
+"→ Review the file", "→ Wait for the checks", "→ Load on room PC", "→ Load the newer version", "→ Set a room" — with
+the full instruction beside it (Travis: "keep the what action need text like before"), e.g. "Copy the approved file
+to the room PC and tick Loaded on Room sync." The day, time and room are no longer on the row (Presentation detail has them;
 the row still opens it). Groups, counts and links stay as D-174.

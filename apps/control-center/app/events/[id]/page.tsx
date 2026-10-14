@@ -314,13 +314,13 @@ export default async function CommandCenterPage({
                               </span>
                               <Chip status={item.status} label={item.status_label} />
                             </Link>
-                            <span
-                              className="chip c-info"
-                              title={ACTION_FOR[item.status]!.todo}
-                              style={{ marginTop: 6, fontWeight: 600 }}
-                            >
-                              → {ACTION_FOR[item.status]!.label}
-                            </span>
+                            {/* The action as a label, and what it means in full beside it (D-177). */}
+                            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginTop: 6 }}>
+                              <span className="chip c-info" style={{ fontWeight: 600 }}>
+                                → {ACTION_FOR[item.status]!.label}
+                              </span>
+                              <span className="note">{ACTION_FOR[item.status]!.todo}</span>
+                            </div>
                           </td>
                         </tr>
                       ))}
