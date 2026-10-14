@@ -3177,3 +3177,14 @@ which presenter". The queue only shaded the open row, and the workspace header n
 - **Slide viewer**: the toolbar carries "<speaker> · <talk> · vN" beside the slide count (`SlideViewer` `caption`,
   passed by the review workspace only), so it stays in view in full screen. The toolbar now wraps on a narrow screen —
   at phone width Full screen was cut off at the right edge (on main too).
+
+## D-171 (2026-10-13): The practice notes deck opens in Keynote — Status: ACCEPTED (Travis)
+Opening Amara Okafor's practice talk in Keynote gave "The file format is invalid". Cause: python-pptx links a notes
+master to the presentation when a slide gets notes but never lists it in `p:notesMasterIdLst`; PowerPoint and
+LibreOffice cope, Keynote refuses the whole file. The G0-1 generator (`scripts/g0-1-corpus/generate.py`,
+`declare_notes_master` in `save_pptx`) now adds the list for any deck with notes. Regenerated:
+`normal-10-slides-notes.pptx` (Keynote opens it) and the two corrupt variants made from it; the PDFs differ only by
+their LibreOffice timestamps; every other fixture is byte-identical. The practice copy
+(`apps/api/assets/practice/normal-10-slides-notes.pptx`) is the new fixture, so practice events started from now on get
+it; existing practice events keep the old file. Real speakers' decks, saved by PowerPoint or Keynote, already carry the
+list.

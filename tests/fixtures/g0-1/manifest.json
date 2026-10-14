@@ -24,8 +24,8 @@
       "todo": "",
       "corrupt": false,
       "committed": true,
-      "bytes": 53508,
-      "sha256": "d679dd12ef35269d21a6b11bd4f47646b074378af2ca131d0bd13f80b7aaee93"
+      "bytes": 53523,
+      "sha256": "966fe185780e5aeabdc0e8f21540b7e958aaf4195abd665204cb1b9b857c72e1"
     },
     {
       "file": "normal-60-slides.pptx",
@@ -440,8 +440,8 @@
       "todo": "",
       "corrupt": true,
       "committed": true,
-      "bytes": 32104,
-      "sha256": "57ac9be03fec5b832533e7ddcd1db048244b9f2db14b67d9aa66cb36bfb02ee4"
+      "bytes": 32113,
+      "sha256": "719ea641ad8425b44801f235c231f037429f9337e34fdcb1fd7992d1b7e30a1a"
     },
     {
       "file": "corrupt-broken-xml.pptx",
@@ -453,8 +453,8 @@
       "todo": "",
       "corrupt": true,
       "committed": true,
-      "bytes": 52949,
-      "sha256": "0fb2d6b5636466e0323530a4fcd78162b88c103031ae3aa0b6173eb0d328a089"
+      "bytes": 52964,
+      "sha256": "0058ddf593e8e59afce764bebf1d23f657d5694d7f0304d6a5a4c14125a390a4"
     },
     {
       "file": "corrupt-not-a-zip.pptx",
@@ -558,7 +558,7 @@
       "corrupt": false,
       "committed": true,
       "bytes": 50634,
-      "sha256": "cf78a910a1f91bd9a2eb8736ba32ef9510d5644e956cef1c7c37653a4c0cc53a"
+      "sha256": "3c127f40f95eefdf42ffaa347cc004753472972e287ffbd7bef644e60eda0563"
     },
     {
       "file": "pdf-4x3-3-pages.pdf",
@@ -571,7 +571,7 @@
       "corrupt": false,
       "committed": true,
       "bytes": 52662,
-      "sha256": "205830e9d76fbc62010f8b44ab3e980b6ebe58d8764d5625187f5feb96bb6150"
+      "sha256": "65946947d9016d9b83a940623440f4e3480d8aa360344d77678e53bfcf700881"
     },
     {
       "file": "keynote-10-slides.key",
