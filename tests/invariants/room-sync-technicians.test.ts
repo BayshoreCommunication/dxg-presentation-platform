@@ -4,10 +4,10 @@ import type { TestContext } from "node:test";
 import { signInStaff } from "../helpers/signIn.ts";
 
 /**
- * Room sync (D-154, D-160, D-163): DXG Admins and support staff see, tick and download every
- * room of their events — nobody hands out rooms one by one. DXG Technician staff no longer
- * open it (D-163); they find the approved presentations on Manage presentations. "Download
- * all" brings a room's (or every room's) approved presentations as one zip.
+ * Room sync (D-154, D-160, D-188): DXG Admins, support staff and technicians see, tick and
+ * download every room of their events — nobody hands out rooms one by one. (D-163 took it from
+ * technicians; D-188 gave it back: they load the room PCs.) "Download all" brings a room's (or
+ * every room's) approved presentations as one zip.
  */
 const API = process.env.API_BASE ?? "http://localhost:4000/api/v1";
 const EVENT = "22222222-2222-4222-8222-222222222222";
@@ -69,28 +69,33 @@ after(async () => {
   if (up && probe) await call(admin, "POST", `/events/${probe}/archive`);
 });
 
-describe("Room sync is the support staff's and admins', not the technicians' (D-163)", () => {
-  test("support staff see the same rooms as an admin", async (t: TestContext) => {
+describe("Room sync is the support staff's, technicians' and admins' (D-188)", () => {
+  test("support staff and technicians see the same rooms as an admin", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
     const all = rooms.map((item) => item.room).sort();
     assert.ok(all.length > 1, "fixture: the event has several rooms");
     assert.deepEqual((await fleet(vega)).map((item) => item.room).sort(), all);
+    assert.deepEqual((await fleet(delgado)).map((item) => item.room).sort(), all);
     assert.equal("technicians" in rooms[0]!, false, "rooms no longer name technicians");
   });
 
-  test("a technician is refused Room sync: the list, the zip and the ticks", async (t: TestContext) => {
+  test("a technician downloads the rooms and ticks a file loaded, and can take the tick back", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
-    const copy = room("Ballroom A").talks.find((talk) => talk.approved?.room_file_id)?.approved;
-    assert.ok(copy?.room_file_id, "fixture: Ballroom A has a room copy");
-    for (const [method, path, body] of [
-      ["GET", `/events/${EVENT}/sync/fleet`, undefined],
-      ["GET", `/events/${EVENT}/sync/approved.zip`, undefined],
-      ["POST", `/room-files/${copy.room_file_id}/loaded`, { lock_version: copy.lock_version }],
-    ] as const) {
-      const refused = await call(delgado, method, path, body);
-      assert.equal(refused.status, 403, `${method} ${path}`);
-      assert.equal(((await refused.json()) as { code: string }).code, "auth.kind_forbidden", `${method} ${path}`);
-    }
+    assert.equal((await call(delgado, "GET", `/events/${EVENT}/sync/approved.zip`)).status, 200);
+    const copy = room("Ballroom A").talks.find((talk) => talk.approved?.room_file_id)!.approved!;
+    const now = (await fleet(admin)).find((item) => item.room === "Ballroom A")!.talks.find((talk) => talk.approved?.room_file_id === copy.room_file_id)!.approved!;
+    const first = await call(delgado, "POST", `/room-files/${copy.room_file_id}/${now.loaded ? "unloaded" : "loaded"}`, { lock_version: now.lock_version });
+    assert.equal(first.status, 200);
+    const ticked = ((await fleet(admin)).find((item) => item.room === "Ballroom A")!.talks.find((talk) => talk.approved?.room_file_id === copy.room_file_id)!).approved!;
+    const back = await call(delgado, "POST", `/room-files/${copy.room_file_id}/${now.loaded ? "loaded" : "unloaded"}`, { lock_version: ticked.lock_version });
+    assert.equal(back.status, 200, "put back as it was");
+  });
+
+  test("a technician still can't open the rest of the event's admin screens", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const refused = await call(delgado, "GET", `/events/${EVENT}/comms`);
+    assert.equal(refused.status, 403);
+    assert.equal(((await refused.json()) as { code: string }).code, "auth.kind_forbidden");
   });
 
   test("nobody hands out rooms any more", async (t: TestContext) => {
@@ -112,10 +117,12 @@ describe("Room sync is the support staff's and admins', not the technicians' (D-
 
   test("an event they are not on stays closed", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
-    for (const path of [`/events/${probe}/sync/fleet`, `/events/${probe}/sync/approved.zip`]) {
-      const refused = await call(vega, "GET", path);
-      assert.equal(refused.status, 403, path);
-      assert.equal(((await refused.json()) as { code: string }).code, "auth.not_on_this_event");
+    for (const cookie of [vega, delgado]) {
+      for (const path of [`/events/${probe}/sync/fleet`, `/events/${probe}/sync/approved.zip`]) {
+        const refused = await call(cookie, "GET", path);
+        assert.equal(refused.status, 403, path);
+        assert.equal(((await refused.json()) as { code: string }).code, "auth.not_on_this_event");
+      }
     }
   });
 });

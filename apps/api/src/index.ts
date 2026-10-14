@@ -785,8 +785,7 @@ const ONSITE_AND_REVIEW: RegExp[] = [
 ];
 /**
  * What a technician may open besides the two screens: the way to them, and what a review shows.
- * Room sync is no longer theirs (D-163); the approved presentations are listed on Manage
- * presentations instead.
+ * Room sync was taken from them in D-163 and given back in D-188 (`TECHNICIAN_ROOM_SYNC`).
  */
 const TECHNICIAN_ALSO: RegExp[] = [
   /^\/api\/v1\/events\/[^/]+\/approved$/,
@@ -796,6 +795,15 @@ const TECHNICIAN_ALSO: RegExp[] = [
   /^\/api\/v1\/file-versions\/[^/]+\/(download|preview|media)(\/|$)/,
   /^\/api\/v1\/timezones$/,
   /^\/api\/v1\/clients$/,
+];
+/**
+ * Room sync is the technicians' again (D-188): they copy approved files onto the room PCs, so
+ * they see the rooms, download them and tick Mark loaded / Undo. The domain rule still decides
+ * who may tick (LOADERS: room technician, SRR technician and above).
+ */
+const TECHNICIAN_ROOM_SYNC: RegExp[] = [
+  /^\/api\/v1\/events\/[^/]+\/sync\/(fleet|approved\.zip)$/,
+  /^\/api\/v1\/room-files\/[^/]+\/(loaded|unloaded)$/,
 ];
 /** Asking for a slide preview is a POST, and part of looking at a file in review. */
 const TECHNICIAN_ALSO_WRITES: RegExp[] = [
@@ -847,10 +855,11 @@ function kindRefusal(kind: "support" | "technician", path: string, method: strin
     if (method !== "GET" && TECHNICIAN_READ_ONLY.some((pattern) => pattern.test(path))) return TECHNICIAN_REVIEW_REFUSAL;
     return null;
   }
+  if (TECHNICIAN_ROOM_SYNC.some((pattern) => pattern.test(path))) return null;
   // A technician reads the event (GET) on the way to their screens; writes elsewhere are not theirs.
   if (method === "GET" && TECHNICIAN_ALSO.some((pattern) => pattern.test(path))) return null;
   if (TECHNICIAN_ALSO_WRITES.some((pattern) => pattern.test(path))) return null;
-  return "DXG Technician staff work the Speaker Ready Room and Manage presentations only. Ask a DXG Admin if you need more.";
+  return "DXG Technician staff work the Speaker Ready Room, Manage presentations and Room sync only. Ask a DXG Admin if you need more.";
 }
 
 

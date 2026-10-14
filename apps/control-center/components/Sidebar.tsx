@@ -195,8 +195,8 @@ export function Sidebar({
     const onsiteOrReview = label === "Speaker Ready Room" || label === "Manage presentations";
     // Support staff open everything on their events, the Speaker Ready Room too (D-164).
     if (kind === "support") return true;
-    // Room sync is no longer theirs (D-163).
-    if (kind === "technician") return onsiteOrReview || label === "Portfolio";
+    // Room sync is theirs again (D-188): they load the room PCs.
+    if (kind === "technician") return onsiteOrReview || label === "Room sync" || label === "Portfolio";
     return true;
   };
 
