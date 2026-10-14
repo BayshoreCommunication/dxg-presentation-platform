@@ -44,10 +44,11 @@ const ACTION_GROUPS: ActionGroup[] = [
   },
 ];
 /** Where an action label leads (D-177): the screen where that action is done. */
-function actionHref(go: ActionGo, eventId: string, slotId: string): string {
+function actionHref(go: ActionGo, eventId: string, slotId: string, speakerId: string | null): string {
   switch (go) {
     case "comms":
-      return `/events/${eventId}/comms`;
+      // The reminder, opened for this speaker alone (D-177).
+      return speakerId ? `/events/${eventId}/comms?remind=${speakerId}` : `/events/${eventId}/comms`;
     case "review":
       return `/events/${eventId}/review`;
     case "sync":
@@ -343,7 +344,7 @@ export default async function CommandCenterPage({
                               <Link
                                 className="chip c-info"
                                 style={{ fontWeight: 600 }}
-                                href={actionHref(ACTION_FOR[item.status]!.go, id, item.slot_id)}
+                                href={actionHref(ACTION_FOR[item.status]!.go, id, item.slot_id, item.speaker_id)}
                               >
                                 → {ACTION_FOR[item.status]!.label}
                               </Link>

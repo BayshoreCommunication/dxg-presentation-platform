@@ -5,8 +5,16 @@ import { guard } from "@/lib/guard";
 
 export const dynamic = "force-dynamic";
 
-export default async function CommsPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function CommsPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ remind?: string }>;
+}) {
   const { id } = await params;
+  // `?remind=<speaker id>` (D-177): open the reminder for that speaker alone.
+  const { remind } = await searchParams;
   // The summary carries the event's name and clock, for the email preview (S33, D-112).
   // The draft carries the event's branding, for the email banner (D-138).
   const [data, summary, events, draft] = await guard(
@@ -28,6 +36,7 @@ export default async function CommsPage({ params }: { params: Promise<{ id: stri
       }}
       banner={bannerOf(draft.branding)}
       practice={practice}
+      remindSpeakerId={remind ?? null}
     />
   );
 }

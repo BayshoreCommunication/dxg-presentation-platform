@@ -179,6 +179,7 @@ export type RiskItem = {
   room: string | null;
   starts_at: string;
   speaker: string | null;
+  speaker_id: string | null;
   title: string;
   status: string;
   status_label: string;
@@ -1265,10 +1266,18 @@ export const remindSpeakersWithoutFiles = async (eventId: string) => {
   return sendBatch(eventId, template.id, true);
 };
 
-export const sendBatch = (eventId: string, templateId: string, missingOnly: boolean) =>
+/** `speakerIds`: only these speakers (D-177) — a reminder opened for one speaker. */
+export const sendBatch = (eventId: string, templateId: string, missingOnly: boolean, speakerIds?: string[]) =>
   request<{ queued: number; skipped: { reason: string; count: number }[] }>(
     `/events/${eventId}/comms/send`,
-    { method: "POST", body: JSON.stringify({ template_id: templateId, missing_only: missingOnly }) },
+    {
+      method: "POST",
+      body: JSON.stringify({
+        template_id: templateId,
+        missing_only: missingOnly,
+        ...(speakerIds ? { speaker_ids: speakerIds } : {}),
+      }),
+    },
   );
 
 /* ── account administration ───────────────────────────────────────────────── */

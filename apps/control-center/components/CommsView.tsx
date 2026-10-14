@@ -147,6 +147,7 @@ export function CommsView({
   event,
   banner = null,
   practice = false,
+  remindSpeakerId = null,
 }: {
   eventId: string;
   data: CommsData;
@@ -155,12 +156,25 @@ export function CommsView({
   banner?: BrandAsset | null;
   /** A practice event (D-116): nothing is sent, so nothing "will send". */
   practice?: boolean;
+  /** Opened from "Get the file" on the event overview (D-177): the reminder, for this speaker alone. */
+  remindSpeakerId?: string | null;
 }) {
   const router = useRouter();
   const subjectRef = useRef<HTMLInputElement>(null);
   // Which box an inserted field goes into: the last one typed in, the message by default.
   const lastBox = useRef<"subject" | "body">("body");
-  const [selected, setSelected] = useState(data.templates[0]?.id ?? "");
+  const reminderTemplate = data.templates.find((row) => row.name.toLowerCase().includes("reminder"));
+  // One speaker, when opened for them (D-177): from the missing list, or — a speaker asked for
+  // changes, or whose file failed the virus check — from everyone.
+  const [focusId, setFocusId] = useState<string | null>(
+    remindSpeakerId && reminderTemplate ? remindSpeakerId : null,
+  );
+  const focus = focusId
+    ? (data.missing.find((row) => row.speaker_id === focusId) ??
+      data.recipients.find((row) => row.speaker_id === focusId) ??
+      null)
+    : null;
+  const [selected, setSelected] = useState((focus && reminderTemplate?.id) || data.templates[0]?.id || "");
   const [confirmingSend, setConfirmingSend] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -250,8 +264,15 @@ export function CommsView({
 
   const template = data.templates.find((row) => row.id === selected) ?? data.templates[0];
   const isReminder = (template?.name ?? "").toLowerCase().includes("reminder");
-  const audience = isReminder ? data.missing : data.recipients;
-  const sendable = audience.filter((row) => row.email && !row.bounced && !row.already_sent);
+  // For one speaker, the reminder goes whatever the lists say (the server still applies the
+  // address, bounce and cooldown guards); otherwise the template's own audience.
+  const single = focus && isReminder ? focus : null;
+  const audience = single ? [single] : isReminder ? data.missing : data.recipients;
+  const sendable = single
+    ? single.email && !single.bounced
+      ? [single]
+      : []
+    : audience.filter((row) => row.email && !row.bounced && !row.already_sent);
   const preview = previewValues(audience[0] ?? data.recipients[0], event, data.reminders.deadline);
 
   /** Puts `{{field}}` where the cursor was in the subject or message (S33, D-112). */
@@ -279,7 +300,9 @@ export function CommsView({
     setBusy(true);
     setError(null);
     try {
-      const result = await sendBatch(eventId, template.id, isReminder);
+      const result = single
+        ? await sendBatch(eventId, template.id, false, [single.speaker_id])
+        : await sendBatch(eventId, template.id, isReminder);
       const skipped = result.skipped.map((entry) => `${entry.count} ${entry.reason}`).join(" · ");
       setToast(
         result.queued > 0
@@ -537,7 +560,9 @@ export function CommsView({
               <div className="tpl-side tpl-facts">
                 <div>
                   <div className="kl">Goes to</div>
-                  <div>{isReminder ? "Speakers still missing a file" : "Speakers not yet invited"}</div>
+                  <div>
+                    {single ? `${single.name} only` : isReminder ? "Speakers still missing a file" : "Speakers not yet invited"}
+                  </div>
                 </div>
                 <div>
                   <div className="kl">Each speaker gets</div>
@@ -560,9 +585,15 @@ export function CommsView({
         <div className="chd">
           <h3>
             Audience · {audience.length}
-            {isReminder ? " (missing files only)" : ""}
+            {single ? ` (${single.name} only)` : isReminder ? " (missing files only)" : ""}
           </h3>
-          <span className="m">who this email would reach right now</span>
+          {single ? (
+            <button type="button" className="linkish m" onClick={() => setFocusId(null)}>
+              Show everyone missing a file
+            </button>
+          ) : (
+            <span className="m">who this email would reach right now</span>
+          )}
         </div>
         <div className="cbd" style={{ padding: "0 0 4px" }}>
           {audience.length === 0 ? (
@@ -577,7 +608,7 @@ export function CommsView({
                     ? "no email address"
                     : row.bounced
                       ? "previous email bounced"
-                      : row.already_sent
+                      : row.already_sent && !single
                         ? "already received this email"
                         : null;
                   return (
@@ -613,7 +644,7 @@ export function CommsView({
         {confirmingSend ? (
           <span style={{ display: "inline-flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
             <b>
-              Email {sendable.length} speaker{sendable.length === 1 ? "" : "s"} now?
+              {single ? `Email ${single.name} now?` : `Email ${sendable.length} speaker${sendable.length === 1 ? "" : "s"} now?`}
             </b>
             <button
               className="btn pri"
@@ -633,7 +664,7 @@ export function CommsView({
         ) : (
           <button className="btn pri" disabled={busy || sendable.length === 0} onClick={() => setConfirmingSend(true)}>
             <Icon name="send" />
-            Send to {sendable.length} speaker{sendable.length === 1 ? "" : "s"}
+            {single ? `Send to ${single.name}` : `Send to ${sendable.length} speaker${sendable.length === 1 ? "" : "s"}`}
           </button>
         )}
       </div>

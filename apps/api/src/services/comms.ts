@@ -696,6 +696,11 @@ export async function sendBatch(
      * "reminder" of it a minute later.
      */
     cooldownAnyTemplate?: boolean;
+    /**
+     * Only these speakers (D-177): "Get the file" on the event overview opens a reminder for one
+     * speaker. Every guard below still applies to them — address, bounce, staff, cooldown.
+     */
+    speakerIds?: readonly string[];
   },
 ): Promise<Result<SendResult, DomainError>> {
   const { rows: readiness } = await tx.query<{
@@ -740,7 +745,7 @@ export async function sendBatch(
   const cooldown = input.cooldownHours ?? RESEND_COOLDOWN_HOURS;
   // Anything but a reminder is the once-only upload invitation (D-086, D-108).
   const once = !/reminder/i.test(template.name);
-  const recipients = await recipientsFor(
+  const everyone = await recipientsFor(
     tx,
     input.eventId,
     input.templateId,
@@ -749,6 +754,9 @@ export async function sendBatch(
     input.cooldownAnyTemplate ?? false,
     once,
   );
+  const recipients = input.speakerIds
+    ? everyone.filter((recipient) => input.speakerIds!.includes(recipient.speaker_id))
+    : everyone;
   const skipped = new Map<string, number>();
   const note = (reason: string) => skipped.set(reason, (skipped.get(reason) ?? 0) + 1);
 

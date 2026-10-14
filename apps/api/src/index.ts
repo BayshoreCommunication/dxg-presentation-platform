@@ -3393,16 +3393,21 @@ app.post("/api/v1/events/:eventId/speakers/:speakerId/account", async (req, res)
 app.post("/api/v1/events/:eventId/comms/send", async (req, res) => {
   const actor = actorFrom(req);
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
-  const body = req.body as { template_id?: string; missing_only?: boolean };
+  const body = req.body as { template_id?: string; missing_only?: boolean; speaker_ids?: unknown };
   if (!body.template_id) {
     return res.status(400).json({ code: "request.invalid", message: "Choose the email to send." });
   }
+  // Only these speakers, when given (D-177) — a list of ids, at most 100.
+  const speakerIds = Array.isArray(body.speaker_ids)
+    ? body.speaker_ids.filter((value): value is string => typeof value === "string").slice(0, 100)
+    : undefined;
   const eventId = String(req.params.eventId);
   const result = await withScope(scopeFor(req, eventId), (tx) =>
     sendBatch(tx, actor, {
       eventId,
       templateId: body.template_id as string,
       missingOnly: body.missing_only === true,
+      ...(speakerIds ? { speakerIds } : {}),
     }),
   );
   if (!result.ok) return res.status(statusFor(result.error)).json(result.error);

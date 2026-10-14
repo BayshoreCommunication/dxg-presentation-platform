@@ -3189,3 +3189,13 @@ the row still opens it). Groups, counts and links stay as D-174.
   version, Get a clean copy) → Communications, where the reminder is sent (Travis's follow-up; the Speakers tab had no
   way to remind); Review the file → Manage presentations; Load on room PC / Load the
   newer version → Room sync; Set a room → the Agenda tab; Wait for the checks → the talk's Presentation detail.
+- **Addendum: a reminder for that speaker** (Travis: "make it open the reminder for that speaker"). The speaker labels
+  open `/events/:id/comms?remind=<speaker id>`: Communications selects the reminder template and narrows to that
+  speaker — the preview as they'd receive it, "Goes to: <name> only", "Audience · 1 (<name> only)" and **Send to
+  <name>** — with "Show everyone missing a file" back to the usual list. A speaker asked for changes or whose file
+  failed the virus check isn't "missing a file", so they come from the full speaker list. The send carries
+  `speaker_ids` (`POST /events/:id/comms/send`, at most 100): only those speakers, and every guard still applies
+  (address, bounce, staff address, resend cooldown); an empty list sends to nobody. The risk list gives each talk's
+  `speaker_id` for the link. Tests: `comms-one-speaker` (3).
+  Note: the reminder template's wording ("We don't have your presentation yet") fits a missing file; for a speaker asked
+  for a new version, edit the text before sending, or save a second reminder template.
