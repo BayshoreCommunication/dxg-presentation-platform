@@ -3184,3 +3184,7 @@ label, and under it a short action label — "→ Get the file", "→ Get the ne
 the full instruction beside it (Travis: "keep the what action need text like before"), e.g. "Copy the approved file
 to the room PC and tick Loaded on Room sync." The day, time and room are no longer on the row (Presentation detail has them;
 the row still opens it). Groups, counts and links stay as D-174.
+- **Addendum (same day): the action label is a link** (Travis: "when I click 'get the new version', it doesn't
+  redirect anywhere"). Each label opens where that action is done: the speaker actions (Get the file, Get the new
+  version, Get a clean copy) → the Speakers tab; Review the file → Manage presentations; Load on room PC / Load the
+  newer version → Room sync; Set a room → the Agenda tab; Wait for the checks → the talk's Presentation detail.

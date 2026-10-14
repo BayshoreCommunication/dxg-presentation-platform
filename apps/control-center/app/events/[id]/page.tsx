@@ -43,6 +43,22 @@ const ACTION_GROUPS: ActionGroup[] = [
     link: { label: "Agenda", href: (id) => `/events/${id}?tab=agenda` },
   },
 ];
+/** Where an action label leads (D-177): the screen where that action is done. */
+function actionHref(go: ActionGo, eventId: string, slotId: string): string {
+  switch (go) {
+    case "speakers":
+      return `/events/${eventId}?tab=speakers`;
+    case "review":
+      return `/events/${eventId}/review`;
+    case "sync":
+      return `/events/${eventId}/sync`;
+    case "agenda":
+      return `/events/${eventId}?tab=agenda`;
+    default:
+      return `/events/${eventId}/talks/${slotId}`;
+  }
+}
+
 /**
  * Why a room isn't ready (D-176), in Action needed's words: each talk that still needs something,
  * by name, under what it needs — "To load: Amara Okafor · To review: Tomás Herrera".
@@ -66,39 +82,46 @@ function roomReasons(talks: { status: string; speaker: string | null; title: str
  * Which group a talk's status falls in, the action as a short label (shown on the row, D-177),
  * and the one thing to do in full (the label's hover text).
  */
-const ACTION_FOR: Record<string, { group: string; label: string; todo: string }> = {
+type ActionGo = "speakers" | "review" | "sync" | "agenda" | "talk";
+const ACTION_FOR: Record<string, { group: string; label: string; todo: string; go: ActionGo }> = {
   missing: {
     group: "speaker",
     label: "Get the file",
     todo: "Nothing uploaded yet — remind the speaker to upload, or take the file in at the Speaker Ready Room.",
+    go: "speakers",
   },
   needs_revision: {
     group: "speaker",
     label: "Get the new version",
     todo: "Changes were asked for — waiting for the speaker's new version.",
+    go: "speakers",
   },
   attention: {
     group: "speaker",
     label: "Get a clean copy",
     todo: "The file failed the virus check — ask the speaker for a clean copy.",
+    go: "speakers",
   },
-  submitted: { group: "review", label: "Review the file", todo: "Review the file and approve it, or ask for changes." },
+  submitted: { group: "review", label: "Review the file", todo: "Review the file and approve it, or ask for changes.", go: "review" },
   processing: {
     group: "review",
     label: "Wait for the checks",
     todo: "The file checks are still running — it will be ready to review in a minute.",
+    go: "talk",
   },
   approved_delivering: {
     group: "load",
     label: "Load on room PC",
     todo: "Copy the approved file to the room PC and tick Loaded on Room sync.",
+    go: "sync",
   },
   update_pending_ack: {
     group: "load",
     label: "Load the newer version",
     todo: "A newer version is approved — load it on the room PC (it still has the older one).",
+    go: "sync",
   },
-  approved: { group: "room", label: "Set a room", todo: "Approved, but the session has no room — set one in the Agenda." },
+  approved: { group: "room", label: "Set a room", todo: "Approved, but the session has no room — set one in the Agenda.", go: "agenda" },
 };
 
 /** Who may change an event's setup. A hint for the UI; `services/events.ts` decides. */
@@ -316,9 +339,14 @@ export default async function CommandCenterPage({
                             </Link>
                             {/* The action as a label, and what it means in full beside it (D-177). */}
                             <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginTop: 6 }}>
-                              <span className="chip c-info" style={{ fontWeight: 600 }}>
+                              {/* The label opens the screen where the action is done. */}
+                              <Link
+                                className="chip c-info"
+                                style={{ fontWeight: 600 }}
+                                href={actionHref(ACTION_FOR[item.status]!.go, id, item.slot_id)}
+                              >
                                 → {ACTION_FOR[item.status]!.label}
-                              </span>
+                              </Link>
                               <span className="note">{ACTION_FOR[item.status]!.todo}</span>
                             </div>
                           </td>
