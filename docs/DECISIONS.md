@@ -3161,3 +3161,9 @@ of day shown, so a list running over several days read as out of order; each row
   detail.
 - A cancelled session needs nothing and is no longer listed (it used to appear with a "Canceled" chip).
 - Same data (`GET /events/:id/risk-list`); SCREEN_SPECS' "Today's risk list" (screen 9) reads as this card.
+
+## D-175 (2026-10-14): No number tiles on the event overview — Status: ACCEPTED (Travis)
+Travis: "remove this 5 cards". The overview's tiles — Collected, Approved, Warnings, Missing, Rooms ready (D-065) — are
+gone; the page goes from the event's settings straight to **Action needed** (D-174), which names each talk and what to
+do, then **Room readiness**. The `Kpi` component stays (the client portal and the import screen use it), and
+`GET /events/:id/summary` still returns the counts.

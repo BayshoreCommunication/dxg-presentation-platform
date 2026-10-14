@@ -5,9 +5,6 @@ import { getSummary, getRiskList, getFleet, getDraft, getSession, getAgenda, get
 import { Chip } from "@/components/Chip";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { EventTabs } from "@/components/EventTabs";
-import { InfoTip } from "@/components/InfoTip";
-import { Kpi } from "@/components/Kpi";
-import type { KpiTone } from "@/components/Kpi";
 import { ROOM_LABEL, roomLoadedLine } from "@/lib/roomWords";
 import { guard } from "@/lib/guard";
 
@@ -159,66 +156,6 @@ export default async function CommandCenterPage({
     (session.principal.event_roles ?? []).some((held) => held.event_id === id && CONFIGURERS.includes(held.role));
   const header = [summary.event.venue, days ?? dateRange].filter(Boolean) as string[];
 
-  /*
-   * Each number carries its own explanation (D-065). They are computed, never typed,
-   * and several mean something narrower than their label suggests — "Rooms ready" is
-   * every talk ticked loaded on the room's computer (D-125) — so the rule is stated where
-   * the number is read rather than left for someone to ask.
-   */
-  const share = (part: number, whole: number) => (whole === 0 ? 0 : part / whole);
-  const kpis: {
-    label: string;
-    icon: string;
-    value: string | number;
-    caption?: string;
-    tone?: KpiTone;
-    progress?: number;
-    help: string;
-  }[] = [
-    {
-      label: "Collected",
-      icon: "upload",
-      value: `${summary.collected} / ${summary.total}`,
-      caption: `${Math.round(share(summary.collected, summary.total) * 100)}% of talks`,
-      progress: share(summary.collected, summary.total),
-      tone: summary.total > 0 && summary.collected === summary.total ? "ok" : undefined,
-      help: "Presentations with at least one file uploaded, out of every presentation on the agenda.",
-    },
-    {
-      label: "Approved",
-      icon: "checkCircle",
-      value: summary.approved,
-      caption: "latest file approved",
-      tone: summary.approved > 0 ? "ok" : undefined,
-      help: "Presentations whose latest file a reviewer has approved. Uploaded files wait in Manage presentations until then.",
-    },
-    {
-      label: "Warnings", // S28 (D-113): "Warnings open" was cut off in the tile
-      icon: "warning",
-      value: summary.warnings_open,
-      caption: summary.warnings_open > 0 ? "not fixed or waived" : "none open",
-      tone: summary.warnings_open > 0 ? "warn" : undefined,
-      help: "Problems the automatic inspection found in uploaded files — a missing font, an oversized video — that nobody has fixed or waived yet. Resolve them from Manage presentations.",
-    },
-    {
-      label: "Missing",
-      icon: "docMissing",
-      value: summary.missing,
-      caption: summary.missing > 0 ? "nothing uploaded yet" : "none missing",
-      tone: summary.missing > 0 ? "bad" : undefined,
-      help: "Presentations with nothing uploaded yet. These are the speakers to chase from Communications.",
-    },
-    {
-      label: "Rooms ready",
-      icon: "monitor",
-      value: `${summary.rooms_ready} / ${summary.rooms_total}`,
-      caption: summary.rooms_ready === summary.rooms_total ? "all rooms ready" : "not all ready",
-      tone: summary.rooms_ready === summary.rooms_total ? "ok" : "warn",
-      progress: share(summary.rooms_ready, summary.rooms_total),
-      help: "A room is ready when every talk scheduled there has its approved version loaded on the room's PC and ticked on Room sync (or is cancelled). Nothing is checked automatically. Rooms with no talks still count in the total.",
-    },
-  ];
-
   return (
     <>
       <AutoRefresh seconds={5} />
@@ -284,28 +221,10 @@ export default async function CommandCenterPage({
         initialTab={tab}
       />
 
-      <div className="krow">
-        {kpis.map((kpi, index) => (
-          <Kpi
-            key={kpi.label}
-            label={kpi.label}
-            icon={kpi.icon}
-            value={kpi.value}
-            caption={kpi.caption}
-            tone={kpi.tone}
-            progress={kpi.progress}
-            help={
-              <InfoTip label={kpi.label} align={index === kpis.length - 1 ? "right" : "left"}>
-                {kpi.help}
-              </InfoTip>
-            }
-          />
-        ))}
-      </div>
-
       {/* Action needed (D-174): what has to happen for each talk not yet in its room. A
-          cancelled session needs nothing, so it isn't listed. */}
-            <div className="card">
+          cancelled session needs nothing, so it isn't listed. The five number tiles that sat
+          above it (Collected, Approved, Warnings, Missing, Rooms ready) are gone (D-175). */}
+      <div className="card">
         <div className="chd">
           <h3>Action needed</h3>
           <span className="m">
