@@ -3237,3 +3237,13 @@ password for any speaker who hadn't chosen their own, and mail it — so each re
 - Tests: `comms-password-once` (3): first invitation carries one; a later reminder carries none and the hash is
   unchanged; Send sign-in issues a fresh one. `cross-event`, `speaker-accounts` and `technician-submits` fail locally
   with or without this change (local seed drift).
+
+## D-180 (2026-10-14): Action needed sends the reminder in place — Status: ACCEPTED (Travis)
+Travis: "instead of redirecting to the communication page, show the send reminder button when clicking 'get the new
+version'". The speaker actions on Action needed — Get the file, Get the new version, Get a clean copy — no longer
+leave the page: the label opens "Send “<reminder>” to <speaker>?" with **Send reminder**, Cancel, and "Preview or edit
+in Communications →" (D-177's link, kept one click away). The reminder is the missing-file one for Get the file and
+"Reminder — new version needed" (D-178) for the other two; the send names that speaker only, so every guard applies,
+and the result is said in place ("Reminder sent to …", "Not sent — already emailed this in the last 24 hours", and on
+a practice event "Recorded for … — a practice event never sends"). The other actions (Review the file, Load on room PC,
+Set a room) still open their screens. The event summary now returns `is_practice` for that wording.
