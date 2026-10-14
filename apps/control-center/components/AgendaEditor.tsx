@@ -133,12 +133,14 @@ export function SessionForm({
           />
         </div>
         <div className="field">
-          <label htmlFor="session-room">Location</label>
+          {/* "Room", not "Location" (D-184): "Location" invited the city ("London"), which then
+              became a room of the event. */}
+          <label htmlFor="session-room">Room</label>
           <input
             id="session-room"
             style={{ width: "100%" }}
             value={value.room}
-            placeholder="Room name"
+            placeholder="e.g. Ballroom A — the room at the venue, not the city"
             onChange={(event) => set({ room: event.target.value })}
             required
           />

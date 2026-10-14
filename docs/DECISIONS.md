@@ -3337,3 +3337,50 @@ outright, since they don't start practice events (D-151). Now the section shows 
 one: "Practice events you're assigned to: …", the event's card, and no "Start a practice event" button. A technician
 on none sees no section, as before; admins and support staff are unchanged. Checked by rendering the portfolio as an
 assigned technician, an unassigned one and an admin.
+
+## D-183 (2026-10-14): The email preview shows a password only for a speaker who'd get one — Status: ACCEPTED (Travis)
+Travis, on Communications: "upload invitation still showing the password". D-179 sends a temporary password only in the
+email that makes a speaker's sign-in, but the preview showed one in every invitation, whoever it was previewed for.
+- Each recipient on `GET /comms` carries `has_sign_in` (an account with their address exists). The preview's
+  `{{sign_in}}` for the speaker it shows is the temporary-password version only when they have no sign-in yet, and the
+  "your password — the one we sent you … Forgotten your password?" version when they have one. With nobody to show,
+  the template's usual case (the invitation with a password, a reminder without).
+- Under the preview, a line says which and why: "<name> has no sign-in yet, so this email makes one and carries a
+  temporary password…" or "<name> already has a sign-in, so no password is sent — only how to sign in…" (shown for a
+  template that uses `{{sign_in}}`).
+- Sending is unchanged (D-179). Note for production: the deployed release predates D-179, so its invitations still
+  carry a password every time until it's deployed.
+
+## D-184 (2026-10-14): Room readiness lists only rooms with talks; the session field says "Room" — Status: ACCEPTED (Travis)
+Found on Test Akib Event: Room readiness listed "London — no presentations for this room yet — Ready" beside
+"Ball Room A". Rooms are created from a session's room field (`resolveRoom`), which the agenda form labelled
+"Location" — so the venue's city was typed in, became a room, and stayed when the session was corrected.
+- **Room readiness** (event overview) lists only rooms that have talks. A room with none says nothing about
+  readiness. When no room has a talk, it says so instead of an empty table. **Room sync** still lists every room.
+- **The agenda's session form** labels the field "Room", with the placeholder "e.g. Ballroom A — the room at the
+  venue, not the city".
+- Leftover rooms are not deleted: a room may be set up ahead of its talks, and Room sync is where it shows.
+
+## D-185 (2026-10-14): No Print / Email receipt buttons on check-in — Status: ACCEPTED (Travis)
+Travis: "we also don't need these two button". The check-in page no longer offers **Print receipt** or **Email
+receipt** (D-106's buttons) — after the speaker confirms, or after they've checked out. The speaker's confirmation is
+still recorded as before, and the page shows it as "Confirmed: v… · when · desk". The wording that told the desk to
+"give them the receipt" is gone. The receipt page and the email endpoint stay in the API and the app, unlinked.
+
+## D-186 (2026-10-14): Mark loaded asks first — Status: ACCEPTED (Travis)
+Travis: "we need to add confirmation before mark loaded." On Room sync, **Mark loaded** no longer ticks at once: it
+asks "Is v… on the {room} PC?" — tick it only once the file is copied onto that room's PC and opens there; the room
+then plays that version — with **Yes, mark loaded** / **Cancel**, the same inline confirmation Undo already had.
+Who may tick is unchanged (D-125, D-160): DXG Technicians, DXG Staff (support staff) and DXG Admins on the event.
+
+## D-187 (2026-10-14): Staff hold their kind's full roles on every event they're on — Status: ACCEPTED (Travis)
+Found on Room sync: a technician saw no **Mark loaded**. C. Delgado held only "reviewer" on MedTech Forward 2026 — the
+seed predates D-151 and gave each technician one role — so the API and the page treated them as a reviewer.
+Event assignments gives the whole set (`ROLES_OF_KIND`), but an account given a role by hand, or placed before
+D-151, could hold part of it.
+- **Migration 045**, once: every support staff member and technician gets the rest of their kind's roles on each
+  event they hold a role on — support → project manager + presentation manager; technician → SRR technician + room
+  technician + reviewer. It only adds: a hand-granted extra role stays. Archived events and DXG Admins are left alone.
+- **Seed**: the seed technicians (C. Delgado, T. Okafor) get the whole technician set on the seed event.
+- Checked: admin, event-scope, room-sync-technicians, srr-open, srr-local-intake, srr-checkin-technician, mfa,
+  auth-separation and event-staff-release pass; technician-submits-for-speakers fails its one test as before.

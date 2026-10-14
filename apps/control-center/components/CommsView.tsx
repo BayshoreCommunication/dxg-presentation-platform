@@ -292,7 +292,17 @@ export function CommsView({
       ? [single]
       : []
     : audience.filter((row) => row.email && !row.bounced && !row.already_sent);
-  const preview = previewValues(audience[0] ?? data.recipients[0], event, data.reminders.deadline, !isReminder);
+  // The speaker the preview shows, and whether their email would carry a password: only when the
+  // send makes their sign-in (D-179) — so not for someone who already has one (D-183). With nobody
+  // to show, the template's usual case.
+  const sample = audience[0] ?? data.recipients[0];
+  const sampleGetsPassword = sample?.has_sign_in !== undefined ? !sample.has_sign_in : !isReminder;
+  const preview = previewValues(sample, event, data.reminders.deadline, sampleGetsPassword);
+  const passwordNote = sample
+    ? sampleGetsPassword
+      ? `${sample.name} has no sign-in yet, so this email makes one and carries a temporary password. A password is sent once — speakers who already have a sign-in get the wording without it.`
+      : `${sample.name} already has a sign-in, so no password is sent — only how to sign in. A temporary password goes out once, in the first email that makes a speaker's sign-in.`
+    : null;
 
   /** Puts `{{field}}` where the cursor was in the subject or message (S33, D-112). */
   function insertField(field: string) {
@@ -571,6 +581,12 @@ export function CommsView({
                   banner={bannerAsset ? assetUrl(eventId, "email_banner", bannerAsset.uploaded_at) : null}
                   eventName={event.name}
                 />
+                {/* Whether this speaker's copy carries a password, and why (D-183). */}
+                {passwordNote && /\{\{\s*sign_in\s*\}\}/.test(template.body) && (
+                  <p className="note" style={{ marginTop: 8 }}>
+                    {passwordNote}
+                  </p>
+                )}
               </div>
               <div className="tpl-side tpl-facts">
                 <div>

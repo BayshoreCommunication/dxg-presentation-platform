@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { FleetRoom, FleetTalk } from "@/lib/api";
+import type { FleetRoom } from "@/lib/api";
 import { ApiError, downloadApproved, fileDownloadUrl, ingestForSlot, markLoaded, unmarkLoaded } from "@/lib/api";
 import { LocalIntake } from "@/components/LocalIntake";
 import { Toast } from "@/components/Toast";
@@ -39,7 +39,8 @@ export function LoadingChecklist({
   canUpload?: boolean;
 }) {
   const router = useRouter();
-  const [busy, setBusy] = useState<string | null>(null);
+  // The talk whose "Mark loaded" is waiting for its confirmation (D-186).
+  const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [undoing, setUndoing] = useState<string | null>(null);
   const [zipping, setZipping] = useState<string | null>(null);
@@ -70,21 +71,6 @@ export function LoadingChecklist({
 
   const approvedCount = (room: FleetRoom) =>
     room.talks.filter((talk) => talk.session_state !== "canceled" && talk.approved).length;
-
-  async function tick(talk: FleetTalk) {
-    const copy = talk.approved;
-    if (!copy?.room_file_id || copy.lock_version === null) return;
-    setBusy(talk.slot_id);
-    setError(null);
-    try {
-      await markLoaded(copy.room_file_id, copy.lock_version);
-      router.refresh();
-    } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : "That didn't save. Refresh the page and try again.");
-    } finally {
-      setBusy(null);
-    }
-  }
 
   const ordered = [...rooms].sort((a, b) => Number(a.readiness === "ready") - Number(b.readiness === "ready"));
 
@@ -173,6 +159,20 @@ export function LoadingChecklist({
                               "Not loaded yet"
                             )}
                           </div>
+                          {loading === talk.slot_id && copy?.room_file_id && copy.lock_version !== null && (
+                            <ConfirmInline
+                              question={`Is v${copy.version_number} on the ${room.room} PC?`}
+                              detail={`Tick it only once the file is copied onto that room's PC and opens there. ${room.room} then plays v${copy.version_number} for this talk.`}
+                              confirmLabel="Yes, mark loaded"
+                              icon="check"
+                              busyLabel="Saving…"
+                              onConfirm={async () => {
+                                await markLoaded(copy.room_file_id!, copy.lock_version!);
+                                router.refresh();
+                              }}
+                              onClose={() => setLoading(null)}
+                            />
+                          )}
                           {undoing === talk.slot_id && copy?.room_file_id && copy.lock_version !== null && (
                             <ConfirmInline
                               question={`Mark v${copy.version_number} as not loaded?`}
@@ -230,7 +230,7 @@ export function LoadingChecklist({
                                     type="button"
                                     className="btn"
                                     style={{ padding: "4px 10px" }}
-                                    disabled={busy !== null || undoing === talk.slot_id}
+                                    disabled={undoing === talk.slot_id}
                                     onClick={() => setUndoing(talk.slot_id)}
                                   >
                                     <Icon name="undo" />
@@ -241,11 +241,11 @@ export function LoadingChecklist({
                                     type="button"
                                     className="btn pri"
                                     style={{ padding: "4px 10px" }}
-                                    disabled={busy !== null}
-                                    onClick={() => void tick(talk)}
+                                    disabled={loading === talk.slot_id}
+                                    onClick={() => setLoading(talk.slot_id)}
                                   >
                                     <Icon name="check" />
-                                    {busy === talk.slot_id ? "Saving…" : "Mark loaded"}
+                                    Mark loaded
                                   </button>
                                 )
                               )}
