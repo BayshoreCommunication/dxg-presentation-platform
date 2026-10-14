@@ -10,11 +10,12 @@ export default async function CommsPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ remind?: string }>;
+  searchParams: Promise<{ remind?: string; reminder?: string }>;
 }) {
   const { id } = await params;
   // `?remind=<speaker id>` (D-177): open the reminder for that speaker alone.
-  const { remind } = await searchParams;
+  // `&reminder=new_version` (D-178): the "new version needed" reminder instead.
+  const { remind, reminder } = await searchParams;
   // The summary carries the event's name and clock, for the email preview (S33, D-112).
   // The draft carries the event's branding, for the email banner (D-138).
   const [data, summary, events, draft] = await guard(
@@ -37,6 +38,7 @@ export default async function CommsPage({
       banner={bannerOf(draft.branding)}
       practice={practice}
       remindSpeakerId={remind ?? null}
+      remindNewVersion={reminder === "new_version"}
     />
   );
 }

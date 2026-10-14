@@ -1200,6 +1200,8 @@ export type CommsView = {
   merge_fields: string[];
   recipients: CommRecipient[];
   missing: CommRecipient[];
+  /** Who "Reminder — new version needed" is for (D-178): asked for changes, or the file failed. */
+  new_version: CommRecipient[];
   log: {
     id: string;
     speaker: string | null;
@@ -1240,6 +1242,8 @@ export const getComms = (eventId: string) =>
  * per event and has no stable id — see `remindSpeakersWithoutFiles`.
  */
 export const REMINDER_TEMPLATE_NAME = "Reminder — file still missing";
+/** The second seeded reminder (D-178), for speakers who need to send a new file. */
+export const NEW_VERSION_REMINDER_NAME = "Reminder — new version needed";
 
 /**
  * Chases everyone whose talk has no file, with the event's reminder template.
@@ -1254,8 +1258,9 @@ export const remindSpeakersWithoutFiles = async (eventId: string) => {
   const { templates } = await getComms(eventId);
   const template =
     templates.find((candidate) => candidate.name === REMINDER_TEMPLATE_NAME) ??
-    // Renamed by hand, most likely. Better than refusing to chase anyone.
-    templates.find((candidate) => /reminder/i.test(candidate.name));
+    // Renamed by hand, most likely. Better than refusing to chase anyone — but never the
+    // "new version needed" reminder, which is for speakers who have uploaded (D-178).
+    templates.find((candidate) => /reminder/i.test(candidate.name) && candidate.name !== NEW_VERSION_REMINDER_NAME);
   if (!template) {
     throw new ApiError(
       "comms.template_not_found",
@@ -1266,15 +1271,18 @@ export const remindSpeakersWithoutFiles = async (eventId: string) => {
   return sendBatch(eventId, template.id, true);
 };
 
-/** `speakerIds`: only these speakers (D-177) — a reminder opened for one speaker. */
-export const sendBatch = (eventId: string, templateId: string, missingOnly: boolean, speakerIds?: string[]) =>
+/**
+ * `missingOnly`: `true` for those missing a file, `"new_version"` for those who need to send a new
+ * one (D-178). `speakerIds`: only these speakers (D-177) — a reminder opened for one speaker.
+ */
+export const sendBatch = (eventId: string, templateId: string, missingOnly: boolean | "new_version", speakerIds?: string[]) =>
   request<{ queued: number; skipped: { reason: string; count: number }[] }>(
     `/events/${eventId}/comms/send`,
     {
       method: "POST",
       body: JSON.stringify({
         template_id: templateId,
-        missing_only: missingOnly,
+        ...(missingOnly === "new_version" ? { audience: "new_version" } : { missing_only: missingOnly }),
         ...(speakerIds ? { speaker_ids: speakerIds } : {}),
       }),
     },

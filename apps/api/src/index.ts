@@ -3255,6 +3255,8 @@ app.get("/api/v1/events/:eventId/comms", async (req, res) => {
       // The invitation audience marks everyone already invited (once only, D-086, D-108).
       recipients: invitation ? await recipientsFor(tx, eventId, invitation.id, false, undefined, false, true) : [],
       missing: invitation ? await recipientsFor(tx, eventId, invitation.id, true) : [],
+      // Who "Reminder — new version needed" is for (D-178): asked for changes, or the file failed.
+      new_version: invitation ? await recipientsFor(tx, eventId, invitation.id, "new_version") : [],
       log: await deliveryLog(tx, eventId),
       // The automatic reminders (D-096): what is on, what is next, what has gone.
       reminders: await reminderSchedule(tx, eventId),
@@ -3393,7 +3395,7 @@ app.post("/api/v1/events/:eventId/speakers/:speakerId/account", async (req, res)
 app.post("/api/v1/events/:eventId/comms/send", async (req, res) => {
   const actor = actorFrom(req);
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
-  const body = req.body as { template_id?: string; missing_only?: boolean; speaker_ids?: unknown };
+  const body = req.body as { template_id?: string; missing_only?: boolean; audience?: string; speaker_ids?: unknown };
   if (!body.template_id) {
     return res.status(400).json({ code: "request.invalid", message: "Choose the email to send." });
   }
@@ -3406,7 +3408,8 @@ app.post("/api/v1/events/:eventId/comms/send", async (req, res) => {
     sendBatch(tx, actor, {
       eventId,
       templateId: body.template_id as string,
-      missingOnly: body.missing_only === true,
+      // `audience: "new_version"` (D-178): speakers who need to send a new file.
+      missingOnly: body.audience === "new_version" ? "new_version" : body.missing_only === true,
       ...(speakerIds ? { speakerIds } : {}),
     }),
   );

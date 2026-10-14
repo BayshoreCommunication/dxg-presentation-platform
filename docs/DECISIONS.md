@@ -3199,3 +3199,22 @@ the row still opens it). Groups, counts and links stay as D-174.
   `speaker_id` for the link. Tests: `comms-one-speaker` (3).
   Note: the reminder template's wording ("We don't have your presentation yet") fits a missing file; for a speaker asked
   for a new version, edit the text before sending, or save a second reminder template.
+
+## D-178 (2026-10-14): A second reminder: "Reminder — new version needed" — Status: ACCEPTED (Travis)
+Travis: "create a reminder template for new version needed". The missing-file reminder ("We don't have your
+presentation yet") was the only one, and D-177's "Get the new version" opened it for a speaker who had uploaded.
+- **The template**, seeded on every event beside the other two (`DEFAULT_TEMPLATES`): "Reminder — new version needed",
+  subject "{{event_name}}: please send a new version of your presentation by {{deadline}}" — "We need a new version of
+  your presentation for … Please upload it by {{deadline}} … Manage presentations shows our note on what to change,
+  and is where you upload the new version." Editable like the others.
+- **Existing events** get it from **migration 042** (only where it's missing; re-running changes nothing; the text is
+  the default's word for word).
+- **Its audience** is speakers asked for changes or whose file failed the virus check (`new_version` on
+  `GET /comms`; `audience: "new_version"` on `POST /comms/send`). Communications says "Goes to: Speakers asked for a new
+  version, or whose file failed the virus check". It's a reminder, so it can go again after the cooldown.
+- **Action needed**: "Get the new version" and "Get a clean copy" open it for that speaker
+  (`?remind=<id>&reminder=new_version`); "Get the file" keeps the missing-file reminder.
+- **The automatic reminders** use the missing-file reminder by name, never this one (they used to take the first
+  template with "reminder" in its name); so does the Speakers screen's "remind those without files".
+- Tests: `comms-new-version` (3); `automatic-reminders`, `comms-one-speaker`, `comms-cadence`, `speakers-add-and-send`
+  pass.

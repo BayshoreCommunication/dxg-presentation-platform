@@ -103,7 +103,41 @@ export const DEFAULT_TEMPLATES = [
       "The DXG presentation team",
     ].join("\n"),
   },
+  {
+    // D-178: for a speaker asked for changes, or whose file failed the virus check — they have
+    // uploaded, so "we don't have your presentation yet" was the wrong thing to tell them.
+    name: "Reminder — new version needed",
+    subject: "{{event_name}}: please send a new version of your presentation by {{deadline}}",
+    body: [
+      "Hi {{speaker_first}},",
+      "",
+      "We need a new version of your presentation for:",
+      "",
+      "{{presentations}}",
+      "",
+      "Please upload it by {{deadline}}. Your sign-in details are below.",
+      "",
+      "{{sign_in}}",
+      "",
+      "Once signed in, Manage presentations shows our note on what to change, and is where you upload the new version.",
+      "",
+      "If you've already sent it another way, reply to this email and we'll check.",
+      "",
+      "The DXG presentation team",
+    ].join("\n"),
+  },
 ] as const;
+
+/** The seeded reminders, by name (D-178): the automatic reminders use the first. */
+export const MISSING_REMINDER_NAME = "Reminder — file still missing";
+export const NEW_VERSION_REMINDER_NAME = "Reminder — new version needed";
+
+/**
+ * Who a batch is for: everyone, those still missing a file (`true`), or those who need to send a
+ * new one — asked for changes, or the file failed the virus check (`"new_version"`, D-178).
+ */
+export type Audience = boolean | "new_version";
+const NEW_VERSION_STATUSES = ["needs_revision", "attention"];
 
 /** Every merge field `send` fills in; anything else would reach the speaker as literal braces. */
 export const MERGE_FIELDS = [
@@ -420,7 +454,7 @@ export async function recipientsFor(
   tx: pg.PoolClient,
   eventId: string,
   templateId: string,
-  missingOnly: boolean,
+  missingOnly: Audience,
   cooldownHours: number = RESEND_COOLDOWN_HOURS,
   /** Count any email about this event towards the cooldown, not just this template (D-102). */
   cooldownAnyTemplate = false,
@@ -482,7 +516,9 @@ export async function recipientsFor(
     }))
     // A canceled presentation is nothing to upload for, so no email names it.
     .filter(({ status }) => status !== "canceled")
-    .filter(({ status }) => (missingOnly ? status === "missing" : true));
+    .filter(({ status }) =>
+      missingOnly === "new_version" ? NEW_VERSION_STATUSES.includes(status) : missingOnly ? status === "missing" : true,
+    );
 
   const bySpeaker = new Map<string, Recipient>();
   for (const { row, status } of perTalk) {
@@ -687,7 +723,7 @@ export async function sendBatch(
   input: {
     eventId: string;
     templateId: string;
-    missingOnly: boolean;
+    missingOnly: Audience;
     /** The automatic reminders use a shorter guard, so reminder days a day apart both go (D-096). */
     cooldownHours?: number;
     /**

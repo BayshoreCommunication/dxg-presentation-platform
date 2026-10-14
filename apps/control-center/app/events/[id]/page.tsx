@@ -49,6 +49,11 @@ function actionHref(go: ActionGo, eventId: string, slotId: string, speakerId: st
     case "comms":
       // The reminder, opened for this speaker alone (D-177).
       return speakerId ? `/events/${eventId}/comms?remind=${speakerId}` : `/events/${eventId}/comms`;
+    case "comms_new_version":
+      // …the "new version needed" one, for a speaker who has uploaded (D-178).
+      return speakerId
+        ? `/events/${eventId}/comms?remind=${speakerId}&reminder=new_version`
+        : `/events/${eventId}/comms`;
     case "review":
       return `/events/${eventId}/review`;
     case "sync":
@@ -83,7 +88,7 @@ function roomReasons(talks: { status: string; speaker: string | null; title: str
  * Which group a talk's status falls in, the action as a short label (shown on the row, D-177),
  * and the one thing to do in full (the label's hover text).
  */
-type ActionGo = "comms" | "review" | "sync" | "agenda" | "talk";
+type ActionGo = "comms" | "comms_new_version" | "review" | "sync" | "agenda" | "talk";
 const ACTION_FOR: Record<string, { group: string; label: string; todo: string; go: ActionGo }> = {
   missing: {
     group: "speaker",
@@ -95,13 +100,13 @@ const ACTION_FOR: Record<string, { group: string; label: string; todo: string; g
     group: "speaker",
     label: "Get the new version",
     todo: "Changes were asked for — waiting for the speaker's new version.",
-    go: "comms",
+    go: "comms_new_version",
   },
   attention: {
     group: "speaker",
     label: "Get a clean copy",
     todo: "The file failed the virus check — ask the speaker for a clean copy.",
-    go: "comms",
+    go: "comms_new_version",
   },
   submitted: { group: "review", label: "Review the file", todo: "Review the file and approve it, or ask for changes.", go: "review" },
   processing: {

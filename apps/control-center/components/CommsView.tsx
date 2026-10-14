@@ -6,7 +6,7 @@ import Link from "next/link";
 
 import { useRouter } from "next/navigation";
 import type { BrandAsset, CommsView as CommsData } from "@/lib/api";
-import { assetUrl, createTemplate, saveEmailSettings, sendBatch, sendTestEmail, updateTemplate, uploadEmailImage, ApiError } from "@/lib/api";
+import { assetUrl, createTemplate, NEW_VERSION_REMINDER_NAME, REMINDER_TEMPLATE_NAME, saveEmailSettings, sendBatch, sendTestEmail, updateTemplate, uploadEmailImage, ApiError } from "@/lib/api";
 import { BrandAssetField } from "@/components/BrandAssetField";
 import { RichEditor } from "@/components/RichEditor";
 import { FloatingMenu, useFloatingMenu } from "@/components/FloatingMenu";
@@ -148,6 +148,7 @@ export function CommsView({
   banner = null,
   practice = false,
   remindSpeakerId = null,
+  remindNewVersion = false,
 }: {
   eventId: string;
   data: CommsData;
@@ -158,12 +159,19 @@ export function CommsView({
   practice?: boolean;
   /** Opened from "Get the file" on the event overview (D-177): the reminder, for this speaker alone. */
   remindSpeakerId?: string | null;
+  /** …with the "new version needed" reminder rather than the missing-file one (D-178). */
+  remindNewVersion?: boolean;
 }) {
   const router = useRouter();
   const subjectRef = useRef<HTMLInputElement>(null);
   // Which box an inserted field goes into: the last one typed in, the message by default.
   const lastBox = useRef<"subject" | "body">("body");
-  const reminderTemplate = data.templates.find((row) => row.name.toLowerCase().includes("reminder"));
+  // The two seeded reminders (D-178): missing a file, and a new version needed.
+  const isNewVersionName = (name: string) => name === NEW_VERSION_REMINDER_NAME;
+  const reminderTemplate = remindNewVersion
+    ? data.templates.find((row) => isNewVersionName(row.name))
+    : (data.templates.find((row) => row.name === REMINDER_TEMPLATE_NAME) ??
+      data.templates.find((row) => /reminder/i.test(row.name) && !isNewVersionName(row.name)));
   // One speaker, when opened for them (D-177): from the missing list, or — a speaker asked for
   // changes, or whose file failed the virus check — from everyone.
   const [focusId, setFocusId] = useState<string | null>(
@@ -171,6 +179,7 @@ export function CommsView({
   );
   const focus = focusId
     ? (data.missing.find((row) => row.speaker_id === focusId) ??
+      data.new_version.find((row) => row.speaker_id === focusId) ??
       data.recipients.find((row) => row.speaker_id === focusId) ??
       null)
     : null;
@@ -263,11 +272,13 @@ export function CommsView({
   }
 
   const template = data.templates.find((row) => row.id === selected) ?? data.templates[0];
+  // A reminder (missing file, or a new version needed — D-178); anything else is the invitation.
+  const isNewVersion = isNewVersionName(template?.name ?? "");
   const isReminder = (template?.name ?? "").toLowerCase().includes("reminder");
   // For one speaker, the reminder goes whatever the lists say (the server still applies the
   // address, bounce and cooldown guards); otherwise the template's own audience.
   const single = focus && isReminder ? focus : null;
-  const audience = single ? [single] : isReminder ? data.missing : data.recipients;
+  const audience = single ? [single] : isNewVersion ? data.new_version : isReminder ? data.missing : data.recipients;
   const sendable = single
     ? single.email && !single.bounced
       ? [single]
@@ -302,7 +313,7 @@ export function CommsView({
     try {
       const result = single
         ? await sendBatch(eventId, template.id, false, [single.speaker_id])
-        : await sendBatch(eventId, template.id, isReminder);
+        : await sendBatch(eventId, template.id, isNewVersion ? "new_version" : isReminder);
       const skipped = result.skipped.map((entry) => `${entry.count} ${entry.reason}`).join(" · ");
       setToast(
         result.queued > 0
@@ -561,7 +572,13 @@ export function CommsView({
                 <div>
                   <div className="kl">Goes to</div>
                   <div>
-                    {single ? `${single.name} only` : isReminder ? "Speakers still missing a file" : "Speakers not yet invited"}
+                    {single
+                      ? `${single.name} only`
+                      : isNewVersion
+                        ? "Speakers asked for a new version, or whose file failed the virus check"
+                        : isReminder
+                          ? "Speakers still missing a file"
+                          : "Speakers not yet invited"}
                   </div>
                 </div>
                 <div>
@@ -585,11 +602,11 @@ export function CommsView({
         <div className="chd">
           <h3>
             Audience · {audience.length}
-            {single ? ` (${single.name} only)` : isReminder ? " (missing files only)" : ""}
+            {single ? ` (${single.name} only)` : isNewVersion ? " (new version needed)" : isReminder ? " (missing files only)" : ""}
           </h3>
           {single ? (
             <button type="button" className="linkish m" onClick={() => setFocusId(null)}>
-              Show everyone missing a file
+              {isNewVersion ? "Show everyone who needs a new version" : "Show everyone missing a file"}
             </button>
           ) : (
             <span className="m">who this email would reach right now</span>
@@ -598,7 +615,11 @@ export function CommsView({
         <div className="cbd" style={{ padding: "0 0 4px" }}>
           {audience.length === 0 ? (
             <div className="empty">
-              {isReminder ? "Nobody is missing a file — there is nothing to chase." : "No speakers yet."}
+              {isNewVersion
+                ? "Nobody needs to send a new version."
+                : isReminder
+                  ? "Nobody is missing a file — there is nothing to chase."
+                  : "No speakers yet."}
             </div>
           ) : (
             <table>
@@ -675,9 +696,11 @@ export function CommsView({
             ? null
             : audience.length > 0
               ? "Everyone in this list has already been sent this email, or has no working address."
-              : isReminder
-                ? "Nobody is missing a file — there is nothing to chase."
-                : "No speakers yet — add them on Speakers first."
+              : isNewVersion
+                ? "Nobody needs to send a new version."
+                : isReminder
+                  ? "Nobody is missing a file — there is nothing to chase."
+                  : "No speakers yet — add them on Speakers first."
         }
       />
       </div>
