@@ -26,6 +26,7 @@ import { Chip } from "@/components/Chip";
 import { DateField, TimeField, stepAfter, stepBefore } from "@/components/DateTimeField";
 import { WhyNot } from "@/components/WhyNot";
 import { Icon } from "@/components/Icon";
+import { SelectMenu } from "@/components/SelectMenu";
 
 /**
  * The headings DXG's own agenda sheet uses (D-029), so a field in this dialog and a
@@ -1091,12 +1092,17 @@ export function ImportView({
                       {FIELD_LABELS[field] ?? field}
                     </span>
                     {/* Read out by the label, not the code "session.title" (D-112). */}
-                    <select
-                      aria-label={`Column for ${FIELD_LABELS[field] ?? field}`}
+                    <SelectMenu
+                      label={`Column for ${FIELD_LABELS[field] ?? field}`}
                       value=""
-                      onChange={(event) =>
+                      placeholder="Choose the column…"
+                      options={preview.headers.map((header, index) => ({
+                        value: String(index),
+                        label: header || `(column ${index + 1}, no heading)`,
+                      }))}
+                      onChange={(chosen) =>
                         void run(async () => {
-                          const index = Number(event.target.value);
+                          const index = Number(chosen);
                           const mapping = [...preview.mapping];
                           // A column can only carry one field, so releasing it first
                           // keeps the mapping honest rather than silently duplicated.
@@ -1106,14 +1112,8 @@ export function ImportView({
                           apply(await remapImport(preview.upload_id, mapping));
                         })
                       }
-                    >
-                      <option value="">Choose the column…</option>
-                      {preview.headers.map((header, index) => (
-                        <option key={header + String(index)} value={index}>
-                          {header || `(column ${index + 1}, no heading)`}
-                        </option>
-                      ))}
-                    </select>
+                      className="mapping-select form-select"
+                    />
                   </div>
                 ))}
               </div>

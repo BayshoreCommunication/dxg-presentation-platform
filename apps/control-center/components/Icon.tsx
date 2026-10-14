@@ -170,6 +170,7 @@ const LINES: Record<string, string> = {
   list: "M5.333 4h8M5.333 8h8M5.333 12h8M2.667 4h.006M2.667 8h.006M2.667 12h.006",
   filter: "M2.667 3.333h10.666L9.333 8.667v4l-2.666 1.333V8.667Z",
   more: "M8 3.333h.006M8 8h.006M8 12.667h.006",
+  chevronDown: "M3.667 6.333 8 10.667l4.333-4.334",
   send: "M14 2 7.333 8.667M14 2 9.667 14 7.333 8.667 2 6.333Z",
   trash: "M2.667 4h10.666M6 4V2.667h4V4M3.667 4l.666 9.333h7.334L12.333 4M6.667 6.667v4M9.333 6.667v4",
   // Download's arrow turned upward into the same tray: a file coming in (Local intake, D-153).

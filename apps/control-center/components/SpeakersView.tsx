@@ -20,6 +20,7 @@ import { Icon } from "@/components/Icon";
 import { InfoTip } from "@/components/InfoTip";
 import { HoverTip } from "@/components/HoverTip";
 import { WhyNot } from "@/components/WhyNot";
+import { SelectMenu } from "@/components/SelectMenu";
 import { EMAIL_STATUS, wordsFor } from "@pmp/format";
 
 /** Screen 5 — the speaker directory, its duplicates, and the chase list. */
@@ -398,24 +399,16 @@ export function SpeakersView({
                         <Chip status={status.status} label={status.label} />
                       </td>
                       <td>
-                        <select
-                          aria-label={`Archive permission for ${row.full_name}`}
+                        <SelectMenu
+                          label={`Archive permission for ${row.full_name}`}
                           value={row.release_permission}
                           disabled={pending === `${row.id}:release`}
-                          style={{ minWidth: 0, maxWidth: 124 }}
-                          onChange={(event) =>
-                            void changeRelease(
-                              row,
-                              event.target.value as ReleasePermission,
-                            )
+                          options={RELEASE_OPTIONS.map(([value, label]) => ({ value, label }))}
+                          onChange={(permission) =>
+                            void changeRelease(row, permission as ReleasePermission)
                           }
-                        >
-                          {RELEASE_OPTIONS.map(([value, label]) => (
-                            <option key={value} value={value}>
-                              {label}
-                            </option>
-                          ))}
-                        </select>
+                          className="compact-select speaker-release-select"
+                        />
                       </td>
                       <td style={{ whiteSpace: "nowrap" }}>
                         <EmailStatus email={row.last_email} />
@@ -706,33 +699,22 @@ function AddSpeakerDialog({
                 to one.
               </div>
             )}
-            <select
+            {/* Grouped by day, as on the Agenda tab; each says when and where (D-135). */}
+            <SelectMenu
               id="new-speaker-talk"
-              style={{ width: "100%" }}
+              label="Session"
               value={slotId}
               required
               disabled={talks.length === 0}
-              onChange={(event) => setSlotId(event.target.value)}
-            >
-              {/* Required (D-095): a speaker is added to a session's presentation. */}
-              <option value="" disabled>
-                {talks.length === 0
-                  ? "No sessions on the agenda yet"
-                  : "Choose a session…"}
-              </option>
-              {/* Grouped by day, as on the Agenda tab; each says when and where (D-135). */}
-              {[...new Set(talks.map((talk) => talk.day))].map((day) => (
-                <optgroup key={day} label={day}>
-                  {talks
-                    .filter((talk) => talk.day === day)
-                    .map((talk) => (
-                      <option key={talk.slot_id} value={talk.slot_id}>
-                        {talk.time} · {talk.label} — {talk.room}
-                      </option>
-                    ))}
-                </optgroup>
-              ))}
-            </select>
+              placeholder={talks.length === 0 ? "No sessions on the agenda yet" : "Choose a session…"}
+              options={talks.map((talk) => ({
+                value: talk.slot_id,
+                label: `${talk.time} · ${talk.label} — ${talk.room}`,
+                group: talk.day,
+              }))}
+              onChange={setSlotId}
+              className="form-select"
+            />
             {(() => {
               const chosen = talks.find((talk) => talk.slot_id === slotId);
               return chosen ? (

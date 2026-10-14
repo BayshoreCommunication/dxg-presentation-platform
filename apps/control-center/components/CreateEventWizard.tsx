@@ -12,6 +12,7 @@ import { ImportView } from "@/components/ImportView";
 import { DateField, today } from "@/components/DateTimeField";
 import { WhyNot } from "@/components/WhyNot";
 import { Icon } from "@/components/Icon";
+import { SelectMenu } from "@/components/SelectMenu";
 import { timeZoneOptions } from "@pmp/format";
 
 /** Tomorrow on this computer, `YYYY-MM-DD` — the earliest an event may start (D-101). */
@@ -179,19 +180,16 @@ export function CreateEventWizard({
                   />
                 </div>
                 <div className="field">
-                  <label>Time zone</label>
-                  <select
-                    style={{ width: "100%" }}
+                  <label htmlFor="event-timezone">Time zone</label>
+                  {/* Named zones, US venues first; the stored value stays IANA (S14, D-110). */}
+                  <SelectMenu
+                    id="event-timezone"
+                    label="Time zone"
                     value={basics.timezone}
-                    onChange={(event) => setBasics({ ...basics, timezone: event.target.value })}
-                  >
-                    {/* Named zones, US venues first; the stored value stays IANA (S14, D-110). */}
-                    {timeZoneOptions(timezones).map(({ zone, label }) => (
-                      <option key={zone} value={zone}>
-                        {label}
-                      </option>
-                    ))}
-                  </select>
+                    options={timeZoneOptions(timezones).map(({ zone, label }) => ({ value: zone, label }))}
+                    onChange={(timezone) => setBasics({ ...basics, timezone })}
+                    className="form-select"
+                  />
                 </div>
                 <div />
                 <div className="field">

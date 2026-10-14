@@ -9,6 +9,7 @@
     "type-check": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
+    "@heroicons/react": "^2.2.0",
     "@pmp/format": "*",
     "date-fns": "^4.4.0",
     "next": "^15.5.4",

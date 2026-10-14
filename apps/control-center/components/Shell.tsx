@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { Cog6ToothIcon, ComputerDesktopIcon, DevicePhoneMobileIcon, KeyIcon, MoonIcon, QuestionMarkCircleIcon, SunIcon } from "@heroicons/react/24/outline";
 import { guideForPath } from "@/components/HelpView";
 import { usePathname } from "next/navigation";
 import { Sidebar } from "@/components/Sidebar";
@@ -207,12 +208,14 @@ function StaffFrame({
                 open onto an empty panel. Kravio's bell glyph is kept in Icon.tsx for when they exist. */}
             {/* Help for the screen you're on (D-115). */}
             <HelpLink />
-            <HeaderMenu label="Settings" className="gear" icon={<Glyph name="settings" />} title="Account">
+            <HeaderMenu label="Settings" className="gear" icon={<Cog6ToothIcon aria-hidden="true" />} title="Account">
               <Link href="/account/password" className="item" role="menuitem">
-                Change password
+                <KeyIcon aria-hidden="true" />
+                <span>Change password</span>
               </Link>
               <Link href="/account/mfa" className="item" role="menuitem">
-                Sign-in app (security code)
+                <DevicePhoneMobileIcon aria-hidden="true" />
+                <span>Sign-in app (security code)</span>
               </Link>
               <div className="sep" />
               <div className="label">Appearance</div>
@@ -246,7 +249,8 @@ function HelpLink() {
   const guide = guideForPath(pathname);
   return (
     <Link href={guide ? `/help#${guide}` : "/help"} className="btn help-link" title="How this screen works">
-      ? Help
+      <QuestionMarkCircleIcon aria-hidden="true" />
+      <span>Help</span>
     </Link>
   );
 }
@@ -366,29 +370,33 @@ function ThemeItems() {
     return () => query.removeEventListener("change", follow);
   }, [choice]);
 
-  const options: { value: ThemeChoice; label: string }[] = [
-    { value: "light", label: "Light" },
-    { value: "dark", label: "Dark" },
-    { value: "system", label: "Match system" },
-  ];
+  const options = [
+    { value: "light", label: "Light", icon: SunIcon },
+    { value: "dark", label: "Dark", icon: MoonIcon },
+    { value: "system", label: "Match system", icon: ComputerDesktopIcon },
+  ] as const;
   return (
     <>
-      {options.map((option) => (
-        <button
-          key={option.value}
-          type="button"
-          className="item"
-          role="menuitemradio"
-          aria-checked={choice === option.value}
-          onClick={() => {
-            saveThemeChoice(option.value);
-            setChoice(option.value);
-          }}
-        >
-          {option.label}
-          {choice === option.value && <span className="tick">✓</span>}
-        </button>
-      ))}
+      {options.map((option) => {
+        const ThemeIcon = option.icon;
+        return (
+          <button
+            key={option.value}
+            type="button"
+            className="item"
+            role="menuitemradio"
+            aria-checked={choice === option.value}
+            onClick={() => {
+              saveThemeChoice(option.value);
+              setChoice(option.value);
+            }}
+          >
+            <ThemeIcon aria-hidden="true" />
+            <span>{option.label}</span>
+            {choice === option.value && <span className="tick">✓</span>}
+          </button>
+        );
+      })}
     </>
   );
 }

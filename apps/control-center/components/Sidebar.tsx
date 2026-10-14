@@ -6,6 +6,7 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import { usePathname, useParams, useRouter, useSearchParams } from "next/navigation";
 import { Glyph, Icon } from "@/components/Icon";
 import { WhyNot } from "@/components/WhyNot";
+import { SelectMenu } from "@/components/SelectMenu";
 import { logout } from "@/lib/api";
 import type { Principal, EventRow } from "@/lib/api";
 
@@ -297,27 +298,18 @@ export function Sidebar({
             </>
           ) : (
             <>
-              <select
-                aria-label="Switch event"
+              <SelectMenu
+                label="Switch event"
                 value={eventId ?? ""}
-                onChange={(event) => {
-                  const chosen = event.target.value;
+                placeholder="Choose an event…"
+                options={events
+                  .filter((event) => event.status !== "archived" || event.id === eventId)
+                  .map((event) => ({ value: event.id, label: event.name }))}
+                onChange={(chosen) => {
                   if (chosen) router.push(`/events/${chosen}`);
                 }}
-              >
-                <option value="" disabled>
-                  Choose an event…
-                </option>
-                {/* Archived events leave the switcher as they leave the portfolio (D-061),
-                    except the one you are standing in, which the select must still name. */}
-                {events
-                  .filter((event) => event.status !== "archived" || event.id === eventId)
-                  .map((event) => (
-                  <option key={event.id} value={event.id}>
-                    {event.name}
-                  </option>
-                ))}
-              </select>
+                className="event-switcher"
+              />
               {/* A20 (D-111): the greyed links say why on the page, not only on hover. */}
               <WhyNot reason={!eventId ? "Choose an event above to open the greyed screens below." : null} />
               {current && (

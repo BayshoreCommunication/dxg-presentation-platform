@@ -1,8 +1,9 @@
 "use client";
 
-import { Fragment, useState } from "react";
+import { Fragment, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { IdentificationIcon, LifebuoyIcon, ShieldCheckIcon, WrenchScrewdriverIcon } from "@heroicons/react/24/outline";
 import type { AccountType, StaffRow } from "@/lib/api";
 import {
   createStaff,
@@ -14,11 +15,11 @@ import {
   unlockStaff,
   ApiError,
 } from "@/lib/api";
-import { Chip } from "@/components/Chip";
 import { WhyNot } from "@/components/WhyNot";
 import { ConfirmInline } from "@/components/ConfirmInline";
 import { ACCOUNT_KIND, plural, SECURITY } from "@pmp/format";
 import { Icon } from "@/components/Icon";
+import { SelectMenu } from "@/components/SelectMenu";
 
 const when = (iso: string | null) =>
   iso
@@ -41,21 +42,50 @@ const when = (iso: string | null) =>
  * account's own email address; this screen never shows one.
  */
 
-const ACCOUNT_TYPES: { value: AccountType; label: string; hint: string }[] = [
-  { value: "support", label: ACCOUNT_KIND.support!.label, hint: ACCOUNT_KIND.support!.meaning },
-  { value: "technician", label: ACCOUNT_KIND.technician!.label, hint: ACCOUNT_KIND.technician!.meaning },
+const ACCOUNT_TYPES: { value: AccountType; label: string; hint: string; icon: ReactNode }[] = [
+  { value: "support", label: ACCOUNT_KIND.support!.label, hint: ACCOUNT_KIND.support!.meaning, icon: <LifebuoyIcon aria-hidden="true" /> },
+  { value: "technician", label: ACCOUNT_KIND.technician!.label, hint: ACCOUNT_KIND.technician!.meaning, icon: <WrenchScrewdriverIcon aria-hidden="true" /> },
   // The client's own people (the review's "Client Admin"), named "Client access" (Travis, 2026-10-11).
-  { value: "client", label: ACCOUNT_KIND.client!.label, hint: ACCOUNT_KIND.client!.meaning },
-  { value: "root_admin", label: ACCOUNT_KIND.root_admin!.label, hint: ACCOUNT_KIND.root_admin!.meaning },
+  { value: "client", label: ACCOUNT_KIND.client!.label, hint: ACCOUNT_KIND.client!.meaning, icon: <IdentificationIcon aria-hidden="true" /> },
+  { value: "root_admin", label: ACCOUNT_KIND.root_admin!.label, hint: ACCOUNT_KIND.root_admin!.meaning, icon: <ShieldCheckIcon aria-hidden="true" /> },
 ];
 
 const kindLabel = (type: AccountType) => ACCOUNT_KIND[type]?.label ?? type;
 
 function TypeBadge({ type }: { type: AccountType }) {
-  return <span className={`chip ${type === "root_admin" ? "c-sync" : type === "client" ? "c-mut" : "c-info"}`}>{kindLabel(type)}</span>;
+  return (
+    <span className="staff-access-badge">
+      {ACCOUNT_TYPES.find((option) => option.value === type)?.icon}
+      {kindLabel(type)}
+    </span>
+  );
 }
 
 const small = { padding: "3px 9px", fontSize: 12 } as const;
+type AccountFilter = "all" | "active" | "deactivated";
+const PAGE_SIZE = 8;
+
+function initials(name: string) {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("");
+}
+
+function paginationItems(current: number, total: number): Array<number | "ellipsis"> {
+  if (total <= 7) return Array.from({ length: total }, (_, index) => index + 1);
+  const pages = [...new Set([1, total, current - 1, current, current + 1])]
+    .filter((page) => page >= 1 && page <= total)
+    .sort((a, b) => a - b);
+  const items: Array<number | "ellipsis"> = [];
+  pages.forEach((page, index) => {
+    if (index > 0 && page - pages[index - 1]! > 1) items.push("ellipsis");
+    items.push(page);
+  });
+  return items;
+}
 
 /** Row actions that take access away or change someone's level — each asks first, under its row (D-113). */
 type RowAction = "password" | "mfa" | "type" | "deactivate" | "delete";
@@ -98,6 +128,10 @@ export function StaffAccounts({ initial, me }: { initial: StaffRow[]; me: string
   const [rowNotice, setRowNotice] = useState<{ id: string; text: string } | null>(null);
   /** Reset sign-in app needs a reason for the record (it used to be a window.prompt). */
   const [mfaReason, setMfaReason] = useState("");
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<AccountFilter>("all");
+  const [page, setPage] = useState(1);
+  const [managingId, setManagingId] = useState<string | null>(null);
 
   const ask = (id: string, action: RowAction) => {
     setAsking({ id, action });
@@ -112,6 +146,46 @@ export function StaffAccounts({ initial, me }: { initial: StaffRow[]; me: string
   };
 
   const rootAdmins = initial.filter((user) => user.account_type === "root_admin" && user.is_active).length;
+
+  const rows = useMemo(() => {
+    const needle = query.trim().toLocaleLowerCase();
+    return initial.filter((user) => {
+      if (filter === "active" && !user.is_active) return false;
+      if (filter === "deactivated" && user.is_active) return false;
+      if (!needle) return true;
+      return [user.display_name, user.email, kindLabel(user.account_type)]
+        .join(" ")
+        .toLocaleLowerCase()
+        .includes(needle);
+    });
+  }, [filter, initial, query]);
+
+  const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const pageRows = rows.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const firstResult = rows.length === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1;
+  const lastResult = Math.min(currentPage * PAGE_SIZE, rows.length);
+
+  const resetList = () => {
+    setPage(1);
+    setManagingId(null);
+    setAsking(null);
+    setRowNotice(null);
+  };
+
+  const goToPage = (next: number) => {
+    setPage(Math.min(Math.max(next, 1), totalPages));
+    setManagingId(null);
+    setAsking(null);
+    setRowNotice(null);
+  };
+
+  const toggleManager = (id: string) => {
+    setManagingId((current) => (current === id ? null : id));
+    setAsking(null);
+    setRowNotice(null);
+    setMfaReason("");
+  };
 
   async function run(work: () => Promise<void>) {
     setBusy(true);
@@ -199,18 +273,14 @@ export function StaffAccounts({ initial, me }: { initial: StaffRow[]; me: string
           <div className="field" style={{ marginTop: 10 }}>
             {/* A16: "Role" is kept for event jobs; the account's own type is its access level. */}
             <label htmlFor="account-type">Access level</label>
-            <select
+            <SelectMenu
               id="account-type"
-              style={{ minWidth: 220 }}
+              label="Access level"
               value={accountType}
-              onChange={(event) => setAccountType(event.target.value as AccountType)}
-            >
-              {ACCOUNT_TYPES.map((type) => (
-                <option key={type.value} value={type.value}>
-                  {type.label}
-                </option>
-              ))}
-            </select>
+              options={ACCOUNT_TYPES.map((type) => ({ value: type.value, label: type.label, icon: type.icon }))}
+              onChange={setAccountType}
+              className="account-type-select form-select"
+            />
             <div className="note" style={{ marginTop: 4 }}>
               {ACCOUNT_TYPES.find((type) => type.value === accountType)?.hint}
               {accountType !== "root_admin" && " Assign them to events on Event assignments after creating the account."}
@@ -244,87 +314,138 @@ export function StaffAccounts({ initial, me }: { initial: StaffRow[]; me: string
         The account rows below answer the other question — what one person can reach.
       */}
 
-      <div className="card">
-        <div className="chd">
-          <h3>Accounts · {initial.length}</h3>
-          <span className="m">
-            passwords, sign-in apps, access
-            <Link
-              href="/admin/assignments"
-              className="btn"
-              style={{ padding: "2px 8px", fontSize: 12, marginLeft: 10 }}
-            >
-              event assignments ›
-            </Link>
-          </span>
+      <div className="card assignment-card staff-accounts-card">
+        <div className="staff-accounts-heading">
+          <div>
+            <h3>Accounts</h3>
+            <span>Manage passwords, sign-in apps and access levels.</span>
+          </div>
+          <Link href="/admin/assignments" className="btn staff-event-assignments">
+            <Icon name="calendar" />
+            Event assignments
+          </Link>
         </div>
-        <div className="cbd" style={{ padding: "0 0 4px" }}>
-          <table>
+
+        <div className="assignment-toolbar staff-accounts-toolbar">
+          <label className="assignment-search">
+            <span className="sr-only">Search staff accounts</span>
+            <Icon name="search" />
+            <input
+              value={query}
+              onChange={(event) => { setQuery(event.target.value); resetList(); }}
+              placeholder="Search name, email or access level…"
+            />
+          </label>
+
+          <div className="assignment-filters" aria-label="Filter staff accounts">
+            {([ ["all", "All accounts", "users"], ["active", "Active", "checkCircle"], ["deactivated", "Deactivated", "pause"] ] as const).map(([value, label, icon]) => (
+              <button
+                key={value}
+                type="button"
+                className={filter === value ? "on" : ""}
+                aria-pressed={filter === value}
+                onClick={() => { setFilter(value); resetList(); }}
+              >
+                <Icon name={icon} size={15} />{label}
+              </button>
+            ))}
+          </div>
+
+          <span className="assignment-result-count">{rows.length} {rows.length === 1 ? "account" : "accounts"}</span>
+        </div>
+
+        <div className="assignment-table-wrap">
+          <table className="assignment-table staff-accounts-table">
+            <colgroup>
+              <col className="staff-col-account" />
+              <col className="staff-col-access" />
+              <col className="staff-col-security" />
+              <col className="staff-col-signin" />
+              <col className="staff-col-action" />
+            </colgroup>
             <thead>
               <tr>
                 <th>Account</th>
                 <th>Access level</th>
-                <th>Status</th>
+                <th>Security</th>
                 <th>Last sign-in</th>
-                <th />
+                <th>Action</th>
               </tr>
             </thead>
             <tbody>
-              {initial.map((user) => {
+              {pageRows.map((user) => {
                 const isMe = user.id === me;
                 const lastRoot = user.account_type === "root_admin" && user.is_active && rootAdmins <= 1;
                 const locked = user.locked_until && new Date(user.locked_until) > new Date();
                 const askingHere = asking?.id === user.id ? asking.action : null;
+                const isOpen = managingId === user.id;
                 return (
                   <Fragment key={user.id}>
-                    <tr>
+                    <tr className={isOpen ? "assignment-row-open" : undefined}>
                       <td>
-                        <b>{user.display_name}</b>
-                        {isMe && <span className="note"> (you)</span>}
-                        <br />
-                        <span className="note mono">{user.email}</span>
+                        <div className="staff-account-identity">
+                          <span className="assignment-avatar" aria-hidden="true">{initials(user.display_name)}</span>
+                          <span>
+                            <strong>{user.display_name}{isMe && <em>you</em>}</strong>
+                            <small>{user.email}</small>
+                          </span>
+                        </div>
                       </td>
                       <td>
                         <TypeBadge type={user.account_type} />
                       </td>
-                      <td style={{ whiteSpace: "nowrap" }}>
-                        {!user.is_active && <Chip status="attention" label="deactivated" />}
-                        {/* A15: status in plain words, one security vocabulary. */}
-                        {user.is_active && user.mfa_enrolled && <Chip status="synchronized_onsite" label="Sign-in app set up" />}
-                        {user.is_active && !user.mfa_enrolled && <Chip status="needs_revision" label="Sign-in app not set up" />}
-                        {user.must_change_password && (
-                          <>
-                            <br />
-                            <span className="note">Must choose a password</span>
-                          </>
-                        )}
-                        {locked && (
-                          <>
-                            <br />
-                            <span className="chip c-bad">locked</span>
-                          </>
-                        )}
-                        {user.mfa_enrolled && (
-                          <>
-                            <br />
-                            <span className="note">
-                              {plural(user.recovery_codes_left, "backup code")} left
-                            </span>
-                          </>
-                        )}
+                      <td>
+                        <div className="staff-security">
+                          <span className={`staff-security-status ${!user.is_active || !user.mfa_enrolled ? "attention" : ""}`}>
+                            <Icon name={user.is_active && user.mfa_enrolled ? "check" : "warning"} />
+                            {!user.is_active ? "Deactivated" : user.mfa_enrolled ? "Sign-in app set up" : "Setup needed"}
+                          </span>
+                          <small>
+                            {locked
+                              ? "Account locked"
+                              : user.must_change_password
+                                ? "Must choose a password"
+                                : user.mfa_enrolled
+                                  ? `${plural(user.recovery_codes_left, "backup code")} left`
+                                  : "No sign-in app yet"}
+                          </small>
+                        </div>
                       </td>
-                      <td className="note">{when(user.last_sign_in)}</td>
-                      <td style={{ textAlign: "right" }}>
-                        <div style={{ display: "inline-flex", flexWrap: "wrap", gap: 4, justifyContent: "flex-end" }}>
+                      <td className="staff-last-signin">{when(user.last_sign_in)}</td>
+                      <td>
+                        <button
+                          type="button"
+                          className="btn assignment-more-button"
+                          aria-label={`Manage ${user.display_name}`}
+                          aria-expanded={isOpen}
+                          onClick={() => toggleManager(user.id)}
+                        >
+                          <Icon name="chevronDown" size={18} />
+                        </button>
+                      </td>
+                    </tr>
+
+                    {isOpen && (
+                      <tr className="assignment-editor-row staff-account-editor-row">
+                        <td colSpan={5}>
+                          <div className="assignment-editor staff-account-editor">
+                            <div className="assignment-editor-head">
+                              <div>
+                                <strong>Manage {user.display_name}</strong>
+                                <span>Password, sign-in security and account access.</span>
+                              </div>
+                            </div>
+
+                            <div className="staff-account-actions">
                           <button
-                            className="btn"
+                            className="btn staff-action-security"
                             style={small}
                             disabled={busy}
                             title="Emails them a new temporary password and ends their open sessions"
                             onClick={() => ask(user.id, "password")}
                           >
                             <Icon name="key" />
-                            reset password
+                            Reset password
                           </button>
                           <button
                             className="btn warnb"
@@ -334,21 +455,21 @@ export function StaffAccounts({ initial, me }: { initial: StaffRow[]; me: string
                             onClick={() => ask(user.id, "mfa")}
                           >
                             <Icon name="refresh" />
-                            reset sign-in app
+                            Reset sign-in app
                           </button>
                           {locked && (
                             <button
-                              className="btn"
+                              className="btn good"
                               style={small}
                               disabled={busy}
                               onClick={() => void run(async () => void (await unlockStaff(user.id)))}
                             >
                               <Icon name="unlock" />
-                              unlock
+                              Unlock
                             </button>
                           )}
                           <button
-                            className="btn"
+                            className="btn staff-action-access"
                             style={small}
                             disabled={busy || isMe || (user.account_type === "root_admin" && lastRoot)}
                             title="Change what this account can reach"
@@ -358,10 +479,10 @@ export function StaffAccounts({ initial, me }: { initial: StaffRow[]; me: string
                             }}
                           >
                             <Icon name="edit" />
-                            change access level
+                            Change access level
                           </button>
                           <button
-                            className={user.is_active ? "btn danger" : "btn"}
+                            className={user.is_active ? "btn warnb" : "btn good"}
                             style={small}
                             disabled={busy || isMe || (user.is_active && lastRoot)}
                             onClick={() =>
@@ -372,7 +493,7 @@ export function StaffAccounts({ initial, me }: { initial: StaffRow[]; me: string
                             }
                           >
                             <Icon name={user.is_active ? "pause" : "play"} />
-                            {user.is_active ? "deactivate" : "reactivate"}
+                            {user.is_active ? "Deactivate" : "Reactivate"}
                           </button>
                           <button
                             className="btn danger"
@@ -382,16 +503,12 @@ export function StaffAccounts({ initial, me }: { initial: StaffRow[]; me: string
                             onClick={() => ask(user.id, "delete")}
                           >
                             <Icon name="trash" />
-                            delete
+                            Delete
                           </button>
-                        </div>
-                        <WhyNot reason={rowReason(user, isMe, lastRoot)} />
-                      </td>
-                    </tr>
-                    {/* D-113: the "are you sure?" and what happens next sit under the row they belong to. */}
-                    {(askingHere || rowNotice?.id === user.id) && (
-                      <tr>
-                        <td colSpan={5} style={{ borderTop: "none", paddingTop: 0 }}>
+                            </div>
+                            <WhyNot reason={rowReason(user, isMe, lastRoot)} />
+
+                          {/* D-113: the confirmation and outcome stay inside the account being managed. */}
                           {rowNotice?.id === user.id && !askingHere && (
                             <div className="confirm-inline">
                               <b>{rowNotice.text}</b>
@@ -458,18 +575,16 @@ export function StaffAccounts({ initial, me }: { initial: StaffRow[]; me: string
                             <>
                               <div className="field" style={{ margin: "8px 0 0" }}>
                                 <label htmlFor={`type-${user.id}`}>New access level for {user.display_name}</label>
-                                <select
+                                <SelectMenu
                                   id={`type-${user.id}`}
-                                  style={{ minWidth: 220 }}
+                                  label={`New access level for ${user.display_name}`}
                                   value={newType}
-                                  onChange={(event) => setNewType(event.target.value as AccountType)}
-                                >
-                                  {ACCOUNT_TYPES.filter((type) => type.value !== user.account_type).map((type) => (
-                                    <option key={type.value} value={type.value}>
-                                      {type.label}
-                                    </option>
-                                  ))}
-                                </select>
+                                  options={ACCOUNT_TYPES
+                                    .filter((type) => type.value !== user.account_type)
+                                    .map((type) => ({ value: type.value, label: type.label, icon: type.icon }))}
+                                  onChange={setNewType}
+                                  className="account-type-select form-select"
+                                />
                                 <div className="note" style={{ marginTop: 4 }}>
                                   {ACCOUNT_TYPES.find((type) => type.value === newType)?.hint}
                                 </div>
@@ -519,15 +634,49 @@ export function StaffAccounts({ initial, me }: { initial: StaffRow[]; me: string
                               onClose={() => setAsking(null)}
                             />
                           )}
+                          </div>
                         </td>
                       </tr>
                     )}
                   </Fragment>
                 );
               })}
+
+              {rows.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="assignment-no-results">
+                    <Icon name="search" size={20} />
+                    <strong>No accounts found</strong>
+                    <span>Try a different search or status filter.</span>
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
+
+        {rows.length > 0 && (
+          <div className="assignment-pagination" aria-label="Staff account pages">
+            <span className="assignment-page-summary">Showing {firstResult}–{lastResult} of {rows.length}</span>
+            {totalPages > 1 && (
+              <div className="assignment-page-controls">
+                <button type="button" className="btn assignment-page-step" disabled={currentPage === 1} onClick={() => goToPage(currentPage - 1)} aria-label="Previous page">
+                  <Icon name="chevronDown" size={15} />Previous
+                </button>
+                <div className="assignment-page-numbers">
+                  {paginationItems(currentPage, totalPages).map((item, index) => item === "ellipsis" ? (
+                    <span key={`ellipsis-${index}`} aria-hidden="true">…</span>
+                  ) : (
+                    <button key={item} type="button" className={item === currentPage ? "on" : ""} aria-label={`Page ${item}`} aria-current={item === currentPage ? "page" : undefined} onClick={() => goToPage(item)}>{item}</button>
+                  ))}
+                </div>
+                <button type="button" className="btn assignment-page-step" disabled={currentPage === totalPages} onClick={() => goToPage(currentPage + 1)} aria-label="Next page">
+                  Next<Icon name="chevronDown" size={15} />
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </>
   );

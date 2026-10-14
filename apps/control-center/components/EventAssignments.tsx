@@ -1,32 +1,41 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { EventRow, StaffRow, WorkedRow } from "@/lib/api";
 import { assignStaffToEvent, ApiError } from "@/lib/api";
-import { Chip } from "@/components/Chip";
 import { ConfirmInline } from "@/components/ConfirmInline";
 import { ACCOUNT_KIND, formatDateRange, ROLE, wordsFor } from "@pmp/format";
 import { Icon } from "@/components/Icon";
+import { SelectMenu } from "@/components/SelectMenu";
 
-/**
- * Who is on each event, inverted from the per-account list.
- *
- * The same facts either way, but the questions are different. "What can this person
- * reach?" is answered by the account rows; "who is working NeuroSummit, and as what?"
- * is not, and that is the question an administrator has while staffing an event.
- *
- * Events with nobody on them are kept in the list rather than filtered out — an event
- * with no staff is the thing most worth seeing here, and it is invisible in a view
- * organised by person, because the absence has no row to appear on.
- */
+type AssignmentFilter = "all" | "needs_staff" | "assigned";
+type AssignmentSort = "upcoming" | "oldest";
+const PAGE_SIZE = 8;
+
+const SORT_OPTIONS = [
+  { value: "upcoming", label: "Upcoming first" },
+  { value: "oldest", label: "Oldest first" },
+] as const;
+
+function paginationItems(current: number, total: number): Array<number | "ellipsis"> {
+  if (total <= 7) return Array.from({ length: total }, (_, index) => index + 1);
+  const pages = [...new Set([1, total, current - 1, current, current + 1])]
+    .filter((page) => page >= 1 && page <= total)
+    .sort((a, b) => a - b);
+  const items: Array<number | "ellipsis"> = [];
+  pages.forEach((page, index) => {
+    if (index > 0 && page - pages[index - 1]! > 1) items.push("ellipsis");
+    items.push(page);
+  });
+  return items;
+}
+
+/** One person per event, carrying every responsibility they have there. */
 function byEvent(staff: StaffRow[], events: EventRow[]) {
   return events.map((event) => ({
     event,
-    // One entry per person, carrying every hat they wear here. Pairing (person, role)
-    // instead would repeat the same name down the column — three lines for someone
-    // holding three roles, which reads as three people at a glance.
     people: staff
       .map((person) => ({
         person,
@@ -37,15 +46,38 @@ function byEvent(staff: StaffRow[], events: EventRow[]) {
   }));
 }
 
-/**
- * Event assignments — who works which event, and as what.
- *
- * A separate page from Staff accounts because they are separate jobs. This one is
- * asked while staffing an event and is about placement; the other is asked about a
- * person and is about their password, authenticator and whether they can sign in at
- * all. Holding both on one screen meant every account row carried controls for a
- * question nobody was asking at that moment.
- */
+function initials(name: string) {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("");
+}
+
+function StaffIdentity({ person, roles }: { person: StaffRow; roles: string[] }) {
+  const roleLabels = roles.map((role) => wordsFor(ROLE, role).label);
+  const visibleRoles = roleLabels.slice(0, 1);
+  const hiddenRoles = roleLabels.length - visibleRoles.length;
+  const accountLabel = ACCOUNT_KIND[person.account_type]?.label ?? person.account_type;
+
+  return (
+    <div className="assignment-person">
+      <span className="assignment-avatar" aria-hidden="true">{initials(person.display_name)}</span>
+      <span className="assignment-person-copy">
+        <strong>{person.display_name}</strong>
+        <span title={[accountLabel, ...roleLabels].join(" · ")}>{[accountLabel, ...visibleRoles].join(" · ")}</span>
+      </span>
+      {hiddenRoles > 0 && (
+        <span className="assignment-role-count" title={roleLabels.slice(1).join(", ")}>+{hiddenRoles}</span>
+      )}
+      {!person.is_active && <span className="assignment-person-alert">Deactivated</span>}
+      {person.is_active && !person.mfa_enrolled && <span className="assignment-person-alert">Sign-in app not set up</span>}
+    </div>
+  );
+}
+
+/** Who works which event, with gaps surfaced before the administrator opens an editor. */
 export function EventAssignments({
   initial,
   events,
@@ -56,30 +88,73 @@ export function EventAssignments({
   events: EventRow[];
   /** Who worked each finished event, once freed from it (D-181). */
   history?: WorkedRow[];
-  /** A14: arrived from "Next: assign them to an event" on Staff accounts (`?assign=<user id>`). */
   assign?: string;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
-  /*
-   * D-181: staff are freed from an event when it is archived, and the day after it ends. Those
-   * events are listed apart — who worked them, nothing to assign — and the rest are staffed here.
-   */
+  // D-181: finished events retain their staffing history, but cannot receive assignments.
   const today = new Date().toISOString().slice(0, 10);
-  const finished = (event: EventRow) => event.status === "archived" || event.ends_on < today;
-  const current = events.filter((event) => !finished(event));
-  const past = events
-    .filter(finished)
-    .sort((a, b) => b.ends_on.localeCompare(a.ends_on));
-  /** A19 (D-113): an error belongs to the event row it happened on, not the top of the page. */
+  const { current, past } = useMemo(() => {
+    const finished = (event: EventRow) => event.status === "archived" || event.ends_on < today;
+    return {
+      current: events.filter((event) => !finished(event)),
+      past: events.filter(finished).sort((a, b) => b.ends_on.localeCompare(a.ends_on)),
+    };
+  }, [events, today]);
   const [error, setError] = useState<{ eventId: string; message: string } | null>(null);
-  /** A18 (D-113): the removal waiting for "are you sure?". */
   const [removing, setRemoving] = useState<{ eventId: string; person: StaffRow } | null>(null);
+  const [draft, setDraft] = useState<Record<string, string>>({});
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<AssignmentFilter>("all");
+  const [sort, setSort] = useState<AssignmentSort>("upcoming");
+  const [openEventId, setOpenEventId] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+
   const newcomer = assign
     ? initial.find((person) => person.id === assign && person.is_active && person.account_type !== "root_admin")
     : undefined;
-  /** Who is about to be assigned to which event. The roles follow their kind (D-151). */
-  const [draft, setDraft] = useState<Record<string, string>>({});
+
+  const rows = useMemo(() => {
+    const needle = query.trim().toLocaleLowerCase();
+    const visible = byEvent(initial, current).filter(({ event, people }) => {
+      if (filter === "needs_staff" && people.length > 0) return false;
+      if (filter === "assigned" && people.length === 0) return false;
+      if (!needle) return true;
+      const searchText = [
+        event.name,
+        formatDateRange(event.starts_on, event.ends_on),
+        ...people.flatMap(({ person, roles }) => [
+          person.display_name,
+          ACCOUNT_KIND[person.account_type]?.label ?? person.account_type,
+          ...roles.map((role) => wordsFor(ROLE, role).label),
+        ]),
+      ].join(" ").toLocaleLowerCase();
+      return searchText.includes(needle);
+    });
+    return visible.sort((a, b) => {
+      const order = a.event.starts_on.localeCompare(b.event.starts_on);
+      return sort === "upcoming" ? -order : order;
+    });
+  }, [current, filter, initial, query, sort]);
+
+  const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const pageRows = rows.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const firstResult = rows.length === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1;
+  const lastResult = Math.min(currentPage * PAGE_SIZE, rows.length);
+
+  const resetPage = () => {
+    setPage(1);
+    setOpenEventId(null);
+    setRemoving(null);
+  };
+
+  const goToPage = (next: number) => {
+    setPage(Math.min(Math.max(next, 1), totalPages));
+    setOpenEventId(null);
+    setRemoving(null);
+  };
+
   const setWho = (eventId: string, who: string) => setDraft((current) => ({ ...current, [eventId]: who }));
 
   async function run(eventId: string, work: () => Promise<void>) {
@@ -95,185 +170,208 @@ export function EventAssignments({
     }
   }
 
+  const toggleEditor = (eventId: string) => {
+    setError(null);
+    setRemoving(null);
+    setOpenEventId((current) => (current === eventId ? null : eventId));
+  };
+
   return (
     <>
-      <h1 className="htitle">Event assignments</h1>
-      <div className="note" style={{ margin: "-8px 0 14px" }}>
-        Staff are placed on events; a staff member assigned nowhere can sign in and reach nothing. What they
-        can do on an event follows their access level — DXG Support staff run it, DXG Technician staff work the
-        Speaker Ready Room and Manage presentations. DXG Admins reach every event already and are not listed here.
+      <div className="assignment-page-head">
+        <div>
+          <h1 className="htitle">Event assignments</h1>
+          <p>Assign staff to events and manage who can access each workspace.</p>
+        </div>
+        <Link href="/admin/users" className="btn assignment-manage-accounts">
+          <Icon name="users" />
+          Manage staff accounts
+        </Link>
       </div>
 
       {newcomer && (
-        <div className="card">
-          <div className="cbd">
-            <b>Assigning {newcomer.display_name}.</b>{" "}
-            <span className="note">
-              Press &ldquo;assign {newcomer.display_name} here&rdquo; on the event they will work.
-            </span>
-          </div>
+        <div className="assignment-newcomer" role="status">
+          <strong>Assigning {newcomer.display_name}</strong>
+          <span>Choose the event they will work, then confirm the assignment.</span>
         </div>
       )}
 
-        <div className="card">
-          <div className="chd">
-            <h3>Event assignments</h3>
-            <span className="m">
-              who works which event, and as what
-              <Link href="/admin/users" className="btn" style={{ padding: "2px 8px", fontSize: 12, marginLeft: 10 }}>
-                manage accounts ›
-              </Link>
-            </span>
+      <div className="card assignment-card">
+        <div className="assignment-toolbar">
+          <label className="assignment-search">
+            <span className="sr-only">Search events</span>
+            <Icon name="search" />
+            <input value={query} onChange={(event) => { setQuery(event.target.value); resetPage(); }} placeholder="Search events…" />
+          </label>
+
+          <div className="assignment-filters" aria-label="Filter event assignments">
+            {([ ["all", "All events", "calendar"], ["needs_staff", "Needs staff", "warning"], ["assigned", "Assigned", "check"] ] as const).map(([value, label, icon]) => (
+              <button key={value} type="button" className={filter === value ? "on" : ""} aria-pressed={filter === value} onClick={() => { setFilter(value); resetPage(); }}>
+                <Icon name={icon} size={15} />{label}
+              </button>
+            ))}
           </div>
-          <div className="cbd" style={{ padding: "0 0 4px" }}>
-            <table>
-              <thead>
-                <tr>
-                  <th>Event</th>
-                  <th>Staff assigned</th>
-                </tr>
-              </thead>
-              <tbody>
-                {byEvent(initial, current).map(({ event, people }) => (
-                  <tr key={event.id}>
-                    <td style={{ verticalAlign: "top", whiteSpace: "nowrap" }}>
-                      <div style={{ fontWeight: 600 }}>{event.name}</div>
-                      <span className="note">{formatDateRange(event.starts_on, event.ends_on)}</span>
-                    </td>
-                    <td>
-                      {people.length === 0 ? (
-                        /*
-                         * The point of this view. An event nobody can work on looks
-                         * exactly like a healthy one from the account list, because
-                         * an absence has no row of its own to appear on.
-                         */
-                        <span className="chip c-warn">nobody assigned yet</span>
-                      ) : (
-                        people.map(({ person, roles }) => (
-                          <div
-                            key={person.id}
-                            style={{
-                              display: "flex",
-                              alignItems: "baseline",
-                              gap: 6,
-                              flexWrap: "wrap",
-                              marginBottom: 4,
-                            }}
-                          >
-                            <span style={{ display: "inline-block", minWidth: 150 }}>
-                              {person.display_name}
-                            </span>
-                            {!person.is_active && <Chip status="attention" label="deactivated" />}
-                            {person.is_active && !person.mfa_enrolled && (
-                              <Chip status="needs_revision" label="Sign-in app not set up" />
-                            )}
-                            <span className="chip c-info" title={ACCOUNT_KIND[person.account_type]?.meaning}>
-                              {ACCOUNT_KIND[person.account_type]?.label ?? person.account_type}
-                            </span>
-                            <span className="note" title={roles.map((role) => wordsFor(ROLE, role).label).join(", ")}>
-                              {roles.map((role) => wordsFor(ROLE, role).label).join(" · ")}
-                            </span>
-                            <button
-                              className="btn"
-                              title={`Take ${person.display_name} off ${event.name}`}
-                              style={{ padding: "0 5px", fontSize: 11, lineHeight: 1.5 }}
-                              disabled={busy}
-                              onClick={() => {
-                                setError(null);
-                                setRemoving({ eventId: event.id, person });
-                              }}
-                            >
-                              ×
-                            </button>
-                          </div>
-                        ))
-                      )}
 
-                      {removing?.eventId === event.id && (
-                        <ConfirmInline
-                          question={`Take ${removing.person.display_name} off ${event.name}?`}
-                          detail="They will no longer see this event. You can assign them again at any time."
-                          confirmLabel="Remove"
-                          icon="trash"
-                          busyLabel="Removing…"
-                          danger
-                          onConfirm={async () => {
-                            await assignStaffToEvent(removing.person.id, event.id, false);
-                            setRemoving(null);
-                            router.refresh();
-                          }}
-                          onClose={() => setRemoving(null)}
-                        />
-                      )}
-
-                      {/*
-                        Assigning happens here rather than on the account rows: this is where the
-                        question is being asked, and the event is already decided by which row you are
-                        on. No roles to tick (D-151): the account's access level says what it does.
-                      */}
-                      <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                        {newcomer && draft[event.id] !== newcomer.id && (
-                          <button
-                            className="btn pri"
-                            style={{ padding: "2px 8px", fontSize: 12 }}
-                            onClick={() => setWho(event.id, newcomer.id)}
-                          >
-                            <Icon name="add" />
-                            assign {newcomer.display_name} here
-                          </button>
-                        )}
-                        <select
-                          value={draft[event.id] ?? ""}
-                          onChange={(e) => setWho(event.id, e.target.value)}
-                          style={{ fontSize: 12, padding: "3px 28px 3px 6px", backgroundPosition: "right 6px center", backgroundSize: "16px 16px" }}
-                        >
-                          <option value="">assign someone…</option>
-                          {initial
-                            // Admins reach every event without a role (D-100); those already here are not offered.
-                            .filter(
-                              (person) =>
-                                person.is_active &&
-                                person.account_type !== "root_admin" &&
-                                !people.some((entry) => entry.person.id === person.id),
-                            )
-                            .map((person) => (
-                              <option key={person.id} value={person.id}>
-                                {person.display_name} — {ACCOUNT_KIND[person.account_type]?.label ?? person.account_type}
-                              </option>
-                            ))}
-                        </select>
-                        {draft[event.id] && (
-                          <button
-                            className="btn"
-                            style={{ padding: "2px 8px", fontSize: 12 }}
-                            disabled={busy}
-                            onClick={() =>
-                              void run(event.id, async () => {
-                                const who = draft[event.id];
-                                if (!who) throw new ApiError("request", "Pick who to assign.", 400);
-                                await assignStaffToEvent(who, event.id, true);
-                                setDraft((current) => ({ ...current, [event.id]: "" }));
-                              })
-                            }
-                          >
-                            <Icon name="add" />
-                            assign
-                          </button>
-                        )}
-                        {/* A19: the error shows under the event it happened on. */}
-                        {error?.eventId === event.id && (
-                          <div className="err" style={{ margin: "6px 0 0" }}>
-                            {error.message}
-                          </div>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="assignment-toolbar-end">
+            <SelectMenu
+              label="Sort events"
+              value={sort}
+              options={SORT_OPTIONS}
+              onChange={(value) => { setSort(value as AssignmentSort); resetPage(); }}
+              className="assignment-sort-select"
+            />
+            <span className="assignment-result-count">{rows.length} {rows.length === 1 ? "event" : "events"}</span>
           </div>
         </div>
+
+        <div className="assignment-table-wrap">
+          <table className="assignment-table">
+            <colgroup>
+              <col className="assignment-col-event" />
+              <col className="assignment-col-date" />
+              <col className="assignment-col-staff" />
+              <col className="assignment-col-status" />
+              <col className="assignment-col-action" />
+            </colgroup>
+            <thead>
+              <tr><th>Event</th><th>Date</th><th>Assigned staff</th><th>Status</th><th>Action</th></tr>
+            </thead>
+            <tbody>
+              {pageRows.map(({ event, people }) => {
+                const isOpen = openEventId === event.id;
+                const available = initial.filter((person) => person.is_active && person.account_type !== "root_admin" && !people.some((entry) => entry.person.id === person.id));
+
+                return (
+                  <Fragment key={event.id}>
+                    <tr className={isOpen ? "assignment-row-open" : undefined}>
+                      <td><strong className="assignment-event-name">{event.name}</strong></td>
+                      <td className="assignment-date">{formatDateRange(event.starts_on, event.ends_on)}</td>
+                      <td>
+                        {people.length > 0 ? (
+                          <div className="assignment-people">
+                            {people.map(({ person, roles }) => <StaffIdentity key={person.id} person={person} roles={roles} />)}
+                          </div>
+                        ) : <span className="assignment-empty">—</span>}
+                      </td>
+                      <td>
+                        <span className={`assignment-status ${people.length > 0 ? "assigned" : "needs-staff"}`}>
+                          <Icon name={people.length > 0 ? "check" : "warning"} />
+                          {people.length > 0 ? "Assigned" : "Needs staff"}
+                        </span>
+                      </td>
+                      <td>
+                        {people.length === 0 ? (
+                          <button type="button" className="btn pri assignment-assign-button" onClick={() => toggleEditor(event.id)}>
+                            <Icon name="add" />Assign staff
+                          </button>
+                        ) : (
+                          <button type="button" className="btn assignment-more-button" aria-label={`Manage assignments for ${event.name}`} aria-expanded={isOpen} onClick={() => toggleEditor(event.id)}>
+                            <Icon name="chevronDown" size={18} />
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+
+                    {isOpen && (
+                      <tr className="assignment-editor-row">
+                        <td colSpan={5}>
+                          <div className="assignment-editor">
+                            <div className="assignment-editor-head">
+                              <div><strong>Manage {event.name}</strong><span>Add someone new or remove an existing assignment.</span></div>
+                            </div>
+
+                            {people.length > 0 && (
+                              <div className="assignment-current-team">
+                                {people.map(({ person, roles }) => (
+                                  <div className="assignment-current-person" key={person.id}>
+                                    <StaffIdentity person={person} roles={roles} />
+                                    <button type="button" className="btn assignment-remove-button" disabled={busy} onClick={() => { setError(null); setRemoving({ eventId: event.id, person }); }}>Remove</button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                            {removing?.eventId === event.id && (
+                              <ConfirmInline
+                                question={`Take ${removing.person.display_name} off ${event.name}?`}
+                                detail="They will no longer see this event. You can assign them again at any time."
+                                confirmLabel="Remove"
+                                icon="trash"
+                                busyLabel="Removing…"
+                                danger
+                                onConfirm={async () => { await assignStaffToEvent(removing.person.id, event.id, false); setRemoving(null); router.refresh(); }}
+                                onClose={() => setRemoving(null)}
+                              />
+                            )}
+
+                            <div className="assignment-add-person">
+                              <div><strong>Assign additional staff</strong><span>Access follows the staff member&apos;s account type.</span></div>
+                              <div className="assignment-add-controls">
+                                {newcomer && draft[event.id] !== newcomer.id && available.some((person) => person.id === newcomer.id) && (
+                                  <button type="button" className="btn" onClick={() => setWho(event.id, newcomer.id)}>Choose {newcomer.display_name}</button>
+                                )}
+                                <SelectMenu
+                                  label={`Choose staff for ${event.name}`}
+                                  value={draft[event.id] ?? ""}
+                                  placeholder="Choose a staff member…"
+                                  options={available.map((person) => ({
+                                    value: person.id,
+                                    label: `${person.display_name} — ${ACCOUNT_KIND[person.account_type]?.label ?? person.account_type}`,
+                                  }))}
+                                  onChange={(value) => setWho(event.id, value)}
+                                  disabled={available.length === 0}
+                                  className="assignment-staff-select"
+                                />
+                                <button type="button" className="btn pri" disabled={busy || !draft[event.id]} onClick={() => void run(event.id, async () => {
+                                  const who = draft[event.id];
+                                  if (!who) throw new ApiError("request", "Choose who to assign.", 400);
+                                  await assignStaffToEvent(who, event.id, true);
+                                  setDraft((current) => ({ ...current, [event.id]: "" }));
+                                })}>
+                                  <Icon name="add" />{busy ? "Assigning…" : "Assign to event"}
+                                </button>
+                              </div>
+                            </div>
+
+                            {available.length === 0 && <p className="assignment-all-assigned">Every active staff member is already assigned.</p>}
+                            {error?.eventId === event.id && <div className="err assignment-error">{error.message}</div>}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                );
+              })}
+
+              {rows.length === 0 && (
+                <tr><td colSpan={5} className="assignment-no-results"><Icon name="search" size={20} /><strong>No events found</strong><span>Try a different search or status filter.</span></td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        {rows.length > 0 && (
+          <div className="assignment-pagination" aria-label="Event assignment pages">
+            <span className="assignment-page-summary">Showing {firstResult}–{lastResult} of {rows.length}</span>
+            {totalPages > 1 && (
+              <div className="assignment-page-controls">
+                <button type="button" className="btn assignment-page-step" disabled={currentPage === 1} onClick={() => goToPage(currentPage - 1)} aria-label="Previous page">
+                  <Icon name="chevronDown" size={15} />Previous
+                </button>
+                <div className="assignment-page-numbers">
+                  {paginationItems(currentPage, totalPages).map((item, index) => item === "ellipsis" ? (
+                    <span key={`ellipsis-${index}`} aria-hidden="true">…</span>
+                  ) : (
+                    <button key={item} type="button" className={item === currentPage ? "on" : ""} aria-label={`Page ${item}`} aria-current={item === currentPage ? "page" : undefined} onClick={() => goToPage(item)}>{item}</button>
+                  ))}
+                </div>
+                <button type="button" className="btn assignment-page-step" disabled={currentPage === totalPages} onClick={() => goToPage(currentPage + 1)} aria-label="Next page">
+                  Next<Icon name="chevronDown" size={15} />
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
         {/* D-181: finished events — their staff were freed; who worked each is kept. */}
         {past.length > 0 && (
@@ -341,7 +439,7 @@ export function EventAssignments({
             </details>
           </div>
         )}
-          </>
+    </>
   );
 }
 

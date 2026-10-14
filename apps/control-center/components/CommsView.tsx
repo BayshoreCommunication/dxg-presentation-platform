@@ -14,6 +14,7 @@ import type { RichEditorHandle } from "@/components/RichEditor";
 import { Chip } from "@/components/Chip";
 import { WhyNot } from "@/components/WhyNot";
 import { Icon } from "@/components/Icon";
+import { SelectMenu } from "@/components/SelectMenu";
 import { EMAIL_STATUS, formatDateRange, formatDeadline, formatSessionTime, wordsFor } from "@pmp/format";
 
 
@@ -405,19 +406,15 @@ export function CommsView({
         <div className="chd">
           <h3>Email templates</h3>
           <div className="tpl-head">
-            <select
-              aria-label="Template"
+            <SelectMenu
+              label="Template"
               value={selected}
               disabled={editing !== null}
               title={editing !== null ? "Save or cancel your changes to switch to another template." : undefined}
-              onChange={(event) => setSelected(event.target.value)}
-            >
-              {data.templates.map((row) => (
-                <option key={row.id} value={row.id}>
-                  {row.name}
-                </option>
-              ))}
-            </select>
+              options={data.templates.map((row) => ({ value: row.id, label: row.name }))}
+              onChange={setSelected}
+              className="template-select form-select"
+            />
             {template && !editing && (
               <button
                 type="button"

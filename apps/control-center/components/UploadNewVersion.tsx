@@ -7,6 +7,7 @@ import { ingestForSlot } from "@/lib/api";
 import { Icon } from "@/components/Icon";
 import { LocalIntake } from "@/components/LocalIntake";
 import { Toast } from "@/components/Toast";
+import { SelectMenu } from "@/components/SelectMenu";
 
 /**
  * Upload a new version from Manage presentations (client review, D-154): a presenter who
@@ -82,18 +83,19 @@ export function UploadNewVersion({ eventId, talks, timezone }: { eventId: string
           <div className="cbd">
             <div className="field">
               <label htmlFor="upload-talk">Presentation</label>
-              <select id="upload-talk" style={{ width: "100%" }} value={slotId} onChange={(event) => setSlotId(event.target.value)}>
-                <option value="">Choose the presentation…</option>
-                {groups.map((group) => (
-                  <optgroup key={group.label} label={group.label}>
-                    {group.items.map((item) => (
-                      <option key={item.slot_id} value={item.slot_id}>
-                        {item.label}
-                      </option>
-                    ))}
-                  </optgroup>
-                ))}
-              </select>
+              <SelectMenu
+                id="upload-talk"
+                label="Presentation"
+                value={slotId}
+                placeholder="Choose the presentation…"
+                options={groups.flatMap((group) => group.items.map((item) => ({
+                  value: item.slot_id,
+                  label: item.label,
+                  group: group.label,
+                })))}
+                onChange={setSlotId}
+                className="form-select"
+              />
             </div>
             {chosen ? (
               <LocalIntake

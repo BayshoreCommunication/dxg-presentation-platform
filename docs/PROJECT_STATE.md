@@ -3718,3 +3718,47 @@ PowerPoint does on Windows. Built in `tools/mac-opener` as a macOS package (inst
 the API, offered on the page. From a clean state on this Mac: installed, and a real open link was fetched and opened
 in the default app; unsafe links refused. Unsigned, a downloaded package needs Privacy & Security → Open Anyway once;
 an Apple Developer ID would remove that. open-in-powerpoint 5/5, unit 291, lint and type-check clean.
+
+## 2026-10-14 — Event assignments compact monochrome workspace
+The administrator's Event assignments page now follows the selected black-and-white DXG mockup: one compact
+five-column table, search, All / Needs staff / Assigned filters, date sorting, neutral icon-led status pills,
+staff initials and a focused inline editor for adding or removing people. The existing account-type-driven access
+rules and confirmation before removal are unchanged. The editor was widened after browser QA found its right-hand
+action could clip at 1440 px. `scripts/verifyEventAssignments.ts` walks the local page as the seeded admin through
+search, filters, sort, assigned and unassigned editors, desktop capture and phone overflow; type-check and lint are
+clean. A follow-up polish pass replaced the platform-native sort/staff dropdowns on this
+screen with an accessible monochrome menu, then migrated every remaining Control Center selector to the same shared
+control while preserving option groups. The sidebar event menu is constrained inside the 250 px sidebar, and Event
+assignments now pages 84 local records eight at a time with result
+counts and compact Previous / numbered / Next navigation. A real four-sided neutral border replaces the inset edge
+that read as broken beside the pagination footer. Mouse, keyboard and route-wide selector checks pass; no native
+selects remain on the covered screens, and the browser reports no console errors.
+
+The Staff accounts list now shares that operations-table language: search, All / Active / Deactivated filters,
+initial avatars, monochrome access and security pills, eight-row pagination, and one inline management accordion
+instead of five buttons on every row. Event assignments and Staff accounts both use a down/up chevron for the
+accordion and no redundant Close button. Both filter groups use meaningful existing icons. The shared select menu
+now renders in a fixed body-level layer, so every open menu stays above later cards and overflow containers; it also
+repositions on scroll/resize and opens upward when space is tighter below. `scripts/verifyStaffAccounts.ts` covers
+search, filters, pagination, the accordion, access confirmation, select layering and mobile overflow with no browser
+or HTTP failures.
+The active filter is now a solid high-contrast black/white pill, including its icon, so selection cannot be confused
+with the pale hover and inactive states; dark theme reverses the same contrast.
+Staff management actions now communicate consequence without recoloring the table itself: password reset is blue,
+access changes indigo, sign-in reset and deactivation amber, restore/unlock green, and permanent deletion red. Each
+uses the same semantic color for icon, text, border and a light/dark-theme-safe soft background.
+Their labels now use consistent initial capitals. The global Settings menu also pairs every item with a meaningful
+outline icon: key and phone for account security, then sun, moon and desktop for Light, Dark and Match system.
+The Settings trigger itself now uses a standard six-tooth gear at 18 px instead of the ambiguous hexagonal badge,
+while preserving the existing hover rotation and menu behavior.
+Access-level selectors now reinforce each role with a monochrome icon in both the selected trigger and open menu:
+lifebuoy for Support, wrench for Technician, identification card for Client access and shield for DXG Admin.
+The Staff accounts table's access-level badges use the same role icons.
+Top-bar Help and Settings now read as one control group: both are 36 px high with matching border, radius and surface;
+Help uses a question-circle plus label and Settings remains a square gear button.
+Staff account accordion headings now align with their helper text and action panel. The Action column's centering
+rule is scoped to ordinary rows, so it no longer centers the expanded row's full-width cell.
+The release combines these interface changes with the current finished-event staffing rules (D-181): finished events
+remain read-only and preserve who worked them. Shared dropdowns allow touch scrolling and keep keyboard navigation
+visible in long option lists.
+**Not deployed.**
