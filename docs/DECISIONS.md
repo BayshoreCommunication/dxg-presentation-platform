@@ -3188,3 +3188,67 @@ their LibreOffice timestamps; every other fixture is byte-identical. The practic
 (`apps/api/assets/practice/normal-10-slides-notes.pptx`) is the new fixture, so practice events started from now on get
 it; existing practice events keep the old file. Real speakers' decks, saved by PowerPoint or Keynote, already carry the
 list.
+
+## D-172 (2026-10-14): Presentation detail, plainly — Status: ACCEPTED (Travis)
+Travis: "improvise the UI of the presentation details … clean and user friendly … remove the 'open inspection report'
+button. Local intake can be done by dxg assign technician so do we need to show in the staff portal?"
+- **Header**: the talk's title is the page title, with its status; the speaker (bold), room and time under it.
+- **What's happening**: the status in one sentence on its own card, with "Final onsite version" / "Restricted" when
+  they apply.
+- **Current file**: vN · size · where it came from · when it arrived, then the actions — **Preview slides** (main),
+  Open in the computer's app and Download (D-167), and **Review this version** only while the version waits for review
+  (it opens that version in Manage presentations). **Open inspection report** is gone from this page (the review
+  workspace still links the full check report). **Replace file (Local intake)** shows to DXG Technician staff only,
+  since taking a file in is theirs (D-162); the hint lines about the Speaker Ready Room are gone.
+- **Progress**: the three steps on their own card, without the "Next:" line that repeated "What's happening"
+  (`ConfirmationStrip` `hideNext`, the same change as D-169's).
+- **Version history**: "From" and "Checks" (Passed) instead of "Source" and "Findings" (clean).
+
+## D-173 (2026-10-14): The event page's header buttons — Status: ACCEPTED (Travis)
+- **No "Back to portfolio"** (Travis: "remove the 'back to portfolio' button"): the breadcrumb's **Portfolio** is the
+  way back. (For an archived event the old button opened the Archived list; the breadcrumb opens the live portfolio,
+  whose Archived button is one click away.)
+- **Manage presentations only when something waits** (Travis: "if there are nothing to review, don't show the manage
+  presentations of the top right"): it shows "Manage presentations (n) →" when n > 0, and nothing otherwise — it used
+  to read "Manage presentations · none waiting". The sidebar's Manage presentations always opens the screen.
+
+## D-174 (2026-10-14): "Today's risk list" becomes "Action needed", grouped by what to do — Status: ACCEPTED (Travis)
+Travis: "rename it to 'Action needed' and make the list more meaningful to understand what needs to do." The card was
+never only today's — it listed every talk of the event not yet synchronized onsite, by start time, with only the time
+of day shown, so a list running over several days read as out of order; each row gave a reason, not an action.
+- **Action needed** groups those talks by what happens next, each group with its count, who acts and a link to where
+  it's done: **Waiting for the speaker** (missing, needs revision, failed the virus check → Speakers tab), **To review**
+  (submitted, checks running → Manage presentations), **To load in the room** (approved — delivering, update pending
+  → Room sync), **Needs a room** (approved, no room → Agenda).
+- Each row: "Tue, Oct 27 · 09:00 · Ballroom A · **Speaker** — Talk", then the one thing to do in words (e.g. "Copy the
+  approved file to the room PC and tick Loaded on Room sync."), and the status chip. The row still opens Presentation
+  detail.
+- A cancelled session needs nothing and is no longer listed (it used to appear with a "Canceled" chip).
+- Same data (`GET /events/:id/risk-list`); SCREEN_SPECS' "Today's risk list" (screen 9) reads as this card.
+
+## D-175 (2026-10-14): No number tiles on the event overview — Status: ACCEPTED (Travis)
+Travis: "remove this 5 cards". The overview's tiles — Collected, Approved, Warnings, Missing, Rooms ready (D-065) — are
+gone; the page goes from the event's settings straight to **Action needed** (D-174), which names each talk and what to
+do, then **Room readiness**. The `Kpi` component stays (the client portal and the import screen use it), and
+`GET /events/:id/summary` still returns the counts.
+
+## D-176 (2026-10-14): Room readiness says why a room isn't ready — Status: ACCEPTED (Travis)
+Travis asked what "Not ready" meant, then: "say why in each room". A room is Ready when every talk in it is
+synchronized onsite — its approved version loaded on the room PC and ticked on Room sync (D-125), cancelled talks
+excepted — and the card only said "0 of 2 talks loaded · Not ready".
+- Under the loaded count, a room that isn't ready names its talks by what each still needs, in Action needed's words
+  (D-174): "To load: Amara Okafor · To review: Tomás Herrera", "Waiting for the speaker: Marcus Lindqvist, Hannah
+  Becker". From the fleet's per-talk status; no API change.
+
+## D-177 (2026-10-14): Action needed rows: who, which talk, status — and the action as a label — Status: ACCEPTED (Travis)
+Travis: "show only the speaker name and the title with the label, and show the action in an action label" (the layout
+chosen: name, title and status on one line, the action below). Each row is now **Speaker** — Talk with its status
+label, and under it a short action label — "→ Get the file", "→ Get the new version", "→ Get a clean copy",
+"→ Review the file", "→ Wait for the checks", "→ Load on room PC", "→ Load the newer version", "→ Set a room" — with
+the full instruction beside it (Travis: "keep the what action need text like before"), e.g. "Copy the approved file
+to the room PC and tick Loaded on Room sync." The day, time and room are no longer on the row (Presentation detail has them;
+the row still opens it). Groups, counts and links stay as D-174.
+- **Addendum (same day): the action label is a link** (Travis: "when I click 'get the new version', it doesn't
+  redirect anywhere"). Each label opens where that action is done: the speaker actions (Get the file, Get the new
+  version, Get a clean copy) → the Speakers tab; Review the file → Manage presentations; Load on room PC / Load the
+  newer version → Room sync; Set a room → the Agenda tab; Wait for the checks → the talk's Presentation detail.

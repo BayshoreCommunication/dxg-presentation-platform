@@ -5,36 +5,123 @@ import { getSummary, getRiskList, getFleet, getDraft, getSession, getAgenda, get
 import { Chip } from "@/components/Chip";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { EventTabs } from "@/components/EventTabs";
-import { InfoTip } from "@/components/InfoTip";
-import { Kpi } from "@/components/Kpi";
-import type { KpiTone } from "@/components/Kpi";
 import { ROOM_LABEL, roomLoadedLine } from "@/lib/roomWords";
 import { guard } from "@/lib/guard";
 
 export const dynamic = "force-dynamic";
 
-/** Times always render in the event's timezone — never the viewer's browser. */
-const time = (iso: string, timeZone: string) =>
-  new Date(iso).toLocaleTimeString("en-US", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-    timeZone,
-  });
+/**
+ * "Action needed" (D-174, was "Today's risk list" — it was never only today's): every talk not
+ * yet loaded in its room, grouped by what has to happen next and who does it, each with the
+ * one thing to do in words and the screen where it's done. S25 (D-113) gave each row a reason;
+ * a reason ("Waiting for review") still left the reader to work out the action.
+ */
+type ActionGroup = { key: string; title: string; who: string; link: { label: string; href: (id: string) => string } };
+const ACTION_GROUPS: ActionGroup[] = [
+  {
+    key: "speaker",
+    title: "Waiting for the speaker",
+    who: "the speaker sends a file",
+    link: { label: "Speakers", href: (id) => `/events/${id}?tab=speakers` },
+  },
+  {
+    key: "review",
+    title: "To review",
+    who: "a reviewer approves the file",
+    link: { label: "Manage presentations", href: (id) => `/events/${id}/review` },
+  },
+  {
+    key: "load",
+    title: "To load in the room",
+    who: "copy the approved file to the room PC and tick it",
+    link: { label: "Room sync", href: (id) => `/events/${id}/sync` },
+  },
+  {
+    key: "room",
+    title: "Needs a room",
+    who: "give the session a room",
+    link: { label: "Agenda", href: (id) => `/events/${id}?tab=agenda` },
+  },
+];
+/** Where an action label leads (D-177): the screen where that action is done. */
+function actionHref(go: ActionGo, eventId: string, slotId: string): string {
+  switch (go) {
+    case "speakers":
+      return `/events/${eventId}?tab=speakers`;
+    case "review":
+      return `/events/${eventId}/review`;
+    case "sync":
+      return `/events/${eventId}/sync`;
+    case "agenda":
+      return `/events/${eventId}?tab=agenda`;
+    default:
+      return `/events/${eventId}/talks/${slotId}`;
+  }
+}
 
 /**
- * S25 (D-113): why a talk is on the risk list, in a few words, beside its session time —
- * a bare "Submitted" chip did not say what is left to do.
+ * Why a room isn't ready (D-176), in Action needed's words: each talk that still needs something,
+ * by name, under what it needs — "To load: Amara Okafor · To review: Tomás Herrera".
  */
-const RISK_REASON: Record<string, string> = {
-  missing: "Nothing uploaded yet",
-  processing: "File checks running",
-  submitted: "Waiting for review",
-  needs_revision: "Waiting for the speaker's new version",
-  approved: "Approved, but the session has no room",
-  approved_delivering: "Not loaded on the room PC yet",
-  update_pending_ack: "Newer version to load – the room PC has the older one",
-  attention: "File held back – ask the speaker for a clean copy",
+const ROOM_REASON_LABEL: Record<string, string> = {
+  load: "To load",
+  review: "To review",
+  speaker: "Waiting for the speaker",
+};
+function roomReasons(talks: { status: string; speaker: string | null; title: string }[]): string | null {
+  const parts = ["load", "review", "speaker"].flatMap((group) => {
+    const names = talks
+      .filter((talk) => ACTION_FOR[talk.status]?.group === group)
+      .map((talk) => talk.speaker ?? talk.title);
+    return names.length > 0 ? [`${ROOM_REASON_LABEL[group]}: ${names.join(", ")}`] : [];
+  });
+  return parts.length > 0 ? parts.join(" · ") : null;
+}
+
+/**
+ * Which group a talk's status falls in, the action as a short label (shown on the row, D-177),
+ * and the one thing to do in full (the label's hover text).
+ */
+type ActionGo = "speakers" | "review" | "sync" | "agenda" | "talk";
+const ACTION_FOR: Record<string, { group: string; label: string; todo: string; go: ActionGo }> = {
+  missing: {
+    group: "speaker",
+    label: "Get the file",
+    todo: "Nothing uploaded yet — remind the speaker to upload, or take the file in at the Speaker Ready Room.",
+    go: "speakers",
+  },
+  needs_revision: {
+    group: "speaker",
+    label: "Get the new version",
+    todo: "Changes were asked for — waiting for the speaker's new version.",
+    go: "speakers",
+  },
+  attention: {
+    group: "speaker",
+    label: "Get a clean copy",
+    todo: "The file failed the virus check — ask the speaker for a clean copy.",
+    go: "speakers",
+  },
+  submitted: { group: "review", label: "Review the file", todo: "Review the file and approve it, or ask for changes.", go: "review" },
+  processing: {
+    group: "review",
+    label: "Wait for the checks",
+    todo: "The file checks are still running — it will be ready to review in a minute.",
+    go: "talk",
+  },
+  approved_delivering: {
+    group: "load",
+    label: "Load on room PC",
+    todo: "Copy the approved file to the room PC and tick Loaded on Room sync.",
+    go: "sync",
+  },
+  update_pending_ack: {
+    group: "load",
+    label: "Load the newer version",
+    todo: "A newer version is approved — load it on the room PC (it still has the older one).",
+    go: "sync",
+  },
+  approved: { group: "room", label: "Set a room", todo: "Approved, but the session has no room — set one in the Agenda.", go: "agenda" },
 };
 
 /** Who may change an event's setup. A hint for the UI; `services/events.ts` decides. */
@@ -71,6 +158,8 @@ export default async function CommandCenterPage({
     ]),
     `/events/${id}`,
   );
+  // The talks that need someone to act (D-174): a cancelled session needs nothing.
+  const actionable = risk.items.filter((item) => ACTION_FOR[item.status] !== undefined);
 
   /*
    * A draft is not a running event, and this screen has no way to say so: it would
@@ -123,66 +212,6 @@ export default async function CommandCenterPage({
     (session.principal.event_roles ?? []).some((held) => held.event_id === id && CONFIGURERS.includes(held.role));
   const header = [summary.event.venue, days ?? dateRange].filter(Boolean) as string[];
 
-  /*
-   * Each number carries its own explanation (D-065). They are computed, never typed,
-   * and several mean something narrower than their label suggests — "Rooms ready" is
-   * every talk ticked loaded on the room's computer (D-125) — so the rule is stated where
-   * the number is read rather than left for someone to ask.
-   */
-  const share = (part: number, whole: number) => (whole === 0 ? 0 : part / whole);
-  const kpis: {
-    label: string;
-    icon: string;
-    value: string | number;
-    caption?: string;
-    tone?: KpiTone;
-    progress?: number;
-    help: string;
-  }[] = [
-    {
-      label: "Collected",
-      icon: "upload",
-      value: `${summary.collected} / ${summary.total}`,
-      caption: `${Math.round(share(summary.collected, summary.total) * 100)}% of talks`,
-      progress: share(summary.collected, summary.total),
-      tone: summary.total > 0 && summary.collected === summary.total ? "ok" : undefined,
-      help: "Presentations with at least one file uploaded, out of every presentation on the agenda.",
-    },
-    {
-      label: "Approved",
-      icon: "checkCircle",
-      value: summary.approved,
-      caption: "latest file approved",
-      tone: summary.approved > 0 ? "ok" : undefined,
-      help: "Presentations whose latest file a reviewer has approved. Uploaded files wait in Manage presentations until then.",
-    },
-    {
-      label: "Warnings", // S28 (D-113): "Warnings open" was cut off in the tile
-      icon: "warning",
-      value: summary.warnings_open,
-      caption: summary.warnings_open > 0 ? "not fixed or waived" : "none open",
-      tone: summary.warnings_open > 0 ? "warn" : undefined,
-      help: "Problems the automatic inspection found in uploaded files — a missing font, an oversized video — that nobody has fixed or waived yet. Resolve them from Manage presentations.",
-    },
-    {
-      label: "Missing",
-      icon: "docMissing",
-      value: summary.missing,
-      caption: summary.missing > 0 ? "nothing uploaded yet" : "none missing",
-      tone: summary.missing > 0 ? "bad" : undefined,
-      help: "Presentations with nothing uploaded yet. These are the speakers to chase from Communications.",
-    },
-    {
-      label: "Rooms ready",
-      icon: "monitor",
-      value: `${summary.rooms_ready} / ${summary.rooms_total}`,
-      caption: summary.rooms_ready === summary.rooms_total ? "all rooms ready" : "not all ready",
-      tone: summary.rooms_ready === summary.rooms_total ? "ok" : "warn",
-      progress: share(summary.rooms_ready, summary.rooms_total),
-      help: "A room is ready when every talk scheduled there has its approved version loaded on the room's PC and ticked on Room sync (or is cancelled). Nothing is checked automatically. Rooms with no talks still count in the total.",
-    },
-  ];
-
   return (
     <>
       <AutoRefresh seconds={5} />
@@ -201,22 +230,18 @@ export default async function CommandCenterPage({
             )}
           </span>
         </div>
-        <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
-          {/* Archiving lives on the portfolio card; from here the way out is back to it. */}
-          <Link href={archived ? "/?archived=1" : "/"} className="btn">
-            ← Back to portfolio
-          </Link>
-          {/*
-            Was "Open review queue" — a name for the mechanism, not the job. It says what
-            the screen is for and how many are waiting, so an empty one is visible
-            before anyone clicks.
-          */}
-          <Link href={`/events/${id}/review`} className="btn pri">
-            {review.items.length > 0
-              ? `Manage presentations (${review.items.length}) →`
-              : "Manage presentations · none waiting"}
-          </Link>
-        </div>
+        {/*
+          No "Back to portfolio" button (D-173): the breadcrumb's "Portfolio" is the way out. And
+          "Manage presentations" shows only when something waits for review, with how many
+          (D-173); with nothing waiting, the sidebar's Manage presentations still opens it.
+        */}
+        {review.items.length > 0 && (
+          <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+            <Link href={`/events/${id}/review`} className="btn pri">
+              {`Manage presentations (${review.items.length}) →`}
+            </Link>
+          </div>
+        )}
       </div>
 
       {/* The Speaker Ready Room's event-day switch (D-157): support staff run the event and open it. */}
@@ -252,62 +277,86 @@ export default async function CommandCenterPage({
         initialTab={tab}
       />
 
-      <div className="krow">
-        {kpis.map((kpi, index) => (
-          <Kpi
-            key={kpi.label}
-            label={kpi.label}
-            icon={kpi.icon}
-            value={kpi.value}
-            caption={kpi.caption}
-            tone={kpi.tone}
-            progress={kpi.progress}
-            help={
-              <InfoTip label={kpi.label} align={index === kpis.length - 1 ? "right" : "left"}>
-                {kpi.help}
-              </InfoTip>
-            }
-          />
-        ))}
-      </div>
-
+      {/* Action needed (D-174): what has to happen for each talk not yet in its room. A
+          cancelled session needs nothing, so it isn't listed. The five number tiles that sat
+          above it (Collected, Approved, Warnings, Missing, Rooms ready) are gone (D-175). */}
       <div className="card">
         <div className="chd">
-          <h3>Today&rsquo;s risk list</h3>
+          <h3>Action needed</h3>
           <span className="m">
-            {risk.items.length} items · click to open
+            {actionable.length === 0
+              ? "every talk is ready in its room"
+              : `${actionable.length} talk${actionable.length === 1 ? "" : "s"} not ready for the room yet · click one to open it`}
           </span>
         </div>
         <div className="cbd" style={{ padding: "0 0 4px" }}>
-          {risk.items.length === 0 ? (
+          {actionable.length === 0 ? (
             <div className="empty">
               {summary.total === 0
                 ? "No talks yet — the agenda has none, or none of its sessions carry one."
-                : "Nothing at risk — every talk is synchronized onsite."}
+                : "Nothing to do — every talk's file is approved and loaded on its room PC."}
             </div>
           ) : (
-            <table>
-              <tbody>
-                {risk.items.map((item) => (
-                  <tr className="rb" key={item.slot_id}>
-                    <td>
-                      <Link href={`/events/${id}/talks/${item.slot_id}`} style={{ display: "block" }}>
-                        {item.room} · {time(item.starts_at, summary.event.timezone)} · {item.speaker} —{" "}
-                        {item.title}
-                      </Link>
-                      {RISK_REASON[item.status] && (
-                        <div className="note">
-                          {RISK_REASON[item.status]} – session at {time(item.starts_at, summary.event.timezone)}
-                        </div>
-                      )}
-                    </td>
-                    <td style={{ textAlign: "right" }}>
-                      <Chip status={item.status} label={item.status_label} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            ACTION_GROUPS.map((group) => {
+              const items = actionable.filter((item) => ACTION_FOR[item.status]!.group === group.key);
+              if (items.length === 0) return null;
+              return (
+                <div key={group.key}>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "baseline",
+                      gap: 8,
+                      flexWrap: "wrap",
+                      padding: "12px 14px 4px",
+                    }}
+                  >
+                    <div>
+                      <b>
+                        {group.title} · {items.length}
+                      </b>
+                      <span className="note"> — {group.who}</span>
+                    </div>
+                    <Link className="note" href={group.link.href(id)}>
+                      {group.link.label} →
+                    </Link>
+                  </div>
+                  <table>
+                    <tbody>
+                      {items.map((item) => (
+                        <tr className="rb" key={item.slot_id}>
+                          {/* D-177: who and which talk, with its status; the action as a label below. */}
+                          <td>
+                            <Link
+                              href={`/events/${id}/talks/${item.slot_id}`}
+                              style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}
+                            >
+                              <span>
+                                <b>{item.speaker ?? "No speaker"}</b> — {item.title}
+                              </span>
+                              <Chip status={item.status} label={item.status_label} />
+                            </Link>
+                            {/* The action as a label, and what it means in full beside it (D-177). */}
+                            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginTop: 6 }}>
+                              {/* The label opens the screen where the action is done. */}
+                              <Link
+                                className="chip c-info"
+                                style={{ fontWeight: 600 }}
+                                href={actionHref(ACTION_FOR[item.status]!.go, id, item.slot_id)}
+                              >
+                                → {ACTION_FOR[item.status]!.label}
+                              </Link>
+                              <span className="note">{ACTION_FOR[item.status]!.todo}</span>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })
           )}
         </div>
       </div>
@@ -329,6 +378,12 @@ export default async function CommandCenterPage({
                     <b>{room.room}</b>
                     <br />
                     <span className="note">{roomLoadedLine(room)}</span>
+                    {/* Why not ready, by name (D-176): the chip alone didn't say what was holding it. */}
+                    {room.readiness !== "ready" && roomReasons(room.talks) && (
+                      <div className="note" style={{ color: "var(--foreground)" }}>
+                        {roomReasons(room.talks)}
+                      </div>
+                    )}
                   </td>
                   <td style={{ textAlign: "right" }}>
                     <Chip
