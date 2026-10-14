@@ -426,6 +426,11 @@ export type Recipient = {
   talks: RecipientTalk[];
   bounced: boolean;
   already_sent: boolean;
+  /**
+   * They already have a sign-in (D-183), so an email to them carries no password (D-179) — the
+   * Communications preview says so for the speaker it shows.
+   */
+  has_sign_in: boolean;
 };
 
 /**
@@ -475,8 +480,11 @@ export async function recipientsFor(
     versions: { processing: string; inspection: string; review: string }[] | null;
     bounced: boolean;
     already_sent: boolean;
+    has_sign_in: boolean;
   }>(
     `SELECT sp.id AS speaker_id, sp.full_name AS name, sp.email::text AS email,
+            EXISTS (SELECT 1 FROM pmp.users u
+                     WHERE lower(u.email::text) = lower(sp.email::text) AND u.deleted_at IS NULL) AS has_sign_in,
             s.title AS talk_title, r.name AS room, se.starts_at, se.ends_at, se.session_state,
             (SELECT json_agg(json_build_object('processing', fv.processing_state,
                                                'inspection', fv.inspection_state,
@@ -541,6 +549,7 @@ export async function recipientsFor(
       talks: [talk],
       bounced: row.bounced,
       already_sent: row.already_sent,
+      has_sign_in: row.has_sign_in,
     });
   }
   for (const recipient of bySpeaker.values()) {

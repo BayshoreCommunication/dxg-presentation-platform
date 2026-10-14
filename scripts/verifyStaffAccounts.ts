@@ -111,10 +111,11 @@ const manage = page.locator('button[aria-label^="Manage "]').nth(1);
 const arrow = manage.locator("svg");
 assert.equal(await arrow.evaluate((element) => getComputedStyle(element).transform), "none", "closed row should show the down arrow without rotation");
 await manage.click();
-await page.getByText("Password, sign-in security and account access.", { exact: true }).waitFor();
+await page.getByText("Name, password, sign-in security and account access.", { exact: true }).waitFor();
 assert.notEqual(await arrow.evaluate((element) => getComputedStyle(element).transform), "none", "open row should rotate the arrow upward");
 
 const actionPanel = page.locator(".staff-account-actions");
+assert.equal(await actionPanel.getByRole("button", { name: "Change name", exact: true }).count(), 1, "staff management should offer name editing");
 const actionColors = await Promise.all([
   actionPanel.getByRole("button", { name: "Reset password", exact: true }),
   actionPanel.getByRole("button", { name: "Reset sign-in app", exact: true }),
