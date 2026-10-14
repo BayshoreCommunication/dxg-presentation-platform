@@ -3337,3 +3337,13 @@ outright, since they don't start practice events (D-151). Now the section shows 
 one: "Practice events you're assigned to: …", the event's card, and no "Start a practice event" button. A technician
 on none sees no section, as before; admins and support staff are unchanged. Checked by rendering the portfolio as an
 assigned technician, an unassigned one and an admin.
+
+## D-184 (2026-10-14): Room readiness lists only rooms with talks; the session field says "Room" — Status: ACCEPTED (Travis)
+Found on Test Akib Event: Room readiness listed "London — no presentations for this room yet — Ready" beside
+"Ball Room A". Rooms are created from a session's room field (`resolveRoom`), which the agenda form labelled
+"Location" — so the venue's city was typed in, became a room, and stayed when the session was corrected.
+- **Room readiness** (event overview) lists only rooms that have talks. A room with none says nothing about
+  readiness. When no room has a talk, it says so instead of an empty table. **Room sync** still lists every room.
+- **The agenda's session form** labels the field "Room", with the placeholder "e.g. Ballroom A — the room at the
+  venue, not the city".
+- Leftover rooms are not deleted: a room may be set up ahead of its talks, and Room sync is where it shows.
