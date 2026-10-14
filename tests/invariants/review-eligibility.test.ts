@@ -4,7 +4,7 @@ import type { TestContext } from "node:test";
 import { writeZip } from "../../packages/files/src/zipWrite.ts";
 import { withSystemScope } from "@pmp/db";
 import { signInStaff } from "../helpers/signIn.ts";
-import { technicianOn } from "../helpers/technician.ts";
+import { DELGADO_ID, technicianOn } from "../helpers/technician.ts";
 
 /**
  * Only a file that passed its virus scan and finished inspection is reviewed or approved
@@ -29,10 +29,10 @@ let infected = "";
 let clean = "";
 let slotId = "";
 
-const call = (method: string, path: string, body?: unknown) =>
+const call = (method: string, path: string, body?: unknown, cookie = admin) =>
   fetch(`${API}${path}`, {
     method,
-    headers: { "content-type": "application/json", cookie: admin },
+    headers: { "content-type": "application/json", cookie },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
 
@@ -110,10 +110,11 @@ before(async () => {
   // A new event's Speaker Ready Room starts closed (D-157); open it, as on the event day.
   assert.equal((await call("PUT", `/events/${eventId}/srr-open`, { open: true })).status, 200);
   const station = (await (await call("POST", `/events/${eventId}/srr/stations`, { name: `Desk ${RUN}` })).json()) as { id: string };
-  const checkin = await call("POST", `/events/${eventId}/srr/checkins`, { speaker_id: speaker.speaker_id, station_id: station.id });
+  // DXG staff check the speaker in and assign the technician; the technician records the confirmation (D-169).
+  technician = await technicianOn(API, admin, eventId);
+  const checkin = await call("POST", `/events/${eventId}/srr/checkins`, { speaker_id: speaker.speaker_id, station_id: station.id, technician_id: DELGADO_ID });
   assert.equal(checkin.status, 201);
   checkinId = ((await checkin.json()) as { checkin_id: string }).checkin_id;
-  technician = await technicianOn(API, admin, eventId);
 
   const bad = await usbFile(Buffer.from(EICAR), "infected.pptx");
   assert.equal(bad.scan_result, "infected", "the EICAR signature must be caught by the scanner");
@@ -193,10 +194,10 @@ describe("a blocking finding holds approval until it is waived (D-105)", () => {
 describe("the presentation receipt (D-106)", () => {
   test("it can only be emailed once there is one, and then goes to the speaker", async (t: TestContext) => {
     if (!up || !clean) return t.skip("API not running");
-    const early = await call("POST", `/srr/checkins/${checkinId}/receipt/email`);
+    const early = await call("POST", `/srr/checkins/${checkinId}/receipt/email`, undefined, technician);
     assert.equal(early.status, 409, "no receipt before sign-off");
 
-    const signed = await call("POST", `/srr/checkins/${checkinId}/sign-off`, { file_version_id: clean });
+    const signed = await call("POST", `/srr/checkins/${checkinId}/sign-off`, { file_version_id: clean }, technician);
     assert.equal(signed.status, 200);
 
     // Staff see the file's name, not its fingerprint (R34, D-112).
@@ -205,7 +206,7 @@ describe("the presentation receipt (D-106)", () => {
     };
     assert.equal(detail.receipt?.file_name, "clean.pptx");
 
-    const sent = await call("POST", `/srr/checkins/${checkinId}/receipt/email`);
+    const sent = await call("POST", `/srr/checkins/${checkinId}/receipt/email`, undefined, technician);
     assert.equal(sent.status, 200);
     assert.equal(((await sent.json()) as { emailed_to: string }).emailed_to, `eligibility.${RUN}@example.invalid`);
     const logged = await withSystemScope(async (tx) => {
@@ -266,10 +267,10 @@ describe("a sign-off stands when the speaker checks in again (D-119)", () => {
       receipt: { version_number: number } | null;
     };
     assert.ok(first.receipt, "signed off on the first visit");
-    assert.equal((await call("POST", `/srr/checkins/${checkinId}/depart`)).status, 200);
+    assert.equal((await call("POST", `/srr/checkins/${checkinId}/depart`, undefined, technician)).status, 200);
 
     const station = (await (await call("POST", `/events/${eventId}/srr/stations`, { name: `Desk again ${RUN}` })).json()) as { id: string };
-    const again = await call("POST", `/events/${eventId}/srr/checkins`, { speaker_id: first.speaker.id, station_id: station.id });
+    const again = await call("POST", `/events/${eventId}/srr/checkins`, { speaker_id: first.speaker.id, station_id: station.id, technician_id: DELGADO_ID });
     assert.equal(again.status, 201);
     const secondId = ((await again.json()) as { checkin_id: string }).checkin_id;
 

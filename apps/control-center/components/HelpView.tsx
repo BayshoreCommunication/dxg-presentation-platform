@@ -161,7 +161,7 @@ export const GUIDES: Section[] = [
         who: "Speaker Ready Room technician or above",
         steps: [
           "Speaker Ready Room lists who is expected, with their three confirmations.",
-          "Check in → choose a free station. Every station in use? Check a speaker out to free one.",
+          "Check in → choose a free station, then the technician who helps the speaker there. Every station in use? Check a speaker out to free one. Shift change? Press Change beside the technician's name on the check-in.",
           "Go through the slides with the speaker: Open in PowerPoint plays the deck on this computer with its transitions, animations and video, as in the room (Quick look shows the slides in the browser).",
           "Sign off: confirm the version the speaker wants to present. Print or email them the receipt.",
           "Check out when they leave. The station is free again.",
