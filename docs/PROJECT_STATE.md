@@ -3762,3 +3762,22 @@ The release combines these interface changes with the current finished-event sta
 remain read-only and preserve who worked them. Shared dropdowns allow touch scrolling and keep keyboard navigation
 visible in long option lists.
 **Not deployed.**
+
+## 2026-10-14 — Speaker Ready Room without duplicate presentation cards
+Removed the speaker-facing room's “Your presentations for this event” section, including its workflow, file details,
+download and upload controls. Those remain under Manage presentations. Check-in status, visits, sign-off receipts,
+desks and the room-opening notice are unchanged; no stored presentation data or API contracts were removed.
+Speaker-portal type-check and targeted lint pass. A local seeded-speaker browser check confirms the section is absent
+on desktop and mobile, status/desks remain visible, and Manage presentations retains the talk and file controls with
+no browser errors or failed API responses. **Not deployed.**
+
+## 2026-10-14 — Administrators can change Staff account names
+Added Change name under each Staff account's management accordion, with a prefilled name field, Save/Cancel,
+inline validation and persistent success feedback. Table names and initials refresh after saving. DXG Admins can
+also change their own name; email, access, credentials, active sessions and event assignments do not change.
+The server restricts this action to administrators, trims/validates 1–200 characters, excludes deleted/speaker
+accounts, and appends an audited before/after name record. No database migration is needed.
+Lint and workspace type-check pass; unit tests pass (291, with four environment-dependent skips). Six targeted
+name/permission/audit invariants and the local name-editing plus Staff accounts browser checks pass, including
+save/cancel, persistence, validation, pending-action locking, initials, own-account editing and mobile controls.
+**Not deployed.**
