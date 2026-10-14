@@ -3337,3 +3337,9 @@ outright, since they don't start practice events (D-151). Now the section shows 
 one: "Practice events you're assigned to: …", the event's card, and no "Start a practice event" button. A technician
 on none sees no section, as before; admins and support staff are unchanged. Checked by rendering the portfolio as an
 assigned technician, an unassigned one and an admin.
+
+## D-185 (2026-10-14): No Print / Email receipt buttons on check-in — Status: ACCEPTED (Travis)
+Travis: "we also don't need these two button". The check-in page no longer offers **Print receipt** or **Email
+receipt** (D-106's buttons) — after the speaker confirms, or after they've checked out. The speaker's confirmation is
+still recorded as before, and the page shows it as "Confirmed: v… · when · desk". The wording that told the desk to
+"give them the receipt" is gone. The receipt page and the email endpoint stay in the API and the app, unlinked.
