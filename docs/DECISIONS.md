@@ -3337,3 +3337,16 @@ outright, since they don't start practice events (D-151). Now the section shows 
 one: "Practice events you're assigned to: …", the event's card, and no "Start a practice event" button. A technician
 on none sees no section, as before; admins and support staff are unchanged. Checked by rendering the portfolio as an
 assigned technician, an unassigned one and an admin.
+
+## D-183 (2026-10-14): The email preview shows a password only for a speaker who'd get one — Status: ACCEPTED (Travis)
+Travis, on Communications: "upload invitation still showing the password". D-179 sends a temporary password only in the
+email that makes a speaker's sign-in, but the preview showed one in every invitation, whoever it was previewed for.
+- Each recipient on `GET /comms` carries `has_sign_in` (an account with their address exists). The preview's
+  `{{sign_in}}` for the speaker it shows is the temporary-password version only when they have no sign-in yet, and the
+  "your password — the one we sent you … Forgotten your password?" version when they have one. With nobody to show,
+  the template's usual case (the invitation with a password, a reminder without).
+- Under the preview, a line says which and why: "<name> has no sign-in yet, so this email makes one and carries a
+  temporary password…" or "<name> already has a sign-in, so no password is sent — only how to sign in…" (shown for a
+  template that uses `{{sign_in}}`).
+- Sending is unchanged (D-179). Note for production: the deployed release predates D-179, so its invitations still
+  carry a password every time until it's deployed.

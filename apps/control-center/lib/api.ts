@@ -1215,6 +1215,8 @@ export type CommRecipient = {
   talks: { title: string; room: string | null; starts_at: string; status: string }[];
   bounced: boolean;
   already_sent: boolean;
+  /** Already has a sign-in, so their email carries no password (D-179, D-183). */
+  has_sign_in?: boolean;
 };
 
 /** The event's automatic reminders (D-096). */
