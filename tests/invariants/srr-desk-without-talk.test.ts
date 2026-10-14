@@ -62,7 +62,7 @@ describe("a desk whose speaker has no talk any more", () => {
   test("each desk links to its own visit, even when two speakers share a name", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
     const ids: string[] = [];
-    // DXG staff check the speakers in and assign the technician (D-168).
+    // DXG staff check the speakers in and assign the technician (D-169).
     await placeTechnician(API, admin, eventId);
     for (const [i, speaker] of speakers.entries()) {
       const checkin = await call("POST", `/events/${eventId}/srr/checkins`, { speaker_id: speaker, station_id: stations[i], technician_id: DELGADO_ID });

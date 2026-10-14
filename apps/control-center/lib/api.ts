@@ -393,11 +393,11 @@ export type SrrDashboard = {
   stations: SrrStation[];
   /** The event-day switch (D-157): closed, nobody checks in. */
   open: boolean;
-  /** Who a check-in may name as the speaker's technician (D-168). */
+  /** Who a check-in may name as the speaker's technician (D-169). */
   technicians: SrrTechnician[];
 };
 
-/** A technician on the event who can help a speaker at a desk (D-168). */
+/** A technician on the event who can help a speaker at a desk (D-169). */
 export type SrrTechnician = { id: string; name: string };
 
 /** Opens or closes the Speaker Ready Room (D-157). DXG Admins and support staff. */
@@ -447,7 +447,7 @@ export type CheckinDetail = {
     technician_id: string;
     departed_at: string | null;
   };
-  /** Who may take this speaker over (D-168). */
+  /** Who may take this speaker over (D-169). */
   technicians: SrrTechnician[];
   speaker: { id: string; name: string };
   talk: {
@@ -504,7 +504,7 @@ export const startCheckin = (eventId: string, speakerId: string, stationId: stri
     },
   );
 
-/** Hands the speaker at a desk to another technician (D-168). */
+/** Hands the speaker at a desk to another technician (D-169). */
 export const changeCheckinTechnician = (checkinId: string, technicianId: string) =>
   request<{ technician: SrrTechnician }>(`/srr/checkins/${checkinId}/technician`, {
     method: "PUT",
@@ -1468,6 +1468,10 @@ export const getEventFiles = (eventId: string, query: FileQuery = {}) => {
   const suffix = params.toString();
   return request<EventFiles>(`/events/${eventId}/files${suffix ? `?${suffix}` : ""}`);
 };
+
+/** A five-minute link to one version, for the presentation app on this computer to open (D-158, D-167). */
+export const getOpenLink = (versionId: string) =>
+  request<{ path: string; filename: string; expires_at: string }>(`/file-versions/${versionId}/open-link`, { method: "POST" });
 
 /** A plain link: a top-level navigation carries the session cookie, like the archive's. */
 export const fileDownloadUrl = (versionId: string) => `${API_BASE_URL}/file-versions/${versionId}/download`;

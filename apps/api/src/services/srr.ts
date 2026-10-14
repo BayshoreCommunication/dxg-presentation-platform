@@ -410,7 +410,7 @@ export async function checkIn(
       message: "That station is not set up for this event. Add it under Stations first.",
     });
   }
-  // And the technician who helps them there (D-168) — no longer whoever pressed Check in.
+  // And the technician who helps them there (D-169) — no longer whoever pressed Check in.
   const technician = await technicianChoice(tx, input.eventId, input.technicianId);
   if (!technician.ok) return err(technician.error);
 
@@ -442,7 +442,7 @@ export type CheckinDetail = {
     technician_id: string;
     departed_at: string | null;
   };
-  /** Who may take this speaker over (D-168): the event's technicians. */
+  /** Who may take this speaker over (D-169): the event's technicians. */
   technicians: SrrTechnician[];
   speaker: { id: string; name: string };
   /**
@@ -510,7 +510,7 @@ export async function checkinDetail(tx: pg.PoolClient, checkinId: string): Promi
        -- has a visit to open and close. With more than one talk, the next one comes first.
        -- Looked up per visit (LATERAL): as a chain of left joins, row-level security kept the
        -- planner from narrowing to this speaker first, and it walked every speaker × talk ×
-       -- session pair — 18 s on the seed event (D-168).
+       -- session pair — 18 s on the seed event (D-169).
        LEFT JOIN LATERAL (
          SELECT s.id AS slot_id, s.title, r.name AS room, se.starts_at, s.final_locked, se.session_state
            FROM pmp.speaker_assignments sa
@@ -1056,7 +1056,7 @@ export async function emailReceipt(
   return ok({ emailed_to: row.email });
 }
 
-/* ── the speaker's technician (D-168) ──────────────────────────────────────── */
+/* ── the speaker's technician (D-169) ──────────────────────────────────────── */
 
 export type SrrTechnician = { id: string; name: string };
 
@@ -1101,7 +1101,7 @@ async function technicianChoice(
   return ok(chosen);
 }
 
-/** Hands a speaker at a desk to another technician (D-168) — a shift change, say. */
+/** Hands a speaker at a desk to another technician (D-169) — a shift change, say. */
 export async function changeTechnician(
   tx: pg.PoolClient,
   actor: Actor,

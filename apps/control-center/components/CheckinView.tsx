@@ -64,7 +64,7 @@ export function CheckinView({
   /** Taking in a file for a speaker is DXG Technician staff's alone (D-162). */
   canUpload?: boolean;
   /**
-   * Recording the speaker's confirmation is the technician's (D-168). The receipt, checking out and
+   * Recording the speaker's confirmation is the technician's (D-169). The receipt, checking out and
    * a hand-over are anyone's at the desk; DXG staff checked the speaker in and assigned them.
    */
   canConfirm?: boolean;
@@ -78,7 +78,7 @@ export function CheckinView({
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const closeToast = useCallback(() => setToast(null), []);
-  // Handing the speaker to another technician (D-168), opened from "Change" in the header.
+  // Handing the speaker to another technician (D-169), opened from "Change" in the header.
   const [changingTechnician, setChangingTechnician] = useState(false);
 
   const refresh = useCallback(async () => {
@@ -267,7 +267,7 @@ export function CheckinView({
     </>
   );
   const who = detail.speaker.name;
-  // Only the technician records the speaker's confirmation (D-168).
+  // Only the technician records the speaker's confirmation (D-169).
   const confirmButton = (label: string) => (canConfirm ? signOffButton(label) : null);
 
   /** The one thing to do now, in the order a technician meets the cases (D-120). */
@@ -327,7 +327,7 @@ export function CheckinView({
               }
             : {
                 title: `Go through the slides with ${who}.`,
-                // Not a second approval (D-168): the reviewer approved the file; this records the
+                // Not a second approval (D-169): the reviewer approved the file; this records the
                 // speaker's own "yes, this is the one", which locks it and makes their receipt.
                 body:
                   approvedNumber === latestNumber
@@ -348,11 +348,11 @@ export function CheckinView({
       <h1 className="htitle" style={{ marginBottom: 4 }}>
         {detail.speaker.name}
       </h1>
-      {/* One line of context; the visit's details are in the card below (D-168). */}
+      {/* One line of context; the visit's details are in the card below (D-169). */}
       <p className="note" style={{ marginTop: 0 }}>
         {detail.talk.title} · {detail.talk.room ?? "No room"} · {when(detail.talk.starts_at, timezone)}
         {!departed && detail.checkin.station ? ` · at ${detail.checkin.station}` : ""}
-        {/* The technician helping them (D-168), named in full below with the hand-over. */}
+        {/* The technician helping them (D-169), named in full below with the hand-over. */}
         {!departed && (
           <>
             {" "}· with <b style={{ color: "var(--foreground)" }}>{detail.checkin.technician}</b>
@@ -394,7 +394,7 @@ export function CheckinView({
       </div>
 
       {/*
-        The visit's details, open (D-168): who is helping the speaker — named large, with the
+        The visit's details, open (D-169): who is helping the speaker — named large, with the
         hand-over — then who approved the file, who confirmed it and the room copy, with times.
         They used to sit folded under "Details".
       */}

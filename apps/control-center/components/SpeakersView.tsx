@@ -217,7 +217,8 @@ export function SpeakersView({
       {askRemind && (
         <ConfirmInline
           question={`Email a reminder to ${missing.length} speaker${missing.length === 1 ? "" : "s"} missing files now?`}
-          detail="Each one gets the reminder email with their sign-in details. Anyone emailed about this event in the last day, or without a working address, is skipped."
+          // Who was skipped, and why, is said in the toast after sending (Travis, 2026-10-13).
+          detail="Each one gets the reminder email with their sign-in details."
           confirmLabel="Send reminders"
           icon="send"
           busyLabel="Sending…"

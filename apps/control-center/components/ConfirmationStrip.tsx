@@ -157,7 +157,7 @@ export function ConfirmationStrip({
 }: {
   facts: ConfirmationFacts;
   compact?: boolean;
-  /** Leave out "Next: …" where the page already says what to do now (the check-in, D-168). */
+  /** Leave out "Next: …" where the page already says what to do now (the check-in, D-169). */
   hideNext?: boolean;
 }) {
   if (facts.status === "archived") return null;

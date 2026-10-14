@@ -47,7 +47,7 @@ export function SrrDashboardView({
   canSwitch: boolean;
   /** Taking in a file for a speaker is DXG Technician staff's alone (D-162). */
   canUpload: boolean;
-  /** The signed-in user, offered first when they are one of the event's technicians (D-168). */
+  /** The signed-in user, offered first when they are one of the event's technicians (D-169). */
   meId: string;
 }) {
   const router = useRouter();
@@ -73,7 +73,7 @@ export function SrrDashboardView({
     </button>
   );
   // Why "Check in →" is greyed, once above the list rather than on every row (R33, D-111).
-  // DXG staff check speakers in and assign the technician; technicians take it from there (D-168).
+  // DXG staff check speakers in and assign the technician; technicians take it from there (D-169).
   const checkInBlocked = canUpload
     ? "DXG staff check speakers in and assign you as their technician. Open a speaker at a desk to go through the slides."
     : !data.open
@@ -400,7 +400,7 @@ function arrivalLine(row: ExpectedArrival): string {
 /** Closes on Escape and on a click anywhere else. */
 
 /**
- * Check-in asks which desk (D-080), then which technician helps the speaker there (D-168). The
+ * Check-in asks which desk (D-080), then which technician helps the speaker there (D-169). The
  * desk list shows the ones already in use but doesn't offer them; the technician list is the
  * event's technicians, with the person checking in first when they are one.
  */
@@ -512,7 +512,7 @@ function StationsCard({
 }: {
   eventId: string;
   stations: SrrStation[];
-  /** DXG staff set up the desks; technicians see them (D-168). */
+  /** DXG staff set up the desks; technicians see them (D-169). */
   canEdit: boolean;
   onChanged: () => void;
 }) {

@@ -67,7 +67,7 @@ describe("a new event's Speaker Ready Room starts closed (D-157)", () => {
     const desk = await call("POST", `/events/${eventId}/srr/stations`, { name: "Desk 1" });
     assert.equal(desk.status, 201, "setting up before the day is fine");
     stationId = ((await desk.json()) as { id: string }).id;
-    // A technician on the event, so it's the switch that refuses and nothing else (D-168).
+    // A technician on the event, so it's the switch that refuses and nothing else (D-169).
     await placeTechnician(API, admin, eventId);
     const refused = await call("POST", `/events/${eventId}/srr/checkins`, { speaker_id: speakerId, station_id: stationId, technician_id: DELGADO_ID });
     assert.equal(refused.status, 409);
@@ -101,7 +101,7 @@ describe("a new event's Speaker Ready Room starts closed (D-157)", () => {
   });
 });
 
-describe("support staff run the Speaker Ready Room (D-164, D-168)", () => {
+describe("support staff run the Speaker Ready Room (D-164, D-169)", () => {
   test("they switch it, set up a desk, check a speaker in and out and get the report — but take no file in and record no confirmation", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
     // M. Vega (seeded DXG Support staff), placed on this event the way DXG does it.
@@ -114,7 +114,7 @@ describe("support staff run the Speaker Ready Room (D-164, D-168)", () => {
     assert.equal(desk.status, 201, "a desk");
     const deskId = ((await desk.json()) as { id: string }).id;
     const technician = await technicianOn(API, admin, eventId);
-    // Technicians neither set up desks nor check speakers in (D-168).
+    // Technicians neither set up desks nor check speakers in (D-169).
     const techDesk = await call("POST", `/events/${eventId}/srr/stations`, { name: `Tech Desk ${RUN}` }, technician);
     assert.equal(await code(techDesk), "auth.staff_only", "desks are staff's");
     const techCheckin = await call("POST", `/events/${eventId}/srr/checkins`, { speaker_id: speakerId, station_id: deskId, technician_id: DELGADO_ID }, technician);

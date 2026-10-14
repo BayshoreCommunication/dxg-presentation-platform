@@ -15,7 +15,7 @@ export async function technicianOn(api: string, admin: string, eventId: string):
 
 /**
  * Places the seeded technician on the event without signing in as them: a check-in names the
- * technician who helps the speaker, and they must be on the event (D-168). Returns their id.
+ * technician who helps the speaker, and they must be on the event (D-169). Returns their id.
  */
 export async function placeTechnician(api: string, admin: string, eventId: string): Promise<string> {
   const placed = await fetch(`${api}/admin/users/${DELGADO_ID}/events`, {

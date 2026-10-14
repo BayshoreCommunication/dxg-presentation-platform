@@ -7,7 +7,7 @@ import { removeTestAccounts } from "../helpers/cleanup.ts";
 import { DELGADO_ID, technicianOn } from "../helpers/technician.ts";
 
 /**
- * Checking a speaker in names the technician who helps them at the desk (D-168): one of the
+ * Checking a speaker in names the technician who helps them at the desk (D-169): one of the
  * event's DXG Technician staff, chosen by the DXG staff (admins, support) who check them in and
  * set up the desks. Only the technician records the speaker's confirmation; the receipt, a
  * hand-over and check-out are either's. A hand-over is audited.
@@ -70,7 +70,7 @@ after(async () => {
   await removeTestAccounts(["probe-desk-technician-"]);
 });
 
-describe("a check-in names the speaker's technician (D-168)", () => {
+describe("a check-in names the speaker's technician (D-169)", () => {
   test("with no technician on the event, the room offers nobody", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
     const room = (await (await call("GET", `/events/${eventId}/srr`)).json()) as { technicians: unknown[] };
