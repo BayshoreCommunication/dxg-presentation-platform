@@ -3140,7 +3140,10 @@ button. Local intake can be done by dxg assign technician so do we need to show 
   (`ConfirmationStrip` `hideNext`, the same change as D-169's).
 - **Version history**: "From" and "Checks" (Passed) instead of "Source" and "Findings" (clean).
 
-## D-173 (2026-10-14): No "Back to portfolio" button on the event page — Status: ACCEPTED (Travis)
-Travis: "remove the 'back to portfolio' button". The event's overview header keeps only **Manage presentations**; the
-breadcrumb's **Portfolio** is the way back. (For an archived event the old button opened the Archived list; the
-breadcrumb opens the live portfolio, whose Archived button is one click away.)
+## D-173 (2026-10-14): The event page's header buttons — Status: ACCEPTED (Travis)
+- **No "Back to portfolio"** (Travis: "remove the 'back to portfolio' button"): the breadcrumb's **Portfolio** is the
+  way back. (For an archived event the old button opened the Archived list; the breadcrumb opens the live portfolio,
+  whose Archived button is one click away.)
+- **Manage presentations only when something waits** (Travis: "if there are nothing to review, don't show the manage
+  presentations of the top right"): it shows "Manage presentations (n) →" when n > 0, and nothing otherwise — it used
+  to read "Manage presentations · none waiting". The sidebar's Manage presentations always opens the screen.

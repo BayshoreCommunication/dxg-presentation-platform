@@ -201,19 +201,18 @@ export default async function CommandCenterPage({
             )}
           </span>
         </div>
-        <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
-          {/* No "Back to portfolio" button (D-173): the breadcrumb's "Portfolio" is the way out. */}
-          {/*
-            Was "Open review queue" — a name for the mechanism, not the job. It says what
-            the screen is for and how many are waiting, so an empty one is visible
-            before anyone clicks.
-          */}
-          <Link href={`/events/${id}/review`} className="btn pri">
-            {review.items.length > 0
-              ? `Manage presentations (${review.items.length}) →`
-              : "Manage presentations · none waiting"}
-          </Link>
-        </div>
+        {/*
+          No "Back to portfolio" button (D-173): the breadcrumb's "Portfolio" is the way out. And
+          "Manage presentations" shows only when something waits for review, with how many
+          (D-173); with nothing waiting, the sidebar's Manage presentations still opens it.
+        */}
+        {review.items.length > 0 && (
+          <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+            <Link href={`/events/${id}/review`} className="btn pri">
+              {`Manage presentations (${review.items.length}) →`}
+            </Link>
+          </div>
+        )}
       </div>
 
       {/* The Speaker Ready Room's event-day switch (D-157): support staff run the event and open it. */}
