@@ -56,6 +56,25 @@ const ACTION_GROUPS: ActionGroup[] = [
     link: { label: "Agenda", href: (id) => `/events/${id}?tab=agenda` },
   },
 ];
+/**
+ * Why a room isn't ready (D-176), in Action needed's words: each talk that still needs something,
+ * by name, under what it needs — "To load: Amara Okafor · To review: Tomás Herrera".
+ */
+const ROOM_REASON_LABEL: Record<string, string> = {
+  load: "To load",
+  review: "To review",
+  speaker: "Waiting for the speaker",
+};
+function roomReasons(talks: { status: string; speaker: string | null; title: string }[]): string | null {
+  const parts = ["load", "review", "speaker"].flatMap((group) => {
+    const names = talks
+      .filter((talk) => ACTION_FOR[talk.status]?.group === group)
+      .map((talk) => talk.speaker ?? talk.title);
+    return names.length > 0 ? [`${ROOM_REASON_LABEL[group]}: ${names.join(", ")}`] : [];
+  });
+  return parts.length > 0 ? parts.join(" · ") : null;
+}
+
 /** Which group a talk's status falls in, and the one thing to do, in words. */
 const ACTION_FOR: Record<string, { group: string; todo: string }> = {
   missing: { group: "speaker", todo: "Nothing uploaded yet — remind the speaker to upload, or take the file in at the Speaker Ready Room." },
@@ -310,6 +329,12 @@ export default async function CommandCenterPage({
                     <b>{room.room}</b>
                     <br />
                     <span className="note">{roomLoadedLine(room)}</span>
+                    {/* Why not ready, by name (D-176): the chip alone didn't say what was holding it. */}
+                    {room.readiness !== "ready" && roomReasons(room.talks) && (
+                      <div className="note" style={{ color: "var(--foreground)" }}>
+                        {roomReasons(room.talks)}
+                      </div>
+                    )}
                   </td>
                   <td style={{ textAlign: "right" }}>
                     <Chip

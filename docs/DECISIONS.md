@@ -3167,3 +3167,11 @@ Travis: "remove this 5 cards". The overview's tiles — Collected, Approved, War
 gone; the page goes from the event's settings straight to **Action needed** (D-174), which names each talk and what to
 do, then **Room readiness**. The `Kpi` component stays (the client portal and the import screen use it), and
 `GET /events/:id/summary` still returns the counts.
+
+## D-176 (2026-10-14): Room readiness says why a room isn't ready — Status: ACCEPTED (Travis)
+Travis asked what "Not ready" meant, then: "say why in each room". A room is Ready when every talk in it is
+synchronized onsite — its approved version loaded on the room PC and ticked on Room sync (D-125), cancelled talks
+excepted — and the card only said "0 of 2 talks loaded · Not ready".
+- Under the loaded count, a room that isn't ready names its talks by what each still needs, in Action needed's words
+  (D-174): "To load: Amara Okafor · To review: Tomás Herrera", "Waiting for the speaker: Marcus Lindqvist, Hannah
+  Becker". From the fleet's per-talk status; no API change.
