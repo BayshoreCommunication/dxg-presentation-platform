@@ -3147,3 +3147,17 @@ button. Local intake can be done by dxg assign technician so do we need to show 
 - **Manage presentations only when something waits** (Travis: "if there are nothing to review, don't show the manage
   presentations of the top right"): it shows "Manage presentations (n) →" when n > 0, and nothing otherwise — it used
   to read "Manage presentations · none waiting". The sidebar's Manage presentations always opens the screen.
+
+## D-174 (2026-10-14): "Today's risk list" becomes "Action needed", grouped by what to do — Status: ACCEPTED (Travis)
+Travis: "rename it to 'Action needed' and make the list more meaningful to understand what needs to do." The card was
+never only today's — it listed every talk of the event not yet synchronized onsite, by start time, with only the time
+of day shown, so a list running over several days read as out of order; each row gave a reason, not an action.
+- **Action needed** groups those talks by what happens next, each group with its count, who acts and a link to where
+  it's done: **Waiting for the speaker** (missing, needs revision, failed the virus check → Speakers tab), **To review**
+  (submitted, checks running → Manage presentations), **To load in the room** (approved — delivering, update pending
+  → Room sync), **Needs a room** (approved, no room → Agenda).
+- Each row: "Tue, Oct 27 · 09:00 · Ballroom A · **Speaker** — Talk", then the one thing to do in words (e.g. "Copy the
+  approved file to the room PC and tick Loaded on Room sync."), and the status chip. The row still opens Presentation
+  detail.
+- A cancelled session needs nothing and is no longer listed (it used to appear with a "Canceled" chip).
+- Same data (`GET /events/:id/risk-list`); SCREEN_SPECS' "Today's risk list" (screen 9) reads as this card.

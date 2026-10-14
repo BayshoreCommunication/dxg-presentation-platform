@@ -22,19 +22,53 @@ const time = (iso: string, timeZone: string) =>
     timeZone,
   });
 
+/** Day and time on the event's clock: "Tue, Oct 27 · 09:00" — talks run over several days. */
+const dayTime = (iso: string, timeZone: string) =>
+  `${new Date(iso).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone })} · ${time(iso, timeZone)}`;
+
 /**
- * S25 (D-113): why a talk is on the risk list, in a few words, beside its session time —
- * a bare "Submitted" chip did not say what is left to do.
+ * "Action needed" (D-174, was "Today's risk list" — it was never only today's): every talk not
+ * yet loaded in its room, grouped by what has to happen next and who does it, each with the
+ * one thing to do in words and the screen where it's done. S25 (D-113) gave each row a reason;
+ * a reason ("Waiting for review") still left the reader to work out the action.
  */
-const RISK_REASON: Record<string, string> = {
-  missing: "Nothing uploaded yet",
-  processing: "File checks running",
-  submitted: "Waiting for review",
-  needs_revision: "Waiting for the speaker's new version",
-  approved: "Approved, but the session has no room",
-  approved_delivering: "Not loaded on the room PC yet",
-  update_pending_ack: "Newer version to load – the room PC has the older one",
-  attention: "File held back – ask the speaker for a clean copy",
+type ActionGroup = { key: string; title: string; who: string; link: { label: string; href: (id: string) => string } };
+const ACTION_GROUPS: ActionGroup[] = [
+  {
+    key: "speaker",
+    title: "Waiting for the speaker",
+    who: "the speaker sends a file",
+    link: { label: "Speakers", href: (id) => `/events/${id}?tab=speakers` },
+  },
+  {
+    key: "review",
+    title: "To review",
+    who: "a reviewer approves the file",
+    link: { label: "Manage presentations", href: (id) => `/events/${id}/review` },
+  },
+  {
+    key: "load",
+    title: "To load in the room",
+    who: "copy the approved file to the room PC and tick it",
+    link: { label: "Room sync", href: (id) => `/events/${id}/sync` },
+  },
+  {
+    key: "room",
+    title: "Needs a room",
+    who: "give the session a room",
+    link: { label: "Agenda", href: (id) => `/events/${id}?tab=agenda` },
+  },
+];
+/** Which group a talk's status falls in, and the one thing to do, in words. */
+const ACTION_FOR: Record<string, { group: string; todo: string }> = {
+  missing: { group: "speaker", todo: "Nothing uploaded yet — remind the speaker to upload, or take the file in at the Speaker Ready Room." },
+  needs_revision: { group: "speaker", todo: "Changes were asked for — waiting for the speaker's new version." },
+  attention: { group: "speaker", todo: "The file failed the virus check — ask the speaker for a clean copy." },
+  submitted: { group: "review", todo: "Review the file and approve it, or ask for changes." },
+  processing: { group: "review", todo: "The file checks are still running — it will be ready to review in a minute." },
+  approved_delivering: { group: "load", todo: "Copy the approved file to the room PC and tick Loaded on Room sync." },
+  update_pending_ack: { group: "load", todo: "A newer version is approved — load it on the room PC (it still has the older one)." },
+  approved: { group: "room", todo: "Approved, but the session has no room — set one in the Agenda." },
 };
 
 /** Who may change an event's setup. A hint for the UI; `services/events.ts` decides. */
@@ -71,6 +105,8 @@ export default async function CommandCenterPage({
     ]),
     `/events/${id}`,
   );
+  // The talks that need someone to act (D-174): a cancelled session needs nothing.
+  const actionable = risk.items.filter((item) => ACTION_FOR[item.status] !== undefined);
 
   /*
    * A draft is not a running event, and this screen has no way to say so: it would
@@ -267,43 +303,73 @@ export default async function CommandCenterPage({
         ))}
       </div>
 
-      <div className="card">
+      {/* Action needed (D-174): what has to happen for each talk not yet in its room. A
+          cancelled session needs nothing, so it isn't listed. */}
+            <div className="card">
         <div className="chd">
-          <h3>Today&rsquo;s risk list</h3>
+          <h3>Action needed</h3>
           <span className="m">
-            {risk.items.length} items · click to open
+            {actionable.length === 0
+              ? "every talk is ready in its room"
+              : `${actionable.length} talk${actionable.length === 1 ? "" : "s"} not ready for the room yet · click one to open it`}
           </span>
         </div>
         <div className="cbd" style={{ padding: "0 0 4px" }}>
-          {risk.items.length === 0 ? (
+          {actionable.length === 0 ? (
             <div className="empty">
               {summary.total === 0
                 ? "No talks yet — the agenda has none, or none of its sessions carry one."
-                : "Nothing at risk — every talk is synchronized onsite."}
+                : "Nothing to do — every talk's file is approved and loaded on its room PC."}
             </div>
           ) : (
-            <table>
-              <tbody>
-                {risk.items.map((item) => (
-                  <tr className="rb" key={item.slot_id}>
-                    <td>
-                      <Link href={`/events/${id}/talks/${item.slot_id}`} style={{ display: "block" }}>
-                        {item.room} · {time(item.starts_at, summary.event.timezone)} · {item.speaker} —{" "}
-                        {item.title}
-                      </Link>
-                      {RISK_REASON[item.status] && (
-                        <div className="note">
-                          {RISK_REASON[item.status]} – session at {time(item.starts_at, summary.event.timezone)}
-                        </div>
-                      )}
-                    </td>
-                    <td style={{ textAlign: "right" }}>
-                      <Chip status={item.status} label={item.status_label} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            ACTION_GROUPS.map((group) => {
+              const items = actionable.filter((item) => ACTION_FOR[item.status]!.group === group.key);
+              if (items.length === 0) return null;
+              return (
+                <div key={group.key}>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "baseline",
+                      gap: 8,
+                      flexWrap: "wrap",
+                      padding: "12px 14px 4px",
+                    }}
+                  >
+                    <div>
+                      <b>
+                        {group.title} · {items.length}
+                      </b>
+                      <span className="note"> — {group.who}</span>
+                    </div>
+                    <Link className="note" href={group.link.href(id)}>
+                      {group.link.label} →
+                    </Link>
+                  </div>
+                  <table>
+                    <tbody>
+                      {items.map((item) => (
+                        <tr className="rb" key={item.slot_id}>
+                          <td>
+                            <Link href={`/events/${id}/talks/${item.slot_id}`} style={{ display: "block" }}>
+                              <span className="note">
+                                {dayTime(item.starts_at, summary.event.timezone)} · {item.room ?? "No room"} ·{" "}
+                              </span>
+                              <b>{item.speaker ?? "No speaker"}</b> — {item.title}
+                            </Link>
+                            <div className="note">{ACTION_FOR[item.status]!.todo}</div>
+                          </td>
+                          <td style={{ textAlign: "right" }}>
+                            <Chip status={item.status} label={item.status_label} />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })
           )}
         </div>
       </div>
