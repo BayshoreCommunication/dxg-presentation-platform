@@ -11,7 +11,6 @@ import {
   signOffCheckin,
   departCheckin,
   ApiError,
-  emailCheckinReceipt,
 } from "@/lib/api";
 import { Chip } from "@/components/Chip";
 import { ConfirmationStrip } from "@/components/ConfirmationStrip";
@@ -64,7 +63,7 @@ export function CheckinView({
   /** Taking in a file for a speaker is DXG Technician staff's alone (D-162). */
   canUpload?: boolean;
   /**
-   * Recording the speaker's confirmation is the technician's (D-169). The receipt, checking out and
+   * Recording the speaker's confirmation is the technician's (D-169). Checking out and
    * a hand-over are anyone's at the desk; DXG staff checked the speaker in and assigned them.
    */
   canConfirm?: boolean;
@@ -182,7 +181,7 @@ export function CheckinView({
       onClick={() =>
         void run(async () => {
           const { receipt } = await signOffCheckin(detail.checkin.id, detail.latest!.file_version_id);
-          return `${detail.speaker.name} confirmed v${receipt.version_number} — locked, and the receipt is ready`;
+          return `${detail.speaker.name} confirmed v${receipt.version_number} — locked`;
         })
       }
     >
@@ -221,27 +220,6 @@ export function CheckinView({
         : null,
     timezone,
   };
-  const printReceipt = (
-    <a className="btn" href={`/events/${eventId}/srr/${detail.checkin.id}/receipt`} target="_blank" rel="noopener">
-      <Icon name="printer" />
-      Print receipt
-    </a>
-  );
-  const emailReceipt = (
-    <button
-      className="btn"
-      disabled={busy}
-      onClick={() =>
-        void run(async () => {
-          const { emailed_to } = await emailCheckinReceipt(detail.checkin.id);
-          return `Receipt emailed to ${emailed_to}`;
-        })
-      }
-    >
-      <Icon name="send" />
-      Email receipt
-    </button>
-  );
   const openUsb = (
     <button type="button" className="btn pri" disabled={!srrOpen || !hasTalk} onClick={() => setIntakeOpen(true)}>
       <Icon name="intake" />
@@ -275,12 +253,7 @@ export function CheckinView({
     ? {
         title: `${who} has checked out.`,
         body: "If they come back, check them in again from the Speaker Ready Room.",
-        actions: detail.receipt ? (
-          <>
-            {printReceipt}
-            {emailReceipt}
-          </>
-        ) : null,
+        actions: null,
       }
     : blockedReason
       ? { title: blockedReason, actions: <>{canUpload && hasTalk && (!detail.latest || detail.latest.processing_state === "quarantined") ? openUsb : null}{checkOut}</> }
@@ -303,12 +276,11 @@ export function CheckinView({
               // Signed off but not approved: say it can't play yet, so "Done" isn't read as all done (D-120).
               body:
                 approvedNumber === detail.receipt.version_number
-                  ? `Give them the receipt, then check them out to free ${detail.checkin.station ?? "the station"}.`
-                  : `Give them the receipt, then check them out to free ${detail.checkin.station ?? "the station"}. A reviewer still needs to approve v${detail.receipt.version_number} in Manage presentations before it plays in ${detail.talk.room ?? "the room"}.`,
+                  ? `Check them out to free ${detail.checkin.station ?? "the station"}.`
+                  : `Check them out to free ${detail.checkin.station ?? "the station"}. A reviewer still needs to approve v${detail.receipt.version_number} in Manage presentations before it plays in ${detail.talk.room ?? "the room"}.`,
               actions: (
                 <>
-                  {printReceipt}
-                  {emailReceipt}
+                  {/* No Print / Email receipt here (D-185): the sign-off is on record. */}
                   {checkOut}
                 </>
               ),
@@ -316,7 +288,7 @@ export function CheckinView({
           : earlier && earlier.version_number === latestNumber
             ? {
                 title: `${who} already confirmed v${earlier.version_number} on an earlier visit.`,
-                body: "If nothing has changed, they're all set — check them out. To give them a new receipt, confirm it again.",
+                body: "If nothing has changed, they're all set — check them out.",
                 actions: (
                   <>
                     {checkOut}
@@ -331,8 +303,8 @@ export function CheckinView({
                 // speaker's own "yes, this is the one", which locks it and makes their receipt.
                 body:
                   approvedNumber === latestNumber
-                    ? `v${latestNumber} is already approved by a reviewer. Now ${who} confirms it's the version they'll present: that locks it — they can't replace it from the portal, any change comes through this desk — and gives them a receipt to print or email.`
-                    : `If they're right, ${who} confirms v${latestNumber} as the version they'll present. That locks it — they can't replace it from the portal, any change comes through this desk — and gives them a receipt to print or email.`,
+                    ? `v${latestNumber} is already approved by a reviewer. Now ${who} confirms it's the version they'll present: that locks it — they can't replace it from the portal, any change comes through this desk.`
+                    : `If they're right, ${who} confirms v${latestNumber} as the version they'll present. That locks it — they can't replace it from the portal, any change comes through this desk.`,
                 actions: (
                   <>
                     {confirmButton(`Speaker confirms v${latestNumber}`)}
@@ -379,7 +351,7 @@ export function CheckinView({
           {approvalNote && next.showApprovalNote && <p className="note" style={{ marginTop: 0 }}>{approvalNote}</p>}
           {detail.receipt && !newerAfterReceipt && (
             <p className="note" style={{ marginTop: 0 }}>
-              Receipt: {receiptVersion(detail.receipt)} · {when(detail.receipt.signed_at, timezone)} ·{" "}
+              Confirmed: {receiptVersion(detail.receipt)} · {when(detail.receipt.signed_at, timezone)} ·{" "}
               {detail.receipt.station}
             </p>
           )}

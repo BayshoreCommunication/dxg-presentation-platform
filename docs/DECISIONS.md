@@ -3360,3 +3360,9 @@ Found on Test Akib Event: Room readiness listed "London — no presentations for
 - **The agenda's session form** labels the field "Room", with the placeholder "e.g. Ballroom A — the room at the
   venue, not the city".
 - Leftover rooms are not deleted: a room may be set up ahead of its talks, and Room sync is where it shows.
+
+## D-185 (2026-10-14): No Print / Email receipt buttons on check-in — Status: ACCEPTED (Travis)
+Travis: "we also don't need these two button". The check-in page no longer offers **Print receipt** or **Email
+receipt** (D-106's buttons) — after the speaker confirms, or after they've checked out. The speaker's confirmation is
+still recorded as before, and the page shows it as "Confirmed: v… · when · desk". The wording that told the desk to
+"give them the receipt" is gone. The receipt page and the email endpoint stay in the API and the app, unlinked.
