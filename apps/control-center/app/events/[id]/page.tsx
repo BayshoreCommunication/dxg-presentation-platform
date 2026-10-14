@@ -202,10 +202,7 @@ export default async function CommandCenterPage({
           </span>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
-          {/* Archiving lives on the portfolio card; from here the way out is back to it. */}
-          <Link href={archived ? "/?archived=1" : "/"} className="btn">
-            ← Back to portfolio
-          </Link>
+          {/* No "Back to portfolio" button (D-173): the breadcrumb's "Portfolio" is the way out. */}
           {/*
             Was "Open review queue" — a name for the mechanism, not the job. It says what
             the screen is for and how many are waiting, so an empty one is visible

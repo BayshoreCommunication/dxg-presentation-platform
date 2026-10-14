@@ -3139,3 +3139,8 @@ button. Local intake can be done by dxg assign technician so do we need to show 
 - **Progress**: the three steps on their own card, without the "Next:" line that repeated "What's happening"
   (`ConfirmationStrip` `hideNext`, the same change as D-169's).
 - **Version history**: "From" and "Checks" (Passed) instead of "Source" and "Findings" (clean).
+
+## D-173 (2026-10-14): No "Back to portfolio" button on the event page — Status: ACCEPTED (Travis)
+Travis: "remove the 'back to portfolio' button". The event's overview header keeps only **Manage presentations**; the
+breadcrumb's **Portfolio** is the way back. (For an archived event the old button opened the Archived list; the
+breadcrumb opens the live portfolio, whose Archived button is one click away.)
