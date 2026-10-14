@@ -3175,3 +3175,11 @@ excepted — and the card only said "0 of 2 talks loaded · Not ready".
 - Under the loaded count, a room that isn't ready names its talks by what each still needs, in Action needed's words
   (D-174): "To load: Amara Okafor · To review: Tomás Herrera", "Waiting for the speaker: Marcus Lindqvist, Hannah
   Becker". From the fleet's per-talk status; no API change.
+
+## D-177 (2026-10-14): Action needed rows: who, which talk, status — and the action as a label — Status: ACCEPTED (Travis)
+Travis: "show only the speaker name and the title with the label, and show the action in an action label" (the layout
+chosen: name, title and status on one line, the action below). Each row is now **Speaker** — Talk with its status
+label, and under it a short action label — "→ Get the file", "→ Get the new version", "→ Get a clean copy",
+"→ Review the file", "→ Wait for the checks", "→ Load on room PC", "→ Load the newer version", "→ Set a room" — whose
+hover text is the full instruction. The day, time and room are no longer on the row (Presentation detail has them;
+the row still opens it). Groups, counts and links stay as D-174.

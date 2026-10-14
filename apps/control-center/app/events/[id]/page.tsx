@@ -10,19 +10,6 @@ import { guard } from "@/lib/guard";
 
 export const dynamic = "force-dynamic";
 
-/** Times always render in the event's timezone — never the viewer's browser. */
-const time = (iso: string, timeZone: string) =>
-  new Date(iso).toLocaleTimeString("en-US", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-    timeZone,
-  });
-
-/** Day and time on the event's clock: "Tue, Oct 27 · 09:00" — talks run over several days. */
-const dayTime = (iso: string, timeZone: string) =>
-  `${new Date(iso).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone })} · ${time(iso, timeZone)}`;
-
 /**
  * "Action needed" (D-174, was "Today's risk list" — it was never only today's): every talk not
  * yet loaded in its room, grouped by what has to happen next and who does it, each with the
@@ -75,16 +62,43 @@ function roomReasons(talks: { status: string; speaker: string | null; title: str
   return parts.length > 0 ? parts.join(" · ") : null;
 }
 
-/** Which group a talk's status falls in, and the one thing to do, in words. */
-const ACTION_FOR: Record<string, { group: string; todo: string }> = {
-  missing: { group: "speaker", todo: "Nothing uploaded yet — remind the speaker to upload, or take the file in at the Speaker Ready Room." },
-  needs_revision: { group: "speaker", todo: "Changes were asked for — waiting for the speaker's new version." },
-  attention: { group: "speaker", todo: "The file failed the virus check — ask the speaker for a clean copy." },
-  submitted: { group: "review", todo: "Review the file and approve it, or ask for changes." },
-  processing: { group: "review", todo: "The file checks are still running — it will be ready to review in a minute." },
-  approved_delivering: { group: "load", todo: "Copy the approved file to the room PC and tick Loaded on Room sync." },
-  update_pending_ack: { group: "load", todo: "A newer version is approved — load it on the room PC (it still has the older one)." },
-  approved: { group: "room", todo: "Approved, but the session has no room — set one in the Agenda." },
+/**
+ * Which group a talk's status falls in, the action as a short label (shown on the row, D-177),
+ * and the one thing to do in full (the label's hover text).
+ */
+const ACTION_FOR: Record<string, { group: string; label: string; todo: string }> = {
+  missing: {
+    group: "speaker",
+    label: "Get the file",
+    todo: "Nothing uploaded yet — remind the speaker to upload, or take the file in at the Speaker Ready Room.",
+  },
+  needs_revision: {
+    group: "speaker",
+    label: "Get the new version",
+    todo: "Changes were asked for — waiting for the speaker's new version.",
+  },
+  attention: {
+    group: "speaker",
+    label: "Get a clean copy",
+    todo: "The file failed the virus check — ask the speaker for a clean copy.",
+  },
+  submitted: { group: "review", label: "Review the file", todo: "Review the file and approve it, or ask for changes." },
+  processing: {
+    group: "review",
+    label: "Wait for the checks",
+    todo: "The file checks are still running — it will be ready to review in a minute.",
+  },
+  approved_delivering: {
+    group: "load",
+    label: "Load on room PC",
+    todo: "Copy the approved file to the room PC and tick Loaded on Room sync.",
+  },
+  update_pending_ack: {
+    group: "load",
+    label: "Load the newer version",
+    todo: "A newer version is approved — load it on the room PC (it still has the older one).",
+  },
+  approved: { group: "room", label: "Set a room", todo: "Approved, but the session has no room — set one in the Agenda." },
 };
 
 /** Who may change an event's setup. A hint for the UI; `services/events.ts` decides. */
@@ -289,17 +303,24 @@ export default async function CommandCenterPage({
                     <tbody>
                       {items.map((item) => (
                         <tr className="rb" key={item.slot_id}>
+                          {/* D-177: who and which talk, with its status; the action as a label below. */}
                           <td>
-                            <Link href={`/events/${id}/talks/${item.slot_id}`} style={{ display: "block" }}>
-                              <span className="note">
-                                {dayTime(item.starts_at, summary.event.timezone)} · {item.room ?? "No room"} ·{" "}
+                            <Link
+                              href={`/events/${id}/talks/${item.slot_id}`}
+                              style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}
+                            >
+                              <span>
+                                <b>{item.speaker ?? "No speaker"}</b> — {item.title}
                               </span>
-                              <b>{item.speaker ?? "No speaker"}</b> — {item.title}
+                              <Chip status={item.status} label={item.status_label} />
                             </Link>
-                            <div className="note">{ACTION_FOR[item.status]!.todo}</div>
-                          </td>
-                          <td style={{ textAlign: "right" }}>
-                            <Chip status={item.status} label={item.status_label} />
+                            <span
+                              className="chip c-info"
+                              title={ACTION_FOR[item.status]!.todo}
+                              style={{ marginTop: 6, fontWeight: 600 }}
+                            >
+                              → {ACTION_FOR[item.status]!.label}
+                            </span>
                           </td>
                         </tr>
                       ))}
