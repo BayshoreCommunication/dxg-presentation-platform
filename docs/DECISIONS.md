@@ -3337,3 +3337,9 @@ outright, since they don't start practice events (D-151). Now the section shows 
 one: "Practice events you're assigned to: …", the event's card, and no "Start a practice event" button. A technician
 on none sees no section, as before; admins and support staff are unchanged. Checked by rendering the portfolio as an
 assigned technician, an unassigned one and an admin.
+
+## D-186 (2026-10-14): Mark loaded asks first — Status: ACCEPTED (Travis)
+Travis: "we need to add confirmation before mark loaded." On Room sync, **Mark loaded** no longer ticks at once: it
+asks "Is v… on the {room} PC?" — tick it only once the file is copied onto that room's PC and opens there; the room
+then plays that version — with **Yes, mark loaded** / **Cancel**, the same inline confirmation Undo already had.
+Who may tick is unchanged (D-125, D-160): DXG Technicians, DXG Staff (support staff) and DXG Admins on the event.
