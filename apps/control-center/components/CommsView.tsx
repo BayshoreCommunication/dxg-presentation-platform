@@ -51,7 +51,7 @@ const FIELD_LABEL: Record<string, string> = {
   session_time: "Session day and time",
   deadline: "Deadline",
   upload_link: "Sign-in link",
-  sign_in: "Sign-in details (link and temporary password)",
+  sign_in: "Sign-in details (link; a temporary password only when their sign-in is new)",
   presentations: "List of their presentations",
 };
 
@@ -80,6 +80,11 @@ function previewValues(
   sample: CommsData["recipients"][number] | undefined,
   event: PreviewEvent,
   deadline: string | null,
+  /**
+   * D-179: a password is emailed only when the sign-in is made — the invitation, typically, not a
+   * reminder. The preview shows the one that template usually carries.
+   */
+  withPassword = true,
 ): { who: string; values: Record<string, string> } {
   const name = sample?.name ?? "Alex Morgan";
   const talks: { title: string; room: string | null; starts_at: string; ends_at?: string }[] = sample?.talks.length
@@ -109,7 +114,9 @@ function previewValues(
       presentations: talks.map((talk) => `• ${talk.title} — ${talk.room ?? "Room TBC"}, ${when(talk)}`).join("\n"),
       deadline: deadline ? formatDeadline(deadline, event.timezone) : "the published deadline",
       upload_link: "https://…/login",
-      sign_in: `Sign in at https://…/login with this email address and your temporary password:\n\n    XXXX-XXXX-XXXX-XXXX\n\nYou'll be asked to choose your own password straight away.`,
+      sign_in: withPassword
+        ? `Sign in at https://…/login with this email address and your temporary password:\n\n    XXXX-XXXX-XXXX-XXXX\n\nYou'll be asked to choose your own password straight away.`
+        : `Sign in at https://…/login with this email address and your password — the one we sent you when your sign-in was made, or your own if you've changed it.\nCan't find it? Use "Forgotten your password?" on the sign-in page.`,
     },
   };
 }
@@ -284,7 +291,7 @@ export function CommsView({
       ? [single]
       : []
     : audience.filter((row) => row.email && !row.bounced && !row.already_sent);
-  const preview = previewValues(audience[0] ?? data.recipients[0], event, data.reminders.deadline);
+  const preview = previewValues(audience[0] ?? data.recipients[0], event, data.reminders.deadline, !isReminder);
 
   /** Puts `{{field}}` where the cursor was in the subject or message (S33, D-112). */
   function insertField(field: string) {

@@ -34,9 +34,11 @@ export function signInBlock(temporaryPassword: string | null): string {
       "You'll be asked to choose your own password straight away.",
     ].join("\n");
   }
+  // No password in this email (D-179): the speaker has the one sent when their sign-in was made,
+  // or their own.
   return [
-    `Sign in at ${SIGN_IN_URL} with this email address and your password.`,
-    "Forgotten it? Use \"Forgotten your password?\" on the sign-in page.",
+    `Sign in at ${SIGN_IN_URL} with this email address and your password — the one we sent you when your sign-in was made, or your own if you've changed it.`,
+    "Can't find it? Use \"Forgotten your password?\" on the sign-in page.",
   ].join("\n");
 }
 
@@ -571,6 +573,12 @@ type QueueInput = {
   template: TemplateRow;
   /** Who sent it, for the audit of a sign-in made on the way; absent for the automatic reminders. */
   actorUserId?: string | undefined;
+  /**
+   * A fresh temporary password for a speaker who never used theirs — only for "Send sign-in",
+   * which exists to send it again. Batches (invitation, reminders) send a password only when they
+   * make the sign-in (D-179).
+   */
+  reissuePassword?: boolean;
   recipient: {
     speaker_id: string;
     name: string;
@@ -636,8 +644,15 @@ async function queueInvitation(tx: pg.PoolClient, input: QueueInput): Promise<st
         eventId: input.eventId,
         clientId: input.event.client_id,
         actorUserId: input.actorUserId,
+        reissue: input.reissuePassword === true,
       });
-  const temporaryPassword = input.event.is_practice ? "XXXX-XXXX-XXXX-XXXX" : (signIn?.temporary_password ?? null);
+  // A practice event shows a sample password where a real first email would carry one — the
+  // invitation, not a reminder (D-179).
+  const temporaryPassword = input.event.is_practice
+    ? /reminder/i.test(input.template.name)
+      ? null
+      : "XXXX-XXXX-XXXX-XXXX"
+    : (signIn?.temporary_password ?? null);
   const values = {
     ...personFields(input.recipient.name),
     ...eventFields(input.event),
@@ -995,6 +1010,8 @@ export async function sendUploadLink(
     event,
     template,
     actorUserId: actor.id,
+    // "Send sign-in" exists to send it again: a fresh temporary password (D-179).
+    reissuePassword: true,
     recipient: {
       speaker_id: input.speakerId,
       name: speaker.name,

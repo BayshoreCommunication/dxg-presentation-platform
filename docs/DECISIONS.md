@@ -3218,3 +3218,22 @@ presentation yet") was the only one, and D-177's "Get the new version" opened it
   template with "reminder" in its name); so does the Speakers screen's "remind those without files".
 - Tests: `comms-new-version` (3); `automatic-reminders`, `comms-one-speaker`, `comms-cadence`, `speakers-add-and-send`
   pass.
+
+## D-179 (2026-10-14): A speaker's password is emailed once, when their sign-in is made — Status: ACCEPTED (Travis)
+Travis: "user password only sent when we will create a new user. not every time we send them the credentials". Every
+email with `{{sign_in}}` (invitation, both reminders, the automatic reminders) used to reissue a new temporary
+password for any speaker who hadn't chosen their own, and mail it — so each reminder replaced the last password.
+- **Batches** (invitation, reminders, automatic reminders): a temporary password only when the send makes the sign-in.
+  A speaker who already has one gets: "Sign in … with this email address and your password — the one we sent you when
+  your sign-in was made, or your own if you've changed it. Can't find it? Use 'Forgotten your password?' on the
+  sign-in page." Their password is left as it is (`ensureSpeakerSignIn` `reissue: false` → outcome `pending`).
+- **"Send sign-in"** on the Speakers screen exists to send it again, so it still issues a fresh temporary password
+  (`reissuePassword: true`); so does the explicit "issue sign-in" email.
+- **Communications' preview** shows what each template usually carries: the sample password in the invitation, the
+  no-password wording in the reminders; the merge field reads "Sign-in details (link; a temporary password only when
+  their sign-in is new)". A practice event's stored emails follow the same rule.
+- Password reset works for a speaker who never used their temporary password, so "Forgotten your password?" is a real
+  way back.
+- Tests: `comms-password-once` (3): first invitation carries one; a later reminder carries none and the hash is
+  unchanged; Send sign-in issues a fresh one. `cross-event`, `speaker-accounts` and `technician-submits` fail locally
+  with or without this change (local seed drift).

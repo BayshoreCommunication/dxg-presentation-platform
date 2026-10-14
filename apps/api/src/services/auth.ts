@@ -616,9 +616,11 @@ export type SpeakerSignIn = {
    * `created`: a new account with a temporary password. `reissued`: the account exists but
    * its temporary password was never changed, so a fresh one replaces it. `active`: the
    * speaker has chosen a password — nothing to issue. `staff`: the address is a staff
-   * member's; they sign in as they always do.
+   * member's; they sign in as they always do. `pending` (D-179): the temporary password was
+   * never changed, but this send isn't the place for a new one — the speaker has the one they
+   * were sent, or "Forgotten your password?".
    */
-  outcome: "created" | "reissued" | "active" | "staff";
+  outcome: "created" | "reissued" | "active" | "staff" | "pending";
   temporary_password: string | null;
 };
 
@@ -631,7 +633,19 @@ export type SpeakerSignIn = {
  */
 export async function ensureSpeakerSignIn(
   tx: pg.PoolClient,
-  input: { email: string; displayName: string; eventId: string; clientId: string; actorUserId?: string | undefined },
+  input: {
+    email: string;
+    displayName: string;
+    eventId: string;
+    clientId: string;
+    actorUserId?: string | undefined;
+    /**
+     * Replace an unused temporary password with a fresh one (the default) — for an explicit
+     * "send the sign-in". The invitation and reminder batches pass false (D-179): a password is
+     * emailed when the sign-in is made, not again with every reminder.
+     */
+    reissue?: boolean;
+  },
 ): Promise<SpeakerSignIn> {
   const email = input.email.trim().toLowerCase();
   const { rows: existing } = await tx.query<{ id: string; account_kind: string; must_change_password: boolean; assists: boolean; is_active: boolean }>(
@@ -656,6 +670,7 @@ export async function ensureSpeakerSignIn(
   const found = existing[0];
   if (found && found.account_kind !== "speaker") return { user_id: found.id, email, outcome: "staff", temporary_password: null };
   if (found && !found.must_change_password) return { user_id: found.id, email, outcome: "active", temporary_password: null };
+  if (found && input.reissue === false) return { user_id: found.id, email, outcome: "pending", temporary_password: null };
 
   const temporary = `${generateAccessCode(4, 4)}`;
   const hash = await hashPassword(temporary);
@@ -742,7 +757,12 @@ export async function createSpeakerAccount(
   if (signIn.temporary_password) {
     await queueSpeakerSignInEmail(tx, { to: email, displayName: speaker.full_name, temporaryPassword: signIn.temporary_password });
   }
-  return ok({ user_id: signIn.user_id, email, outcome: signIn.outcome === "active" ? "existing" : signIn.outcome });
+  // This send reissues, so "pending" can't come back; were it to, the sign-in exists.
+  return ok({
+    user_id: signIn.user_id,
+    email,
+    outcome: signIn.outcome === "active" || signIn.outcome === "pending" ? "existing" : signIn.outcome,
+  });
 }
 
 export async function changeOwnPassword(
