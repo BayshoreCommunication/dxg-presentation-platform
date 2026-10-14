@@ -3124,3 +3124,14 @@ open a deck in Keynote or LibreOffice on a Mac; Travis chose a small helper app:
   Mac). The installer route serves the package without a sign-in; `open-in-powerpoint` 5/5. The test browser pane doesn't pass custom links to
   macOS, so there the download fallback and the install offer were seen; the prompt itself is for a real Chrome or
   Safari on a desk Mac. This conflicts with the client's removal of desk apps (D-155) only in kind — tell them.
+
+## D-171 (2026-10-13): The practice notes deck opens in Keynote — Status: ACCEPTED (Travis)
+Opening Amara Okafor's practice talk in Keynote gave "The file format is invalid". Cause: python-pptx links a notes
+master to the presentation when a slide gets notes but never lists it in `p:notesMasterIdLst`; PowerPoint and
+LibreOffice cope, Keynote refuses the whole file. The G0-1 generator (`scripts/g0-1-corpus/generate.py`,
+`declare_notes_master` in `save_pptx`) now adds the list for any deck with notes. Regenerated:
+`normal-10-slides-notes.pptx` (Keynote opens it) and the two corrupt variants made from it; the PDFs differ only by
+their LibreOffice timestamps; every other fixture is byte-identical. The practice copy
+(`apps/api/assets/practice/normal-10-slides-notes.pptx`) is the new fixture, so practice events started from now on get
+it; existing practice events keep the old file. Real speakers' decks, saved by PowerPoint or Keynote, already carry the
+list.
