@@ -203,6 +203,8 @@ tbody tr{transition:background-color .15s}
 tr.rb{cursor:pointer}
 tr.rb:hover td,tbody tr:hover td{background:var(--hover-row)}
 tr.sel td{background:var(--accent)}
+/* The open row in a list that drives a panel below (review queue): a bar on its left edge. */
+tr.rb.sel td:first-child{box-shadow:inset 3px 0 0 var(--primary)}
 td b,td strong{color:var(--foreground);font-weight:500}
 .num{font-variant-numeric:tabular-nums}
 
@@ -917,6 +919,7 @@ input[type=time]:invalid,input[type=date]:invalid{border-color:var(--block)}
 [data-theme="dark"] td{color:#e5e5e5;border-bottom-color:#262626}
 [data-theme="dark"] tbody tr:hover td,[data-theme="dark"] tr.rb:hover td{background:#141414}
 [data-theme="dark"] tr.sel td{background:#1f1f1f}
+[data-theme="dark"] tr.rb.sel td:first-child{box-shadow:inset 3px 0 0 #fff}
 [data-theme="dark"] td b,[data-theme="dark"] td strong{color:#fff}
 
 /* status pills: outlined, tinted, no dot */
