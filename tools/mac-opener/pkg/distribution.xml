@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<installer-gui-script minSpecVersion="2">
+  <title>DXG·PM Opener</title>
+  <welcome mime-type="text/plain"><![CDATA[DXG·PM Opener lets "Open in Keynote" in DXG·PM open a presentation straight in this Mac's app for presentations (Keynote, LibreOffice or PowerPoint).
+
+It installs one small app in Applications. It only opens DXG·PM's own presentation links, and only presentation files.]]></welcome>
+  <domains enable_localSystem="true" enable_currentUserHome="true" enable_anywhere="false"/>
+  <options customize="never" require-scripts="false" hostArchitectures="arm64,x86_64"/>
+  <pkg-ref id="com.dxg.pm.opener"/>
+  <choices-outline><line choice="default"><line choice="com.dxg.pm.opener"/></line></choices-outline>
+  <choice id="default"/>
+  <choice id="com.dxg.pm.opener" visible="false"><pkg-ref id="com.dxg.pm.opener"/></choice>
+  <pkg-ref id="com.dxg.pm.opener" version="1.0" onConclusion="none">opener.pkg</pkg-ref>
+</installer-gui-script>

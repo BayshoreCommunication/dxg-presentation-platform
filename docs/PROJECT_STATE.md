@@ -3696,3 +3696,25 @@ clean.
 The technician's Manage presentations is now Upload a new version and the Approved list only; the queue and every
 review decision are refused them. Seen as the demo technician on Tech Summit: Upload and "Approved · 1" (Priya Shah,
 Download v1), nothing else. Related suites 147/147, unit 291, lint and type-check clean.
+
+## 2026-10-13 — Reminder dialog wording
+Travis found the Speakers screen's reminder confirmation confusing. Walked it on a local demo event with seven kinds of
+speaker: it emails those in a session with no file; it skips anyone with no address, a bounced address, a DXG staff
+address, or who already got *this reminder* in the last 24 hours (another email, such as a sign-in sent today, does
+not hold it back — so the old "anyone emailed about this event in the last day" was wrong). Travis's call: the
+dialog says only "Email a reminder to n speakers missing files now? Each one gets the reminder email with their
+sign-in details."; who was skipped and why is in the toast after sending. Demo speakers removed, demo event archived.
+
+## 2026-10-13 — Open the deck in each desktop's own app (D-167)
+Windows: Open in PowerPoint hands the deck to PowerPoint (browser prompt), falling back to a download. Mac: Open in
+Keynote downloads and Keynote opens it (no website can open Keynote directly; the PowerPoint link on a Mac without
+PowerPoint opened an empty LibreOffice — tried). Linux: Open in LibreOffice, a download. Download beside it on every
+desktop; phones get Download only (a detection bug — a phone read as a Mac — found and fixed). Checked in the
+browser on the check-in and Presentation detail; open-in-powerpoint 4/4. PowerPoint on Windows not tried here.
+
+## 2026-10-13 — DXG·PM Opener for Mac (D-168)
+A small Mac helper so "Open in Keynote" opens the deck directly (browser prompt, then the Mac's default app), as
+PowerPoint does on Windows. Built in `tools/mac-opener` as a macOS package (installs into Applications and registers the link itself), served by
+the API, offered on the page. From a clean state on this Mac: installed, and a real open link was fetched and opened
+in the default app; unsafe links refused. Unsigned, a downloaded package needs Privacy & Security → Open Anyway once;
+an Apple Developer ID would remove that. open-in-powerpoint 5/5, unit 291, lint and type-check clean.
