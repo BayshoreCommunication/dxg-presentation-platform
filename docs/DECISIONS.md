@@ -3124,3 +3124,18 @@ open a deck in Keynote or LibreOffice on a Mac; Travis chose a small helper app:
   Mac). The installer route serves the package without a sign-in; `open-in-powerpoint` 5/5. The test browser pane doesn't pass custom links to
   macOS, so there the download fallback and the install offer were seen; the prompt itself is for a real Chrome or
   Safari on a desk Mac. This conflicts with the client's removal of desk apps (D-155) only in kind — tell them.
+
+## D-172 (2026-10-14): Presentation detail, plainly — Status: ACCEPTED (Travis)
+Travis: "improvise the UI of the presentation details … clean and user friendly … remove the 'open inspection report'
+button. Local intake can be done by dxg assign technician so do we need to show in the staff portal?"
+- **Header**: the talk's title is the page title, with its status; the speaker (bold), room and time under it.
+- **What's happening**: the status in one sentence on its own card, with "Final onsite version" / "Restricted" when
+  they apply.
+- **Current file**: vN · size · where it came from · when it arrived, then the actions — **Preview slides** (main),
+  Open in the computer's app and Download (D-167), and **Review this version** only while the version waits for review
+  (it opens that version in Manage presentations). **Open inspection report** is gone from this page (the review
+  workspace still links the full check report). **Replace file (Local intake)** shows to DXG Technician staff only,
+  since taking a file in is theirs (D-162); the hint lines about the Speaker Ready Room are gone.
+- **Progress**: the three steps on their own card, without the "Next:" line that repeated "What's happening"
+  (`ConfirmationStrip` `hideNext`, the same change as D-169's).
+- **Version history**: "From" and "Checks" (Passed) instead of "Source" and "Findings" (clean).

@@ -150,7 +150,16 @@ const COLOR = (step: Step) => (step.state === "done" ? "var(--success)" : "var(-
  * dashboard): "✓ Approved · ○ Signed off · ○ Loaded" — the row's status line already
  * says what to do next, and hovering a mark gives its detail.
  */
-export function ConfirmationStrip({ facts, compact = false }: { facts: ConfirmationFacts; compact?: boolean }) {
+export function ConfirmationStrip({
+  facts,
+  compact = false,
+  hideNext = false,
+}: {
+  facts: ConfirmationFacts;
+  compact?: boolean;
+  /** Leave out "Next: …" where the page already says what to do now (the check-in, D-169). */
+  hideNext?: boolean;
+}) {
   if (facts.status === "archived") return null;
   const steps = confirmationSteps(facts);
   const next = steps.find((step) => step.state === "waiting" && step.next)?.next ?? steps.find((step) => step.next)?.next;
@@ -203,7 +212,7 @@ export function ConfirmationStrip({ facts, compact = false }: { facts: Confirmat
           ? "The session was cancelled — nothing to do."
           : allDone
               ? "All three confirmations are in — nothing left to do."
-            : next
+            : next && !hideNext
               ? `Next: ${next}`
               : null}{" "}
         These are separate steps: each approved version is loaded onto the room PC whether or not the speaker has signed off.
