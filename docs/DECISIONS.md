@@ -3265,3 +3265,11 @@ events." Chosen: on archive, and the day after it ends; removed but kept on reco
   technician not yet freed as "still assigned".
 - **Migration 044**, once: events archived before this are cleaned up the same way (111 roles locally).
 - Tests: `event-staff-release` (6).
+
+## D-182 (2026-10-14): A technician sees the practice events they're assigned to — Status: ACCEPTED (Travis)
+Found testing the technician's site: C. Delgado, assigned to a practice event on Event assignments, reached it from
+the sidebar's event switcher but not from the portfolio — the "Practice events" section was hidden from technicians
+outright, since they don't start practice events (D-151). Now the section shows for a technician whenever they're on
+one: "Practice events you're assigned to: …", the event's card, and no "Start a practice event" button. A technician
+on none sees no section, as before; admins and support staff are unchanged. Checked by rendering the portfolio as an
+assigned technician, an unassigned one and an admin.
