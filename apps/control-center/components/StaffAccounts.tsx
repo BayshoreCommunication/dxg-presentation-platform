@@ -10,6 +10,7 @@ import {
   deleteStaff,
   resetStaffPassword,
   resetStaffMfa,
+  setStaffName,
   setStaffAccountType,
   setStaffActive,
   unlockStaff,
@@ -88,7 +89,70 @@ function paginationItems(current: number, total: number): Array<number | "ellips
 }
 
 /** Row actions that take access away or change someone's level — each asks first, under its row (D-113). */
-type RowAction = "password" | "mfa" | "type" | "deactivate" | "delete";
+type RowAction = "name" | "password" | "mfa" | "type" | "deactivate" | "delete";
+
+function StaffNameEditor({ user, onSaved, onCancel, onSavingChange }: {
+  user: StaffRow;
+  onSaved: (name: string) => void;
+  onCancel: () => void;
+  onSavingChange: (saving: boolean) => void;
+}) {
+  const [name, setName] = useState(user.display_name);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function save(event: React.FormEvent) {
+    event.preventDefault();
+    const trimmed = name.trim();
+    if (!trimmed) {
+      setError("Enter a name, not just spaces.");
+      return;
+    }
+    setSaving(true);
+    onSavingChange(true);
+    setError(null);
+    try {
+      const result = await setStaffName(user.id, trimmed);
+      onSaved(result.display_name);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not change the name. Please try again.");
+    } finally {
+      setSaving(false);
+      onSavingChange(false);
+    }
+  }
+
+  return (
+    <form className="confirm-inline" aria-label={`Change name for ${user.display_name}`} onSubmit={(event) => void save(event)}>
+      <div className="field" style={{ margin: 0 }}>
+        <label htmlFor={`staff-name-${user.id}`}>Name</label>
+        <input
+          id={`staff-name-${user.id}`}
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          maxLength={200}
+          required
+          autoFocus
+          disabled={saving}
+          aria-invalid={Boolean(error)}
+          aria-describedby={`staff-name-help-${user.id}${error ? ` staff-name-error-${user.id}` : ""}`}
+          style={{ width: "100%", maxWidth: 520 }}
+        />
+      </div>
+      <p className="note" id={`staff-name-help-${user.id}`} style={{ margin: "8px 0 0" }}>
+        Only the display name changes. Email, access level and sign-in details stay the same.
+      </p>
+      {error && <div className="err" id={`staff-name-error-${user.id}`} role="alert" style={{ margin: "8px 0 0" }}>{error}</div>}
+      <div className="confirm-inline-actions">
+        <button type="submit" className="btn pri" disabled={saving || name.trim() === user.display_name}>
+          <Icon name="save" />
+          {saving ? "Saving…" : "Save name"}
+        </button>
+        <button type="button" className="btn" disabled={saving} onClick={onCancel}>Cancel</button>
+      </div>
+    </form>
+  );
+}
 
 /**
  * Why a row's buttons are greyed out, on the page (A12, D-111). Mirrors the API's own
@@ -216,7 +280,7 @@ export function StaffAccounts({ initial, me }: { initial: StaffRow[]; me: string
       {error && <div className="err">{error}</div>}
 
       {notice && (
-        <div className="card">
+        <div className="card" role="status">
           <div className="chd">
             <h3>{notice}</h3>
             <button
@@ -318,7 +382,7 @@ export function StaffAccounts({ initial, me }: { initial: StaffRow[]; me: string
         <div className="staff-accounts-heading">
           <div>
             <h3>Accounts</h3>
-            <span>Manage passwords, sign-in apps and access levels.</span>
+            <span>Manage names, passwords, sign-in apps and access levels.</span>
           </div>
           <Link href="/admin/assignments" className="btn staff-event-assignments">
             <Icon name="calendar" />
@@ -418,6 +482,7 @@ export function StaffAccounts({ initial, me }: { initial: StaffRow[]; me: string
                           className="btn assignment-more-button"
                           aria-label={`Manage ${user.display_name}`}
                           aria-expanded={isOpen}
+                          disabled={busy}
                           onClick={() => toggleManager(user.id)}
                         >
                           <Icon name="chevronDown" size={18} />
@@ -432,11 +497,21 @@ export function StaffAccounts({ initial, me }: { initial: StaffRow[]; me: string
                             <div className="assignment-editor-head">
                               <div>
                                 <strong>Manage {user.display_name}</strong>
-                                <span>Password, sign-in security and account access.</span>
+                                <span>Name, password, sign-in security and account access.</span>
                               </div>
                             </div>
 
                             <div className="staff-account-actions">
+                          <button
+                            className="btn"
+                            style={small}
+                            disabled={busy}
+                            title="Change the display name without changing sign-in or access"
+                            onClick={() => ask(user.id, "name")}
+                          >
+                            <Icon name="edit" />
+                            Change name
+                          </button>
                           <button
                             className="btn staff-action-security"
                             style={small}
@@ -510,7 +585,7 @@ export function StaffAccounts({ initial, me }: { initial: StaffRow[]; me: string
 
                           {/* D-113: the confirmation and outcome stay inside the account being managed. */}
                           {rowNotice?.id === user.id && !askingHere && (
-                            <div className="confirm-inline">
+                            <div className="confirm-inline" role="status">
                               <b>{rowNotice.text}</b>
                               <div className="confirm-inline-actions">
                                 <button type="button" className="btn" style={small} onClick={() => setRowNotice(null)}>
@@ -518,6 +593,18 @@ export function StaffAccounts({ initial, me }: { initial: StaffRow[]; me: string
                                 </button>
                               </div>
                             </div>
+                          )}
+                          {askingHere === "name" && (
+                            <StaffNameEditor
+                              user={user}
+                              onSaved={(name) => {
+                                setAsking(null);
+                                setNotice(`Name changed to ${name}.`);
+                                router.refresh();
+                              }}
+                              onCancel={() => setAsking(null)}
+                              onSavingChange={setBusy}
+                            />
                           )}
                           {askingHere === "password" && (
                             <ConfirmInline

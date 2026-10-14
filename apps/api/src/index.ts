@@ -61,6 +61,7 @@ import {
   grantRole,
   revokeRole,
   setAccountType,
+  setDisplayName,
   assignToEvent,
   deleteAccount,
 } from "./services/admin.ts";
@@ -3818,6 +3819,19 @@ app.get("/api/v1/admin/assignments/history", async (req, res) => {
   }
   const items = await withScope(scopeFor(req), (tx) => eventStaffHistory(tx));
   return res.json({ items });
+});
+
+app.post("/api/v1/admin/users/:userId/name", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  const userId = String(req.params.userId);
+  if (!UUID.test(userId)) return res.status(400).json({ code: "request.invalid", message: "Choose a valid Staff account." });
+  const body = req.body as { display_name?: unknown } | undefined;
+  const result = await withScope(scopeFor(req), (tx) =>
+    setDisplayName(tx, actor, userId, body?.display_name),
+  );
+  if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+  return res.json(result.value);
 });
 
 app.post("/api/v1/admin/users/:userId/reset-password", async (req, res) => {
