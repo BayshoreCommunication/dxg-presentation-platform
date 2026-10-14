@@ -72,7 +72,7 @@ const SPEAKER_SITE = `${process.env.PORTAL_BASE ?? "http://localhost:3001"}/logi
 import { approvedRoomsZip, markLoaded, unmarkLoaded } from "./services/roomSync.ts";
 import { eventStaffHistory } from "./services/eventStaff.ts";
 import { issueOpenLink, readOpenLink } from "./services/openLinks.ts";
-import { setSrrOpen, srrDashboard, srrReportCsv, checkIn, checkinDetail, usbIngest, slotIntake, signOff, depart, emailReceipt, addStation, renameStation, retireStation } from "./services/srr.ts";
+import { setSrrOpen, srrDashboard, srrReportCsv, checkIn, checkinDetail, changeTechnician, usbIngest, slotIntake, signOff, depart, emailReceipt, addStation, renameStation, retireStation } from "./services/srr.ts";
 import {
   presentationDetail,
   findingsFor,
@@ -1911,16 +1911,19 @@ app.get("/api/v1/events/:eventId/srr/report.csv", async (req, res) => {
 app.post("/api/v1/events/:eventId/srr/checkins", async (req, res) => {
   const actor = actorFrom(req);
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
-  const body = req.body as { speaker_id?: string; station_id?: string };
+  if (!deskStaffOnly(req, res, CHECK_IN_STAFF_ONLY)) return;
+  const body = req.body as { speaker_id?: string; station_id?: string; technician_id?: string };
   if (!body.speaker_id) {
     return res.status(400).json({ code: "request.invalid", message: "Choose the speaker to check in." });
   }
-  // No default station (D-080): the check-in names the desk the speaker is actually at.
+  // No default station (D-080): the check-in names the desk the speaker is actually at, and the
+  // technician who helps them there (D-169).
   const result = await withScope(scopeFor(req), (tx) =>
     checkIn(tx, actor, {
       eventId: String(req.params.eventId),
       speakerId: body.speaker_id as string,
       stationId: typeof body.station_id === "string" ? body.station_id : undefined,
+      technicianId: typeof body.technician_id === "string" ? body.technician_id : undefined,
     }),
   );
   if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
@@ -1931,6 +1934,7 @@ app.post("/api/v1/events/:eventId/srr/checkins", async (req, res) => {
 app.post("/api/v1/events/:eventId/srr/stations", async (req, res) => {
   const actor = actorFrom(req);
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  if (!deskStaffOnly(req, res, DESKS_STAFF_ONLY)) return;
   const eventId = String(req.params.eventId);
   const result = await withScope(scopeFor(req, eventId), (tx) =>
     addStation(tx, actor, eventId, (req.body as { name?: unknown })?.name),
@@ -1942,6 +1946,7 @@ app.post("/api/v1/events/:eventId/srr/stations", async (req, res) => {
 app.patch("/api/v1/events/:eventId/srr/stations/:stationId", async (req, res) => {
   const actor = actorFrom(req);
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  if (!deskStaffOnly(req, res, DESKS_STAFF_ONLY)) return;
   const eventId = String(req.params.eventId);
   const result = await withScope(scopeFor(req, eventId), (tx) =>
     renameStation(tx, actor, eventId, String(req.params.stationId), (req.body as { name?: unknown })?.name),
@@ -1953,6 +1958,7 @@ app.patch("/api/v1/events/:eventId/srr/stations/:stationId", async (req, res) =>
 app.delete("/api/v1/events/:eventId/srr/stations/:stationId", async (req, res) => {
   const actor = actorFrom(req);
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  if (!deskStaffOnly(req, res, DESKS_STAFF_ONLY)) return;
   const eventId = String(req.params.eventId);
   const result = await withScope(scopeFor(req, eventId), (tx) =>
     retireStation(tx, actor, eventId, String(req.params.stationId)),
@@ -1976,15 +1982,34 @@ app.get("/api/v1/srr/checkins/:checkinId", async (req, res) => {
  * a check-in's Local intake — is DXG Technician staff's alone (D-162, Travis): not DXG Admins,
  * not support staff. Speakers keep uploading their own on the speaker site.
  */
-function technicianOnly(req: express.Request, res: express.Response): boolean {
+function technicianOnly(
+  req: express.Request,
+  res: express.Response,
+  message = "Only DXG Technician staff take in a speaker's file. Ask the event's technician, or the speaker can upload it on their own site.",
+): boolean {
   const principal = (req as express.Request & { principal?: Principal }).principal;
   if (principal?.kind === "staff" && principal.staff_kind === "technician") return true;
-  res.status(403).json({
-    code: "auth.technician_only",
-    message: "Only DXG Technician staff take in a speaker's file. Ask the event's technician, or the speaker can upload it on their own site.",
-  });
+  res.status(403).json({ code: "auth.technician_only", message });
   return false;
 }
+
+/**
+ * At the desk (D-169): DXG staff — admins and support staff — set up the desks, check the speaker
+ * in and assign the technician; the technician goes through the slides and records the speaker's
+ * confirmation. The receipt email, a hand-over and checking out are either's.
+ */
+const SPEAKER_CONFIRMS_TECHNICIAN_ONLY =
+  "Only the DXG Technician helping the speaker records their confirmation. Ask the event's technician.";
+
+function deskStaffOnly(req: express.Request, res: express.Response, message: string): boolean {
+  const principal = (req as express.Request & { principal?: Principal }).principal;
+  if (principal?.kind === "staff" && (principal.staff_kind === "support" || principal.staff_kind === "root_admin")) return true;
+  res.status(403).json({ code: "auth.staff_only", message });
+  return false;
+}
+const CHECK_IN_STAFF_ONLY =
+  "DXG staff check speakers in and assign their technician. Ask a DXG Admin or support staff at the Speaker Ready Room.";
+const DESKS_STAFF_ONLY = "DXG staff set up the Speaker Ready Room's desks. Ask a DXG Admin or support staff.";
 
 /** Staff-side resumable upload, used by local intake (the portal has its own). */
 app.post("/api/v1/srr/uploads", async (req, res) => {
@@ -2056,6 +2081,7 @@ app.post("/api/v1/events/:eventId/srr/slots/:slotId/intake", async (req, res) =>
 app.post("/api/v1/srr/checkins/:checkinId/sign-off", async (req, res) => {
   const actor = actorFrom(req);
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  if (!technicianOnly(req, res, SPEAKER_CONFIRMS_TECHNICIAN_ONLY)) return;
   const body = req.body as { file_version_id?: string };
   if (!body.file_version_id) {
     return res.status(400).json({ code: "request.invalid", message: "Choose the version the speaker is signing off." });
@@ -2075,6 +2101,18 @@ app.post("/api/v1/srr/checkins/:checkinId/receipt/email", async (req, res) => {
   const actor = actorFrom(req);
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
   const result = await withScope(scopeFor(req), (tx) => emailReceipt(tx, actor, String(req.params.checkinId)));
+  if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
+  return res.json(result.value);
+});
+
+/** Hands the speaker at a desk to another technician on the event (D-169). */
+app.put("/api/v1/srr/checkins/:checkinId/technician", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  const technicianId = (req.body as { technician_id?: unknown })?.technician_id;
+  const result = await withScope(scopeFor(req), (tx) =>
+    changeTechnician(tx, actor, String(req.params.checkinId), typeof technicianId === "string" ? technicianId : undefined),
+  );
   if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
   return res.json(result.value);
 });
