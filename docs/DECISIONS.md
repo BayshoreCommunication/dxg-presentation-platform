@@ -3366,3 +3366,21 @@ Travis: "we also don't need these two button". The check-in page no longer offer
 receipt** (D-106's buttons) — after the speaker confirms, or after they've checked out. The speaker's confirmation is
 still recorded as before, and the page shows it as "Confirmed: v… · when · desk". The wording that told the desk to
 "give them the receipt" is gone. The receipt page and the email endpoint stay in the API and the app, unlinked.
+
+## D-186 (2026-10-14): Mark loaded asks first — Status: ACCEPTED (Travis)
+Travis: "we need to add confirmation before mark loaded." On Room sync, **Mark loaded** no longer ticks at once: it
+asks "Is v… on the {room} PC?" — tick it only once the file is copied onto that room's PC and opens there; the room
+then plays that version — with **Yes, mark loaded** / **Cancel**, the same inline confirmation Undo already had.
+Who may tick is unchanged (D-125, D-160): DXG Technicians, DXG Staff (support staff) and DXG Admins on the event.
+
+## D-187 (2026-10-14): Staff hold their kind's full roles on every event they're on — Status: ACCEPTED (Travis)
+Found on Room sync: a technician saw no **Mark loaded**. C. Delgado held only "reviewer" on MedTech Forward 2026 — the
+seed predates D-151 and gave each technician one role — so the API and the page treated them as a reviewer.
+Event assignments gives the whole set (`ROLES_OF_KIND`), but an account given a role by hand, or placed before
+D-151, could hold part of it.
+- **Migration 045**, once: every support staff member and technician gets the rest of their kind's roles on each
+  event they hold a role on — support → project manager + presentation manager; technician → SRR technician + room
+  technician + reviewer. It only adds: a hand-granted extra role stays. Archived events and DXG Admins are left alone.
+- **Seed**: the seed technicians (C. Delgado, T. Okafor) get the whole technician set on the seed event.
+- Checked: admin, event-scope, room-sync-technicians, srr-open, srr-local-intake, srr-checkin-technician, mfa,
+  auth-separation and event-staff-release pass; technician-submits-for-speakers fails its one test as before.

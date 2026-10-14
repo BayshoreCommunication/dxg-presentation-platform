@@ -162,11 +162,16 @@ async function seed(): Promise<void> {
               ? "client"
               : "support",
         ]);
-        await client.query(
-          `INSERT INTO event_roles (user_id, event_id, role) VALUES ($1, $2, $3)
-           ON CONFLICT DO NOTHING`,
-          [id, IDS.event, role],
-        );
+        // A technician holds the whole technician set on the event, as Event assignments
+        // places them (D-151 `ROLES_OF_KIND`, D-187) — with "reviewer" alone they could not tick Mark loaded.
+        const technician = role === "content_reviewer" || role === "room_technician" || role === "srr_technician";
+        for (const held of technician ? ["srr_technician", "room_technician", "content_reviewer"] : [role]) {
+          await client.query(
+            `INSERT INTO event_roles (user_id, event_id, role) VALUES ($1, $2, $3)
+             ON CONFLICT DO NOTHING`,
+            [id, IDS.event, held],
+          );
+        }
       }
       for (const recovery of recoveryCodes) {
         await client.query(
