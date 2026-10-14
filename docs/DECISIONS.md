@@ -3124,3 +3124,216 @@ open a deck in Keynote or LibreOffice on a Mac; Travis chose a small helper app:
   Mac). The installer route serves the package without a sign-in; `open-in-powerpoint` 5/5. The test browser pane doesn't pass custom links to
   macOS, so there the download fallback and the install offer were seen; the prompt itself is for a real Chrome or
   Safari on a desk Mac. This conflicts with the client's removal of desk apps (D-155) only in kind — tell them.
+
+## D-169 (2026-10-13): A check-in names the technician who helps the speaker — Status: ACCEPTED (Travis)
+Travis: "in the speaker ready room, when we assign a desk for the presenter, we need to assign a technician who will
+help the speaker to ready the presentation file." Until now `srr_checkins.technician_id` was whoever pressed Check in —
+since D-164 that can be support staff or an admin, so the "technician" on the visit, the receipt and the report could
+be someone who isn't one.
+- **Check in** asks "At which desk?" and then "Who helps them at <desk>?": the event's DXG Technician staff (event
+  assignments), the person checking in first and marked "you" when they are one. Required — the API refuses a check-in
+  without one (`srr.technician_required`), with someone who isn't a technician on the event
+  (`srr.technician_not_found`), or on an event with no technician (`srr.no_technicians`; the button is greyed and says
+  a DXG Admin adds one under Event assignments). Only DXG Technician staff — never an admin or support staff, on a
+  practice event too (Travis: "Dxg technition will be assigned not the admin or staff"); to practise check-in, assign a
+  technician to the practice event.
+- `technician_id` now holds the chosen technician; who pressed Check in stays in the audit (`srr.checked_in`, which
+  also records `technician_id`). Everything that already showed "technician" (receipt, report, desks, the speaker's
+  own view) now shows the right person.
+- **Hand-over**: the check-in's header reads "at <desk> · with <technician>", with **Change** when the event has more
+  than one technician (`PUT /srr/checkins/:id/technician`); refused after checkout; audited as
+  `srr.technician_changed` {from, to}.
+- **Check-in page speed**: `checkinDetail` found the speaker's talk through a chain of left joins; under row-level
+  security the planner walked every speaker × talk × session pair (18 s per load on the seed event, also on main).
+  It is now a `LEFT JOIN LATERAL … LIMIT 1` for the one speaker, with the same "next talk that hasn't ended" order:
+  ~30 ms.
+- **Who does what at the desk** (Travis: "desk will be created by the dxg staff not technition and also the check in
+  also be done by dxg staff and will assign a techition"). **DXG staff** — admins and support staff — set up the desks
+  and check the speaker in, assigning the technician (`403 auth.staff_only` for a technician). **The technician**
+  goes through the slides and records the speaker's confirmation (`403 auth.technician_only` for anyone else; the
+  button is not shown to staff, who see "<technician> goes through the slides with <speaker> and records their
+  confirmation"). The receipt email, a hand-over and checking out are either's. Taking a file in stays the
+  technician's (D-162). (A first cut made the whole desk technician-only; Travis corrected it the same day.)
+- **Confirm is the speaker's, not a second approval** (Travis: "we already approved … why need to confirm again").
+  Approve = a reviewer says the file is fine; this step records the speaker's own "this is the one", locks the talk and
+  makes the receipt. The button reads **Speaker confirms vN**, and when vN is approved the text says so: "vN is already
+  approved by a reviewer. Now <speaker> confirms it's the version they'll present …".
+- **The visit's details, open** (Travis: "show the details info, like who approved and emphasise the name of the
+  technician"): the check-in's second card leads with **Technician** — the name large, Change for a hand-over, the desk
+  and check-in time — then the three steps with who approved, who confirmed and the room copy, and when. They were
+  folded under "Details". The header names the technician in bold; the strip's "Next:" line is left out there
+  (`hideNext`), since "What to do now" says it.
+- Tests: `srr-checkin-technician` (7: staff-only check-in and desks, technician-only confirmation, the choice rules,
+  hand-over, practice events); the suites that check in place the seeded technician on their event and name them, and
+  record confirmations as them; `srr-open`'s support-staff test checks in and out as support staff and expects a
+  technician refused at check-in and desks, and support staff refused at the confirmation.
+
+## D-170 (2026-10-13): Manage presentations says whose file is open — Status: ACCEPTED (Travis)
+Travis, on the review workspace: "improvise this section so that it's easier to understand which slide is open on
+which presenter". The queue only shaded the open row, and the workspace header named the speaker but not the talk.
+- **Queue**: the open row has a bar on its left edge and a **Viewing** tag; every row also shows its version, room
+  and time (event zone), so two talks that read alike are told apart. `aria-current` marks the open row.
+- **Workspace header**: "Now reviewing", then **<speaker> — <talk>**, then version · file name · size · room · time.
+- **Slide viewer**: the toolbar carries "<speaker> · <talk> · vN" beside the slide count (`SlideViewer` `caption`,
+  passed by the review workspace only), so it stays in view in full screen. The toolbar now wraps on a narrow screen —
+  at phone width Full screen was cut off at the right edge (on main too).
+
+## D-171 (2026-10-13): The practice notes deck opens in Keynote — Status: ACCEPTED (Travis)
+Opening Amara Okafor's practice talk in Keynote gave "The file format is invalid". Cause: python-pptx links a notes
+master to the presentation when a slide gets notes but never lists it in `p:notesMasterIdLst`; PowerPoint and
+LibreOffice cope, Keynote refuses the whole file. The G0-1 generator (`scripts/g0-1-corpus/generate.py`,
+`declare_notes_master` in `save_pptx`) now adds the list for any deck with notes. Regenerated:
+`normal-10-slides-notes.pptx` (Keynote opens it) and the two corrupt variants made from it; the PDFs differ only by
+their LibreOffice timestamps; every other fixture is byte-identical. The practice copy
+(`apps/api/assets/practice/normal-10-slides-notes.pptx`) is the new fixture, so practice events started from now on get
+it; existing practice events keep the old file. Real speakers' decks, saved by PowerPoint or Keynote, already carry the
+list.
+
+## D-172 (2026-10-14): Presentation detail, plainly — Status: ACCEPTED (Travis)
+Travis: "improvise the UI of the presentation details … clean and user friendly … remove the 'open inspection report'
+button. Local intake can be done by dxg assign technician so do we need to show in the staff portal?"
+- **Header**: the talk's title is the page title, with its status; the speaker (bold), room and time under it.
+- **What's happening**: the status in one sentence on its own card, with "Final onsite version" / "Restricted" when
+  they apply.
+- **Current file**: vN · size · where it came from · when it arrived, then the actions — **Preview slides** (main),
+  Open in the computer's app and Download (D-167), and **Review this version** only while the version waits for review
+  (it opens that version in Manage presentations). **Open inspection report** is gone from this page (the review
+  workspace still links the full check report). **Replace file (Local intake)** shows to DXG Technician staff only,
+  since taking a file in is theirs (D-162); the hint lines about the Speaker Ready Room are gone.
+- **Progress**: the three steps on their own card, without the "Next:" line that repeated "What's happening"
+  (`ConfirmationStrip` `hideNext`, the same change as D-169's).
+- **Version history**: "From" and "Checks" (Passed) instead of "Source" and "Findings" (clean).
+
+## D-173 (2026-10-14): The event page's header buttons — Status: ACCEPTED (Travis)
+- **No "Back to portfolio"** (Travis: "remove the 'back to portfolio' button"): the breadcrumb's **Portfolio** is the
+  way back. (For an archived event the old button opened the Archived list; the breadcrumb opens the live portfolio,
+  whose Archived button is one click away.)
+- **Manage presentations only when something waits** (Travis: "if there are nothing to review, don't show the manage
+  presentations of the top right"): it shows "Manage presentations (n) →" when n > 0, and nothing otherwise — it used
+  to read "Manage presentations · none waiting". The sidebar's Manage presentations always opens the screen.
+
+## D-174 (2026-10-14): "Today's risk list" becomes "Action needed", grouped by what to do — Status: ACCEPTED (Travis)
+Travis: "rename it to 'Action needed' and make the list more meaningful to understand what needs to do." The card was
+never only today's — it listed every talk of the event not yet synchronized onsite, by start time, with only the time
+of day shown, so a list running over several days read as out of order; each row gave a reason, not an action.
+- **Action needed** groups those talks by what happens next, each group with its count, who acts and a link to where
+  it's done: **Waiting for the speaker** (missing, needs revision, failed the virus check → Speakers tab), **To review**
+  (submitted, checks running → Manage presentations), **To load in the room** (approved — delivering, update pending
+  → Room sync), **Needs a room** (approved, no room → Agenda).
+- Each row: "Tue, Oct 27 · 09:00 · Ballroom A · **Speaker** — Talk", then the one thing to do in words (e.g. "Copy the
+  approved file to the room PC and tick Loaded on Room sync."), and the status chip. The row still opens Presentation
+  detail.
+- A cancelled session needs nothing and is no longer listed (it used to appear with a "Canceled" chip).
+- Same data (`GET /events/:id/risk-list`); SCREEN_SPECS' "Today's risk list" (screen 9) reads as this card.
+
+## D-175 (2026-10-14): No number tiles on the event overview — Status: ACCEPTED (Travis)
+Travis: "remove this 5 cards". The overview's tiles — Collected, Approved, Warnings, Missing, Rooms ready (D-065) — are
+gone; the page goes from the event's settings straight to **Action needed** (D-174), which names each talk and what to
+do, then **Room readiness**. The `Kpi` component stays (the client portal and the import screen use it), and
+`GET /events/:id/summary` still returns the counts.
+
+## D-176 (2026-10-14): Room readiness says why a room isn't ready — Status: ACCEPTED (Travis)
+Travis asked what "Not ready" meant, then: "say why in each room". A room is Ready when every talk in it is
+synchronized onsite — its approved version loaded on the room PC and ticked on Room sync (D-125), cancelled talks
+excepted — and the card only said "0 of 2 talks loaded · Not ready".
+- Under the loaded count, a room that isn't ready names its talks by what each still needs, in Action needed's words
+  (D-174): "To load: Amara Okafor · To review: Tomás Herrera", "Waiting for the speaker: Marcus Lindqvist, Hannah
+  Becker". From the fleet's per-talk status; no API change.
+
+## D-177 (2026-10-14): Action needed rows: who, which talk, status — and the action as a label — Status: ACCEPTED (Travis)
+Travis: "show only the speaker name and the title with the label, and show the action in an action label" (the layout
+chosen: name, title and status on one line, the action below). Each row is now **Speaker** — Talk with its status
+label, and under it a short action label — "→ Get the file", "→ Get the new version", "→ Get a clean copy",
+"→ Review the file", "→ Wait for the checks", "→ Load on room PC", "→ Load the newer version", "→ Set a room" — with
+the full instruction beside it (Travis: "keep the what action need text like before"), e.g. "Copy the approved file
+to the room PC and tick Loaded on Room sync." The day, time and room are no longer on the row (Presentation detail has them;
+the row still opens it). Groups, counts and links stay as D-174.
+- **Addendum (same day): the action label is a link** (Travis: "when I click 'get the new version', it doesn't
+  redirect anywhere"). Each label opens where that action is done: the speaker actions (Get the file, Get the new
+  version, Get a clean copy) → Communications, where the reminder is sent (Travis's follow-up; the Speakers tab had no
+  way to remind); Review the file → Manage presentations; Load on room PC / Load the
+  newer version → Room sync; Set a room → the Agenda tab; Wait for the checks → the talk's Presentation detail.
+- **Addendum: a reminder for that speaker** (Travis: "make it open the reminder for that speaker"). The speaker labels
+  open `/events/:id/comms?remind=<speaker id>`: Communications selects the reminder template and narrows to that
+  speaker — the preview as they'd receive it, "Goes to: <name> only", "Audience · 1 (<name> only)" and **Send to
+  <name>** — with "Show everyone missing a file" back to the usual list. A speaker asked for changes or whose file
+  failed the virus check isn't "missing a file", so they come from the full speaker list. The send carries
+  `speaker_ids` (`POST /events/:id/comms/send`, at most 100): only those speakers, and every guard still applies
+  (address, bounce, staff address, resend cooldown); an empty list sends to nobody. The risk list gives each talk's
+  `speaker_id` for the link. Tests: `comms-one-speaker` (3).
+  Note: the reminder template's wording ("We don't have your presentation yet") fits a missing file; for a speaker asked
+  for a new version, edit the text before sending, or save a second reminder template.
+
+## D-178 (2026-10-14): A second reminder: "Reminder — new version needed" — Status: ACCEPTED (Travis)
+Travis: "create a reminder template for new version needed". The missing-file reminder ("We don't have your
+presentation yet") was the only one, and D-177's "Get the new version" opened it for a speaker who had uploaded.
+- **The template**, seeded on every event beside the other two (`DEFAULT_TEMPLATES`): "Reminder — new version needed",
+  subject "{{event_name}}: please send a new version of your presentation by {{deadline}}" — "We need a new version of
+  your presentation for … Please upload it by {{deadline}} … Manage presentations shows our note on what to change,
+  and is where you upload the new version." Editable like the others.
+- **Existing events** get it from **migration 042** (only where it's missing; re-running changes nothing; the text is
+  the default's word for word).
+- **Its audience** is speakers asked for changes or whose file failed the virus check (`new_version` on
+  `GET /comms`; `audience: "new_version"` on `POST /comms/send`). Communications says "Goes to: Speakers asked for a new
+  version, or whose file failed the virus check". It's a reminder, so it can go again after the cooldown.
+- **Action needed**: "Get the new version" and "Get a clean copy" open it for that speaker
+  (`?remind=<id>&reminder=new_version`); "Get the file" keeps the missing-file reminder.
+- **The automatic reminders** use the missing-file reminder by name, never this one (they used to take the first
+  template with "reminder" in its name); so does the Speakers screen's "remind those without files".
+- Tests: `comms-new-version` (3); `automatic-reminders`, `comms-one-speaker`, `comms-cadence`, `speakers-add-and-send`
+  pass.
+
+## D-179 (2026-10-14): A speaker's password is emailed once, when their sign-in is made — Status: ACCEPTED (Travis)
+Travis: "user password only sent when we will create a new user. not every time we send them the credentials". Every
+email with `{{sign_in}}` (invitation, both reminders, the automatic reminders) used to reissue a new temporary
+password for any speaker who hadn't chosen their own, and mail it — so each reminder replaced the last password.
+- **Batches** (invitation, reminders, automatic reminders): a temporary password only when the send makes the sign-in.
+  A speaker who already has one gets: "Sign in … with this email address and your password — the one we sent you when
+  your sign-in was made, or your own if you've changed it. Can't find it? Use 'Forgotten your password?' on the
+  sign-in page." Their password is left as it is (`ensureSpeakerSignIn` `reissue: false` → outcome `pending`).
+- **"Send sign-in"** on the Speakers screen exists to send it again, so it still issues a fresh temporary password
+  (`reissuePassword: true`); so does the explicit "issue sign-in" email.
+- **Communications' preview** shows what each template usually carries: the sample password in the invitation, the
+  no-password wording in the reminders; the merge field reads "Sign-in details (link; a temporary password only when
+  their sign-in is new)". A practice event's stored emails follow the same rule.
+- Password reset works for a speaker who never used their temporary password, so "Forgotten your password?" is a real
+  way back.
+- Tests: `comms-password-once` (3): first invitation carries one; a later reminder carries none and the hash is
+  unchanged; Send sign-in issues a fresh one. `cross-event`, `speaker-accounts` and `technician-submits` fail locally
+  with or without this change (local seed drift).
+
+## D-180 (2026-10-14): Action needed sends the reminder in place — Status: ACCEPTED (Travis)
+Travis: "instead of redirecting to the communication page, show the send reminder button when clicking 'get the new
+version'". The speaker actions on Action needed — Get the file, Get the new version, Get a clean copy — no longer
+leave the page: the label opens "Send “<reminder>” to <speaker>?" with **Send reminder**, Cancel, and "Preview or edit
+in Communications →" (D-177's link, kept one click away). The reminder is the missing-file one for Get the file and
+"Reminder — new version needed" (D-178) for the other two; the send names that speaker only, so every guard applies,
+and the result is said in place ("Reminder sent to …", "Not sent — already emailed this in the last 24 hours", and on
+a practice event "Recorded for … — a practice event never sends"). The other actions (Review the file, Load on room PC,
+Set a room) still open their screens. The event summary now returns `is_practice` for that wording.
+
+## D-181 (2026-10-14): Staff are freed from an event when it's archived or over — Status: ACCEPTED (Travis)
+Travis: "when an event moves to archive or the event has been done, we should free the staff and technician from the
+events." Chosen: on archive, and the day after it ends; removed but kept on record.
+- **Archiving** frees the event's support staff and technicians at once: their event roles go (they no longer reach
+  the event) and who worked it goes to `event_staff_history` (**migration 043**), audited as `events.staff_released`.
+- **The day after the last day** (on the event's clock) the worker frees them too, in the reminder scheduler's tick
+  (`releaseEndedEvents`). It runs in production; in development and CI only with `RELEASE_ENDED_EVENTS=1` — the seed
+  event (MedTech, March 2026) is over, and many tests rely on its seeded staff. `RELEASE_ENDED_EVENTS=0` turns it off.
+- **Not released**: clients (their own event) and DXG Admins (every event — a practice event's owner, for instance).
+- **Restoring** an archived event puts nobody back; an **archived** event takes no new staff (409
+  `admin.event_archived_conflict`: "Restore the event first"). An event that is over but not archived can still be
+  staffed (the seed's tests do).
+- **Event assignments**: current events as before; **Finished events** (archived or over, collapsed) list who worked
+  each — "Worked this event" from the history (`GET /admin/assignments/history`, DXG Admins) — and any support staff or
+  technician not yet freed as "still assigned".
+- **Migration 044**, once: events archived before this are cleaned up the same way (111 roles locally).
+- Tests: `event-staff-release` (6).
+
+## D-182 (2026-10-14): A technician sees the practice events they're assigned to — Status: ACCEPTED (Travis)
+Found testing the technician's site: C. Delgado, assigned to a practice event on Event assignments, reached it from
+the sidebar's event switcher but not from the portfolio — the "Practice events" section was hidden from technicians
+outright, since they don't start practice events (D-151). Now the section shows for a technician whenever they're on
+one: "Practice events you're assigned to: …", the event's card, and no "Start a practice event" button. A technician
+on none sees no section, as before; admins and support staff are unchanged. Checked by rendering the portfolio as an
+assigned technician, an unassigned one and an admin.

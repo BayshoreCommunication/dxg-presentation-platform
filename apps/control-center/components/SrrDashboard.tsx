@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { ExpectedArrival, SrrDashboard, SrrStation } from "@/lib/api";
+import type { ExpectedArrival, SrrDashboard, SrrStation, SrrTechnician } from "@/lib/api";
 import { addStation, renameStation, retireStation, startCheckin, ingestForSlot, srrReportUrl, ApiError } from "@/lib/api";
 import { LocalIntake } from "@/components/LocalIntake";
 import { Toast } from "@/components/Toast";
@@ -37,6 +37,7 @@ export function SrrDashboardView({
   data,
   canSwitch,
   canUpload,
+  meId,
 }: {
   eventId: string;
   eventName: string;
@@ -46,6 +47,8 @@ export function SrrDashboardView({
   canSwitch: boolean;
   /** Taking in a file for a speaker is DXG Technician staff's alone (D-162). */
   canUpload: boolean;
+  /** The signed-in user, offered first when they are one of the event's technicians (D-169). */
+  meId: string;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -70,19 +73,24 @@ export function SrrDashboardView({
     </button>
   );
   // Why "Check in →" is greyed, once above the list rather than on every row (R33, D-111).
-  const checkInBlocked = !data.open
+  // DXG staff check speakers in and assign the technician; technicians take it from there (D-169).
+  const checkInBlocked = canUpload
+    ? "DXG staff check speakers in and assign you as their technician. Open a speaker at a desk to go through the slides."
+    : !data.open
     ? "The Speaker Ready Room is closed. It opens on the event day — a DXG Admin or support staff opens it."
     : data.stations.length === 0
       ? "Check in is off until this room has a desk. Add one under Desks above."
       : data.stations.every((station) => station.busy)
         ? "Every desk is in use. To free one, check a speaker out: open their check-in and press Check out."
-        : null;
+        : data.technicians.length === 0
+          ? "Check in is off until a DXG Technician is on this event. A DXG Admin adds one under Event assignments."
+          : null;
 
-  async function check(speakerId: string, stationId: string) {
+  async function check(speakerId: string, stationId: string, technicianId: string) {
     setBusy(true);
     setError(null);
     try {
-      const { checkin_id } = await startCheckin(eventId, speakerId, stationId);
+      const { checkin_id } = await startCheckin(eventId, speakerId, stationId, technicianId);
       router.push(`/events/${eventId}/srr/${checkin_id}`);
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : "Check-in failed.");
@@ -176,7 +184,7 @@ export function SrrDashboardView({
       )}
 
       {data.stations.length === 0 && (
-        <StationsCard eventId={eventId} stations={data.stations} onChanged={() => router.refresh()} />
+        <StationsCard eventId={eventId} stations={data.stations} canEdit={!canUpload} onChanged={() => router.refresh()} />
       )}
 
       {/* ── At the desks now: one card per desk (D-121) ─────────────────────────── */}
@@ -252,8 +260,10 @@ export function SrrDashboardView({
                           {canUpload && <>{uploadButton(row)} </>}
                           <CheckInButton
                             stations={data.stations}
-                            disabled={busy || !data.open}
-                            onPick={(stationId) => void check(row.speaker_id, stationId)}
+                            technicians={data.technicians}
+                            meId={meId}
+                            disabled={busy || !data.open || canUpload}
+                            onPick={(stationId, technicianId) => void check(row.speaker_id, stationId, technicianId)}
                           />
                         </td>
                       </tr>
@@ -289,9 +299,11 @@ export function SrrDashboardView({
                       {canUpload && <>{uploadButton(row)} </>}
                       <CheckInButton
                         stations={data.stations}
+                        technicians={data.technicians}
+                        meId={meId}
                         label="Check in again"
-                        disabled={busy || !data.open}
-                        onPick={(stationId) => void check(row.speaker_id, stationId)}
+                        disabled={busy || !data.open || canUpload}
+                        onPick={(stationId, technicianId) => void check(row.speaker_id, stationId, technicianId)}
                       />
                     </td>
                   </tr>
@@ -349,7 +361,7 @@ export function SrrDashboardView({
         top, because then it *is* the job.
       */}
       {data.stations.length > 0 && (
-        <StationsCard eventId={eventId} stations={data.stations} onChanged={() => router.refresh()} />
+        <StationsCard eventId={eventId} stations={data.stations} canEdit={!canUpload} onChanged={() => router.refresh()} />
       )}
 
       <Toast message={toast} onClose={closeToast} />
@@ -388,22 +400,31 @@ function arrivalLine(row: ExpectedArrival): string {
 /** Closes on Escape and on a click anywhere else. */
 
 /**
- * Check-in asks which desk (D-080). It was recorded at "Station 2" for every speaker;
- * now the menu lists this event's stations, with the ones already in use shown but not
- * offered.
+ * Check-in asks which desk (D-080), then which technician helps the speaker there (D-169). The
+ * desk list shows the ones already in use but doesn't offer them; the technician list is the
+ * event's technicians, with the person checking in first when they are one.
  */
 function CheckInButton({
   stations,
+  technicians,
+  meId,
   disabled,
   onPick,
   label = "Check in",
 }: {
   stations: SrrStation[];
+  technicians: SrrTechnician[];
+  meId: string;
   disabled: boolean;
-  onPick: (stationId: string) => void;
+  onPick: (stationId: string, technicianId: string) => void;
   label?: string;
 }) {
   const { open, setOpen, trigger, menu } = useFloatingMenu();
+  // The desk chosen in step one; the menu then asks for the technician.
+  const [desk, setDesk] = useState<SrrStation | null>(null);
+  useEffect(() => {
+    if (!open) setDesk(null);
+  }, [open]);
   const free = stations.filter((station) => !station.busy);
   if (stations.length === 0) {
     return (
@@ -413,13 +434,20 @@ function CheckInButton({
       </button>
     );
   }
+  const ordered = [...technicians.filter((t) => t.id === meId), ...technicians.filter((t) => t.id !== meId)];
+  const blocked =
+    free.length === 0
+      ? "Every desk is in use. Check a speaker out to free one."
+      : technicians.length === 0
+        ? "No DXG Technician is on this event yet. A DXG Admin adds one under Event assignments."
+        : undefined;
   return (
     <div className="rowmenu" style={{ verticalAlign: "middle" }}>
       <button
         ref={trigger}
         className="btn pri"
-        disabled={disabled || free.length === 0}
-        title={free.length === 0 ? "Every desk is in use. Check a speaker out to free one." : undefined}
+        disabled={disabled || blocked !== undefined}
+        title={blocked}
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
@@ -427,39 +455,65 @@ function CheckInButton({
         <Icon name="login" />
         {label}
       </button>
-      <FloatingMenu open={open} trigger={trigger} menu={menu} width={220}>
-          <div className="label">At which desk?</div>
-          {stations.map((station) => (
-            <button
-              key={station.id}
-              type="button"
-              className="item"
-              role="menuitem"
-              disabled={station.busy}
-              style={station.busy ? { opacity: 0.5, cursor: "default" } : undefined}
-              onClick={() => {
-                if (station.busy) return;
-                setOpen(false);
-                onPick(station.id);
-              }}
-            >
-              {station.name}
-              {station.busy && <span className="tick">in use</span>}
+      <FloatingMenu open={open} trigger={trigger} menu={menu} width={240}>
+        {desk === null ? (
+          <>
+            <div className="label">At which desk?</div>
+            {stations.map((station) => (
+              <button
+                key={station.id}
+                type="button"
+                className="item"
+                role="menuitem"
+                disabled={station.busy}
+                style={station.busy ? { opacity: 0.5, cursor: "default" } : undefined}
+                onClick={() => {
+                  if (!station.busy) setDesk(station);
+                }}
+              >
+                {station.name}
+                {station.busy && <span className="tick">in use</span>}
+              </button>
+            ))}
+          </>
+        ) : (
+          <>
+            <div className="label">Who helps them at {desk.name}?</div>
+            {ordered.map((technician) => (
+              <button
+                key={technician.id}
+                type="button"
+                className="item"
+                role="menuitem"
+                onClick={() => {
+                  setOpen(false);
+                  onPick(desk.id, technician.id);
+                }}
+              >
+                {technician.name}
+                {technician.id === meId && <span className="tick">you</span>}
+              </button>
+            ))}
+            <button type="button" className="item" role="menuitem" onClick={() => setDesk(null)}>
+              ← Another desk
             </button>
-          ))}
+          </>
+        )}
       </FloatingMenu>
     </div>
   );
 }
 
-/** The event's desks: who is at each, and add / rename / remove (D-080). */
 function StationsCard({
   eventId,
   stations,
+  canEdit,
   onChanged,
 }: {
   eventId: string;
   stations: SrrStation[];
+  /** DXG staff set up the desks; technicians see them (D-169). */
+  canEdit: boolean;
   onChanged: () => void;
 }) {
   const [draft, setDraft] = useState("");
@@ -487,7 +541,7 @@ function StationsCard({
     <div className="card">
       <div className="chd">
         <h3>Desks · {stations.length}</h3>
-        <span className="m">where speakers check in — rename or remove them here</span>
+        <span className="m">{canEdit ? "where speakers check in — rename or remove them here" : "where speakers check in — DXG staff set them up"}</span>
       </div>
       <div className="cbd" style={{ padding: "0 0 4px" }}>
         {error && (
@@ -502,7 +556,11 @@ function StationsCard({
           </div>
         )}
         {stations.length === 0 ? (
-          <div className="empty">No desks yet. Add each desk this room has — speakers are checked in at one.</div>
+          <div className="empty">
+            {canEdit
+              ? "No desks yet. Add each desk this room has — speakers are checked in at one."
+              : "No desks yet. DXG staff add them before speakers are checked in."}
+          </div>
         ) : (
           <table>
             <tbody>
@@ -549,7 +607,8 @@ function StationsCard({
                   </td>
                   <td className="srr-actions">
                     <Chip status={station.busy ? "submitted" : "canceled"} label={station.busy ? "In session" : "Free"} />{" "}
-                    {editing?.id !== station.id &&
+                    {canEdit &&
+                      editing?.id !== station.id &&
                       (confirming === station.id ? (
                         <>
                           <button
@@ -589,6 +648,7 @@ function StationsCard({
             </tbody>
           </table>
         )}
+        {canEdit && (
         <form
           style={{ display: "flex", gap: 8, padding: "12px 14px 10px", borderTop: "1px solid rgba(0,0,0,.06)" }}
           onSubmit={(event) => {
@@ -611,6 +671,7 @@ function StationsCard({
             Add desk
           </button>
         </form>
+        )}
       </div>
     </div>
   );

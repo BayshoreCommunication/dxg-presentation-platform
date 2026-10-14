@@ -6,7 +6,7 @@ import Link from "next/link";
 
 import { useRouter } from "next/navigation";
 import type { BrandAsset, CommsView as CommsData } from "@/lib/api";
-import { assetUrl, createTemplate, saveEmailSettings, sendBatch, sendTestEmail, updateTemplate, uploadEmailImage, ApiError } from "@/lib/api";
+import { assetUrl, createTemplate, NEW_VERSION_REMINDER_NAME, REMINDER_TEMPLATE_NAME, saveEmailSettings, sendBatch, sendTestEmail, updateTemplate, uploadEmailImage, ApiError } from "@/lib/api";
 import { BrandAssetField } from "@/components/BrandAssetField";
 import { RichEditor } from "@/components/RichEditor";
 import { FloatingMenu, useFloatingMenu } from "@/components/FloatingMenu";
@@ -51,7 +51,7 @@ const FIELD_LABEL: Record<string, string> = {
   session_time: "Session day and time",
   deadline: "Deadline",
   upload_link: "Sign-in link",
-  sign_in: "Sign-in details (link and temporary password)",
+  sign_in: "Sign-in details (link; a temporary password only when their sign-in is new)",
   presentations: "List of their presentations",
 };
 
@@ -80,6 +80,11 @@ function previewValues(
   sample: CommsData["recipients"][number] | undefined,
   event: PreviewEvent,
   deadline: string | null,
+  /**
+   * D-179: a password is emailed only when the sign-in is made — the invitation, typically, not a
+   * reminder. The preview shows the one that template usually carries.
+   */
+  withPassword = true,
 ): { who: string; values: Record<string, string> } {
   const name = sample?.name ?? "Alex Morgan";
   const talks: { title: string; room: string | null; starts_at: string; ends_at?: string }[] = sample?.talks.length
@@ -109,7 +114,9 @@ function previewValues(
       presentations: talks.map((talk) => `• ${talk.title} — ${talk.room ?? "Room TBC"}, ${when(talk)}`).join("\n"),
       deadline: deadline ? formatDeadline(deadline, event.timezone) : "the published deadline",
       upload_link: "https://…/login",
-      sign_in: `Sign in at https://…/login with this email address and your temporary password:\n\n    XXXX-XXXX-XXXX-XXXX\n\nYou'll be asked to choose your own password straight away.`,
+      sign_in: withPassword
+        ? `Sign in at https://…/login with this email address and your temporary password:\n\n    XXXX-XXXX-XXXX-XXXX\n\nYou'll be asked to choose your own password straight away.`
+        : `Sign in at https://…/login with this email address and your password — the one we sent you when your sign-in was made, or your own if you've changed it.\nCan't find it? Use "Forgotten your password?" on the sign-in page.`,
     },
   };
 }
@@ -147,6 +154,8 @@ export function CommsView({
   event,
   banner = null,
   practice = false,
+  remindSpeakerId = null,
+  remindNewVersion = false,
 }: {
   eventId: string;
   data: CommsData;
@@ -155,12 +164,33 @@ export function CommsView({
   banner?: BrandAsset | null;
   /** A practice event (D-116): nothing is sent, so nothing "will send". */
   practice?: boolean;
+  /** Opened from "Get the file" on the event overview (D-177): the reminder, for this speaker alone. */
+  remindSpeakerId?: string | null;
+  /** …with the "new version needed" reminder rather than the missing-file one (D-178). */
+  remindNewVersion?: boolean;
 }) {
   const router = useRouter();
   const subjectRef = useRef<HTMLInputElement>(null);
   // Which box an inserted field goes into: the last one typed in, the message by default.
   const lastBox = useRef<"subject" | "body">("body");
-  const [selected, setSelected] = useState(data.templates[0]?.id ?? "");
+  // The two seeded reminders (D-178): missing a file, and a new version needed.
+  const isNewVersionName = (name: string) => name === NEW_VERSION_REMINDER_NAME;
+  const reminderTemplate = remindNewVersion
+    ? data.templates.find((row) => isNewVersionName(row.name))
+    : (data.templates.find((row) => row.name === REMINDER_TEMPLATE_NAME) ??
+      data.templates.find((row) => /reminder/i.test(row.name) && !isNewVersionName(row.name)));
+  // One speaker, when opened for them (D-177): from the missing list, or — a speaker asked for
+  // changes, or whose file failed the virus check — from everyone.
+  const [focusId, setFocusId] = useState<string | null>(
+    remindSpeakerId && reminderTemplate ? remindSpeakerId : null,
+  );
+  const focus = focusId
+    ? (data.missing.find((row) => row.speaker_id === focusId) ??
+      data.new_version.find((row) => row.speaker_id === focusId) ??
+      data.recipients.find((row) => row.speaker_id === focusId) ??
+      null)
+    : null;
+  const [selected, setSelected] = useState((focus && reminderTemplate?.id) || data.templates[0]?.id || "");
   const [confirmingSend, setConfirmingSend] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -249,10 +279,19 @@ export function CommsView({
   }
 
   const template = data.templates.find((row) => row.id === selected) ?? data.templates[0];
+  // A reminder (missing file, or a new version needed — D-178); anything else is the invitation.
+  const isNewVersion = isNewVersionName(template?.name ?? "");
   const isReminder = (template?.name ?? "").toLowerCase().includes("reminder");
-  const audience = isReminder ? data.missing : data.recipients;
-  const sendable = audience.filter((row) => row.email && !row.bounced && !row.already_sent);
-  const preview = previewValues(audience[0] ?? data.recipients[0], event, data.reminders.deadline);
+  // For one speaker, the reminder goes whatever the lists say (the server still applies the
+  // address, bounce and cooldown guards); otherwise the template's own audience.
+  const single = focus && isReminder ? focus : null;
+  const audience = single ? [single] : isNewVersion ? data.new_version : isReminder ? data.missing : data.recipients;
+  const sendable = single
+    ? single.email && !single.bounced
+      ? [single]
+      : []
+    : audience.filter((row) => row.email && !row.bounced && !row.already_sent);
+  const preview = previewValues(audience[0] ?? data.recipients[0], event, data.reminders.deadline, !isReminder);
 
   /** Puts `{{field}}` where the cursor was in the subject or message (S33, D-112). */
   function insertField(field: string) {
@@ -279,7 +318,9 @@ export function CommsView({
     setBusy(true);
     setError(null);
     try {
-      const result = await sendBatch(eventId, template.id, isReminder);
+      const result = single
+        ? await sendBatch(eventId, template.id, false, [single.speaker_id])
+        : await sendBatch(eventId, template.id, isNewVersion ? "new_version" : isReminder);
       const skipped = result.skipped.map((entry) => `${entry.count} ${entry.reason}`).join(" · ");
       setToast(
         result.queued > 0
@@ -537,7 +578,15 @@ export function CommsView({
               <div className="tpl-side tpl-facts">
                 <div>
                   <div className="kl">Goes to</div>
-                  <div>{isReminder ? "Speakers still missing a file" : "Speakers not yet invited"}</div>
+                  <div>
+                    {single
+                      ? `${single.name} only`
+                      : isNewVersion
+                        ? "Speakers asked for a new version, or whose file failed the virus check"
+                        : isReminder
+                          ? "Speakers still missing a file"
+                          : "Speakers not yet invited"}
+                  </div>
                 </div>
                 <div>
                   <div className="kl">Each speaker gets</div>
@@ -560,14 +609,24 @@ export function CommsView({
         <div className="chd">
           <h3>
             Audience · {audience.length}
-            {isReminder ? " (missing files only)" : ""}
+            {single ? ` (${single.name} only)` : isNewVersion ? " (new version needed)" : isReminder ? " (missing files only)" : ""}
           </h3>
-          <span className="m">who this email would reach right now</span>
+          {single ? (
+            <button type="button" className="linkish m" onClick={() => setFocusId(null)}>
+              {isNewVersion ? "Show everyone who needs a new version" : "Show everyone missing a file"}
+            </button>
+          ) : (
+            <span className="m">who this email would reach right now</span>
+          )}
         </div>
         <div className="cbd" style={{ padding: "0 0 4px" }}>
           {audience.length === 0 ? (
             <div className="empty">
-              {isReminder ? "Nobody is missing a file — there is nothing to chase." : "No speakers yet."}
+              {isNewVersion
+                ? "Nobody needs to send a new version."
+                : isReminder
+                  ? "Nobody is missing a file — there is nothing to chase."
+                  : "No speakers yet."}
             </div>
           ) : (
             <table>
@@ -577,7 +636,7 @@ export function CommsView({
                     ? "no email address"
                     : row.bounced
                       ? "previous email bounced"
-                      : row.already_sent
+                      : row.already_sent && !single
                         ? "already received this email"
                         : null;
                   return (
@@ -613,7 +672,7 @@ export function CommsView({
         {confirmingSend ? (
           <span style={{ display: "inline-flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
             <b>
-              Email {sendable.length} speaker{sendable.length === 1 ? "" : "s"} now?
+              {single ? `Email ${single.name} now?` : `Email ${sendable.length} speaker${sendable.length === 1 ? "" : "s"} now?`}
             </b>
             <button
               className="btn pri"
@@ -633,7 +692,7 @@ export function CommsView({
         ) : (
           <button className="btn pri" disabled={busy || sendable.length === 0} onClick={() => setConfirmingSend(true)}>
             <Icon name="send" />
-            Send to {sendable.length} speaker{sendable.length === 1 ? "" : "s"}
+            {single ? `Send to ${single.name}` : `Send to ${sendable.length} speaker${sendable.length === 1 ? "" : "s"}`}
           </button>
         )}
       </div>
@@ -644,9 +703,11 @@ export function CommsView({
             ? null
             : audience.length > 0
               ? "Everyone in this list has already been sent this email, or has no working address."
-              : isReminder
-                ? "Nobody is missing a file — there is nothing to chase."
-                : "No speakers yet — add them on Speakers first."
+              : isNewVersion
+                ? "Nobody needs to send a new version."
+                : isReminder
+                  ? "Nobody is missing a file — there is nothing to chase."
+                  : "No speakers yet — add them on Speakers first."
         }
       />
       </div>

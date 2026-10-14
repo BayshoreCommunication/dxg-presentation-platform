@@ -179,6 +179,7 @@ export type RiskItem = {
   room: string | null;
   starts_at: string;
   speaker: string | null;
+  speaker_id: string | null;
   title: string;
   status: string;
   status_label: string;
@@ -266,6 +267,17 @@ export type FleetRoom = {
 };
 
 export const listEvents = () => request<{ items: EventRow[] }>("/events");
+
+/** Who worked an event, once freed from it — when it was archived or the day after it ended (D-181). */
+export type WorkedRow = {
+  event_id: string;
+  user_id: string;
+  display_name: string;
+  role: string;
+  released_at: string;
+  reason: "archived" | "ended";
+};
+export const getAssignmentHistory = () => request<{ items: WorkedRow[] }>("/admin/assignments/history");
 export const getSummary = (eventId: string) => request<Summary>(`/events/${eventId}/summary`);
 export const getRiskList = (eventId: string) =>
   request<{ items: RiskItem[] }>(`/events/${eventId}/risk-list`);
@@ -393,7 +405,12 @@ export type SrrDashboard = {
   stations: SrrStation[];
   /** The event-day switch (D-157): closed, nobody checks in. */
   open: boolean;
+  /** Who a check-in may name as the speaker's technician (D-169). */
+  technicians: SrrTechnician[];
 };
+
+/** A technician on the event who can help a speaker at a desk (D-169). */
+export type SrrTechnician = { id: string; name: string };
 
 /** Opens or closes the Speaker Ready Room (D-157). DXG Admins and support staff. */
 export const setSrrOpen = (eventId: string, open: boolean) =>
@@ -434,7 +451,16 @@ export type VersionFacts = {
 };
 
 export type CheckinDetail = {
-  checkin: { id: string; station: string | null; checked_in_at: string; technician: string; departed_at: string | null };
+  checkin: {
+    id: string;
+    station: string | null;
+    checked_in_at: string;
+    technician: string;
+    technician_id: string;
+    departed_at: string | null;
+  };
+  /** Who may take this speaker over (D-169). */
+  technicians: SrrTechnician[];
   speaker: { id: string; name: string };
   talk: {
     /** Null when the speaker is no longer on a session — the visit can still be checked out. */
@@ -481,11 +507,21 @@ export const getSrrDashboard = (eventId: string) =>
 export const getCheckin = (checkinId: string) =>
   request<CheckinDetail>(`/srr/checkins/${checkinId}`);
 
-export const startCheckin = (eventId: string, speakerId: string, stationId: string) =>
+export const startCheckin = (eventId: string, speakerId: string, stationId: string, technicianId: string) =>
   request<{ checkin_id: string }>(
     `/events/${eventId}/srr/checkins`,
-    { method: "POST", body: JSON.stringify({ speaker_id: speakerId, station_id: stationId }) },
+    {
+      method: "POST",
+      body: JSON.stringify({ speaker_id: speakerId, station_id: stationId, technician_id: technicianId }),
+    },
   );
+
+/** Hands the speaker at a desk to another technician (D-169). */
+export const changeCheckinTechnician = (checkinId: string, technicianId: string) =>
+  request<{ technician: SrrTechnician }>(`/srr/checkins/${checkinId}/technician`, {
+    method: "PUT",
+    body: JSON.stringify({ technician_id: technicianId }),
+  });
 
 export const beginSrrUpload = () =>
   request<{ upload_id: string; part_size: number }>(`/srr/uploads`, { method: "POST" });
@@ -1199,6 +1235,8 @@ export type CommsView = {
   merge_fields: string[];
   recipients: CommRecipient[];
   missing: CommRecipient[];
+  /** Who "Reminder — new version needed" is for (D-178): asked for changes, or the file failed. */
+  new_version: CommRecipient[];
   log: {
     id: string;
     speaker: string | null;
@@ -1239,6 +1277,8 @@ export const getComms = (eventId: string) =>
  * per event and has no stable id — see `remindSpeakersWithoutFiles`.
  */
 export const REMINDER_TEMPLATE_NAME = "Reminder — file still missing";
+/** The second seeded reminder (D-178), for speakers who need to send a new file. */
+export const NEW_VERSION_REMINDER_NAME = "Reminder — new version needed";
 
 /**
  * Chases everyone whose talk has no file, with the event's reminder template.
@@ -1253,8 +1293,9 @@ export const remindSpeakersWithoutFiles = async (eventId: string) => {
   const { templates } = await getComms(eventId);
   const template =
     templates.find((candidate) => candidate.name === REMINDER_TEMPLATE_NAME) ??
-    // Renamed by hand, most likely. Better than refusing to chase anyone.
-    templates.find((candidate) => /reminder/i.test(candidate.name));
+    // Renamed by hand, most likely. Better than refusing to chase anyone — but never the
+    // "new version needed" reminder, which is for speakers who have uploaded (D-178).
+    templates.find((candidate) => /reminder/i.test(candidate.name) && candidate.name !== NEW_VERSION_REMINDER_NAME);
   if (!template) {
     throw new ApiError(
       "comms.template_not_found",
@@ -1265,10 +1306,21 @@ export const remindSpeakersWithoutFiles = async (eventId: string) => {
   return sendBatch(eventId, template.id, true);
 };
 
-export const sendBatch = (eventId: string, templateId: string, missingOnly: boolean) =>
+/**
+ * `missingOnly`: `true` for those missing a file, `"new_version"` for those who need to send a new
+ * one (D-178). `speakerIds`: only these speakers (D-177) — a reminder opened for one speaker.
+ */
+export const sendBatch = (eventId: string, templateId: string, missingOnly: boolean | "new_version", speakerIds?: string[]) =>
   request<{ queued: number; skipped: { reason: string; count: number }[] }>(
     `/events/${eventId}/comms/send`,
-    { method: "POST", body: JSON.stringify({ template_id: templateId, missing_only: missingOnly }) },
+    {
+      method: "POST",
+      body: JSON.stringify({
+        template_id: templateId,
+        ...(missingOnly === "new_version" ? { audience: "new_version" } : { missing_only: missingOnly }),
+        ...(speakerIds ? { speaker_ids: speakerIds } : {}),
+      }),
+    },
   );
 
 /* ── account administration ───────────────────────────────────────────────── */

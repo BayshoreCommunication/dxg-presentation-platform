@@ -95,7 +95,12 @@ export default async function PortfolioPage({
 
       {items.map((event, index) => card(event, summaries[index]!))}
 
-      {!showArchived && principal?.staff_kind !== "technician" && (
+      {/*
+        A technician doesn't start practice events (D-151), but can be assigned to someone's — then
+        it's listed here, without the button (D-182). It used to vanish: the section was hidden from
+        technicians outright.
+      */}
+      {!showArchived && (principal?.staff_kind !== "technician" || practice.length > 0) && (
         <>
           <div
             style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, margin: "24px 0 10px" }}
@@ -105,12 +110,12 @@ export default async function PortfolioPage({
                 Practice events
               </h2>
               <p className="note" style={{ margin: "4px 0 0", maxWidth: 560 }}>
-                A practice event is yours to learn on: made-up speakers and real files in every state. Nothing in it reaches
-                real speakers or clients, and its emails are never sent. When you are done, press Archive — that removes it
-                from here.
+                {principal?.staff_kind === "technician"
+                  ? "Practice events you're assigned to: made-up speakers and real files in every state, to try your jobs safely. Nothing in them reaches real speakers or clients, and their emails are never sent."
+                  : "A practice event is yours to learn on: made-up speakers and real files in every state. Nothing in it reaches real speakers or clients, and its emails are never sent. When you are done, press Archive — that removes it from here."}
               </p>
             </div>
-            {principal?.kind === "staff" && <StartPracticeButton open={myPractice} />}
+            {principal?.kind === "staff" && principal.staff_kind !== "technician" && <StartPracticeButton open={myPractice} />}
           </div>
           {practice.length === 0 ? (
             <div className="card">

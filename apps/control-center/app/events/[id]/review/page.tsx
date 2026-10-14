@@ -45,6 +45,7 @@ export default async function ReviewPage({
       eventId={id}
       initialQueue={items}
       initialSelectedId={v ?? null}
+      timezone={summary.event.timezone}
       approved={<ApprovedPresentations eventId={id} items={approved.items} timezone={summary.event.timezone} />}
     />
   );

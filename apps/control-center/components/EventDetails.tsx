@@ -146,7 +146,6 @@ export function EventDetails({
       <div className="card">
         <div className="chd">
           <h3>Basics</h3>
-          <span className="m">what this event is called, and where</span>
         </div>
         <div className="cbd">
           <div className="grid2">
@@ -209,7 +208,6 @@ export function EventDetails({
         <div className="chd">
           <h3>Agenda</h3>
           {/* Edited in the Agenda tab (D-064); the code itself is not shown (S22, D-112). */}
-          <span className="m">from the schedule import · edit it in the Agenda tab</span>
         </div>
         <div className="cbd" style={{ padding: "0 0 4px" }}>
           <table>
@@ -247,7 +245,6 @@ export function EventDetails({
       <div className="card">
         <div className="chd">
           <h3>Deadlines &amp; reminders</h3>
-          <span className="m">when the speaker portal closes</span>
         </div>
         <div className="cbd">
           <div className="grid2">

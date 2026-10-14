@@ -456,13 +456,39 @@ def drop_unreferenced(entries):
     return out
 
 
+def declare_notes_master(entries):
+    """List the notes master in presentation.xml's p:notesMasterIdLst.
+
+    python-pptx creates the notes master and relates it to the presentation when a slide first gets
+    notes, but never adds `p:notesMasterIdLst`. PowerPoint and LibreOffice cope; Keynote refuses the
+    whole file ("The file format is invalid"). The list goes straight after p:sldMasterIdLst (schema order).
+    """
+    rels = dict(entries).get("ppt/_rels/presentation.xml.rels")
+    if rels is None:
+        return entries
+    rid = next((rel.get("Id") for rel in etree.fromstring(rels) if rel.get("Type") == f"{R_NS}/notesMaster"), None)
+    if rid is None:
+        return entries
+
+    def fix(data):
+        root = etree.fromstring(data)
+        if root.find(qn("p:notesMasterIdLst")) is not None:
+            return data
+        lst = etree.Element(qn("p:notesMasterIdLst"))
+        etree.SubElement(lst, qn("p:notesMasterId")).set(f"{{{R_NS}}}id", rid)
+        root.find(qn("p:sldMasterIdLst")).addnext(lst)
+        return etree.tostring(root, xml_declaration=True, encoding="UTF-8", standalone=True)
+
+    return edit_entry(entries, "ppt/presentation.xml", fix)
+
+
 def save_pptx(prs, path: Path, mutate=None):
     """Save via python-pptx, apply optional package mutation, rewrite zip deterministically."""
     buf = io.BytesIO()
     prs.save(buf)
     tmp = BUILD / ("_tmp_" + path.name)
     tmp.write_bytes(buf.getvalue())
-    entries = read_zip(tmp)
+    entries = declare_notes_master(read_zip(tmp))
     tmp.unlink()
     if mutate:
         entries = mutate(entries)

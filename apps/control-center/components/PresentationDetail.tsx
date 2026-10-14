@@ -62,12 +62,15 @@ export function PresentationDetailView({
   initial,
   comments,
   readOnly = false,
+  canUpload = false,
 }: {
   eventId: string;
   initial: PresentationDetail;
   comments: CommentRow[];
   /** Support staff (D-151) look; the decisions — here, a rollback — are not theirs. */
   readOnly?: boolean;
+  /** Taking a new file in is the DXG Technician's (D-162), so only they get "Replace file". */
+  canUpload?: boolean;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -164,28 +167,123 @@ export function PresentationDetailView({
 
   return (
     <>
-      <h1 className="htitle">Presentation detail</h1>
+      {/*
+        D-172: one talk, said plainly. The page was a generic "Presentation detail" title over a
+        card that mixed status, people, steps, file facts, five equal buttons and two hint lines.
+        Now: who and when, what's happening, the current file and what you can do with it, then
+        the three steps.
+      */}
+      <div className="note" style={{ margin: "0 0 2px" }}>
+        Presentation
+      </div>
+      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+        <h1 className="htitle" style={{ margin: 0 }}>
+          {initial.talk.title}
+        </h1>
+        <Chip status={initial.talk.status} label={initial.talk.status_label} />
+      </div>
+      <p className="note" style={{ margin: "4px 0 14px" }}>
+        <b style={{ color: "var(--foreground)" }}>{initial.speaker?.name ?? "No speaker assigned"}</b>
+        {initial.speaker?.organization ? `, ${initial.speaker.organization}` : ""} · {initial.talk.room ?? "No room"} ·{" "}
+        {when(initial.talk.starts_at, initial.event.timezone)}
+        {initial.talk.track ? ` · ${initial.talk.track}` : ""}
+      </p>
       {error && <div className="err">{error}</div>}
 
-      <div className="card">
-        <div className="chd">
-          <h3>{initial.talk.title}</h3>
-          <Chip status={initial.talk.status} label={initial.talk.status_label} />
-        </div>
+      {/* What's happening now, in one sentence (R47, D-110). */}
+      <div className="card next-step">
         <div className="cbd">
-          {/* R47: what the status means, visibly (D-110). */}
-          <div style={{ marginBottom: 6 }}>
+          <div className="next-step-label">What&rsquo;s happening</div>
+          <div className="next-step-body" style={{ margin: 0 }}>
             <StatusMeaning status={initial.talk.status} />
           </div>
-          <div className="note" style={{ marginBottom: 6 }}>
-            {initial.speaker?.name ?? "No speaker assigned"}
-            {initial.speaker?.organization ? `, ${initial.speaker.organization}` : ""} · {initial.talk.room} ·{" "}
-            {when(initial.talk.starts_at, initial.event.timezone)}
-            {initial.talk.track ? ` · ${initial.talk.track}` : ""}
-          </div>
+          {(initial.talk.final_locked || initial.talk.restricted) && (
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+              {initial.talk.final_locked && <span className="chip c-sync">Final onsite version</span>}
+              {initial.talk.restricted && <span className="chip c-bad">Restricted from distribution</span>}
+            </div>
+          )}
+        </div>
+      </div>
 
-          {/* Approval → sign-off → room, connected (D-113, root cause 5). */}
+      {/* The current file and what you can do with it. */}
+      <div className="card">
+        <div className="chd">
+          <h3>Current file</h3>
+        </div>
+        <div className="cbd">
+          {latest ? (
+            <p style={{ margin: "0 0 10px" }}>
+              {/* No file fingerprint here: staff never need it (R15, D-112). */}
+              <b>v{latest.version_number}</b>
+              <span className="note">
+                {" "}
+                · {formatBytes(latest.size_bytes)} · from {SOURCE_LABEL[latest.source] ?? latest.source} · received{" "}
+                {when(latest.created_at, initial.event.timezone)}
+              </span>
+            </p>
+          ) : (
+            <p className="note" style={{ margin: "0 0 10px" }}>
+              No file yet{initial.speaker ? ` — ${initial.speaker.name} hasn't uploaded one.` : "."}
+            </p>
+          )}
+
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            {latest && (
+              <button
+                className="btn pri"
+                disabled={busy || previewBlocked !== null}
+                title={previewBlocked ?? undefined}
+                aria-expanded={previewOpen}
+                onClick={() => void preview()}
+              >
+                <Icon name={previewOpen ? "close" : "eye"} />
+                {previewOpen ? "Hide slides" : "Preview slides"}
+              </button>
+            )}
+            {/* The deck in this computer's own app, with transitions, animations and video (D-167). */}
+            {latest && latest.processing_state === "stored" && <OpenInPowerPoint versionId={latest.file_version_id} />}
+            {/* Only while there is something to review — it used to sit here for every file. */}
+            {latest && ["awaiting_review", "in_review"].includes(latest.review_state) && (
+              <Link className="btn" href={`/events/${eventId}/review?v=${latest.file_version_id}`}>
+                <Icon name="eye" />
+                Review this version
+              </Link>
+            )}
+            {/* Taking a new file in is the technician's (D-162): at the speaker's check-in, or beside
+                them in the Speaker Ready Room (D-153). */}
+            {canUpload && initial.speaker && (
+              <Link
+                className="btn"
+                href={initial.srr?.checkin_id ? `/events/${eventId}/srr/${initial.srr.checkin_id}` : `/events/${eventId}/srr`}
+              >
+                <Icon name="intake" />
+                Replace file (Local intake)
+              </Link>
+            )}
+          </div>
+          {latest && <WhyNot reason={previewBlocked} />}
+          {previewOpen && latest?.pdf_state === "done" && (
+            <div style={{ marginTop: 12 }}>
+              <SlideViewer
+                key={latest.file_version_id}
+                url={previewUrl(latest.file_version_id)}
+                versionId={latest.file_version_id}
+                title={`${initial.talk.title}, version ${latest.version_number}`}
+              />
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Approval → sign-off → room, connected (D-113, root cause 5). */}
+      <div className="card">
+        <div className="chd">
+          <h3>Progress</h3>
+        </div>
+        <div className="cbd">
           <ConfirmationStrip
+            hideNext
             facts={{
               status: initial.talk.status,
               room: initial.talk.room,
@@ -205,79 +303,6 @@ export function PresentationDetailView({
               timezone: initial.event.timezone,
             }}
           />
-
-          {latest && (
-            <div className="note" style={{ marginBottom: 6 }}>
-              {/* No file fingerprint here: staff never need it (R15, D-112). */}
-              v{latest.version_number} · {formatBytes(latest.size_bytes)} ·{" "}
-              {SOURCE_LABEL[latest.source] ?? latest.source}
-            </div>
-          )}
-
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
-            {/* Who approved it and when is step 1 of the strip above (D-113). */}
-            {initial.talk.final_locked && <span className="chip c-sync">Final onsite version</span>}
-            {initial.talk.restricted && <span className="chip c-bad">Restricted from distribution</span>}
-          </div>
-
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button
-              className="btn"
-              disabled={busy || previewBlocked !== null}
-              title={previewBlocked ?? undefined}
-              aria-expanded={previewOpen}
-              onClick={() => void preview()}
-            >
-              <Icon name={previewOpen ? "close" : "eye"} />
-              {previewOpen ? "Hide slides" : "Preview slides"}
-            </button>
-            {/* The deck in this computer's own PowerPoint, with transitions, animations and video (D-158). */}
-            {latest && latest.processing_state === "stored" && <OpenInPowerPoint versionId={latest.file_version_id} />}
-            {latest && (
-              <Link
-                className="btn"
-                href={`/events/${eventId}/talks/${initial.talk.slot_id}/inspection?v=${latest.file_version_id}`}
-              >
-                <Icon name="eye" />
-                Open inspection report
-              </Link>
-            )}
-            <Link className="btn" href={`/events/${eventId}/review`}>
-              <Icon name="eye" />
-              Review workspace
-            </Link>
-            {/* R19 (D-113): local intake lives on the speaker's check-in and, since D-153, beside
-                the speaker in the Speaker Ready Room — go straight to the check-in when there is one. */}
-            {initial.srr?.checkin_id ? (
-              <Link className="btn" href={`/events/${eventId}/srr/${initial.srr.checkin_id}`}>
-                <Icon name="intake" />
-                Replace file (Local intake)
-              </Link>
-            ) : (
-              initial.speaker && (
-                <Link className="btn" href={`/events/${eventId}/srr`}>
-                  Speaker Ready Room
-                </Link>
-              )
-            )}
-          </div>
-          <WhyNot reason={previewBlocked} />
-          {!initial.srr?.checkin_id && initial.speaker && (
-            <p className="note" style={{ margin: "6px 0 0" }}>
-              To take a new file — from a USB drive or this computer — open the Speaker Ready Room and press
-              Upload beside {initial.speaker.name}.
-            </p>
-          )}
-          {previewOpen && latest?.pdf_state === "done" && (
-            <div style={{ marginTop: 12 }}>
-              <SlideViewer
-                key={latest.file_version_id}
-                url={previewUrl(latest.file_version_id)}
-                versionId={latest.file_version_id}
-                title={`${initial.talk.title}, version ${latest.version_number}`}
-              />
-            </div>
-          )}
         </div>
       </div>
 
@@ -296,8 +321,8 @@ export function PresentationDetailView({
                 <th>Version</th>
                 <th>Received</th>
                 <th>Size</th>
-                <th>Source</th>
-                <th>Findings</th>
+                <th>From</th>
+                <th>Checks</th>
                 <th>State</th>
                 <th />
               </tr>
@@ -322,7 +347,7 @@ export function PresentationDetailView({
                       </span>
                     )}{" "}
                     {row.finding_counts.blocking + row.finding_counts.warning === 0 && (
-                      <span className="chip c-ok">clean</span>
+                      <span className="chip c-ok">Passed</span>
                     )}
                   </td>
                   <td>

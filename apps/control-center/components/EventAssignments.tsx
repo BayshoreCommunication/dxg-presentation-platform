@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import type { EventRow, StaffRow } from "@/lib/api";
+import type { EventRow, StaffRow, WorkedRow } from "@/lib/api";
 import { assignStaffToEvent, ApiError } from "@/lib/api";
 import { Chip } from "@/components/Chip";
 import { ConfirmInline } from "@/components/ConfirmInline";
@@ -49,15 +49,28 @@ function byEvent(staff: StaffRow[], events: EventRow[]) {
 export function EventAssignments({
   initial,
   events,
+  history = [],
   assign,
 }: {
   initial: StaffRow[];
   events: EventRow[];
+  /** Who worked each finished event, once freed from it (D-181). */
+  history?: WorkedRow[];
   /** A14: arrived from "Next: assign them to an event" on Staff accounts (`?assign=<user id>`). */
   assign?: string;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
+  /*
+   * D-181: staff are freed from an event when it is archived, and the day after it ends. Those
+   * events are listed apart — who worked them, nothing to assign — and the rest are staffed here.
+   */
+  const today = new Date().toISOString().slice(0, 10);
+  const finished = (event: EventRow) => event.status === "archived" || event.ends_on < today;
+  const current = events.filter((event) => !finished(event));
+  const past = events
+    .filter(finished)
+    .sort((a, b) => b.ends_on.localeCompare(a.ends_on));
   /** A19 (D-113): an error belongs to the event row it happened on, not the top of the page. */
   const [error, setError] = useState<{ eventId: string; message: string } | null>(null);
   /** A18 (D-113): the removal waiting for "are you sure?". */
@@ -121,7 +134,7 @@ export function EventAssignments({
                 </tr>
               </thead>
               <tbody>
-                {byEvent(initial, events).map(({ event, people }) => (
+                {byEvent(initial, current).map(({ event, people }) => (
                   <tr key={event.id}>
                     <td style={{ verticalAlign: "top", whiteSpace: "nowrap" }}>
                       <div style={{ fontWeight: 600 }}>{event.name}</div>
@@ -261,6 +274,84 @@ export function EventAssignments({
             </table>
           </div>
         </div>
+
+        {/* D-181: finished events — their staff were freed; who worked each is kept. */}
+        {past.length > 0 && (
+          <div className="card">
+            <details>
+              <summary className="chd" style={{ cursor: "pointer" }}>
+                <h3>Finished events · {past.length}</h3>
+                <span className="m">archived or over — staff are freed; who worked each is kept</span>
+              </summary>
+              <div className="cbd" style={{ padding: "0 0 4px" }}>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Event</th>
+                      <th>Worked this event</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {past.map((event) => {
+                      // Only support staff and technicians are freed (D-181): clients keep their own
+                      // event, and a DXG Admin (a practice event's owner, say) reaches every event.
+                      const still = byEvent(initial, [event])[0]!.people.filter(
+                        (entry) => entry.person.account_type === "support" || entry.person.account_type === "technician",
+                      );
+                      const worked = workedOn(history, event.id).filter(
+                        (entry) => !still.some((held) => held.person.id === entry.user_id),
+                      );
+                      return (
+                        <tr key={event.id}>
+                          <td style={{ verticalAlign: "top", whiteSpace: "nowrap" }}>
+                            <div style={{ fontWeight: 600 }}>{event.name}</div>
+                            <span className="note">
+                              {formatDateRange(event.starts_on, event.ends_on)} ·{" "}
+                              {event.status === "archived" ? "archived" : "over"}
+                            </span>
+                          </td>
+                          <td>
+                            {worked.length === 0 && still.length === 0 && <span className="note">Nobody recorded.</span>}
+                            {worked.map((entry) => (
+                              <div key={entry.user_id} style={{ marginBottom: 4 }}>
+                                <span style={{ display: "inline-block", minWidth: 150 }}>{entry.display_name}</span>
+                                <span className="note">{entry.roles.map((role) => wordsFor(ROLE, role).label).join(" · ")}</span>
+                              </div>
+                            ))}
+                            {/* Over but not yet freed: the worker frees them the day after the last day (D-181). */}
+                            {still.map(({ person, roles }) => (
+                              <div key={person.id} style={{ marginBottom: 4 }}>
+                                <span style={{ display: "inline-block", minWidth: 150 }}>{person.display_name}</span>
+                                <span className="note">{roles.map((role) => wordsFor(ROLE, role).label).join(" · ")}</span>{" "}
+                                <span
+                                  className="chip c-mut"
+                                  title="The event is over. Staff are freed automatically the day after its last day, or when it is archived."
+                                >
+                                  still assigned
+                                </span>
+                              </div>
+                            ))}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </details>
+          </div>
+        )}
           </>
   );
+}
+
+/** Who worked an event, one line per person with every role they held (D-181). */
+function workedOn(history: WorkedRow[], eventId: string): { user_id: string; display_name: string; roles: string[] }[] {
+  const byPerson = new Map<string, { user_id: string; display_name: string; roles: string[] }>();
+  for (const row of history.filter((entry) => entry.event_id === eventId)) {
+    const entry = byPerson.get(row.user_id) ?? { user_id: row.user_id, display_name: row.display_name, roles: [] };
+    if (!entry.roles.includes(row.role)) entry.roles.push(row.role);
+    byPerson.set(row.user_id, entry);
+  }
+  return [...byPerson.values()].sort((a, b) => a.display_name.localeCompare(b.display_name));
 }

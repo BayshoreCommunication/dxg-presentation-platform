@@ -1,4 +1,5 @@
 import type pg from "pg";
+import { releaseEventStaff } from "./eventStaff.ts";
 import { appendAudit } from "@pmp/db";
 import type { Actor, DomainError, Result } from "@pmp/domain";
 import { atLeast, err, hasAnyRole, ok } from "@pmp/domain";
@@ -648,6 +649,8 @@ export async function archiveEvent(
     detail: { from: event.status },
     ...(why ? { reason: why } : {}),
   });
+  // Its support staff and technicians are freed (D-181); who worked it is kept.
+  await releaseEventStaff(tx, { eventId, reason: "archived", actorUserId: actor.id });
   return draftOf(tx, eventId);
 }
 
