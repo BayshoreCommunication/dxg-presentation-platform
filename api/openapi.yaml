@@ -359,6 +359,36 @@ paths:
   /admin/users:
     get: {tags: [admin], summary: List users, responses: {'200': {$ref: '#/components/responses/Page'}}}
     post: {tags: [admin], summary: Create user, responses: {'201': {$ref: '#/components/responses/Created'}}}
+  /admin/users/{userId}/name:
+    parameters:
+      - {name: userId, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      tags: [admin]
+      summary: Change a staff account display name (DXG Admin only)
+      description: Trims the name and audits its before/after values. Email, access and sign-in sessions are unchanged.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [display_name]
+              properties:
+                display_name: {type: string, description: Must contain 1 to 200 characters after trimming}
+      responses:
+        '200':
+          description: Saved display name
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [display_name]
+                properties:
+                  display_name: {type: string, minLength: 1, maxLength: 200}
+        '400': {description: Invalid account ID or name outside 1 to 200 characters after trimming}
+        '401': {description: Sign-in required}
+        '403': {description: DXG Admin access required}
+        '404': {description: Staff account not found}
   /admin/client-grants:
     post: {tags: [admin], summary: Grant client access (FR-ADMIN-001), responses: {'201': {$ref: '#/components/responses/Created'}}}
   /admin/retention-policies:

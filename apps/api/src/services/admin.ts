@@ -62,6 +62,36 @@ export async function listStaff(tx: pg.PoolClient, actor: Actor): Promise<Result
   return ok(rows.filter((row) => (row as StaffRow & { account_kind?: string }).account_kind !== "speaker"));
 }
 
+/** A display name is cosmetic: changing it keeps sign-in and access as they are. */
+export async function setDisplayName(
+  tx: pg.PoolClient,
+  actor: Actor,
+  userId: string,
+  requested: unknown,
+): Promise<Result<{ display_name: string }, DomainError>> {
+  if (!hasAnyRole(actor, ADMIN_ROLES)) return err(forbidden("Changing an account name"));
+  const displayName = typeof requested === "string" ? requested.trim() : "";
+  if (!displayName || displayName.length > 200) {
+    return err({ code: "admin.bad_name", message: "Enter a name between 1 and 200 characters." });
+  }
+
+  const { rows } = await tx.query<{ display_name: string }>(
+    `SELECT display_name FROM pmp.users
+      WHERE id = $1 AND deleted_at IS NULL AND account_kind <> 'speaker'
+      FOR UPDATE`,
+    [userId],
+  );
+  const target = rows[0];
+  if (!target) return err({ code: "admin.not_found", message: "This account no longer exists — it may have been removed. Refresh the page." });
+
+  await tx.query(`UPDATE pmp.users SET display_name = $1 WHERE id = $2`, [displayName, userId]);
+  await audit(tx, actor, userId, "admin.name_changed", {
+    before: { display_name: target.display_name },
+    after: { display_name: displayName },
+  });
+  return ok({ display_name: displayName });
+}
+
 /** A temporary password is shown once and must be changed on first use. */
 export async function resetPassword(
   tx: pg.PoolClient,

@@ -1371,6 +1371,12 @@ export const assignStaffToEvent = (userId: string, eventId: string, assign: bool
 export const resetStaffPassword = (userId: string) =>
   request<{ emailed_to: string }>(`/admin/users/${userId}/reset-password`, { method: "POST" });
 
+export const setStaffName = (userId: string, displayName: string) =>
+  request<{ display_name: string }>(`/admin/users/${userId}/name`, {
+    method: "POST",
+    body: JSON.stringify({ display_name: displayName }),
+  });
+
 export const setStaffAccountType = (userId: string, accountType: AccountType) =>
   request<{ account_type: AccountType }>(`/admin/users/${userId}/account-type`, {
     method: "POST",

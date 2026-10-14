@@ -59,3 +59,10 @@ Approval/re-approval before room replacement; scanned-only library; SHA-256 ever
 - **Phase 0 (gate G0)**: PowerPoint-from-Node PoC, offline delta-sync PoC, physical schema, OpenAPI surface, security review, usability prototypes.
 - **Phase 1 (MVP)**: M1 core platform/import/speakers → M2 portal/upload/inspection → M3 review/comms → M4 SRR → M5 agent/sync → M6 archive/reports/admin → M7 hardening/UAT/pilot.
 - Out of scope: SRS §21 list (no billing, registration, livestream, SMS, edge server, AI features, non-Windows agents).
+
+## 7. Staff account display names (2026-10-14)
+
+DXG Admins can change a staff account's display name from Staff accounts, including their own name and names on
+deactivated accounts. The trimmed name must contain 1–200 characters. The API enforces administrator access and
+records the old/new name in the append-only audit log. Renaming does not change the email, password, sign-in app,
+sessions, access level or event assignments. Deleted and speaker accounts are not editable through this staff action.
