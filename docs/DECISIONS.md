@@ -3311,3 +3311,29 @@ in Communications →" (D-177's link, kept one click away). The reminder is the 
 and the result is said in place ("Reminder sent to …", "Not sent — already emailed this in the last 24 hours", and on
 a practice event "Recorded for … — a practice event never sends"). The other actions (Review the file, Load on room PC,
 Set a room) still open their screens. The event summary now returns `is_practice` for that wording.
+
+## D-181 (2026-10-14): Staff are freed from an event when it's archived or over — Status: ACCEPTED (Travis)
+Travis: "when an event moves to archive or the event has been done, we should free the staff and technician from the
+events." Chosen: on archive, and the day after it ends; removed but kept on record.
+- **Archiving** frees the event's support staff and technicians at once: their event roles go (they no longer reach
+  the event) and who worked it goes to `event_staff_history` (**migration 043**), audited as `events.staff_released`.
+- **The day after the last day** (on the event's clock) the worker frees them too, in the reminder scheduler's tick
+  (`releaseEndedEvents`). It runs in production; in development and CI only with `RELEASE_ENDED_EVENTS=1` — the seed
+  event (MedTech, March 2026) is over, and many tests rely on its seeded staff. `RELEASE_ENDED_EVENTS=0` turns it off.
+- **Not released**: clients (their own event) and DXG Admins (every event — a practice event's owner, for instance).
+- **Restoring** an archived event puts nobody back; an **archived** event takes no new staff (409
+  `admin.event_archived_conflict`: "Restore the event first"). An event that is over but not archived can still be
+  staffed (the seed's tests do).
+- **Event assignments**: current events as before; **Finished events** (archived or over, collapsed) list who worked
+  each — "Worked this event" from the history (`GET /admin/assignments/history`, DXG Admins) — and any support staff or
+  technician not yet freed as "still assigned".
+- **Migration 044**, once: events archived before this are cleaned up the same way (111 roles locally).
+- Tests: `event-staff-release` (6).
+
+## D-182 (2026-10-14): A technician sees the practice events they're assigned to — Status: ACCEPTED (Travis)
+Found testing the technician's site: C. Delgado, assigned to a practice event on Event assignments, reached it from
+the sidebar's event switcher but not from the portfolio — the "Practice events" section was hidden from technicians
+outright, since they don't start practice events (D-151). Now the section shows for a technician whenever they're on
+one: "Practice events you're assigned to: …", the event's card, and no "Start a practice event" button. A technician
+on none sees no section, as before; admins and support staff are unchanged. Checked by rendering the portfolio as an
+assigned technician, an unassigned one and an admin.

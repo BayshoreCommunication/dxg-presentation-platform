@@ -70,6 +70,7 @@ const MFA_COOKIE = "pmp_mfa";
 /** The speaker site's sign-in page (D-148). */
 const SPEAKER_SITE = `${process.env.PORTAL_BASE ?? "http://localhost:3001"}/login`;
 import { approvedRoomsZip, markLoaded, unmarkLoaded } from "./services/roomSync.ts";
+import { eventStaffHistory } from "./services/eventStaff.ts";
 import { issueOpenLink, readOpenLink } from "./services/openLinks.ts";
 import { setSrrOpen, srrDashboard, srrReportCsv, checkIn, checkinDetail, changeTechnician, usbIngest, slotIntake, signOff, depart, emailReceipt, addStation, renameStation, retireStation } from "./services/srr.ts";
 import {
@@ -3806,6 +3807,17 @@ app.get("/api/v1/admin/users", async (req, res) => {
   const result = await withScope(scopeFor(req), (tx) => listStaff(tx, actor));
   if (!result.ok) return res.status(statusFor(result.error)).json(result.error);
   return res.json({ items: result.value });
+});
+
+/** Who worked each finished event, once freed from it (D-181) — for Event assignments. DXG Admins. */
+app.get("/api/v1/admin/assignments/history", async (req, res) => {
+  const actor = actorFrom(req);
+  if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
+  if (!hasAnyRole(actor, ["platform_admin"])) {
+    return res.status(403).json({ code: "auth.forbidden", message: "Only DXG Admins see who worked each event." });
+  }
+  const items = await withScope(scopeFor(req), (tx) => eventStaffHistory(tx));
+  return res.json({ items });
 });
 
 app.post("/api/v1/admin/users/:userId/reset-password", async (req, res) => {

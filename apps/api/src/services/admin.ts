@@ -304,9 +304,16 @@ export async function assignToEvent(
   if (target.is_root_admin) {
     return err({ code: "admin.not_assignable", message: "A DXG Admin reaches every event already." });
   }
-  const { rows } = await tx.query(`SELECT id FROM pmp.events WHERE id = $1`, [input.eventId]);
+  const { rows } = await tx.query<{ status: string }>(`SELECT status FROM pmp.events WHERE id = $1`, [input.eventId]);
   if (!rows[0]) return err({ code: "admin.event_not_found", message: "This event no longer exists — it may have been removed. Refresh the page." });
 
+  // An archived event's staff were freed from it (D-181); restore it first to staff it again.
+  if (input.assign && rows[0].status === "archived") {
+    return err({
+      code: "admin.event_archived_conflict",
+      message: "This event is archived, so its staff have been freed. Restore the event first to assign staff to it again.",
+    });
+  }
   if (input.assign) {
     await placeOnEvent(tx, input.userId, input.eventId, target.staff_kind);
     await audit(tx, actor, input.userId, "admin.assigned", { event_id: input.eventId, kind: target.staff_kind });

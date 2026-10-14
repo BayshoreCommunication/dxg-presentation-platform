@@ -267,6 +267,17 @@ export type FleetRoom = {
 };
 
 export const listEvents = () => request<{ items: EventRow[] }>("/events");
+
+/** Who worked an event, once freed from it — when it was archived or the day after it ended (D-181). */
+export type WorkedRow = {
+  event_id: string;
+  user_id: string;
+  display_name: string;
+  role: string;
+  released_at: string;
+  reason: "archived" | "ended";
+};
+export const getAssignmentHistory = () => request<{ items: WorkedRow[] }>("/admin/assignments/history");
 export const getSummary = (eventId: string) => request<Summary>(`/events/${eventId}/summary`);
 export const getRiskList = (eventId: string) =>
   request<{ items: RiskItem[] }>(`/events/${eventId}/risk-list`);

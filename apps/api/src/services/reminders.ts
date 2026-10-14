@@ -2,6 +2,7 @@ import type pg from "pg";
 import { withSystemScope } from "@pmp/db";
 import type { Actor } from "@pmp/domain";
 import { ensureTemplates, MISSING_REMINDER_NAME, NEW_VERSION_REMINDER_NAME, sendBatch } from "./comms.ts";
+import { releaseEndedEvents, releasingEndedEvents } from "./eventStaff.ts";
 
 /**
  * Automatic upload reminders (D-096, FR-COM-002: "configurable event reminder cadence;
@@ -239,7 +240,16 @@ export function startReminderScheduler(): void {
           console.error(`[reminders] event ${run.event_id} · ${run.days_before} days before · ${run.outcome} · ${run.queued} queued`);
         }
       })
-      .catch((error) => console.error("[reminders] run failed", error));
+      .catch((error) => console.error("[reminders] run failed", error))
+      // The same tick frees staff from events that have ended (D-181).
+      .then(() =>
+        releasingEndedEvents()
+          ? withSystemScope((tx) => releaseEndedEvents(tx)).then((done) => {
+              for (const row of done) console.error(`[staff] event ${row.event_id} ended · ${row.released} freed`);
+            })
+          : undefined,
+      )
+      .catch((error) => console.error("[staff] release failed", error));
   };
   // A minute after start, so a restart does not race the rest of boot.
   first = setTimeout(tick, 60_000);
