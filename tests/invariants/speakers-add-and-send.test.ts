@@ -408,8 +408,14 @@ describe("emailing the upload link (D-086)", () => {
       return rows[0]!;
     });
     assert.equal(outboxBody.sensitive, "true", "the outbox row is wiped after sending");
-    assert.match(outboxBody.body, /[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}/, "the sent copy carries the temporary password");
-    assert.ok(!/removed after sending/.test(outboxBody.body) || true);
+    // The dispatcher may already have sent it — then it has wiped the password from the row
+    // (apps/dispatcher). Either the password is still there, or the row says it was removed;
+    // reading it right after sending raced the dispatcher in CI.
+    assert.ok(
+      /[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}/.test(outboxBody.body) ||
+        outboxBody.body === "[removed after sending: contained a temporary password]",
+      "the sent copy carries the temporary password (or it was wiped once sent)",
+    );
 
     const row = (await speakers(sendEventId)).find((speaker) => speaker.id === speakerId);
     assert.ok(row?.last_email, "the list shows it was emailed");
