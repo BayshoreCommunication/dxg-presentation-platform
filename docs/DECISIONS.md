@@ -3124,3 +3124,46 @@ open a deck in Keynote or LibreOffice on a Mac; Travis chose a small helper app:
   Mac). The installer route serves the package without a sign-in; `open-in-powerpoint` 5/5. The test browser pane doesn't pass custom links to
   macOS, so there the download fallback and the install offer were seen; the prompt itself is for a real Chrome or
   Safari on a desk Mac. This conflicts with the client's removal of desk apps (D-155) only in kind — tell them.
+
+## D-169 (2026-10-13): A check-in names the technician who helps the speaker — Status: ACCEPTED (Travis)
+Travis: "in the speaker ready room, when we assign a desk for the presenter, we need to assign a technician who will
+help the speaker to ready the presentation file." Until now `srr_checkins.technician_id` was whoever pressed Check in —
+since D-164 that can be support staff or an admin, so the "technician" on the visit, the receipt and the report could
+be someone who isn't one.
+- **Check in** asks "At which desk?" and then "Who helps them at <desk>?": the event's DXG Technician staff (event
+  assignments), the person checking in first and marked "you" when they are one. Required — the API refuses a check-in
+  without one (`srr.technician_required`), with someone who isn't a technician on the event
+  (`srr.technician_not_found`), or on an event with no technician (`srr.no_technicians`; the button is greyed and says
+  a DXG Admin adds one under Event assignments). Only DXG Technician staff — never an admin or support staff, on a
+  practice event too (Travis: "Dxg technition will be assigned not the admin or staff"); to practise check-in, assign a
+  technician to the practice event.
+- `technician_id` now holds the chosen technician; who pressed Check in stays in the audit (`srr.checked_in`, which
+  also records `technician_id`). Everything that already showed "technician" (receipt, report, desks, the speaker's
+  own view) now shows the right person.
+- **Hand-over**: the check-in's header reads "at <desk> · with <technician>", with **Change** when the event has more
+  than one technician (`PUT /srr/checkins/:id/technician`); refused after checkout; audited as
+  `srr.technician_changed` {from, to}.
+- **Check-in page speed**: `checkinDetail` found the speaker's talk through a chain of left joins; under row-level
+  security the planner walked every speaker × talk × session pair (18 s per load on the seed event, also on main).
+  It is now a `LEFT JOIN LATERAL … LIMIT 1` for the one speaker, with the same "next talk that hasn't ended" order:
+  ~30 ms.
+- **Who does what at the desk** (Travis: "desk will be created by the dxg staff not technition and also the check in
+  also be done by dxg staff and will assign a techition"). **DXG staff** — admins and support staff — set up the desks
+  and check the speaker in, assigning the technician (`403 auth.staff_only` for a technician). **The technician**
+  goes through the slides and records the speaker's confirmation (`403 auth.technician_only` for anyone else; the
+  button is not shown to staff, who see "<technician> goes through the slides with <speaker> and records their
+  confirmation"). The receipt email, a hand-over and checking out are either's. Taking a file in stays the
+  technician's (D-162). (A first cut made the whole desk technician-only; Travis corrected it the same day.)
+- **Confirm is the speaker's, not a second approval** (Travis: "we already approved … why need to confirm again").
+  Approve = a reviewer says the file is fine; this step records the speaker's own "this is the one", locks the talk and
+  makes the receipt. The button reads **Speaker confirms vN**, and when vN is approved the text says so: "vN is already
+  approved by a reviewer. Now <speaker> confirms it's the version they'll present …".
+- **The visit's details, open** (Travis: "show the details info, like who approved and emphasise the name of the
+  technician"): the check-in's second card leads with **Technician** — the name large, Change for a hand-over, the desk
+  and check-in time — then the three steps with who approved, who confirmed and the room copy, and when. They were
+  folded under "Details". The header names the technician in bold; the strip's "Next:" line is left out there
+  (`hideNext`), since "What to do now" says it.
+- Tests: `srr-checkin-technician` (7: staff-only check-in and desks, technician-only confirmation, the choice rules,
+  hand-over, practice events); the suites that check in place the seeded technician on their event and name them, and
+  record confirmations as them; `srr-open`'s support-staff test checks in and out as support staff and expects a
+  technician refused at check-in and desks, and support staff refused at the confirmation.
