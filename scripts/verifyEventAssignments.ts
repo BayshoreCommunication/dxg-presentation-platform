@@ -46,9 +46,13 @@ assert.ok((await page.locator("tr:has(.assignment-event-name)").count()) > 0, "e
 assert.ok((await page.locator("tr:has(.assignment-event-name)").count()) <= 8, "pagination should cap the visible event rows");
 
 const firstPageName = await page.locator(".assignment-event-name").first().innerText();
-await page.getByRole("button", { name: "Next page" }).click();
-assert.notEqual(await page.locator(".assignment-event-name").first().innerText(), firstPageName, "next page should show a new event slice");
-await page.getByRole("button", { name: "Previous page" }).click();
+const nextPage = page.getByRole("button", { name: "Next page" });
+const paginationExercised = (await nextPage.count()) > 0;
+if (paginationExercised) {
+  await nextPage.click();
+  assert.notEqual(await page.locator(".assignment-event-name").first().innerText(), firstPageName, "next page should show a new event slice");
+  await page.getByRole("button", { name: "Previous page" }).click();
+}
 
 await page.getByRole("button", { name: "Switch event" }).click();
 await page.getByRole("listbox", { name: "Switch event" }).waitFor();
@@ -69,10 +73,19 @@ await page.getByPlaceholder("Search events…").fill("event-that-does-not-exist"
 await page.getByText("No events found", { exact: true }).waitFor();
 await page.getByPlaceholder("Search events…").fill("");
 await page.getByRole("button", { name: "All events", exact: true }).click();
+const visibleStarts = async () => page.locator("tr[data-starts-on]").evaluateAll((rows) => rows.map((row) => (row as HTMLElement).dataset.startsOn ?? ""));
+const ascending = (values: string[]) => [...values].sort((a, b) => a.localeCompare(b));
+const descending = (values: string[]) => [...values].sort((a, b) => b.localeCompare(a));
+assert.deepEqual(await visibleStarts(), ascending(await visibleStarts()), "Upcoming first should show the nearest event dates first");
 await page.getByRole("button", { name: "Sort events" }).click();
-await page.getByRole("option", { name: "Oldest first" }).click();
+await page.keyboard.press("Tab");
+assert.equal(await page.getByRole("listbox", { name: "Sort events" }).count(), 0, "Tab should close the open select and move focus on");
+await page.getByRole("button", { name: "Sort events" }).click();
+await page.getByRole("option", { name: "Latest first" }).click();
+assert.deepEqual(await visibleStarts(), descending(await visibleStarts()), "Latest first should reverse the event-date order");
 await page.getByRole("button", { name: "Sort events" }).click();
 await page.getByRole("option", { name: "Upcoming first" }).click();
+assert.deepEqual(await visibleStarts(), ascending(await visibleStarts()), "Upcoming first should restore nearest-date ordering");
 await page.getByRole("button", { name: "Sort events" }).click();
 await page.screenshot({ path: `${OUT}/select-open-1440x1024.png`, fullPage: false });
 await page.keyboard.press("Escape");
@@ -106,7 +119,7 @@ console.log(JSON.stringify({
   route: page.url(),
   rows: await page.locator("tr:has(.assignment-event-name)").count(),
   screenshots: [`${OUT}/implementation-1440x1024.png`, `${OUT}/select-open-1440x1024.png`, `${OUT}/sidebar-select-open-1440x1024.png`, `${OUT}/editor-1440x1024.png`, `${OUT}/implementation-390x844.png`],
-  interactions: ["pagination", "sidebar event menu", "needs-staff filter", "assigned filter", "search empty state", "custom sort menu", "assigned editor", "unassigned editor", "mobile overflow"],
+  interactions: [paginationExercised ? "pagination" : "single-page page-size guard", "sidebar event menu", "needs-staff filter", "assigned filter", "search empty state", "custom sort menu", "assigned editor", "unassigned editor", "mobile overflow"],
   browserErrors,
   failedResponses,
 }, null, 2));

@@ -3783,7 +3783,7 @@ save/cancel, persistence, validation, pending-action locking, initials, own-acco
 **Not deployed.**
 
 ## 2026-10-14 — One DXG Technician per event and assignment responsiveness
-The API now reserves one technician slot per event (D-188), including inactive but undeleted technician accounts.
+The API now reserves one technician slot per event (D-189), including inactive but undeleted technician accounts.
 Normal assignment, legacy role grants and access-level conversions share account/event transaction locks; conversions
 preflight every affected event before changing access, roles, sessions or audit state. Automatic staff release uses
 the same event locks and a stable order. Support, clients, root admins and released history do not occupy the slot.
@@ -3805,3 +3805,10 @@ removal; temporary demonstration fixtures are cleaned afterward. Targeted concur
 legacy-role and idempotence invariants pass. Lint, workspace type-check and 295 unit tests pass (291 passed, four
 environment-dependent skips); related account/SRR/release checks and six MFA checks pass after updating synthetic
 fixtures to preserve the reset. **Code not deployed; live assignment reset is complete.**
+
+Follow-up verification corrected this entry's decision reference to D-189, made “Upcoming first” sort nearest dates
+before later ones, renamed the reverse order “Latest first”, and closes custom selects when keyboard users Tab onward.
+The Event assignments browser verifier now supports both paginated and single-page datasets and asserts both sort
+directions plus Tab dismissal. The full responsive matrix, the six-route shared-select check and 40 related
+assignment/Room sync invariants pass with no browser errors or failed responses; local technician roles return to zero
+after the test fixtures clean up.
