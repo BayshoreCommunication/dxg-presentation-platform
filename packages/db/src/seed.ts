@@ -151,6 +151,8 @@ async function seed(): Promise<void> {
       );
       // Root admin is a flag on the account, not an event role (D-100). The kind (D-151): the
       // reviewer and the room technician are technicians; the presentation manager is support.
+      // Only the reviewer is placed on MedTech: an event has at most one technician.
+      // The second technician stays available for another event or an explicit replacement.
       if (role === "platform_admin") {
         await client.query(`UPDATE users SET is_root_admin = true WHERE id = $1`, [id]);
       } else {
@@ -162,11 +164,13 @@ async function seed(): Promise<void> {
               ? "client"
               : "support",
         ]);
-        await client.query(
-          `INSERT INTO event_roles (user_id, event_id, role) VALUES ($1, $2, $3)
-           ON CONFLICT DO NOTHING`,
-          [id, IDS.event, role],
-        );
+        if (id !== IDS.roomTech) {
+          await client.query(
+            `INSERT INTO event_roles (user_id, event_id, role) VALUES ($1, $2, $3)
+             ON CONFLICT DO NOTHING`,
+            [id, IDS.event, role],
+          );
+        }
       }
       for (const recovery of recoveryCodes) {
         await client.query(

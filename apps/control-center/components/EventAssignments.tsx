@@ -3,6 +3,7 @@
 import { Fragment, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { UserMinusIcon } from "@heroicons/react/24/outline";
 import type { EventRow, StaffRow, WorkedRow } from "@/lib/api";
 import { assignStaffToEvent, ApiError } from "@/lib/api";
 import { ConfirmInline } from "@/components/ConfirmInline";
@@ -165,6 +166,7 @@ export function EventAssignments({
       router.refresh();
     } catch (caught) {
       setError({ eventId, message: caught instanceof ApiError ? caught.message : "Something went wrong." });
+      if (caught instanceof ApiError && caught.code === "admin.event_technician_conflict") router.refresh();
     } finally {
       setBusy(false);
     }
@@ -239,7 +241,13 @@ export function EventAssignments({
             <tbody>
               {pageRows.map(({ event, people }) => {
                 const isOpen = openEventId === event.id;
-                const available = initial.filter((person) => person.is_active && person.account_type !== "root_admin" && !people.some((entry) => entry.person.id === person.id));
+                const technicians = people.filter((entry) => entry.person.account_type === "technician");
+                const available = initial.filter((person) =>
+                  person.is_active && person.account_type !== "root_admin" &&
+                  !people.some((entry) => entry.person.id === person.id) &&
+                  (person.account_type !== "technician" || technicians.length === 0),
+                );
+                const selectedPerson = available.find((person) => person.id === draft[event.id]);
 
                 return (
                   <Fragment key={event.id}>
@@ -285,7 +293,9 @@ export function EventAssignments({
                                 {people.map(({ person, roles }) => (
                                   <div className="assignment-current-person" key={person.id}>
                                     <StaffIdentity person={person} roles={roles} />
-                                    <button type="button" className="btn assignment-remove-button" disabled={busy} onClick={() => { setError(null); setRemoving({ eventId: event.id, person }); }}>Remove</button>
+                                    <button type="button" className="btn assignment-remove-button" disabled={busy} onClick={() => { setError(null); setRemoving({ eventId: event.id, person }); }}>
+                                      <UserMinusIcon width={16} height={16} aria-hidden="true" />Remove
+                                    </button>
                                   </div>
                                 ))}
                               </div>
@@ -305,27 +315,26 @@ export function EventAssignments({
                             )}
 
                             <div className="assignment-add-person">
-                              <div><strong>Assign additional staff</strong><span>Access follows the staff member&apos;s account type.</span></div>
+                              <div><strong>Assign additional staff</strong><span>Access follows the staff member&apos;s account type. Maximum one DXG Technician per event.</span></div>
                               <div className="assignment-add-controls">
                                 {newcomer && draft[event.id] !== newcomer.id && available.some((person) => person.id === newcomer.id) && (
                                   <button type="button" className="btn" onClick={() => setWho(event.id, newcomer.id)}>Choose {newcomer.display_name}</button>
                                 )}
                                 <SelectMenu
                                   label={`Choose staff for ${event.name}`}
-                                  value={draft[event.id] ?? ""}
+                                  value={selectedPerson?.id ?? ""}
                                   placeholder="Choose a staff member…"
                                   options={available.map((person) => ({
                                     value: person.id,
                                     label: `${person.display_name} — ${ACCOUNT_KIND[person.account_type]?.label ?? person.account_type}`,
                                   }))}
                                   onChange={(value) => setWho(event.id, value)}
-                                  disabled={available.length === 0}
+                                  disabled={busy || available.length === 0}
                                   className="assignment-staff-select"
                                 />
-                                <button type="button" className="btn pri" disabled={busy || !draft[event.id]} onClick={() => void run(event.id, async () => {
-                                  const who = draft[event.id];
-                                  if (!who) throw new ApiError("request", "Choose who to assign.", 400);
-                                  await assignStaffToEvent(who, event.id, true);
+                                <button type="button" className="btn pri" disabled={busy || !selectedPerson} onClick={() => void run(event.id, async () => {
+                                  if (!selectedPerson) throw new ApiError("request", "Choose who to assign.", 400);
+                                  await assignStaffToEvent(selectedPerson.id, event.id, true);
                                   setDraft((current) => ({ ...current, [event.id]: "" }));
                                 })}>
                                   <Icon name="add" />{busy ? "Assigning…" : "Assign to event"}
@@ -333,8 +342,16 @@ export function EventAssignments({
                               </div>
                             </div>
 
-                            {available.length === 0 && <p className="assignment-all-assigned">Every active staff member is already assigned.</p>}
-                            {error?.eventId === event.id && <div className="err assignment-error">{error.message}</div>}
+                            {technicians.length > 0 && (
+                              <p className="note" role="status" style={{ margin: 0 }}>
+                                {technicians.length > 1
+                                  ? `This event already has ${technicians.length} DXG Technicians. Remove the extra assignments so only one remains.`
+                                  : `${technicians[0]!.person.display_name} is the DXG Technician for this event. Remove their assignment before choosing another technician.`}
+                                {" "}Other staff can still be assigned.
+                              </p>
+                            )}
+                            {available.length === 0 && <p className="assignment-all-assigned">No eligible active staff are available to assign.</p>}
+                            {error?.eventId === event.id && <div className="err assignment-error" role="alert">{error.message}</div>}
                           </div>
                         </td>
                       </tr>

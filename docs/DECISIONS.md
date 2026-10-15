@@ -3337,3 +3337,13 @@ outright, since they don't start practice events (D-151). Now the section shows 
 one: "Practice events you're assigned to: …", the event's card, and no "Start a practice event" button. A technician
 on none sees no section, as before; admins and support staff are unchanged. Checked by rendering the portfolio as an
 assigned technician, an unassigned one and an admin.
+
+## D-188 (2026-10-14): Maximum one DXG Technician staff per event — Status: ACCEPTED
+An administrator can assign one DXG Technician to an event, not two. The capacity is enforced by the API for normal
+assignment, direct role grants and access-level conversions, with per-account/per-event transaction locks so concurrent
+requests cannot bypass it. A conversion checks every affected event before making changes; a conflict returns 409
+`admin.event_technician_conflict` and leaves account access, memberships and sessions untouched.
+Count undeleted, non-root Technician accounts with any non-platform role on the event, including deactivated accounts.
+Support staff, clients, DXG Admins and released history are outside the limit. Repeating the current technician's
+assignment is harmless; replacement requires removing the previous assignment. Existing over-capacity events remain
+visible for an administrator to correct explicitly. Development seeds assign only one Technician to the demo event.

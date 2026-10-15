@@ -127,8 +127,12 @@ describe("a check-in names the speaker's technician (D-169)", () => {
     const notHere = await call("PUT", `/srr/checkins/${checkinId}/technician`, { technician_id: secondId }, technician);
     assert.equal(await code(notHere), "srr.technician_not_found", "not on the event yet");
 
+    const occupied = await call("POST", `/admin/users/${secondId}/events`, { event_id: eventId, assign: true });
+    assert.equal(occupied.status, 409, "the event cannot have two technicians at once");
+    const released = await call("POST", `/admin/users/${DELGADO_ID}/events`, { event_id: eventId, assign: false });
+    assert.ok(released.ok, "fixture: the outgoing technician leaves this synthetic event");
     const placed = await call("POST", `/admin/users/${secondId}/events`, { event_id: eventId, assign: true });
-    assert.ok(placed.ok, "fixture: the second technician joins the event");
+    assert.ok(placed.ok, "fixture: the replacement technician joins after the slot is free");
     const changed = await call("PUT", `/srr/checkins/${checkinId}/technician`, { technician_id: secondId });
     assert.equal(changed.status, 200);
     const detail = (await (await call("GET", `/srr/checkins/${checkinId}`)).json()) as { checkin: { technician_id: string } };
@@ -157,8 +161,8 @@ describe("a check-in names the speaker's technician (D-169)", () => {
   test("not after the speaker has checked out", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
     assert.ok(checkinId, "needs the check-in above");
-    assert.equal((await call("POST", `/srr/checkins/${checkinId}/depart`, undefined, technician)).status, 200);
-    const late = await call("PUT", `/srr/checkins/${checkinId}/technician`, { technician_id: DELGADO_ID }, technician);
+    assert.equal((await call("POST", `/srr/checkins/${checkinId}/depart`)).status, 200);
+    const late = await call("PUT", `/srr/checkins/${checkinId}/technician`, { technician_id: DELGADO_ID });
     assert.equal(await code(late), "srr.already_departed");
   });
 });

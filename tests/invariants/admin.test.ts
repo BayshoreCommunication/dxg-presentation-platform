@@ -4,7 +4,7 @@ import type { TestContext } from "node:test";
 import { withSystemScope } from "@pmp/db";
 import { signInStaff } from "../helpers/signIn.ts";
 import { removeTestAccounts, removeTestEvents } from "../helpers/cleanup.ts";
-import { createStaffAccount } from "../helpers/account.ts";
+import { createStaffAccount, signInWithSecret } from "../helpers/account.ts";
 
 /**
  * Account administration is the one place an account can be created or handed
@@ -403,7 +403,6 @@ describe("three kinds of DXG account (D-151)", () => {
 
   test("support staff run the Speaker Ready Room and review on Manage presentations; technicians open nothing else", async (t: TestContext) => {
     if (!up || !presentationManager) return t.skip("API not running");
-    const technician = await signInStaff(API, "c.delgado@example.invalid", PASSWORD);
     // m.vega is support staff (seed): the event is theirs, the Speaker Ready Room too (D-164) —
     // but not taking a speaker's file in (D-162).
     assert.equal((await fetch(`${API}/events/${EVENT_ID}/srr`, { headers: { cookie: presentationManager } })).status, 200);
@@ -442,22 +441,51 @@ describe("three kinds of DXG account (D-151)", () => {
     });
     assert.equal(decide.status, 403);
     assert.equal(((await json(decide)) as { code: string }).code, "auth.kind_forbidden");
-    // c.delgado is a technician (seed): the two screens and the way to them, nothing else.
-    assert.equal((await fetch(`${API}/events/${EVENT_ID}/srr`, { headers: { cookie: technician } })).status, 200);
-    assert.equal((await fetch(`${API}/events/${EVENT_ID}/summary`, { headers: { cookie: technician } })).status, 200);
-    // Looking at a file in review asks for its slide preview (a POST): that is their job too.
+    // Technician assignments may have been deliberately reset; establish only synthetic data.
+    const run = Date.now();
+    const techEventName = `probe-admin-event-technician-access-${run}`;
+    const headers = { "content-type": "application/json", cookie: admin };
+    const createdEvent = await fetch(`${API}/events`, {
+      method: "POST", headers,
+      body: JSON.stringify({
+        client_id: "11111111-1111-4111-8111-111111111111", name: techEventName, venue: "",
+        starts_on: "2031-10-10", ends_on: "2031-10-11", timezone: "America/New_York",
+      }),
+    });
+    assert.equal(createdEvent.status, 201);
+    const techEvent = ((await json(createdEvent)) as { event_id: string }).event_id;
+    t.after(() => removeTestEvents([techEventName]));
+    const email = `probe-admin-technician-access-${run}@example.invalid`;
+    const account = await createStaffAccount(API, admin, { email, displayName: "Technician Access Probe", password: ISSUED });
+    t.after(async () => {
+      const removed = await fetch(`${API}/admin/users/${account.userId}`, { method: "DELETE", headers: { cookie: admin } });
+      assert.equal(removed.status, 200);
+    });
+    assert.equal((await fetch(`${API}/admin/users/${account.userId}/account-type`, {
+      method: "POST", headers, body: JSON.stringify({ account_type: "technician" }),
+    })).status, 200);
+    assert.equal((await fetch(`${API}/admin/users/${account.userId}/events`, {
+      method: "POST", headers, body: JSON.stringify({ event_id: techEvent, assign: true }),
+    })).status, 200);
+    // The type change revokes the earlier session; sign in as the synthetic technician.
+    const technician = await signInWithSecret(API, email, ISSUED, account.secret);
+    assert.equal((await fetch(`${API}/events/${techEvent}/srr`, { headers: { cookie: technician } })).status, 200);
+    assert.equal((await fetch(`${API}/events/${techEvent}/summary`, { headers: { cookie: technician } })).status, 200);
+    // A retained MedTech file is outside this technician's event, even for its preview.
     const queue = (await json(await fetch(`${API}/events/${EVENT_ID}/review-queue`, { headers: { cookie: admin } }))) as {
       items: { file_version_id: string }[];
     };
     if (queue.items[0]) {
       const preview = await fetch(`${API}/file-versions/${queue.items[0].file_version_id}/preview`, { method: "POST", headers: { cookie: technician } });
-      assert.notEqual(preview.status, 403, "a technician may ask for a preview");
+      assert.equal(preview.status, 403, "an unassigned event's files stay private");
+      assert.equal(((await json(preview)) as { code: string }).code, "auth.not_on_this_event");
     }
     // The approved presentations are listed for them on Manage presentations (D-163) …
-    assert.equal((await fetch(`${API}/events/${EVENT_ID}/approved`, { headers: { cookie: technician } })).status, 200);
+    assert.equal((await fetch(`${API}/events/${techEvent}/approved`, { headers: { cookie: technician } })).status, 200);
     // … but they don't review (D-165): no queue, no approving, asking for changes or rejecting.
-    const noQueue = await fetch(`${API}/events/${EVENT_ID}/review-queue`, { headers: { cookie: technician } });
+    const noQueue = await fetch(`${API}/events/${techEvent}/review-queue`, { headers: { cookie: technician } });
     assert.equal(noQueue.status, 403, "the queue");
+    assert.equal(((await json(noQueue)) as { code: string }).code, "auth.kind_forbidden");
     for (const action of ["approve", "request_changes", "reject"]) {
       const refused = await fetch(`${API}/file-versions/${anyVersion.id}:transition`, {
         method: "POST",
@@ -465,7 +493,7 @@ describe("three kinds of DXG account (D-151)", () => {
         body: JSON.stringify({ action, lock_version: 0, note: "probe", reason: "probe" }),
       });
       assert.equal(refused.status, 403, action);
-      assert.equal(((await json(refused)) as { code: string }).code, "auth.kind_forbidden", action);
+      assert.equal(((await json(refused)) as { code: string }).code, "auth.not_on_this_event", action);
     }
     const revision = await fetch(`${API}/file-versions/${anyVersion.id}/request-revision`, {
       method: "POST",
@@ -473,8 +501,9 @@ describe("three kinds of DXG account (D-151)", () => {
       body: JSON.stringify({ finding_id: "x", note: "probe" }),
     });
     assert.equal(revision.status, 403, "nor ask from a finding");
+    assert.equal(((await json(revision)) as { code: string }).code, "auth.not_on_this_event");
     // Room sync is no longer theirs (D-163).
-    for (const path of [`/events/${EVENT_ID}/speakers`, `/events/${EVENT_ID}/comms`, `/events/${EVENT_ID}/files`, `/events/${EVENT_ID}/sync/fleet`, `/events/${EVENT_ID}/sync/approved.zip`]) {
+    for (const path of [`/events/${techEvent}/speakers`, `/events/${techEvent}/comms`, `/events/${techEvent}/files`, `/events/${techEvent}/sync/fleet`, `/events/${techEvent}/sync/approved.zip`]) {
       const refused = await fetch(`${API}${path}`, { headers: { cookie: technician } });
       assert.equal(refused.status, 403, path);
       assert.equal(((await json(refused)) as { code: string }).code, "auth.kind_forbidden");
@@ -486,8 +515,22 @@ describe("three kinds of DXG account (D-151)", () => {
     const email = `probe-kind-${Date.now()}@example.invalid`;
     const made = (await json(await create({ email, display_name: "Kind Probe", account_type: "technician" }))) as { user_id: string };
     const headers = { "content-type": "application/json", cookie: admin };
+    const createdEvent = await fetch(`${API}/events`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        client_id: "11111111-1111-4111-8111-111111111111",
+        name: `probe-admin-event-kind-${Date.now()}`,
+        venue: "Kind Probe",
+        starts_on: "2031-10-10",
+        ends_on: "2031-10-11",
+        timezone: "America/New_York",
+      }),
+    });
+    assert.equal(createdEvent.status, 201, "fixture: an event with no technician assigned");
+    const kindEvent = ((await json(createdEvent)) as { event_id: string }).event_id;
     const placed = (await json(
-      await fetch(`${API}/admin/users/${made.user_id}/events`, { method: "POST", headers, body: JSON.stringify({ event_id: EVENT_ID, assign: true }) }),
+      await fetch(`${API}/admin/users/${made.user_id}/events`, { method: "POST", headers, body: JSON.stringify({ event_id: kindEvent, assign: true }) }),
     )) as { assigned: boolean; roles: string[] };
     assert.equal(placed.assigned, true);
     assert.deepEqual([...placed.roles].sort(), ["content_reviewer", "room_technician", "srr_technician"]);
@@ -497,7 +540,7 @@ describe("three kinds of DXG account (D-151)", () => {
         items: { id: string; account_type: string; roles: { event_id: string; role: string }[] }[];
       };
       const row = list.items.find((user) => user.id === made.user_id)!;
-      return { type: row.account_type, roles: row.roles.filter((held) => held.event_id === EVENT_ID).map((held) => held.role).sort() };
+      return { type: row.account_type, roles: row.roles.filter((held) => held.event_id === kindEvent).map((held) => held.role).sort() };
     };
     assert.deepEqual(await rolesOf(), { type: "technician", roles: ["content_reviewer", "room_technician", "srr_technician"] });
 
@@ -506,7 +549,7 @@ describe("three kinds of DXG account (D-151)", () => {
     assert.deepEqual(await rolesOf(), { type: "support", roles: ["presentation_manager", "project_manager"] });
 
     const removed = (await json(
-      await fetch(`${API}/admin/users/${made.user_id}/events`, { method: "POST", headers, body: JSON.stringify({ event_id: EVENT_ID, assign: false }) }),
+      await fetch(`${API}/admin/users/${made.user_id}/events`, { method: "POST", headers, body: JSON.stringify({ event_id: kindEvent, assign: false }) }),
     )) as { assigned: boolean };
     assert.equal(removed.assigned, false);
     assert.deepEqual((await rolesOf()).roles, []);

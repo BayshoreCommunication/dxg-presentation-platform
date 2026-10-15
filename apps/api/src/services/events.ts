@@ -212,6 +212,11 @@ export async function createEvent(
   const invalid = checkBasics(input) ?? checkFutureStart(input);
   if (invalid) return err(invalid);
 
+  if (!hasAnyRole(actor, ["platform_admin"])) {
+    // A creator gains membership below; serialize it with account-kind conversions.
+    await tx.query(`SELECT id FROM pmp.users WHERE id = $1 FOR NO KEY UPDATE`, [actor.id]);
+  }
+
   let venueId: string | null = null;
   if (input.venue.trim()) {
     const { rows } = await tx.query<{ id: string }>(
