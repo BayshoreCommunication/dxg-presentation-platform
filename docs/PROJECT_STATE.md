@@ -3812,3 +3812,11 @@ The Event assignments browser verifier now supports both paginated and single-pa
 directions plus Tab dismissal. The full responsive matrix, the six-route shared-select check and 40 related
 assignment/Room sync invariants pass with no browser errors or failed responses; local technician roles return to zero
 after the test fixtures clean up.
+
+## 2026-10-15 — Staff emails are refused while adding a speaker
+The Add speaker dialog now explains that a speaker needs their own email. Submitting any active or deactivated DXG
+staff account address returns a specific inline error before a speaker or presentation assignment is created. The
+Agenda's Add speaker path, existing-speaker email correction and schedule-import preview enforce the same rule;
+send-time and batch guards remain for older data. Local browser verification used the seeded DXG Admin email and
+confirmed the dialog retained the entered values, showed the specific error, and left the speaker count unchanged.
+API invariants cover the write paths and the legacy-data guard; targeted lint and workspace type-check pass.

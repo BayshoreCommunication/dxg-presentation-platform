@@ -681,6 +681,9 @@ function AddSpeakerDialog({
               placeholder="Needed to send their sign-in"
               required
             />
+            <div className="note" style={{ marginTop: 6 }}>
+              Use the speaker&rsquo;s own email. A DXG staff account email cannot be used for a speaker.
+            </div>
           </div>
           <div className="field">
             <label htmlFor="new-speaker-org">Organization</label>

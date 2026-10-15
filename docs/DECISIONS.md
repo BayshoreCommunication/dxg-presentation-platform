@@ -3411,3 +3411,11 @@ Count undeleted, non-root Technician accounts with any non-platform role on the 
 Support staff, clients, DXG Admins and released history are outside the limit. Repeating the current technician's
 assignment is harmless; replacement requires removing the previous assignment. Existing over-capacity events remain
 visible for an administrator to correct explicitly. Development seeds assign only one Technician to the demo event.
+
+## D-190 (2026-10-15): Refuse DXG staff emails when a speaker is added — Status: ACCEPTED
+A DXG staff account email cannot be used for a speaker. The Speakers dialog says this beside the email field, and
+the API refuses it before creating the speaker or assigning a presentation. The same rule covers Add speaker on the
+Agenda, changing an existing speaker's email and spreadsheet-import previews, so no write path can leave an
+invitation that will fail only when staff later press Send sign-in. Active and deactivated staff accounts both
+reserve their email; deleting an account releases it as before. The existing send-time and batch guards remain as
+protection for older records.
