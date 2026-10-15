@@ -165,11 +165,16 @@ async function seed(): Promise<void> {
               : "support",
         ]);
         if (id !== IDS.roomTech) {
-          await client.query(
-            `INSERT INTO event_roles (user_id, event_id, role) VALUES ($1, $2, $3)
-             ON CONFLICT DO NOTHING`,
-            [id, IDS.event, role],
-          );
+          // An assigned technician holds the whole technician set (D-151/D-187), while
+          // the second seeded technician stays available for another event (D-188).
+          const technician = role === "content_reviewer" || role === "room_technician" || role === "srr_technician";
+          for (const held of technician ? ["srr_technician", "room_technician", "content_reviewer"] : [role]) {
+            await client.query(
+              `INSERT INTO event_roles (user_id, event_id, role) VALUES ($1, $2, $3)
+               ON CONFLICT DO NOTHING`,
+              [id, IDS.event, held],
+            );
+          }
         }
       }
       for (const recovery of recoveryCodes) {

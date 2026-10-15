@@ -390,9 +390,18 @@ export default async function CommandCenterPage({
           </Link>
         </div>
         <div className="cbd" style={{ padding: "0 0 4px" }}>
+          {/*
+            Only rooms that have talks (D-184). A room with none says nothing about readiness — it
+            was listed as "Ready · no presentations for this room yet", and a session's location
+            typed as the city ("London") and later corrected left the city behind as a "room".
+            Room sync still lists every room.
+          */}
+          {fleet.items.every((room) => room.files_total === 0) && (
+            <div className="empty">No room has a talk yet — they appear here once the agenda places talks in them.</div>
+          )}
           <table>
             <tbody>
-              {fleet.items.map((room) => (
+              {fleet.items.filter((room) => room.files_total > 0).map((room) => (
                 <tr key={room.room_id}>
                   <td>
                     <b>{room.room}</b>
