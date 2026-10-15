@@ -138,7 +138,10 @@ Optional: `AUTH_RATE_LIMIT` (sign-in attempts per address per 5 minutes, default
 
 ## 6. Updating
 
-Since 2026-10-08 (D-149) **nothing is built on the server**. GitHub Actions builds the four app images and pushes
+Since 2026-10-15 (D-189) the last step is automatic: approve the `deploy` job on the GitHub run (environment
+`production`), and it runs `auto-deploy.sh <commit>` on the server through SSM (document `PmpDeploy`, role
+`pmp-github-deploy`, node `mi-02b92f8d2db894f89`), rolling back on failure. `./deploy.sh <commit>` over SSH stays the
+fallback. **nothing is built on the server**. GitHub Actions builds the four app images and pushes
 them to ECR; the server pulls them. A release is three moves:
 
 1. **Release** — on GitHub, open a pull request from `main` into **`production`** and merge it. Only the

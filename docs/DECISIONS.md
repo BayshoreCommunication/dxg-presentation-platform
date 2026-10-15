@@ -3419,3 +3419,18 @@ Agenda, changing an existing speaker's email and spreadsheet-import previews, so
 invitation that will fail only when staff later press Send sign-in. Active and deactivated staff accounts both
 reserve their email; deleting an account releases it as before. The existing send-time and batch guards remain as
 protection for older records.
+
+
+## D-191 (2026-10-15): Releases deploy automatically after approval — Status: ACCEPTED (Travis)
+Plan A. A push to `production` now ends with a `deploy` job: after `publish`, it waits for approval on the GitHub
+environment **production** (required reviewer), then GitHub signs in to AWS with OIDC as **`pmp-github-deploy`**
+and runs the SSM document **`PmpDeploy`** on the server (`pmp-prod`, hybrid managed node `mi-02b92f8d2db894f89`).
+- **`PmpDeploy`** accepts only a 7-character commit and runs `deploy/server/auto-deploy.sh <commit>` as `ubuntu`.
+  The role may send only that document, only to that node — GitHub cannot run anything else on the server.
+- **`auto-deploy.sh`**: one deploy at a time (`flock`); reads the live commit, runs `deploy.sh <commit>`, and if it
+  fails, runs `deploy.sh <previous>` and fails the job. Tested: a re-deploy of the live commit, and a missing tag
+  rolling back without touching the site.
+- **No inbound access**: the SSM agent connects out (443); SSH stays limited to the deploying machine.
+- A release in progress is never cancelled by a newer push (`cancel-in-progress` off on `production`).
+- **Still manual**: copying `deploy/server` to the server when it changes, and `./deploy.sh <commit>` over SSH stays
+  the fallback. Run Command on hybrid nodes is billed per use (since 2026-09-30) — one call per release.
