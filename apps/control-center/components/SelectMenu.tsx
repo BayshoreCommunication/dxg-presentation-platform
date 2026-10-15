@@ -144,6 +144,10 @@ export function SelectMenu<T extends string>({
   };
 
   const onKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
+    if (event.key === "Tab" && open) {
+      setOpen(false);
+      return;
+    }
     if (event.key === "Escape") {
       setOpen(false);
       return;

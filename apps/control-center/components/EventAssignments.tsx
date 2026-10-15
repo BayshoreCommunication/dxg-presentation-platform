@@ -12,12 +12,12 @@ import { Icon } from "@/components/Icon";
 import { SelectMenu } from "@/components/SelectMenu";
 
 type AssignmentFilter = "all" | "needs_staff" | "assigned";
-type AssignmentSort = "upcoming" | "oldest";
+type AssignmentSort = "upcoming" | "latest";
 const PAGE_SIZE = 8;
 
 const SORT_OPTIONS = [
   { value: "upcoming", label: "Upcoming first" },
-  { value: "oldest", label: "Oldest first" },
+  { value: "latest", label: "Latest first" },
 ] as const;
 
 function paginationItems(current: number, total: number): Array<number | "ellipsis"> {
@@ -134,7 +134,7 @@ export function EventAssignments({
     });
     return visible.sort((a, b) => {
       const order = a.event.starts_on.localeCompare(b.event.starts_on);
-      return sort === "upcoming" ? -order : order;
+      return sort === "upcoming" ? order : -order;
     });
   }, [current, filter, initial, query, sort]);
 
@@ -251,7 +251,7 @@ export function EventAssignments({
 
                 return (
                   <Fragment key={event.id}>
-                    <tr className={isOpen ? "assignment-row-open" : undefined}>
+                    <tr className={isOpen ? "assignment-row-open" : undefined} data-starts-on={event.starts_on}>
                       <td><strong className="assignment-event-name">{event.name}</strong></td>
                       <td className="assignment-date">{formatDateRange(event.starts_on, event.ends_on)}</td>
                       <td>

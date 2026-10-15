@@ -166,7 +166,7 @@ async function seed(): Promise<void> {
         ]);
         if (id !== IDS.roomTech) {
           // An assigned technician holds the whole technician set (D-151/D-187), while
-          // the second seeded technician stays available for another event (D-188).
+          // the second seeded technician stays available for another event (D-189).
           const technician = role === "content_reviewer" || role === "room_technician" || role === "srr_technician";
           for (const held of technician ? ["srr_technician", "room_technician", "content_reviewer"] : [role]) {
             await client.query(
