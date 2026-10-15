@@ -296,28 +296,58 @@ describe("uploads and downloads stay within the speaker's own talks", () => {
 });
 
 describe("a staff member's address never becomes a speaker's sign-in", () => {
-  test("Send sign-in refuses it with a message, and no email goes", async (t: TestContext) => {
+  test("Add speaker refuses the staff address before creating anything", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
     const agenda = (await json(await fetch(`${API}/events/${EVENT}/agenda`, { headers: { cookie: admin } }))) as {
       items: { presentations: { slot_id: string }[] }[];
     };
     const slot = agenda.items.flatMap((session) => session.presentations)[0]!.slot_id;
-    const added = (await json(
-      await fetch(`${API}/events/${EVENT}/speakers`, {
-        method: "POST",
-        headers: headers(admin),
-        body: JSON.stringify({ name: "Probe Staffmail", email: "m.vega@example.invalid", organization: "", slot_id: slot }),
-      }),
-    )) as { speaker_id?: string; code?: string };
-    if (!added.speaker_id) return t.skip(`could not add a probe speaker: ${added.code}`);
+    const before = (await json(await fetch(`${API}/events/${EVENT}/speakers`, { headers: { cookie: admin } }))) as {
+      items: { id: string }[];
+    };
+    const response = await fetch(`${API}/events/${EVENT}/speakers`, {
+      method: "POST",
+      headers: headers(admin),
+      body: JSON.stringify({ name: "Probe Staffmail", email: "m.vega@example.invalid", organization: "", slot_id: slot }),
+    });
+    assert.equal(response.status, 409);
+    assert.equal(((await json(response)) as { code: string }).code, "speakers.staff_address_conflict");
+    const after = (await json(await fetch(`${API}/events/${EVENT}/speakers`, { headers: { cookie: admin } }))) as {
+      items: { id: string }[];
+    };
+    assert.equal(after.items.length, before.items.length, "no speaker was created");
+  });
+
+  test("the send-time guards still protect an older invalid speaker record", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const speakerId = await withSystemScope(async (tx) => {
+      const { rows: slots } = await tx.query<{ id: string; client_id: string }>(
+        `SELECT id, client_id FROM pmp.slots WHERE event_id = $1 ORDER BY created_at LIMIT 1`,
+        [EVENT],
+      );
+      const slot = slots[0]!;
+      const { rows } = await tx.query<{ id: string }>(
+        `INSERT INTO pmp.speakers (client_id, event_id, email, full_name)
+         VALUES ($1,$2,'m.vega@example.invalid','Legacy Staffmail Probe') RETURNING id`,
+        [slot.client_id, EVENT],
+      );
+      await tx.query(
+        `INSERT INTO pmp.speaker_assignments (speaker_id, slot_id, event_id, client_id) VALUES ($1,$2,$3,$4)`,
+        [rows[0]!.id, slot.id, EVENT, slot.client_id],
+      );
+      return rows[0]!.id;
+    });
     try {
-      const refused = await fetch(`${API}/events/${EVENT}/speakers/${added.speaker_id}/send-link`, { method: "POST", headers: headers(admin) });
+      const refused = await fetch(`${API}/events/${EVENT}/speakers/${speakerId}/send-link`, { method: "POST", headers: headers(admin) });
       assert.equal(refused.status, 409);
       assert.equal(((await json(refused)) as { code: string }).code, "comms.staff_address");
-      const account = await fetch(`${API}/events/${EVENT}/speakers/${added.speaker_id}/account`, { method: "POST", headers: headers(admin) });
+      const account = await fetch(`${API}/events/${EVENT}/speakers/${speakerId}/account`, { method: "POST", headers: headers(admin) });
       assert.equal(account.status, 409);
     } finally {
-      await fetch(`${API}/events/${EVENT}/speakers/${added.speaker_id}`, { method: "DELETE", headers: headers(admin) });
+      await withSystemScope(async (tx) => {
+        await tx.query(`DELETE FROM pmp.speaker_assignments WHERE speaker_id = $1`, [speakerId]);
+        await tx.query(`DELETE FROM pmp.speakers WHERE id = $1`, [speakerId]);
+      });
     }
   });
 });

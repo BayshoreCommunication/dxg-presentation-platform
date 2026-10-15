@@ -5,6 +5,7 @@ import { atLeast, err, hasAnyRole, ok } from "@pmp/domain";
 import { normalise, resolveDay, resolveRoom, resolveTrack, syncPresenters } from "./scheduleImport.ts";
 import { verifyAddress } from "@pmp/email";
 import { formatDateRange } from "@pmp/format";
+import { isStaffAccountAddress, staffSpeakerConflict } from "./speakerIdentity.ts";
 
 /**
  * A typed address, checked before it is stored (D-097): its shape, known typos, and that
@@ -549,6 +550,7 @@ export async function addPresenter(
   const checked = await checkedEmail(typed);
   if (!checked.ok) return checked;
   const email = checked.value;
+  if (email && (await isStaffAccountAddress(tx, email))) return err(staffSpeakerConflict(email));
   const touched = await syncPresenters(tx, {
     eventId,
     clientId: event.client_id,
@@ -602,6 +604,7 @@ export async function addSpeaker(
   const checked = await checkedEmail(typedEmail);
   if (!checked.ok) return checked;
   const email = checked.value;
+  if (await isStaffAccountAddress(tx, email)) return err(staffSpeakerConflict(email));
   // A speaker is added *to a presentation* (D-095). A speaker on nothing has nothing to
   // upload for, gets no invitation, and is only clutter in the directory.
   if (!slotId) {
@@ -676,6 +679,7 @@ export async function changeSpeakerEmail(
   if (!checked.ok) return checked;
   if (!checked.value) return err({ code: "speakers.bad_email", message: "Enter the speaker's email address." });
   const email = checked.value;
+  if (await isStaffAccountAddress(tx, email)) return err(staffSpeakerConflict(email));
   const { rows: clash } = await tx.query<{ full_name: string }>(
     `SELECT full_name FROM pmp.speakers
       WHERE event_id = $1 AND id <> $2 AND lower(email::text) = lower($3) AND merged_into IS NULL AND removed_at IS NULL`,

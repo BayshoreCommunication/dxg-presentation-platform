@@ -260,6 +260,47 @@ describe("adding a speaker (D-085)", () => {
     assert.equal(row?.talks, 1);
   });
 
+  test("a DXG staff email is refused before a speaker is created", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const before = (await speakers(addEventId)).length;
+    const response = await call(admin, "POST", `/events/${addEventId}/speakers`, {
+      name: "Must Not Become A Speaker",
+      email: "ADMIN@example.invalid",
+      organization: "",
+      slot_id: addSlots[0],
+    });
+    assert.equal(response.status, 409);
+    const body = (await response.json()) as { code: string; message: string };
+    assert.equal(body.code, "speakers.staff_address_conflict");
+    assert.match(body.message, /DXG staff account/);
+    assert.equal((await speakers(addEventId)).length, before, "nothing was created");
+  });
+
+  test("the Agenda add-speaker path refuses the same staff email", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const before = (await speakers(addEventId)).length;
+    const response = await call(admin, "POST", `/events/${addEventId}/presentations/${addSlots[0]}/presenters`, {
+      name: "Must Not Become A Presenter",
+      email: "admin@example.invalid",
+      organization: "",
+    });
+    assert.equal(response.status, 409);
+    assert.equal(await codeOf(response), "speakers.staff_address_conflict");
+    assert.equal((await speakers(addEventId)).length, before, "nothing was created");
+  });
+
+  test("an existing speaker cannot be changed to a DXG staff email", async (t: TestContext) => {
+    if (!up) return t.skip("API not running");
+    const placed = (await speakers(addEventId)).find((speaker) => speaker.email === "placed.probe@example.invalid");
+    assert.ok(placed, "fixture: placed speaker");
+    const response = await call(admin, "PUT", `/events/${addEventId}/speakers/${placed.id}/email`, {
+      email: "admin@example.invalid",
+    });
+    assert.equal(response.status, 409);
+    assert.equal(await codeOf(response), "speakers.staff_address_conflict");
+    assert.equal((await speakers(addEventId)).find((speaker) => speaker.id === placed.id)?.email, "placed.probe@example.invalid");
+  });
+
   test("the same email on the same presentation is refused, not silently matched", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
     const before = (await speakers(addEventId)).length;
@@ -702,6 +743,7 @@ describe("email addresses are checked before they can cost us (D-097)", () => {
       "Good Row,Probe Room,08/01/2027,1:00 PM,2:00 PM,good.row@example.invalid",
       "Bad Row,Probe Room,08/01/2027,2:00 PM,3:00 PM,bad row@example",
       "Typo Row,Probe Room,08/01/2027,3:00 PM,4:00 PM,typo.row@hotmial.com",
+      "Staff Row,Probe Room,08/01/2027,4:00 PM,5:00 PM,ADMIN@example.invalid",
     ].join("\n");
     const preview = (await (
       await fetch(`${API}/events/${addEventId}/imports`, {
@@ -711,9 +753,10 @@ describe("email addresses are checked before they can cost us (D-097)", () => {
       })
     ).json()) as { issues: { row: number; column: string; severity: string; message: string }[] };
     const emailIssues = preview.issues.filter((issue) => issue.column === "speaker.email" && issue.severity === "blocking");
-    assert.equal(emailIssues.length, 2, JSON.stringify(preview.issues));
+    assert.equal(emailIssues.length, 3, JSON.stringify(preview.issues));
     assert.ok(emailIssues.some((issue) => /space/.test(issue.message)));
     assert.ok(emailIssues.some((issue) => /hotmail\.com/.test(issue.message)));
+    assert.ok(emailIssues.some((issue) => /DXG staff account/.test(issue.message)));
   });
 
   test("an address that bounced is never sent again — under any speaker record", async (t: TestContext) => {

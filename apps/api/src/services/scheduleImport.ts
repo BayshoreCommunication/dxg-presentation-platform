@@ -7,6 +7,7 @@ import { checkAddress } from "@pmp/email";
 import { verifyAddress } from "@pmp/email";
 import { firstName } from "./firstName.ts";
 import { formatDateRange } from "@pmp/format";
+import { staffAccountAddresses, staffSpeakerConflict } from "./speakerIdentity.ts";
 
 /* ── column mapping (FR-IMP-001) ─────────────────────────────────────────── */
 
@@ -773,6 +774,7 @@ export async function buildPreview(
     [input.eventId],
   );
   const existingEmails = new Set(speakerRows.map((row) => (row.email ?? "").toLowerCase()));
+  const staffEmails = await staffAccountAddresses(tx);
 
   const issues: RowIssue[] = [];
   const staged: StagedRow[] = [];
@@ -833,6 +835,15 @@ export async function buildPreview(
       const address = at(column);
       if (!address) return;
       const check = checkAddress(address);
+      if (staffEmails.has(address.toLowerCase())) {
+        issues.push({
+          row: rowNumber,
+          column,
+          severity: "blocking",
+          message: staffSpeakerConflict(address).message,
+        });
+        return;
+      }
       if (!check.ok) {
         issues.push({
           row: rowNumber,

@@ -8,6 +8,7 @@ import { firstName } from "./firstName.ts";
 import { lookFor } from "./emailLook.ts";
 import { ensureSpeakerSignIn } from "./auth.ts";
 import { checkAddress, fillHtml, htmlToText, MESSAGE_MAX_CHARS, sanitizeEmailHtml } from "@pmp/email";
+import { isStaffAccountAddress } from "./speakerIdentity.ts";
 
 /**
  * Where speakers sign in (D-147, D-148): the speaker site's sign-in page — its own origin,
@@ -830,7 +831,7 @@ export async function sendBatch(
       note("previous email bounced");
       continue;
     }
-    if (await isStaffAddress(tx, recipient.email)) {
+    if (await isStaffAccountAddress(tx, recipient.email)) {
       note("address belongs to a DXG staff account");
       continue;
     }
@@ -871,15 +872,6 @@ export async function sendBatch(
     queued,
     skipped: [...skipped.entries()].map(([reason, count]) => ({ reason, count })),
   });
-}
-
-/** A staff member's address can never carry a speaker's sign-in (D-146, D-147). */
-async function isStaffAddress(tx: pg.PoolClient, email: string): Promise<boolean> {
-  const { rows } = await tx.query<{ account_kind: string }>(
-    `SELECT account_kind FROM pmp.users WHERE lower(email::text) = lower($1) AND is_active AND deleted_at IS NULL`,
-    [email],
-  );
-  return rows[0] !== undefined && rows[0].account_kind !== "speaker";
 }
 
 /** What the Speakers screen shows about the last email a speaker was sent (D-086). */
@@ -990,20 +982,18 @@ export async function sendUploadLink(
    * password, which is what "Resend" is for. Once the speaker has chosen a password there is
    * nothing to send — they sign in with it, and the page offers "Forgotten your password?".
    */
-  const { rows: account } = await tx.query<{ must_change_password: boolean; account_kind: string }>(
-    `SELECT must_change_password, account_kind FROM pmp.users
-      WHERE lower(email::text) = lower($1) AND is_active AND deleted_at IS NULL`,
-    [speaker.email],
-  );
-  // A staff member's address is never a speaker's sign-in (D-146): say so here rather than
-  // mailing them an invitation whose "your password" opens nothing on the speaker site.
-  if (account[0] && account[0].account_kind !== "speaker") {
+  if (await isStaffAccountAddress(tx, speaker.email)) {
     return err({
       code: "comms.staff_address",
       message: `${speaker.email} belongs to a DXG staff account, so it can't be a speaker's sign-in. Give ${speaker.name} a different email address on the Agenda, then send the sign-in.`,
     });
   }
-  if (account[0] && account[0].account_kind === "speaker" && !account[0].must_change_password) {
+  const { rows: account } = await tx.query<{ must_change_password: boolean }>(
+    `SELECT must_change_password FROM pmp.users
+      WHERE lower(email::text) = lower($1) AND is_active AND deleted_at IS NULL AND account_kind = 'speaker'`,
+    [speaker.email],
+  );
+  if (account[0] && !account[0].must_change_password) {
     return err({
       code: "comms.already_signed_in",
       message: `${speaker.name} already has a sign-in and has chosen their password, so there is nothing to send. They can use "Forgotten your password?" on the sign-in page.`,
