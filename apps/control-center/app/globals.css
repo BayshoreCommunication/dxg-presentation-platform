@@ -313,6 +313,28 @@ label{display:block;margin-bottom:6px;font-size:12px;font-weight:500;color:var(-
 .live{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted-foreground)}
 .live i{width:7px;height:7px;border-radius:50%;background:var(--success);display:inline-block;box-shadow:0 0 0 3px rgba(5,150,105,.15)}
 
+/* Portfolio controls stay beside their copy on wide screens and stack as full-width
+   rows on phones. This keeps the actions inside the event card instead of squeezing
+   headings and explanatory text into a narrow column. */
+.portfolio-page-head,.practice-section-head,.event-card-head,.event-card-footer{display:flex;justify-content:space-between;gap:12px}
+.portfolio-page-head{align-items:center;margin-bottom:14px}
+.portfolio-page-actions,.event-card-status,.event-card-actions{display:flex;gap:8px}
+.practice-section-head{align-items:flex-start;margin:24px 0 10px}
+.practice-start-control{display:inline-flex;flex-direction:column;align-items:flex-end}
+.event-card-head{align-items:baseline;gap:8px}
+.event-card-status{gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.event-card-footer{align-items:center}
+.event-card-actions{align-items:flex-start}
+
+@media (max-width:640px){
+  .portfolio-page-head,.practice-section-head,.event-card-head,.event-card-footer{align-items:stretch;flex-direction:column}
+  .portfolio-page-actions,.event-card-actions{width:100%;flex-wrap:wrap}
+  .portfolio-page-actions .btn,.event-card-actions>*{flex:1 1 auto}
+  .practice-start-control{align-items:stretch;width:100%}
+  .event-card-status{justify-content:flex-start}
+  .event-card-footer{gap:10px}
+}
+
 @media (max-width:760px){
   .grid2{grid-template-columns:1fr}
 }
