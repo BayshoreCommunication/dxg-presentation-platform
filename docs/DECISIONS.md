@@ -3385,7 +3385,24 @@ D-151, could hold part of it.
 - Checked: admin, event-scope, room-sync-technicians, srr-open, srr-local-intake, srr-checkin-technician, mfa,
   auth-separation and event-staff-release pass; technician-submits-for-speakers fails its one test as before.
 
-## D-188 (2026-10-14): Maximum one DXG Technician staff per event — Status: ACCEPTED
+## D-188 (2026-10-14): Room sync is the technicians' again — Status: ACCEPTED (Travis)
+Travis: "yes, give technicians access to room sync". After D-187 a technician held the roles that tick Mark loaded,
+but couldn't open Room sync at all: D-163 had taken it from them ("No access — not part of your access level").
+Technicians load the room PCs, so it's theirs again — reversing that part of D-163.
+- **API** (`kindRefusal`, `TECHNICIAN_ROOM_SYNC`): a technician may open the room list
+  (`GET /events/:id/sync/fleet`), download a room or every room (`approved.zip`) and tick **Mark loaded** / **Undo**
+  (`POST /room-files/:id/loaded|unloaded`). The domain rule still decides who may tick (D-125, D-160); an event
+  they're not on stays closed. The rest of the event's screens stay support staff's.
+- **Every room** of the events they're on, not only rooms of the speakers they helped at check-in (Travis, asked
+  again: "All rooms"; D-160 stands). Many speakers never check in, and room PCs are often loaded before the desk
+  assigns anyone.
+- **Sidebar**: technicians see **Room sync** under ONSITE, after the Speaker Ready Room.
+- **Wording**: the no-access page and Staff accounts say technicians work the Speaker Ready Room, Manage
+  presentations and Room sync.
+- Tests: `room-sync-technicians` (a technician sees every room, downloads, ticks and un-ticks; an event they're not
+  on is refused) and `admin` (Room sync dropped from a technician's refused screens).
+
+## D-189 (2026-10-14): Maximum one DXG Technician staff per event — Status: ACCEPTED
 An administrator can assign one DXG Technician to an event, not two. The capacity is enforced by the API for normal
 assignment, direct role grants and access-level conversions, with per-account/per-event transaction locks so concurrent
 requests cannot bypass it. A conversion checks every affected event before making changes; a conflict returns 409

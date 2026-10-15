@@ -502,8 +502,8 @@ describe("three kinds of DXG account (D-151)", () => {
     });
     assert.equal(revision.status, 403, "nor ask from a finding");
     assert.equal(((await json(revision)) as { code: string }).code, "auth.not_on_this_event");
-    // Room sync is no longer theirs (D-163).
-    for (const path of [`/events/${techEvent}/speakers`, `/events/${techEvent}/comms`, `/events/${techEvent}/files`, `/events/${techEvent}/sync/fleet`, `/events/${techEvent}/sync/approved.zip`]) {
+    // Room sync is theirs again (D-188); the rest of the event stays support staff's.
+    for (const path of [`/events/${techEvent}/speakers`, `/events/${techEvent}/comms`, `/events/${techEvent}/files`]) {
       const refused = await fetch(`${API}${path}`, { headers: { cookie: technician } });
       assert.equal(refused.status, 403, path);
       assert.equal(((await json(refused)) as { code: string }).code, "auth.kind_forbidden");
