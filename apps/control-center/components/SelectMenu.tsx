@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { Fragment, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Icon } from "@/components/Icon";
 
@@ -37,12 +37,41 @@ export function SelectMenu<T extends string>({
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const [listStyle, setListStyle] = useState<CSSProperties>({});
+  const [contentWidth, setContentWidth] = useState({ trigger: 0, menu: 0 });
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const list = useRef<HTMLDivElement>(null);
+  const sizer = useRef<HTMLSpanElement>(null);
   const listId = useId();
   const selectedIndex = options.findIndex((option) => option.value === value);
   const selected = selectedIndex >= 0 ? options[selectedIndex] : undefined;
+
+  useEffect(() => {
+    let alive = true;
+    const measure = () => {
+      const button = trigger.current;
+      const probes = sizer.current;
+      if (!alive || !button || !probes) return;
+      const widest = Math.max(0, ...Array.from(probes.querySelectorAll<HTMLElement>(":scope > span:not(.select-menu-group)"), (probe) => probe.getBoundingClientRect().width));
+      const groups = Math.max(0, ...Array.from(probes.querySelectorAll<HTMLElement>(":scope > .select-menu-group"), (probe) => probe.getBoundingClientRect().width));
+      const style = getComputedStyle(button);
+      const arrow = button.lastElementChild?.getBoundingClientRect().width ?? 16;
+      const inset = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight) + parseFloat(style.borderLeftWidth) + parseFloat(style.borderRightWidth);
+      const next = {
+        trigger: Math.ceil(widest + inset + arrow + (parseFloat(style.columnGap) || 0)),
+        // List padding/borders, option padding, and space for the selected checkmark.
+        menu: Math.ceil(Math.max(widest + 67, groups + 14)),
+      };
+      setContentWidth((current) => current.trigger === next.trigger && current.menu === next.menu ? current : next);
+    };
+    measure();
+    void document.fonts.ready.then(measure);
+    document.fonts.addEventListener("loadingdone", measure);
+    return () => {
+      alive = false;
+      document.fonts.removeEventListener("loadingdone", measure);
+    };
+  }, [options, placeholder, className]);
 
   useEffect(() => {
     const close = (event: PointerEvent) => {
@@ -57,7 +86,7 @@ export function SelectMenu<T extends string>({
     if (open) setActiveIndex(selectedIndex >= 0 ? selectedIndex : 0);
   }, [open, selectedIndex]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!open) return;
     const place = () => {
       const rect = trigger.current?.getBoundingClientRect();
@@ -68,7 +97,8 @@ export function SelectMenu<T extends string>({
       const above = rect.top;
       const openAbove = below < 220 && above > below;
       const available = Math.max(120, (openAbove ? above : below) - gap - edge);
-      const width = Math.min(Math.max(rect.width, 170), Math.min(380, window.innerWidth - edge * 2));
+      const maxWidth = Math.min(window.innerWidth - edge * 2, root.current?.closest("aside") ? rect.width : Infinity);
+      const width = Math.min(Math.max(rect.width, contentWidth.menu, 170), maxWidth);
       const left = Math.min(Math.max(rect.left, edge), window.innerWidth - width - edge);
       setListStyle({
         left,
@@ -87,7 +117,7 @@ export function SelectMenu<T extends string>({
       window.removeEventListener("resize", place);
       document.removeEventListener("scroll", place, true);
     };
-  }, [open]);
+  }, [open, contentWidth.menu]);
 
   const activeId = useMemo(() => `${listId}-option-${activeIndex}`, [activeIndex, listId]);
   const listMaxHeight = listStyle.maxHeight;
@@ -146,7 +176,23 @@ export function SelectMenu<T extends string>({
   };
 
   return (
-    <div ref={root} className={`select-menu ${open ? "is-open" : ""} ${className}`.trim()}>
+    <div
+      ref={root}
+      className={`select-menu ${open ? "is-open" : ""} ${className}`.trim()}
+      style={contentWidth.trigger ? { "--select-menu-natural-width": `${contentWidth.trigger}px` } as CSSProperties : undefined}
+    >
+      <span ref={sizer} className="select-menu-sizer" aria-hidden="true">
+        <span>{placeholder}</span>
+        {options.map((option) => (
+          <Fragment key={option.value}>
+            <span>
+              {option.icon && <span className="select-menu-option-icon">{option.icon}</span>}
+              <span>{option.label}</span>
+            </span>
+            {option.group && <span className="select-menu-group">{option.group}</span>}
+          </Fragment>
+        ))}
+      </span>
       <button
         ref={trigger}
         id={id}

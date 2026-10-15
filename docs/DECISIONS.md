@@ -3401,3 +3401,13 @@ Technicians load the room PCs, so it's theirs again — reversing that part of D
   presentations and Room sync.
 - Tests: `room-sync-technicians` (a technician sees every room, downloads, ticks and un-ticks; an event they're not
   on is refused) and `admin` (Room sync dropped from a technician's refused screens).
+
+## D-189 (2026-10-14): Maximum one DXG Technician staff per event — Status: ACCEPTED
+An administrator can assign one DXG Technician to an event, not two. The capacity is enforced by the API for normal
+assignment, direct role grants and access-level conversions, with per-account/per-event transaction locks so concurrent
+requests cannot bypass it. A conversion checks every affected event before making changes; a conflict returns 409
+`admin.event_technician_conflict` and leaves account access, memberships and sessions untouched.
+Count undeleted, non-root Technician accounts with any non-platform role on the event, including deactivated accounts.
+Support staff, clients, DXG Admins and released history are outside the limit. Repeating the current technician's
+assignment is harmless; replacement requires removing the previous assignment. Existing over-capacity events remain
+visible for an administrator to correct explicitly. Development seeds assign only one Technician to the demo event.

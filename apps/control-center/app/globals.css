@@ -1302,23 +1302,24 @@ input,select,textarea{border-width:1px}
 .assignment-newcomer span{color:var(--secondary-foreground)}
 .assignment-card{overflow:hidden;margin-bottom:0;border:1px solid var(--border);border-radius:16px;box-shadow:0 1px 2px rgba(15,23,42,.04)}
 [data-theme="dark"] .assignment-card{box-shadow:0 1px 2px rgba(0,0,0,.28)}
-.assignment-toolbar{display:grid;grid-template-columns:minmax(260px,1fr) auto auto;align-items:center;gap:14px;padding:16px 18px!important;border-bottom:1px solid var(--border)!important;background:var(--card)!important}
+.assignment-toolbar{display:grid;grid-template-columns:minmax(260px,1fr) auto auto;align-items:center;gap:14px;min-width:0;padding:16px 18px!important;border-bottom:1px solid var(--border)!important;background:var(--card)!important}
 .assignment-search{position:relative;display:block;margin:0;min-width:0}
 .assignment-search>svg{position:absolute;left:13px;top:50%;z-index:1;transform:translateY(-50%);color:var(--secondary-foreground)}
 .assignment-search input{width:100%;height:42px;padding-left:42px;font-size:14px}
-.assignment-filters{display:flex;align-items:center;gap:6px}
-.assignment-filters button{display:inline-flex;align-items:center;justify-content:center;gap:7px;height:40px;padding:0 16px;border:1px solid var(--border);border-radius:999px;background:var(--card);color:var(--secondary-foreground);font:inherit;font-size:13px;font-weight:500;transition:background-color .15s,border-color .15s,color .15s,transform .15s}
+.assignment-filters{display:flex;align-items:center;flex-wrap:wrap;gap:6px;min-width:0}
+.assignment-filters button{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;gap:7px;height:40px;padding:0 16px;border:1px solid var(--border);border-radius:999px;background:var(--card);color:var(--secondary-foreground);font:inherit;font-size:13px;font-weight:500;white-space:nowrap;transition:background-color .15s,border-color .15s,color .15s,transform .15s}
 .assignment-filters button svg{width:15px;height:15px;flex:0 0 auto}
 .assignment-filters button:hover{border-color:var(--hover-border);background:var(--hover-bg);color:var(--foreground)}
 .assignment-filters button:active{transform:scale(.98)}
 .assignment-filters button.on{border-color:var(--primary);background:var(--primary);color:var(--primary-foreground);font-weight:600;box-shadow:var(--shadow-dark)}
 .assignment-filters button.on svg :is([fill="#D9D9D9"],[fill="#F7F7F7"]){fill:transparent}
 .assignment-filters button.on svg [stroke="#4B5563"]{stroke:var(--primary-foreground)}
-.assignment-toolbar-end{display:flex;align-items:center;justify-content:flex-end;gap:14px;white-space:nowrap}
-.assignment-sort-select{width:184px}
+.assignment-toolbar-end{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:14px;min-width:0;white-space:nowrap}
+.assignment-sort-select{width:184px;max-width:100%;min-width:0}
 .assignment-result-count{min-width:58px;color:var(--secondary-foreground);font-size:13px;text-align:right;font-variant-numeric:tabular-nums}
-.assignment-table-wrap{overflow-x:auto;background:var(--card)!important}
-.assignment-table{min-width:980px;table-layout:fixed}
+.assignment-table-wrap{overflow-x:auto;container-type:inline-size;background:var(--card)!important}
+.assignment-card~.card details>.cbd{overflow-x:auto}
+.assignment-table{min-width:1120px;table-layout:fixed}
 .assignment-col-event{width:22%}.assignment-col-date{width:19%}.assignment-col-staff{width:31%}.assignment-col-status{width:14%}.assignment-col-action{width:14%}
 .assignment-table th{height:48px;padding:0 16px;border-top:0;border-bottom:1px solid var(--border);border-radius:0!important;background:var(--secondary);font-size:13px;font-weight:500;color:var(--secondary-foreground)}
 .assignment-table th:first-child{border-left:0}.assignment-table th:last-child{border-right:0}
@@ -1347,18 +1348,19 @@ input,select,textarea{border-width:1px}
 .assignment-more-button[aria-expanded="true"] svg{transform:rotate(180deg)}
 .assignment-editor-row td{height:auto!important;padding:0!important;border-bottom:1px solid var(--border)!important;background:var(--muted)!important}
 .assignment-editor-row:hover td{background:var(--muted)!important}
-.assignment-editor{display:flex;flex-direction:column;gap:14px;padding:16px 18px 18px;border-top:1px solid var(--border)}
+.assignment-editor{position:sticky;left:0;display:flex;flex-direction:column;gap:14px;width:100cqw;max-width:100%;padding:16px 18px 18px;border-top:1px solid var(--border)}
 .assignment-editor-head,.assignment-add-person{display:flex;align-items:center;justify-content:space-between;gap:16px}
 .assignment-editor-head>div,.assignment-add-person>div:first-child{display:flex;min-width:0;flex-direction:column;gap:3px}
 .assignment-editor-head strong,.assignment-add-person strong{color:var(--foreground);font-size:13px;font-weight:600}
 .assignment-editor-head span,.assignment-add-person span{color:var(--muted-foreground);font-size:12px}
 .assignment-current-team{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:8px}
 .assignment-current-person{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--card)}
-.assignment-current-person .assignment-person{min-width:0;flex:1}
+.assignment-current-person .assignment-person{min-width:0;flex:1;flex-wrap:wrap}
+.assignment-current-person .assignment-person-copy{flex:1 1 100px}
 .assignment-remove-button{height:32px;flex-shrink:0}
 .assignment-add-person{padding:12px;border:1px solid var(--border);border-radius:10px;background:var(--card)}
-.assignment-add-controls{display:flex!important;align-items:center;justify-content:flex-end;flex-direction:row!important;gap:8px;flex:1}
-.assignment-staff-select{width:min(100%,330px)}
+.assignment-add-controls{display:flex!important;align-items:center;justify-content:flex-end;flex-direction:row!important;flex-wrap:wrap;gap:8px;flex:0 0 auto;max-width:100%;min-width:0}
+.assignment-staff-select{width:var(--select-menu-natural-width,auto);max-width:100%;flex:0 0 auto}
 .assignment-staff-select .select-menu-trigger{height:38px}
 .assignment-add-controls .btn{height:38px}
 .assignment-all-assigned{margin:-4px 0 0;color:var(--muted-foreground);font-size:12px}
@@ -1379,19 +1381,29 @@ input,select,textarea{border-width:1px}
 @media (max-width:1180px){
   .assignment-toolbar{grid-template-columns:minmax(240px,1fr) auto}
   .assignment-toolbar-end{grid-column:1/-1;justify-content:space-between}
+  .assignment-add-person{align-items:stretch;flex-direction:column}
+}
+@media (max-width:1000px){
+  .assignment-toolbar{grid-template-columns:minmax(0,1fr)}
+  .assignment-toolbar-end{grid-column:auto}
 }
 @media (max-width:820px){
   .assignment-page-head{align-items:stretch;flex-direction:column}
   .assignment-manage-accounts{align-self:flex-start}
-  .assignment-toolbar{grid-template-columns:1fr}
-  .assignment-filters{overflow-x:auto}
+  .assignment-toolbar{grid-template-columns:minmax(0,1fr)}
   .assignment-toolbar-end{grid-column:auto}
   .assignment-editor-head,.assignment-add-person{align-items:stretch;flex-direction:column}
+  .assignment-current-team{grid-template-columns:minmax(0,1fr)}
+  .assignment-current-person{align-items:flex-start;flex-direction:column}
+  .assignment-current-person .assignment-person{width:100%;flex:none}
   .assignment-add-controls{align-items:stretch!important;flex-direction:column!important}
   .assignment-staff-select{width:100%}
   .assignment-pagination{align-items:flex-start;flex-direction:column}
   .assignment-page-controls{width:100%;justify-content:space-between}
   .assignment-page-numbers{overflow-x:auto}
+}
+@media (max-width:480px){
+  .assignment-filters button{padding:0 10px}
 }
 
 /* Staff accounts uses the same monochrome operations-table language as Event assignments.
@@ -1446,7 +1458,12 @@ input,select,textarea{border-width:1px}
 
 /* Custom select menu used where the open state is part of the task flow. Unlike a native
    select, the list keeps the same monochrome spacing, focus and elevation on every OS. */
-.select-menu{position:relative;display:inline-block;font-size:13px;color:var(--foreground)}
+.select-menu{position:relative;display:inline-block;max-width:100%;font-size:13px;color:var(--foreground)}
+:where(.select-menu){width:var(--select-menu-natural-width,auto)}
+.select-menu-sizer{position:absolute;width:0;height:0;overflow:hidden;visibility:hidden;pointer-events:none;font-weight:600}
+.select-menu-sizer>span{display:flex;align-items:center;gap:8px;width:max-content;white-space:nowrap}
+.select-menu-sizer>span:not(.select-menu-group),.select-menu-sizer>span:not(.select-menu-group)>span{font-size:14px;font-weight:600}
+.select-menu-sizer>.select-menu-group{font-size:10px;font-weight:700}
 .select-menu.is-open{z-index:10000}
 .select-menu-trigger{display:flex;align-items:center;justify-content:space-between;gap:14px;width:100%;height:42px;padding:0 11px 0 13px;border:1px solid var(--border);border-radius:9px;background:var(--card);color:var(--foreground);font:inherit;text-align:left;box-shadow:0 1px 2px rgba(15,23,42,.04);transition:border-color .15s,box-shadow .15s,background-color .15s}
 .select-menu-trigger>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

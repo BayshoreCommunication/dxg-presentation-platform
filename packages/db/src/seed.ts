@@ -151,6 +151,8 @@ async function seed(): Promise<void> {
       );
       // Root admin is a flag on the account, not an event role (D-100). The kind (D-151): the
       // reviewer and the room technician are technicians; the presentation manager is support.
+      // Only the reviewer is placed on MedTech: an event has at most one technician.
+      // The second technician stays available for another event or an explicit replacement.
       if (role === "platform_admin") {
         await client.query(`UPDATE users SET is_root_admin = true WHERE id = $1`, [id]);
       } else {
@@ -162,15 +164,17 @@ async function seed(): Promise<void> {
               ? "client"
               : "support",
         ]);
-        // A technician holds the whole technician set on the event, as Event assignments
-        // places them (D-151 `ROLES_OF_KIND`, D-187) — with "reviewer" alone they could not tick Mark loaded.
-        const technician = role === "content_reviewer" || role === "room_technician" || role === "srr_technician";
-        for (const held of technician ? ["srr_technician", "room_technician", "content_reviewer"] : [role]) {
-          await client.query(
-            `INSERT INTO event_roles (user_id, event_id, role) VALUES ($1, $2, $3)
-             ON CONFLICT DO NOTHING`,
-            [id, IDS.event, held],
-          );
+        if (id !== IDS.roomTech) {
+          // An assigned technician holds the whole technician set (D-151/D-187), while
+          // the second seeded technician stays available for another event (D-188).
+          const technician = role === "content_reviewer" || role === "room_technician" || role === "srr_technician";
+          for (const held of technician ? ["srr_technician", "room_technician", "content_reviewer"] : [role]) {
+            await client.query(
+              `INSERT INTO event_roles (user_id, event_id, role) VALUES ($1, $2, $3)
+               ON CONFLICT DO NOTHING`,
+              [id, IDS.event, held],
+            );
+          }
         }
       }
       for (const recovery of recoveryCodes) {

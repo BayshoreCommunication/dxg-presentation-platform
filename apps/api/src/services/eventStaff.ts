@@ -16,6 +16,8 @@ export async function releaseEventStaff(
   tx: pg.PoolClient,
   input: { eventId: string; reason: ReleaseReason; actorUserId?: string | undefined },
 ): Promise<{ released: number }> {
+  // Use the same event lock as assignments/conversions before recording and removing roles.
+  await tx.query(`SELECT id FROM pmp.events WHERE id = $1 FOR UPDATE`, [input.eventId]);
   const { rows } = await tx.query<{ user_id: string; role: string; created_at: string; client_id: string }>(
     `SELECT er.user_id, er.role, er.created_at, e.client_id
        FROM pmp.event_roles er
@@ -75,7 +77,8 @@ export async function releaseEndedEvents(
         AND e.ends_on < (now() AT TIME ZONE e.timezone)::date
         AND EXISTS (SELECT 1 FROM pmp.event_roles er JOIN pmp.users u ON u.id = er.user_id
                      WHERE er.event_id = e.id AND u.account_kind = 'staff' AND NOT u.is_root_admin
-                       AND u.staff_kind IN ('support', 'technician') AND er.role <> 'platform_admin')`,
+                       AND u.staff_kind IN ('support', 'technician') AND er.role <> 'platform_admin')
+      ORDER BY e.id`,
     [only ? [...only] : null],
   );
   const done: { event_id: string; released: number }[] = [];

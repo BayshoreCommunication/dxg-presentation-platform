@@ -28,6 +28,7 @@ let delgado = "";
 let vega = "";
 let rooms: Room[] = [];
 let probe = "";
+let delgadoWasAssigned = false;
 
 const call = (cookie: string, method: string, path: string, body?: unknown) =>
   fetch(`${API}${path}`, {
@@ -49,6 +50,14 @@ before(async () => {
   admin = await signInStaff(API, "admin@example.invalid", PASSWORD);
   delgado = await signInStaff(API, "c.delgado@example.invalid", PASSWORD);
   vega = await signInStaff(API, "m.vega@example.invalid", PASSWORD);
+  const users = (await (await call(admin, "GET", "/admin/users")).json()) as {
+    items: { id: string; roles: { event_id: string }[] }[];
+  };
+  delgadoWasAssigned = users.items.find((user) => user.id === DELGADO)?.roles.some((role) => role.event_id === EVENT) ?? false;
+  if (!delgadoWasAssigned) {
+    const assigned = await call(admin, "POST", `/admin/users/${DELGADO}/events`, { event_id: EVENT, assign: true });
+    assert.equal(assigned.status, 200, "fixture: temporarily assign the reset technician");
+  }
   rooms = await fleet(admin);
 
   // An event neither technician is on.
@@ -66,6 +75,10 @@ before(async () => {
 });
 
 after(async () => {
+  if (up && !delgadoWasAssigned) {
+    const removed = await call(admin, "POST", `/admin/users/${DELGADO}/events`, { event_id: EVENT, assign: false });
+    assert.equal(removed.status, 200, "fixture: restore the reset technician state");
+  }
   if (up && probe) await call(admin, "POST", `/events/${probe}/archive`);
 });
 

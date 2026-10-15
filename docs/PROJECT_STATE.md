@@ -3781,3 +3781,27 @@ Lint and workspace type-check pass; unit tests pass (291, with four environment-
 name/permission/audit invariants and the local name-editing plus Staff accounts browser checks pass, including
 save/cancel, persistence, validation, pending-action locking, initials, own-account editing and mobile controls.
 **Not deployed.**
+
+## 2026-10-14 — One DXG Technician per event and assignment responsiveness
+The API now reserves one technician slot per event (D-188), including inactive but undeleted technician accounts.
+Normal assignment, legacy role grants and access-level conversions share account/event transaction locks; conversions
+preflight every affected event before changing access, roles, sessions or audit state. Automatic staff release uses
+the same event locks and a stable order. Support, clients, root admins and released history do not occupy the slot.
+The assignment editor excludes additional technicians while a slot is occupied, explains replacement, refreshes on
+stale conflicts, and gives Remove an unassignment icon. New seeds keep the second demo technician unassigned.
+
+Under explicit technician-only reset authority, removed 26 old local event/person assignments (74 role bindings)
+and two live event/person assignments. Kept accounts, events, presentation files, check-ins, sign-offs, other staff
+assignments and released work history. Local database/role backups and a reversible live role manifest were retained
+outside the repository. Local reset verification checked protected counts, unrelated roles and intact audit chains;
+live browser verification retained six accounts and the approved presentation. The local assignment-page error was
+a missing staff-history table: applied only migration 043, without applying unrelated template/release migrations.
+
+Responsive checks cover 320, 375, 390, 430, 768, 1024, 1440 and 1920 px: single-line filter pills with clean group
+wrapping, usable action columns, viewport-contained accordion controls, non-overlapping staff metadata and Remove,
+and internally scrolling finished-event history. Shared selects size to their labels and truncate only at available
+space limits. The local browser demonstrated first assignment, refusal of a second technician and replacement after
+removal; temporary demonstration fixtures are cleaned afterward. Targeted concurrency, conversion, inactive-slot,
+legacy-role and idempotence invariants pass. Lint, workspace type-check and 295 unit tests pass (291 passed, four
+environment-dependent skips); related account/SRR/release checks and six MFA checks pass after updating synthetic
+fixtures to preserve the reset. **Code not deployed; live assignment reset is complete.**

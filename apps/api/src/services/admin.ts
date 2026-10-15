@@ -223,11 +223,18 @@ export async function grantRole(
       message: "DXG Admin isn't an event role. Change the access level on Staff accounts instead.",
     });
   }
-  const target = await accountOf(tx, input.userId);
+  const target = await accountOf(tx, input.userId, true);
   if (!target) return err({ code: "admin.not_found", message: "This account no longer exists — it may have been removed. Refresh the page." });
 
-  const { rows } = await tx.query(`SELECT id FROM pmp.events WHERE id = $1`, [input.eventId]);
-  if (!rows[0]) return err({ code: "admin.event_not_found", message: "This event no longer exists — it may have been removed. Refresh the page." });
+  const [event] = await lockStaffingEvents(tx, [input.eventId]);
+  if (!event) return err({ code: "admin.event_not_found", message: "This event no longer exists — it may have been removed. Refresh the page." });
+  if (event.status === "archived" && !target.is_root_admin && target.staff_kind !== "client") {
+    return err(archivedStaffingRefusal(event));
+  }
+  if (isTechnician(target)) {
+    const conflict = await technicianRefusal(tx, target, event);
+    if (conflict) return err(conflict);
+  }
 
   await tx.query(
     `INSERT INTO pmp.event_roles (user_id, event_id, role) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`,
@@ -243,6 +250,9 @@ export async function revokeRole(
   input: { userId: string; eventId: string; role: EventRole },
 ): Promise<Result<{ revoked: true }, DomainError>> {
   if (!hasAnyRole(actor, ADMIN_ROLES)) return err(forbidden("Revoking a role"));
+  // Membership changes share the target → sorted events lock order with conversions.
+  await accountOf(tx, input.userId, true);
+  await lockStaffingEvents(tx, [input.eventId]);
 
   await tx.query(`DELETE FROM pmp.event_roles WHERE user_id = $1 AND event_id = $2 AND role = $3`, [
     input.userId,
@@ -270,7 +280,7 @@ export async function setAccountType(
   if (accountType !== "root_admin" && !STAFF_KINDS.includes(accountType as StaffKind)) {
     return err({ code: "admin.bad_account_type", message: "Choose an access level: DXG Admin, DXG Support staff, DXG Technician staff or Client access." });
   }
-  const target = await accountOf(tx, userId);
+  const target = await accountOf(tx, userId, true);
   if (!target) return err({ code: "admin.not_found", message: "This account no longer exists — it may have been removed. Refresh the page." });
   if (accountType !== "root_admin" && target.is_root_admin) {
     if (userId === actor.id) {
@@ -278,6 +288,21 @@ export async function setAccountType(
     }
     const refusal = await lastRootAdminRefusal(tx, userId, "change");
     if (refusal) return err(refusal);
+  }
+
+  const memberships = await staffingEventsOf(tx, userId);
+  const lockedEvents = await lockStaffingEvents(tx, memberships);
+  // Archiving/releasing can remove memberships while we wait for an event lock.
+  // Do not re-create the roles that were just released.
+  const stillAssigned = new Set(await staffingEventsOf(tx, userId));
+  const events = lockedEvents.filter((event) => stillAssigned.has(event.id));
+  if (accountType === "technician") {
+    // A returned error is committed by withScope, so every event must pass before any write.
+    for (const event of events) {
+      if (event.status === "archived") return err(archivedStaffingRefusal(event));
+      const conflict = await technicianRefusal(tx, target, event);
+      if (conflict) return err(conflict);
+    }
   }
 
   await tx.query(`UPDATE pmp.users SET is_root_admin = $1, staff_kind = $2 WHERE id = $3`, [
@@ -288,11 +313,7 @@ export async function setAccountType(
   // The roles held on each event follow the kind (D-151): a technician made support staff
   // keeps their events, as support staff.
   if (accountType !== "root_admin") {
-    const { rows: events } = await tx.query<{ event_id: string }>(
-      `SELECT DISTINCT event_id FROM pmp.event_roles WHERE user_id = $1 AND role <> 'platform_admin'`,
-      [userId],
-    );
-    for (const row of events) await placeOnEvent(tx, userId, row.event_id, accountType);
+    for (const event of events) await placeOnEvent(tx, userId, event.id, accountType);
   }
   // New powers, or fewer, take effect at the next sign-in rather than mid-session.
   await tx.query(`UPDATE pmp.auth_sessions SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL`, [
@@ -329,22 +350,21 @@ export async function assignToEvent(
   input: { userId: string; eventId: string; assign: boolean },
 ): Promise<Result<{ assigned: boolean; roles: readonly EventRole[] }, DomainError>> {
   if (!hasAnyRole(actor, ADMIN_ROLES)) return err(forbidden("Assigning staff"));
-  const target = await accountOf(tx, input.userId);
+  const target = await accountOf(tx, input.userId, true);
   if (!target) return err({ code: "admin.not_found", message: "This account no longer exists — it may have been removed. Refresh the page." });
   if (target.is_root_admin) {
     return err({ code: "admin.not_assignable", message: "A DXG Admin reaches every event already." });
   }
-  const { rows } = await tx.query<{ status: string }>(`SELECT status FROM pmp.events WHERE id = $1`, [input.eventId]);
-  if (!rows[0]) return err({ code: "admin.event_not_found", message: "This event no longer exists — it may have been removed. Refresh the page." });
+  const [event] = await lockStaffingEvents(tx, [input.eventId]);
+  if (!event) return err({ code: "admin.event_not_found", message: "This event no longer exists — it may have been removed. Refresh the page." });
 
   // An archived event's staff were freed from it (D-181); restore it first to staff it again.
-  if (input.assign && rows[0].status === "archived") {
-    return err({
-      code: "admin.event_archived_conflict",
-      message: "This event is archived, so its staff have been freed. Restore the event first to assign staff to it again.",
-    });
-  }
+  if (input.assign && event.status === "archived") return err(archivedStaffingRefusal(event));
   if (input.assign) {
+    if (isTechnician(target)) {
+      const conflict = await technicianRefusal(tx, target, event);
+      if (conflict) return err(conflict);
+    }
     await placeOnEvent(tx, input.userId, input.eventId, target.staff_kind);
     await audit(tx, actor, input.userId, "admin.assigned", { event_id: input.eventId, kind: target.staff_kind });
     return ok({ assigned: true, roles: ROLES_OF_KIND[target.staff_kind] });
@@ -402,15 +422,66 @@ export async function deleteAccount(
   return ok({ deleted: true });
 }
 
-type Account = { id: string; email: string; display_name: string; is_root_admin: boolean; is_active: boolean; staff_kind: StaffKind };
+type Account = { id: string; email: string; display_name: string; is_root_admin: boolean; is_active: boolean; staff_kind: StaffKind; account_kind: string };
+
+type StaffingEvent = { id: string; name: string; status: string };
+
+const isTechnician = (account: Account): boolean =>
+  account.account_kind === "staff" && !account.is_root_admin && account.staff_kind === "technician";
+
+/** Lock the target user first, then events in UUID order; never lock competing users. */
+async function lockStaffingEvents(tx: pg.PoolClient, eventIds: readonly string[]): Promise<StaffingEvent[]> {
+  if (eventIds.length === 0) return [];
+  return (await tx.query<StaffingEvent>(
+    `SELECT id, name, status FROM pmp.events WHERE id = ANY($1::uuid[]) ORDER BY id FOR UPDATE`, [eventIds],
+  )).rows;
+}
+
+async function staffingEventsOf(tx: pg.PoolClient, userId: string): Promise<string[]> {
+  return (await tx.query<{ event_id: string }>(
+    `SELECT DISTINCT event_id FROM pmp.event_roles WHERE user_id = $1 AND role <> 'platform_admin' ORDER BY event_id`, [userId],
+  )).rows.map((row) => row.event_id);
+}
+
+const archivedStaffingRefusal = (event: StaffingEvent): DomainError => ({
+  code: "admin.event_archived_conflict",
+  message: `“${event.name}” is archived, so its staff have been freed. Restore the event first to assign staff to it again.`,
+});
+
+/** An inactive but undeleted technician still reserves the event's one technician slot. */
+async function technicianRefusal(tx: pg.PoolClient, target: Account, event: StaffingEvent): Promise<DomainError | undefined> {
+  // Reassigning an existing technician adds no person, even if historical duplicates remain.
+  if (isTechnician(target)) {
+    const ownMembership = await tx.query(
+      `SELECT 1 FROM pmp.event_roles WHERE user_id = $1 AND event_id = $2 AND role <> 'platform_admin' LIMIT 1`,
+      [target.id, event.id],
+    );
+    if (ownMembership.rows.length > 0) return undefined;
+  }
+  const { rows } = await tx.query<{ id: string; display_name: string }>(
+    `SELECT u.id, u.display_name FROM pmp.users u
+      WHERE u.id <> $2 AND u.deleted_at IS NULL AND u.account_kind = 'staff'
+        AND NOT u.is_root_admin AND u.staff_kind = 'technician'
+        AND EXISTS (SELECT 1 FROM pmp.event_roles er
+                     WHERE er.user_id = u.id AND er.event_id = $1 AND er.role <> 'platform_admin')
+      ORDER BY u.display_name, u.id LIMIT 1`,
+    [event.id, target.id],
+  );
+  const occupant = rows[0];
+  return occupant ? {
+    code: "admin.event_technician_conflict",
+    message: `“${event.name}” already has ${occupant.display_name} as its DXG Technician staff. Only one technician can be assigned to an event. Remove the current technician first.`,
+    detail: { event_id: event.id, event_name: event.name, technician_id: occupant.id, technician_name: occupant.display_name },
+  } : undefined;
+}
 
 const kindOf = (account: Account): AccountType => (account.is_root_admin ? "root_admin" : account.staff_kind);
 
 /** A live (not deleted) account, or nothing. */
-async function accountOf(tx: pg.PoolClient, userId: string): Promise<Account | undefined> {
+async function accountOf(tx: pg.PoolClient, userId: string, lock = false): Promise<Account | undefined> {
   const { rows } = await tx.query<Account>(
-    `SELECT id, email::text, display_name, is_root_admin, is_active, staff_kind
-       FROM pmp.users WHERE id = $1 AND deleted_at IS NULL`,
+    `SELECT id, email::text, display_name, is_root_admin, is_active, staff_kind, account_kind
+       FROM pmp.users WHERE id = $1 AND deleted_at IS NULL ${lock ? "FOR NO KEY UPDATE" : ""}`,
     [userId],
   );
   return rows[0];
