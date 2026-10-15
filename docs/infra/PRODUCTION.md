@@ -139,13 +139,18 @@ Optional: `AUTH_RATE_LIMIT` (sign-in attempts per address per 5 minutes, default
 ## 6. Updating
 
 Since 2026-10-08 (D-149) **nothing is built on the server**. GitHub Actions builds the four app images and pushes
-them to ECR; the server pulls them. A release is three moves:
+them to ECR; the server pulls them. Since 2026-10-15 (D-191) the deploy itself is automatic once approved. A release
+is three moves:
 
 1. **Release** — on GitHub, open a pull request from `main` into **`production`** and merge it. Only the
    `production` branch publishes images; `main` and pull requests run every check but push nothing.
 2. **Wait for CI** — the `production` run goes `checks` → `invariants` → `images` → four `publish` jobs. Its
    summary prints the deploy command with the 7-character commit (the merge commit, if GitHub made one).
-3. **Deploy** — on the server:
+3. **Approve the deploy** — the run's `deploy` job waits on the GitHub environment **production**: open the run →
+   **Review deployments** → **Approve**. GitHub signs in as `pmp-github-deploy` (OIDC) and runs the SSM document
+   `PmpDeploy` on the server (node `mi-02b92f8d2db894f89`), which runs `auto-deploy.sh <commit>`: `deploy.sh`, and on
+   failure `deploy.sh <previous commit>`. The job log shows the whole output; a red job means it rolled back.
+   **Fallback** (GitHub or SSM unavailable) — the manual deploy, as before:
    ```bash
    ssh -i ~/.ssh/pmp-lightsail.pem ubuntu@3.146.210.9
    cd /opt/pmp/deploy/server && ./deploy.sh <commit>
