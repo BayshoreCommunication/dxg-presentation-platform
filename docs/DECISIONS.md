@@ -3420,7 +3420,6 @@ invitation that will fail only when staff later press Send sign-in. Active and d
 reserve their email; deleting an account releases it as before. The existing send-time and batch guards remain as
 protection for older records.
 
-
 ## D-191 (2026-10-15): Releases deploy automatically after approval — Status: ACCEPTED (Travis)
 Plan A. A push to `production` now ends with a `deploy` job: after `publish`, it waits for approval on the GitHub
 environment **production** (required reviewer), then GitHub signs in to AWS with OIDC as **`pmp-github-deploy`**

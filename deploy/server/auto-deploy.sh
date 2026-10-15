@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run by GitHub Actions through SSM (D-189): deploy <commit>; if it fails, put the previous commit back.
+# Run by GitHub Actions through SSM (D-191): deploy <commit>; if it fails, put the previous commit back.
 set -uo pipefail
 cd "$(dirname "$0")"
 TAG=${1:?usage: ./auto-deploy.sh <commit>}

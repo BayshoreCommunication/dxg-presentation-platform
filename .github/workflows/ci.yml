@@ -19,7 +19,7 @@ env:
 
 concurrency:
   group: ci-${{ github.ref }}
-  # A newer push cancels an older run, except on production: a release in progress finishes (D-189).
+  # A newer push cancels an older run, except on production: a release in progress finishes (D-191).
   cancel-in-progress: ${{ github.ref != 'refs/heads/production' }}
 
 jobs:
@@ -139,7 +139,7 @@ jobs:
           echo "pmp-${{ matrix.target }}:${{ steps.tag.outputs.tag }} pushed." >> "$GITHUB_STEP_SUMMARY"
           echo "Deploy on the server: \`cd /opt/pmp/deploy/server && ./deploy.sh ${{ steps.tag.outputs.tag }}\`" >> "$GITHUB_STEP_SUMMARY"
 
-  # Automatic deploy (D-189). After publish, waits for approval on the `production` environment, then runs
+  # Automatic deploy (D-191). After publish, waits for approval on the `production` environment, then runs
   # the PmpDeploy SSM document on the server: auto-deploy.sh deploys the commit and rolls back on failure.
   # GitHub signs in with OIDC as pmp-github-deploy, which may only send PmpDeploy to pmp-prod.
   # Manual fallback: ./deploy.sh <commit> over SSH, as before.
