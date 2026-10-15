@@ -61,11 +61,11 @@ export default async function PortfolioPage({
 
   return (
     <>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+      <div className="portfolio-page-head">
         <h1 className="htitle" style={{ margin: 0 }}>
           {showArchived ? "Archived events" : "Event portfolio"}
         </h1>
-        <span style={{ display: "flex", gap: 8 }}>
+        <span className="portfolio-page-actions">
           {showArchived ? (
             <Link href="/" className="btn">
               ← Back to portfolio
@@ -102,9 +102,7 @@ export default async function PortfolioPage({
       */}
       {!showArchived && (principal?.staff_kind !== "technician" || practice.length > 0) && (
         <>
-          <div
-            style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, margin: "24px 0 10px" }}
-          >
+          <div className="practice-section-head">
             <div>
               <h2 className="htitle" style={{ margin: 0, fontSize: 18 }}>
                 Practice events
@@ -148,9 +146,9 @@ function EventCard({
   return (
     <div className="card" style={event.status === "active" ? { boxShadow: "inset 0 0 0 .8px var(--ring)" } : undefined}>
       <div className="cbd">
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
+        <div className="event-card-head">
           <h3 style={{ fontSize: 17 }}>{event.name}</h3>
-          <span style={{ display: "inline-flex", gap: 6 }}>
+          <span className="event-card-status">
             {event.is_practice && (
               <span className="chip c-sync" title="Made-up speakers; no email is ever sent.">
                 Practice
@@ -172,7 +170,7 @@ function EventCard({
             ? "No presentations on the agenda yet"
             : `${summary.collected} of ${plural(summary.total, "presentation")} received (${collected}%)`}
         </div>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div className="event-card-footer">
           {/* S11 (D-113): open warnings lead to where they are resolved. */}
           {summary.warnings_open > 0 && event.status !== "draft" ? (
             <Link href={`/events/${event.id}/review`} className="chip c-warn">
@@ -183,7 +181,7 @@ function EventCard({
           ) : (
             <span className="note">No file warnings</span>
           )}
-          <span style={{ display: "inline-flex", alignItems: "flex-start", gap: 8 }}>
+          <span className="event-card-actions">
             {canArchive && (
               <ArchiveEventButton eventId={event.id} eventName={event.name} archived={event.status === "archived"} />
             )}

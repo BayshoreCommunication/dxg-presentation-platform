@@ -31,7 +31,7 @@ export function StartPracticeButton({ open }: { open: number }) {
   };
 
   return (
-    <span style={{ display: "inline-flex", flexDirection: "column", alignItems: "flex-end" }}>
+    <span className="practice-start-control">
       <button type="button" className="btn pri" disabled={busy || full} onClick={() => void start()}>
         <Icon name="play" />
         {busy ? "Setting up your practice event…" : "Start a practice event"}
