@@ -17,5 +17,5 @@ export function middleware(request: NextRequest) {
 
 export const config = {
   // `/api` is the API behind this site, which checks its own sessions.
-  matcher: ["/((?!api/|_next/static|_next/image|favicon.ico).*)"],
+  matcher: ["/((?!api/|_next/static|_next/image|favicon.ico|icon.svg).*)"],
 };
