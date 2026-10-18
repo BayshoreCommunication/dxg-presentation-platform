@@ -3782,6 +3782,15 @@ name/permission/audit invariants and the local name-editing plus Staff accounts 
 save/cancel, persistence, validation, pending-action locking, initials, own-account editing and mobile controls.
 **Not deployed.**
 
+## 2026-10-18 — Events take as many DXG Technicians as their rooms need (D-192)
+From the client's review of 2026-10-15 (one technician per room plus a backup): the one-technician-per-event limit
+(D-189) is removed. The API accepts any number of technicians on an event through assignment, legacy role grants and
+access-level conversions; `admin.event_technician_conflict` is gone, while the archived-event refusal and the
+account/event transaction locks remain. The assignment editor lists every eligible technician and its hint now reads
+"Assign as many DXG Technicians as the event's rooms need, backups included." Seeds place both demo technicians on
+MedTech. `event-technicians.test.ts` replaces the limit test; `srr-checkin-technician` and `mfa` follow the seed.
+**Not deployed.**
+
 ## 2026-10-14 — One DXG Technician per event and assignment responsiveness
 The API now reserves one technician slot per event (D-189), including inactive but undeleted technician accounts.
 Normal assignment, legacy role grants and access-level conversions share account/event transaction locks; conversions

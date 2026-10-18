@@ -78,10 +78,9 @@ describe("a password is not a sign-in", () => {
     const { principal } = await signedIn.json() as { principal: { email: string; mfa_enrolled: boolean } };
     assert.equal(principal.email, STAFF.email);
     assert.equal(principal.mfa_enrolled, true);
-    // This technician is intentionally unassigned; signing in does not grant event access.
+    // The seed places this technician on MedTech alongside the reviewer (D-192).
     const events = await fetch(`${API}/events`, { headers: { cookie: session } });
-    assert.equal(events.status, 403);
-    assert.equal((await events.json() as { code: string }).code, "auth.not_staff");
+    assert.equal(events.status, 200);
     await fetch(`${API}/auth/logout`, { method: "POST", headers: { cookie: session } });
   });
 

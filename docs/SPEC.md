@@ -67,12 +67,9 @@ deactivated accounts. The trimmed name must contain 1–200 characters. The API 
 records the old/new name in the append-only audit log. Renaming does not change the email, password, sign-in app,
 sessions, access level or event assignments. Deleted and speaker accounts are not editable through this staff action.
 
-## 8. One DXG Technician per event (2026-10-14)
+## 8. DXG Technicians per event (2026-10-18, supersedes the 2026-10-14 rule)
 
-An event can have at most one assigned DXG Technician staff account. This applies to normal assignment, direct role
-grants and changing an assigned account's access level to Technician. A conflicting request is refused without
-partially changing account access, event roles or sessions. Simultaneous requests cannot add two technicians.
-Any current non-platform event role counts as an assignment; inactive technician assignments still reserve the slot.
-DXG Admins, Support staff, Client access and released staffing history do not occupy it. To replace a technician,
-remove the existing assignment first. Existing excess assignments are reported for manual correction, not silently
-removed. New development seeds follow the same one-technician rule.
+An event can have any number of assigned DXG Technician staff accounts — one per room plus backups, as the client
+asked on 2026-10-15 (D-192). This applies to normal assignment, direct role grants and changing an assigned account's
+access level to Technician. Technicians still work every room of their events (D-160); the Speaker Ready Room offers
+every technician on the event when a speaker is checked in. Archived events still refuse staffing (D-181).

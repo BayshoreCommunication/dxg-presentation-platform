@@ -231,10 +231,6 @@ export async function grantRole(
   if (event.status === "archived" && !target.is_root_admin && target.staff_kind !== "client") {
     return err(archivedStaffingRefusal(event));
   }
-  if (isTechnician(target)) {
-    const conflict = await technicianRefusal(tx, target, event);
-    if (conflict) return err(conflict);
-  }
 
   await tx.query(
     `INSERT INTO pmp.event_roles (user_id, event_id, role) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`,
@@ -300,8 +296,6 @@ export async function setAccountType(
     // A returned error is committed by withScope, so every event must pass before any write.
     for (const event of events) {
       if (event.status === "archived") return err(archivedStaffingRefusal(event));
-      const conflict = await technicianRefusal(tx, target, event);
-      if (conflict) return err(conflict);
     }
   }
 
@@ -361,10 +355,7 @@ export async function assignToEvent(
   // An archived event's staff were freed from it (D-181); restore it first to staff it again.
   if (input.assign && event.status === "archived") return err(archivedStaffingRefusal(event));
   if (input.assign) {
-    if (isTechnician(target)) {
-      const conflict = await technicianRefusal(tx, target, event);
-      if (conflict) return err(conflict);
-    }
+    // Any number of technicians may share an event (D-192): one per room plus backups.
     await placeOnEvent(tx, input.userId, input.eventId, target.staff_kind);
     await audit(tx, actor, input.userId, "admin.assigned", { event_id: input.eventId, kind: target.staff_kind });
     return ok({ assigned: true, roles: ROLES_OF_KIND[target.staff_kind] });
@@ -426,9 +417,6 @@ type Account = { id: string; email: string; display_name: string; is_root_admin:
 
 type StaffingEvent = { id: string; name: string; status: string };
 
-const isTechnician = (account: Account): boolean =>
-  account.account_kind === "staff" && !account.is_root_admin && account.staff_kind === "technician";
-
 /** Lock the target user first, then events in UUID order; never lock competing users. */
 async function lockStaffingEvents(tx: pg.PoolClient, eventIds: readonly string[]): Promise<StaffingEvent[]> {
   if (eventIds.length === 0) return [];
@@ -447,33 +435,6 @@ const archivedStaffingRefusal = (event: StaffingEvent): DomainError => ({
   code: "admin.event_archived_conflict",
   message: `“${event.name}” is archived, so its staff have been freed. Restore the event first to assign staff to it again.`,
 });
-
-/** An inactive but undeleted technician still reserves the event's one technician slot. */
-async function technicianRefusal(tx: pg.PoolClient, target: Account, event: StaffingEvent): Promise<DomainError | undefined> {
-  // Reassigning an existing technician adds no person, even if historical duplicates remain.
-  if (isTechnician(target)) {
-    const ownMembership = await tx.query(
-      `SELECT 1 FROM pmp.event_roles WHERE user_id = $1 AND event_id = $2 AND role <> 'platform_admin' LIMIT 1`,
-      [target.id, event.id],
-    );
-    if (ownMembership.rows.length > 0) return undefined;
-  }
-  const { rows } = await tx.query<{ id: string; display_name: string }>(
-    `SELECT u.id, u.display_name FROM pmp.users u
-      WHERE u.id <> $2 AND u.deleted_at IS NULL AND u.account_kind = 'staff'
-        AND NOT u.is_root_admin AND u.staff_kind = 'technician'
-        AND EXISTS (SELECT 1 FROM pmp.event_roles er
-                     WHERE er.user_id = u.id AND er.event_id = $1 AND er.role <> 'platform_admin')
-      ORDER BY u.display_name, u.id LIMIT 1`,
-    [event.id, target.id],
-  );
-  const occupant = rows[0];
-  return occupant ? {
-    code: "admin.event_technician_conflict",
-    message: `“${event.name}” already has ${occupant.display_name} as its DXG Technician staff. Only one technician can be assigned to an event. Remove the current technician first.`,
-    detail: { event_id: event.id, event_name: event.name, technician_id: occupant.id, technician_name: occupant.display_name },
-  } : undefined;
-}
 
 const kindOf = (account: Account): AccountType => (account.is_root_admin ? "root_admin" : account.staff_kind);
 
