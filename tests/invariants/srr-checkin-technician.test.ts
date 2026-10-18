@@ -127,12 +127,9 @@ describe("a check-in names the speaker's technician (D-169)", () => {
     const notHere = await call("PUT", `/srr/checkins/${checkinId}/technician`, { technician_id: secondId }, technician);
     assert.equal(await code(notHere), "srr.technician_not_found", "not on the event yet");
 
-    const occupied = await call("POST", `/admin/users/${secondId}/events`, { event_id: eventId, assign: true });
-    assert.equal(occupied.status, 409, "the event cannot have two technicians at once");
-    const released = await call("POST", `/admin/users/${DELGADO_ID}/events`, { event_id: eventId, assign: false });
-    assert.ok(released.ok, "fixture: the outgoing technician leaves this synthetic event");
+    // Two technicians share the event (D-192); the first stays on it while the second joins.
     const placed = await call("POST", `/admin/users/${secondId}/events`, { event_id: eventId, assign: true });
-    assert.ok(placed.ok, "fixture: the replacement technician joins after the slot is free");
+    assert.ok(placed.ok, "fixture: the second technician joins the event");
     const changed = await call("PUT", `/srr/checkins/${checkinId}/technician`, { technician_id: secondId });
     assert.equal(changed.status, 200);
     const detail = (await (await call("GET", `/srr/checkins/${checkinId}`)).json()) as { checkin: { technician_id: string } };

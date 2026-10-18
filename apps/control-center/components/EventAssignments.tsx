@@ -166,7 +166,6 @@ export function EventAssignments({
       router.refresh();
     } catch (caught) {
       setError({ eventId, message: caught instanceof ApiError ? caught.message : "Something went wrong." });
-      if (caught instanceof ApiError && caught.code === "admin.event_technician_conflict") router.refresh();
     } finally {
       setBusy(false);
     }
@@ -241,11 +240,10 @@ export function EventAssignments({
             <tbody>
               {pageRows.map(({ event, people }) => {
                 const isOpen = openEventId === event.id;
-                const technicians = people.filter((entry) => entry.person.account_type === "technician");
+                // Any number of technicians may share an event (D-192): one per room plus backups.
                 const available = initial.filter((person) =>
                   person.is_active && person.account_type !== "root_admin" &&
-                  !people.some((entry) => entry.person.id === person.id) &&
-                  (person.account_type !== "technician" || technicians.length === 0),
+                  !people.some((entry) => entry.person.id === person.id),
                 );
                 const selectedPerson = available.find((person) => person.id === draft[event.id]);
 
@@ -315,7 +313,7 @@ export function EventAssignments({
                             )}
 
                             <div className="assignment-add-person">
-                              <div><strong>Assign additional staff</strong><span>Access follows the staff member&apos;s account type. Maximum one DXG Technician per event.</span></div>
+                              <div><strong>Assign additional staff</strong><span>Access follows the staff member&apos;s account type. Assign as many DXG Technicians as the event&apos;s rooms need, backups included.</span></div>
                               <div className="assignment-add-controls">
                                 {newcomer && draft[event.id] !== newcomer.id && available.some((person) => person.id === newcomer.id) && (
                                   <button type="button" className="btn" onClick={() => setWho(event.id, newcomer.id)}>Choose {newcomer.display_name}</button>
@@ -342,15 +340,7 @@ export function EventAssignments({
                               </div>
                             </div>
 
-                            {technicians.length > 0 && (
-                              <p className="note" role="status" style={{ margin: 0 }}>
-                                {technicians.length > 1
-                                  ? `This event already has ${technicians.length} DXG Technicians. Remove the extra assignments so only one remains.`
-                                  : `${technicians[0]!.person.display_name} is the DXG Technician for this event. Remove their assignment before choosing another technician.`}
-                                {" "}Other staff can still be assigned.
-                              </p>
-                            )}
-                            {available.length === 0 && <p className="assignment-all-assigned">No eligible active staff are available to assign.</p>}
+                            {available.length === 0 && <p className="assignment-all-assigned">Every active staff member is already assigned.</p>}
                             {error?.eventId === event.id && <div className="err assignment-error" role="alert">{error.message}</div>}
                           </div>
                         </td>

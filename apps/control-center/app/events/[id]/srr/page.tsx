@@ -10,13 +10,9 @@ export default async function SrrPage({ params }: { params: Promise<{ id: string
     Promise.all([getSrrDashboard(id), getSummary(id), getSession()]),
     `/events/${id}/srr`,
   );
-  // Who opens the room on the event day (D-157): DXG Admins and support staff — managers on the event.
+  // Who opens the room on the event day (D-157): a DXG Admin alone (D-193).
   const principal = session.principal;
-  const canSwitch =
-    principal.is_root_admin ||
-    (principal.event_roles ?? []).some(
-      (held) => held.event_id === id && ["presentation_manager", "project_manager", "platform_admin"].includes(held.role),
-    );
+  const canSwitch = principal.is_root_admin;
   return (
     <SrrDashboardView
       eventId={id}

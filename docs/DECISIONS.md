@@ -3402,7 +3402,7 @@ Technicians load the room PCs, so it's theirs again — reversing that part of D
 - Tests: `room-sync-technicians` (a technician sees every room, downloads, ticks and un-ticks; an event they're not
   on is refused) and `admin` (Room sync dropped from a technician's refused screens).
 
-## D-189 (2026-10-14): Maximum one DXG Technician staff per event — Status: ACCEPTED
+## D-189 (2026-10-14): Maximum one DXG Technician staff per event — Status: SUPERSEDED by D-192
 An administrator can assign one DXG Technician to an event, not two. The capacity is enforced by the API for normal
 assignment, direct role grants and access-level conversions, with per-account/per-event transaction locks so concurrent
 requests cannot bypass it. A conversion checks every affected event before making changes; a conflict returns 409
@@ -3433,3 +3433,35 @@ and runs the SSM document **`PmpDeploy`** on the server (`pmp-prod`, hybrid mana
 - A release in progress is never cancelled by a newer push (`cancel-in-progress` off on `production`).
 - **Still manual**: copying `deploy/server` to the server when it changes, and `./deploy.sh <commit>` over SSH stays
   the fallback. Run Command on hybrid nodes is billed per use (since 2026-09-30) — one call per release.
+
+## D-192 (2026-10-18): An event takes as many DXG Technicians as its rooms need — Status: ACCEPTED (Travis, from the client's review of 2026-10-15)
+Ace, 2026-10-15: "Each event may have different technicians. Each room may have different technicians. Say there's
+eight rooms — we may assign one technician to each room, and then have a backup technician. So need to be able to
+assign multiple people to a room." Supersedes D-189: the one-technician-per-event capacity is removed.
+- **Event assignments** takes any number of DXG Technician staff on an event, through normal assignment, legacy
+  role grants and access-level conversions. `admin.event_technician_conflict` is gone; the archived-event refusal
+  (D-181) and the account/event transaction locks stay.
+- Technicians still work every room of their events (D-160): there is no room-level assignment, so "one per room
+  plus a backup" is simply several technicians on the event, and the Speaker Ready Room offers every one of them
+  for a check-in (D-169).
+- The assignment editor no longer hides technicians from the chooser or explains replacement; its hint reads
+  "Assign as many DXG Technicians as the event's rooms need, backups included."
+- Seeds place both demo technicians on MedTech again.
+- Tests: `event-technicians.test.ts` replaces `event-technician-limit.test.ts` (several join, legacy grants,
+  conversion beside an occupant, simultaneous assignments, SRR choices); `srr-checkin-technician` and `mfa`
+  adjusted to the seed.
+
+## D-193 (2026-10-18): Only a DXG Admin opens or closes the Speaker Ready Room — Status: ACCEPTED (Travis, from the client's review of 2026-10-15)
+Ace, 2026-10-15: "For the Speaker Ready Room open — let's keep that to an admin function." Narrows D-157's switch.
+- `PUT /events/:id/srr-open` refuses everyone but DXG Admins (`auth.forbidden`, "Only a DXG Admin can open or close
+  the Speaker Ready Room"). Support staff still run the room once it is open (desks, check-in, checkout, the report,
+  D-164/D-169) and technicians still work it (intake, sign-off, D-162); neither switches it.
+- The switch, and the Speaker Ready Room page's "Not open yet" card that holds it, are shown to DXG Admins only
+  (Travis: "dxg technician e to Speaker Ready Room er switch thakbe na"; the card: "ei section ta ki rakhar dorkar
+  ache?" — no). Everyone else sees nothing there; a closed room still greys Check in with its reason and the
+  check-in page says so. The closed-room messages name the admin alone.
+- Local intake without a check-in (`slotIntake`, D-153) keeps its own rule — DXG Admins and support staff on the
+  event — it was never tied to the switch.
+- Practice events (D-116) still start open, so a support staff owner needs no switch to try things.
+- Tests: `srr-open` — technician and support staff both refused in either direction and the room unchanged; the
+  support-staff suite has the admin open the room, then runs it as before.

@@ -77,7 +77,7 @@ export function SrrDashboardView({
   const checkInBlocked = canUpload
     ? "DXG staff check speakers in and assign you as their technician. Open a speaker at a desk to go through the slides."
     : !data.open
-    ? "The Speaker Ready Room is closed. It opens on the event day — a DXG Admin or support staff opens it."
+    ? "The Speaker Ready Room is closed. It opens on the event day — a DXG Admin opens it."
     : data.stations.length === 0
       ? "Check in is off until this room has a desk. Add one under Desks above."
       : data.stations.every((station) => station.busy)
@@ -138,21 +138,23 @@ export function SrrDashboardView({
 
       {error && <div className="err">{error}</div>}
 
-      {/* The event-day switch (D-157). */}
-      <div className={data.open ? undefined : "card next-step"} style={data.open ? { margin: "0 0 12px" } : undefined}>
-        <div className={data.open ? undefined : "cbd"}>
-          {!data.open && (
-            <>
-              <div className="next-step-label">Not open yet</div>
-              <p className="next-step-body" style={{ marginTop: 0 }}>
-                The Speaker Ready Room opens on the event day. Until then you can set up desks and upload speakers&rsquo;
-                files, but no one can be checked in.
-              </p>
-            </>
-          )}
-          <SrrSwitch eventId={eventId} open={data.open} canSwitch={canSwitch} />
+      {/* The event-day switch (D-157), a DXG Admin's alone (D-193): nobody else sees this card. */}
+      {canSwitch && (
+        <div className={data.open ? undefined : "card next-step"} style={data.open ? { margin: "0 0 12px" } : undefined}>
+          <div className={data.open ? undefined : "cbd"}>
+            {!data.open && (
+              <>
+                <div className="next-step-label">Not open yet</div>
+                <p className="next-step-body" style={{ marginTop: 0 }}>
+                  The Speaker Ready Room opens on the event day. Until then you can set up desks and upload speakers&rsquo;
+                  files, but no one can be checked in.
+                </p>
+              </>
+            )}
+            <SrrSwitch eventId={eventId} open={data.open} canSwitch={canSwitch} />
+          </div>
         </div>
-      </div>
+      )}
 
       {intakeFor && (
         <div className="card">
