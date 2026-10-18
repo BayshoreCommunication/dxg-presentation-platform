@@ -29,17 +29,19 @@ export function SrrSwitch({ eventId, open, canSwitch }: { eventId: string; open:
     }
   }
 
+  // The switch is a DXG Admin's alone (D-193): pages don't render it for anyone else.
+  if (!canSwitch) return null;
+
   return (
     <span style={{ display: "inline-flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-      {/* A real on/off switch (D-157); without the right to change it, the same switch, read-only. */}
+      {/* A real on/off switch (D-157). */}
       <button
         type="button"
         role="switch"
         aria-checked={open}
         aria-label="Speaker Ready Room open"
         className={`srr-switch${open ? " on" : ""}`}
-        disabled={!canSwitch || busy || asking}
-        title={canSwitch ? undefined : "A DXG Admin or support staff opens and closes the Speaker Ready Room"}
+        disabled={busy || asking}
         onClick={() => (open ? setAsking(true) : void set(true))}
       >
         <span className="track" aria-hidden="true">

@@ -3450,3 +3450,18 @@ assign multiple people to a room." Supersedes D-189: the one-technician-per-even
 - Tests: `event-technicians.test.ts` replaces `event-technician-limit.test.ts` (several join, legacy grants,
   conversion beside an occupant, simultaneous assignments, SRR choices); `srr-checkin-technician` and `mfa`
   adjusted to the seed.
+
+## D-193 (2026-10-18): Only a DXG Admin opens or closes the Speaker Ready Room — Status: ACCEPTED (Travis, from the client's review of 2026-10-15)
+Ace, 2026-10-15: "For the Speaker Ready Room open — let's keep that to an admin function." Narrows D-157's switch.
+- `PUT /events/:id/srr-open` refuses everyone but DXG Admins (`auth.forbidden`, "Only a DXG Admin can open or close
+  the Speaker Ready Room"). Support staff still run the room once it is open (desks, check-in, checkout, the report,
+  D-164/D-169) and technicians still work it (intake, sign-off, D-162); neither switches it.
+- The switch, and the Speaker Ready Room page's "Not open yet" card that holds it, are shown to DXG Admins only
+  (Travis: "dxg technician e to Speaker Ready Room er switch thakbe na"; the card: "ei section ta ki rakhar dorkar
+  ache?" — no). Everyone else sees nothing there; a closed room still greys Check in with its reason and the
+  check-in page says so. The closed-room messages name the admin alone.
+- Local intake without a check-in (`slotIntake`, D-153) keeps its own rule — DXG Admins and support staff on the
+  event — it was never tied to the switch.
+- Practice events (D-116) still start open, so a support staff owner needs no switch to try things.
+- Tests: `srr-open` — technician and support staff both refused in either direction and the room unchanged; the
+  support-staff suite has the admin open the room, then runs it as before.

@@ -6,9 +6,9 @@ import { DELGADO_ID, placeTechnician, technicianOn } from "../helpers/technician
 
 /**
  * The Speaker Ready Room's event-day switch (client review, D-157): a new event's room
- * starts closed; DXG Admins and support staff open it on the day. While closed nobody checks
- * in, takes a file in at a check-in or signs off — setting up desks, checking out and the
- * report still work.
+ * starts closed; a DXG Admin opens it on the day — support staff and technicians don't
+ * (D-193). While closed nobody checks in, takes a file in at a check-in or signs off —
+ * setting up desks, checking out and the report still work.
  */
 const API = process.env.API_BASE ?? "http://localhost:4000/api/v1";
 const CLIENT = "11111111-1111-4111-8111-111111111111";
@@ -74,11 +74,22 @@ describe("a new event's Speaker Ready Room starts closed (D-157)", () => {
     assert.equal(await code(refused), "srr.closed_conflict");
   });
 
-  test("a technician can't open it", async (t: TestContext) => {
+  test("neither a technician nor support staff can open or close it; the room stays as it was (D-193)", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
+    const before = ((await (await call("GET", `/events/${SEED_EVENT}/srr`)).json()) as { open: boolean }).open;
+    // Both are seeded onto MedTech, so it is the switch that refuses, not event membership.
     const technician = await signInStaff(API, "c.delgado@example.invalid", PASSWORD);
-    const refused = await call("PUT", `/events/${SEED_EVENT}/srr-open`, { open: false }, technician);
-    assert.equal(refused.status, 403);
+    const support = await signInStaff(API, "m.vega@example.invalid", PASSWORD);
+    for (const [who, cookie] of [["technician", technician], ["support staff", support]] as const) {
+      for (const open of [!before, before]) {
+        const refused = await call("PUT", `/events/${SEED_EVENT}/srr-open`, { open }, cookie);
+        assert.equal(refused.status, 403, `${who} setting open=${open}`);
+        // A technician is stopped by the account-kind gate before the switch's own check runs.
+        assert.equal(await code(refused), who === "technician" ? "auth.kind_forbidden" : "auth.forbidden", who);
+      }
+    }
+    const after = ((await (await call("GET", `/events/${SEED_EVENT}/srr`)).json()) as { open: boolean }).open;
+    assert.equal(after, before, "a refused switch changes nothing");
   });
 
   test("opened, speakers check in; closed again, sign-off and intake stop but checkout still works", async (t: TestContext) => {
@@ -101,15 +112,19 @@ describe("a new event's Speaker Ready Room starts closed (D-157)", () => {
   });
 });
 
-describe("support staff run the Speaker Ready Room (D-164, D-169)", () => {
-  test("they switch it, set up a desk, check a speaker in and out and get the report — but take no file in and record no confirmation", async (t: TestContext) => {
+describe("support staff run the Speaker Ready Room (D-164, D-169) once an admin has opened it (D-193)", () => {
+  test("they set up a desk, check a speaker in and out and get the report — but don't switch the room, take no file in and record no confirmation", async (t: TestContext) => {
     if (!up) return t.skip("API not running");
     // M. Vega (seeded DXG Support staff), placed on this event the way DXG does it.
     const placed = await call("POST", "/admin/users/33333333-3333-4333-8333-333333333331/events", { event_id: eventId, assign: true });
     assert.equal(placed.status, 200);
     const support = await signInStaff(API, "m.vega@example.invalid", PASSWORD);
     assert.equal((await call("GET", `/events/${eventId}/srr`, undefined, support)).status, 200);
-    assert.equal((await call("PUT", `/events/${eventId}/srr-open`, { open: true }, support)).status, 200, "the switch");
+    // The previous suite closed the room; support staff on the event still can't open it.
+    const switched = await call("PUT", `/events/${eventId}/srr-open`, { open: true }, support);
+    assert.equal(switched.status, 403, "the switch is the admin's");
+    assert.equal(await code(switched), "auth.forbidden");
+    assert.equal((await call("PUT", `/events/${eventId}/srr-open`, { open: true })).status, 200, "the admin opens it");
     const desk = await call("POST", `/events/${eventId}/srr/stations`, { name: `Support Desk ${RUN}` }, support);
     assert.equal(desk.status, 201, "a desk");
     const deskId = ((await desk.json()) as { id: string }).id;

@@ -251,10 +251,10 @@ export default async function CommandCenterPage({
         )}
       </div>
 
-      {/* The Speaker Ready Room's event-day switch (D-157): support staff run the event and open it. */}
-      {!archived && (
+      {/* The Speaker Ready Room's event-day switch (D-157): a DXG Admin's alone (D-193); nobody else sees it. */}
+      {!archived && session.principal.is_root_admin && (
         <div style={{ margin: "-4px 0 14px" }}>
-          <SrrSwitch eventId={id} open={summary.event.srr_open} canSwitch={canConfigure} />
+          <SrrSwitch eventId={id} open={summary.event.srr_open} canSwitch />
         </div>
       )}
 

@@ -336,7 +336,7 @@ export function CheckinView({
       {!srrOpen && (
         <div className="err" style={{ borderLeftColor: "var(--line)", background: "var(--mist)" }}>
           The Speaker Ready Room is closed, so nothing can be taken in or signed off here. You can still check{" "}
-          {detail.speaker.name} out. A DXG Admin or support staff opens the room on the event day.
+          {detail.speaker.name} out. A DXG Admin opens the room on the event day.
         </div>
       )}
 

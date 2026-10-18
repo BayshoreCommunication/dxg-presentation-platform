@@ -73,3 +73,9 @@ An event can have any number of assigned DXG Technician staff accounts — one p
 asked on 2026-10-15 (D-192). This applies to normal assignment, direct role grants and changing an assigned account's
 access level to Technician. Technicians still work every room of their events (D-160); the Speaker Ready Room offers
 every technician on the event when a speaker is checked in. Archived events still refuse staffing (D-181).
+
+## 9. Only a DXG Admin opens or closes the Speaker Ready Room (2026-10-18)
+
+The Speaker Ready Room's event-day switch is a DXG Admin's alone (D-193, the client's call of 2026-10-15). Support
+staff and technicians on the event don't see the switch or its card at all; the API refuses them. Everything they do once the room
+is open — desks, check-in, checkout, the report, local intake, sign-off — is unchanged.

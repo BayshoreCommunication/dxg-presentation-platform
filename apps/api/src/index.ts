@@ -1891,8 +1891,8 @@ app.get("/api/v1/events/:eventId/srr", async (req, res) => {
 });
 
 /**
- * The Speaker Ready Room's event-day switch (D-157). Outside the `/srr` path on purpose: support
- * staff never open the room itself (D-151), but they run the event and open it on the day.
+ * The Speaker Ready Room's event-day switch (D-157), a DXG Admin's alone (D-193). Outside the
+ * `/srr` path on purpose: it is an event-level control, not room work.
  */
 app.put("/api/v1/events/:eventId/srr-open", async (req, res) => {
   const actor = actorFrom(req);

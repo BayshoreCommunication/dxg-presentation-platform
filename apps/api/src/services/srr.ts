@@ -334,7 +334,7 @@ export async function retireStation(
 
 const SRR_CLOSED: DomainError = {
   code: "srr.closed_conflict",
-  message: "The Speaker Ready Room is closed. A DXG Admin or support staff opens it on the event day.",
+  message: "The Speaker Ready Room is closed. A DXG Admin opens it on the event day.",
 };
 
 export async function srrIsOpen(tx: pg.PoolClient, eventId: string): Promise<boolean> {
@@ -343,9 +343,9 @@ export async function srrIsOpen(tx: pg.PoolClient, eventId: string): Promise<boo
 }
 
 /**
- * Opens or closes the Speaker Ready Room for the event: DXG Admins and support staff, whose
- * placement makes them presentation and project managers (D-151). Technicians work the room;
- * they don't open it.
+ * Opens or closes the Speaker Ready Room for the event: DXG Admins only (D-193, the client's
+ * call: "keep that to an admin function"). Support staff run the room and technicians work
+ * it; neither opens it.
  */
 export async function setSrrOpen(
   tx: pg.PoolClient,
@@ -353,8 +353,8 @@ export async function setSrrOpen(
   eventId: string,
   open: boolean,
 ): Promise<Result<{ srr_open: boolean }, DomainError>> {
-  if (!hasAnyRole(actor, atLeast("presentation_manager"))) {
-    return err({ code: "auth.forbidden", message: "Only a DXG Admin or support staff can open or close the Speaker Ready Room." });
+  if (!hasAnyRole(actor, ["platform_admin"])) {
+    return err({ code: "auth.forbidden", message: "Only a DXG Admin can open or close the Speaker Ready Room." });
   }
   const { rows } = await tx.query<{ client_id: string; was: boolean }>(
     `UPDATE pmp.events e SET srr_open = $2 FROM (SELECT srr_open AS was FROM pmp.events WHERE id = $1) old
@@ -838,8 +838,9 @@ export async function slotIntake(
   actor: Actor,
   input: { eventId: string; slotId: string; uploadId: string; fileName: string; reason: string },
 ): Promise<Result<UsbResult, DomainError>> {
-  // Who may: whoever may open the Speaker Ready Room — the account's level and its place on
-  // the event (D-151), checked before this runs; the same as intake on a check-in.
+  // Who may: DXG Admins and support staff on the event (presentation manager or above, D-151),
+  // checked before this runs; the same as intake on a check-in. Not tied to the room's switch,
+  // which is the admin's alone (D-193).
   if (!input.reason.trim()) return err(REASON_REQUIRED);
 
   const { rows } = await tx.query<{ client_id: string }>(
