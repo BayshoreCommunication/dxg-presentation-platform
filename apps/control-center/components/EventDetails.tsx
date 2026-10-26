@@ -41,11 +41,14 @@ export function EventDetails({
   talks,
   canEdit,
   embedded = false,
+  hideSetup = false,
 }: {
   setup: EventDraft;
   talks: { total: number; collected: number };
   canEdit: boolean;
   embedded?: boolean;
+  /** Client access (D-196): the event's deadlines, reminders and branding are DXG's setup, not the client's view. */
+  hideSetup?: boolean;
 }) {
   const router = useRouter();
   const chip = eventStatusChip(setup.status, setup);
@@ -136,7 +139,7 @@ export function EventDetails({
 
       {error && <div className="err">{error}</div>}
       {/* An archived event explains itself in the page's own banner (D-062). */}
-      {readOnly && setup.status !== "archived" && (
+      {readOnly && !hideSetup && setup.status !== "archived" && (
         <div className="note" style={{ marginBottom: 12 }}>
           You can read this event&rsquo;s setup. Changing it needs a presentation manager, project
           manager or administrator.
@@ -148,6 +151,19 @@ export function EventDetails({
           <h3>Basics</h3>
         </div>
         <div className="cbd">
+          {/* A client (D-196) reads the name and venue as words: the frame hides every input from it. */}
+          {hideSetup ? (
+            <div className="grid2">
+              <div className="field">
+                <label>Event name</label>
+                <span>{setup.name}</span>
+              </div>
+              <div className="field">
+                <label>Venue</label>
+                <span>{setup.venue || "Not recorded"}</span>
+              </div>
+            </div>
+          ) : (
           <div className="grid2">
             <div className="field">
               <label htmlFor="event-name">Event name</label>
@@ -171,6 +187,7 @@ export function EventDetails({
               />
             </div>
           </div>
+          )}
 
           {/*
             Shown, locked, and told why. Leaving them off the screen would hide the
@@ -242,6 +259,8 @@ export function EventDetails({
         </div>
       </div>
 
+      {!hideSetup && (
+        <>
       <div className="card">
         <div className="chd">
           <h3>Deadlines &amp; reminders</h3>
@@ -318,6 +337,8 @@ export function EventDetails({
           </div>
         </div>
       </div>
+        </>
+      )}
 
       {canEdit && (
         <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 4 }}>

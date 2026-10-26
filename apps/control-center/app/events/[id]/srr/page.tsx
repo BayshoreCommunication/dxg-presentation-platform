@@ -1,11 +1,14 @@
 import { getSession, getSrrDashboard, getSummary } from "@/lib/api";
 import { SrrDashboardView } from "@/components/SrrDashboard";
 import { guard } from "@/lib/guard";
+import { notForClientAccess } from "@/lib/clientAccess";
 
 export const dynamic = "force-dynamic";
 
 export default async function SrrPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  // DXG's screen, not Client access's (D-196).
+  await notForClientAccess();
   const [data, summary, session] = await guard(
     Promise.all([getSrrDashboard(id), getSummary(id), getSession()]),
     `/events/${id}/srr`,

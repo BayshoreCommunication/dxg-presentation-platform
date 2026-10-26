@@ -151,6 +151,9 @@ export default async function CommandCenterPage({
   const session = await guard(getSession(), `/events/${id}`);
   const kind = session.principal.staff_kind;
   if (kind === "technician") redirect(`/events/${id}/srr`);
+  // Client access (D-196): the event as it stands, without the team's to-do — no action labels,
+  // no links to the screens where the team does it.
+  const client = kind === "client";
   const unlessRefused = <T,>(work: Promise<T>, fallback: T): Promise<T> =>
     work.catch((caught: unknown) => (caught instanceof ApiError && caught.status === 403 ? fallback : Promise.reject(caught)));
   const [summary, risk, fleet, setup, agenda, speakers, review] = await guard(
@@ -282,6 +285,7 @@ export default async function CommandCenterPage({
         agenda={agenda.items}
         speakers={speakers.items}
         initialTab={tab}
+        client={client}
       />
 
       {/* Action needed (D-174): what has to happen for each talk not yet in its room. A
@@ -325,9 +329,11 @@ export default async function CommandCenterPage({
                       </b>
                       <span className="note"> — {group.who}</span>
                     </div>
-                    <Link className="note" href={group.link.href(id)}>
-                      {group.link.label} →
-                    </Link>
+                    {!client && (
+                      <Link className="note" href={group.link.href(id)}>
+                        {group.link.label} →
+                      </Link>
+                    )}
                   </div>
                   <table>
                     <tbody>
@@ -347,7 +353,7 @@ export default async function CommandCenterPage({
                             {/* The action as a label, and what it means in full beside it (D-177). A
                                 speaker action sends the reminder right here (D-180); the others open
                                 the screen where they're done. */}
-                            {ACTION_FOR[item.status]!.go.startsWith("comms") && item.speaker_id ? (
+                            {client ? null : ACTION_FOR[item.status]!.go.startsWith("comms") && item.speaker_id ? (
                               <RemindSpeaker
                                 eventId={id}
                                 speakerId={item.speaker_id}
@@ -385,9 +391,13 @@ export default async function CommandCenterPage({
         <div className="chd">
           <h3>Room readiness</h3>
           {/* S3 (D-112): plain words for where these statuses come from — since D-125, the ticks on Room sync. */}
-          <Link className="m" href={`/events/${id}/sync`}>
-            From the ticks on Room sync →
-          </Link>
+          {client ? (
+            <span className="m">as DXG loads each room PC</span>
+          ) : (
+            <Link className="m" href={`/events/${id}/sync`}>
+              From the ticks on Room sync →
+            </Link>
+          )}
         </div>
         <div className="cbd" style={{ padding: "0 0 4px" }}>
           {/*

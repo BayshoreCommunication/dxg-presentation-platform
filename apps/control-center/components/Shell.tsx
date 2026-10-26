@@ -214,8 +214,8 @@ function StaffFrame({
           <div className="right">
             {/* No notifications bell: nothing in the product raises notifications yet, so it would
                 open onto an empty panel. Kravio's bell glyph is kept in Icon.tsx for when they exist. */}
-            {/* Help for the screen you're on (D-115). */}
-            <HelpLink />
+            {/* Help for the screen you're on (D-115) — written for the team, so not offered to a client (D-196). */}
+            {!readOnly && <HelpLink />}
             <HeaderMenu label="Settings" className="gear" icon={<Cog6ToothIcon aria-hidden="true" />} title="Account">
               <Link href="/account/password" className="item" role="menuitem">
                 <KeyIcon aria-hidden="true" />

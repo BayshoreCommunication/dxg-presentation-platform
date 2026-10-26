@@ -3481,3 +3481,64 @@ Manage presentations, Files, Communications, Archive builder, Speaker Ready Room
 - The Client portal route (`/client/*`) and its API stay reachable but nothing links to them.
 - Tests: auth-separation (client reads the four staff routes, every write 403, portal still 200), admin (ten screens'
   reads 200, four writes 403). Walked every staff page as the seeded client account: all 200, no server error.
+
+## D-196 (2026-10-26): Client access is the client's view of the event, not DXG's working screens — Status: ACCEPTED (Travis: "bad diye deo")
+D-194 gave Client access the whole control centre read-only. Walking it as the client showed it carried the team's
+own work and words — internal review notes marked "DXG staff only", the email templates and delivery log with every
+speaker's address, sign-in and reminder state per speaker, the Speaker Ready Room, room loading, the archive's build and
+exclusions, inspection findings, and "remind the speaker" instructions the client cannot act on. Travis: take them out.
+- **Kept**: Portfolio, the event's Overview (details, Action needed as a status list, Room readiness), Agenda, Speakers
+  tab (name, organisation, email, sessions, files, archive permission), a talk's page with its client-lane comments
+  (no reviewer's or technician's name), and Files (no reviewer's name, no inspection warnings).
+- **Gone for a client** (Travis's second pass took Manage presentations and the archive out too): Manage presentations,
+  Communications, the archive builder, Speaker Ready Room (and check-ins, receipts), Room sync, Schedule import, the
+  inspection report, Manage speakers (sign-in state, last email, duplicates), event setup (deadlines, reminders,
+  branding), Help, and every link to those. The delivered archive still reaches the client by its emailed link.
+- **API**: in the staff gate a client kind is refused (`403 auth.kind_forbidden`) on `CLIENT_NOT_OFFERED` — comms,
+  email settings/images, srr, `sync/approved.zip`, `archive/scope` and `archive/pdfs`, the approved list, imports and
+  the agenda template, the review queue, speaker duplicates, findings, `audit:verify`, admin. The comments read
+  returns the `client_visible` lane alone to a client kind; the fleet stays readable because the overview's Room
+  readiness is drawn from it. The package download stays open: it is how the delivered archive reaches the client.
+- **Screens**: `lib/clientAccess.ts` sends a client off the barred pages to `/no-access?for=kind` (whose text now names
+  Client access); the sidebar lists Portfolio, Agenda and Files; the components take a `client` flag for the pieces
+  that stay on a shared screen.
+- Not changed, Travis's call pending: a client can still download a speaker's file from Files or the talk page whatever
+  that speaker's archive permission says; the permission governs the archive only.
+
+## D-197 (2026-10-26): A deck edited at the desk comes back by itself, as a new version for review — Status: ACCEPTED (Travis: "desk er ta banao locally")
+Travis, from the check-in page: if the deck is changed in Keynote or PowerPoint after "Open in Keynote", does PMP get
+the change? It did not — the opener (D-168) fetched a copy and the app knew nothing of PMP. Travis asked for the desk
+side to be built (the room PC during a show is a different matter: no software of ours runs there since D-155).
+- **The link takes a file back.** An open link (D-158) still opens for five minutes; it now also *returns* for eight
+  hours (`open_links.return_expires_at`). `POST /open/{token}/return` begins an upload, `PUT …/parts/{n}` puts the
+  parts, `POST …/complete` names the file and its SHA-256. No sign-in, like the fetch: the link is the credential. The
+  file goes through the one intake path (scan → store → inspect → review, I-2) as a version with `source = 'desk_edit'`,
+  credited to the staff member who opened it. The approved version is untouched and keeps playing in the room until the
+  new one is approved (FR-REV-004); a version still waiting is superseded as by any upload (D-076). The unchanged deck
+  (same digest as the version opened) is refused with `409 open_link.unchanged` before anything is stored; a name that
+  isn't a presentation file, or a missing digest, `400`; a wrong digest `422 file.checksum_mismatch`; past the window
+  `404`. Audited as `file.desk_edit_returned`.
+- **The opener watches.** `open.sh` fetches the deck and opens it as before, then starts `watch.sh` on it. The watcher
+  runs as a launchd job of the person at the Mac (`~/Library/LaunchAgents/com.dxg.pm.watch.<hash>.plist`), because a
+  process the applet starts itself is killed when the applet quits a moment later — and the decks now land in
+  `~/Library/Application Support/DXG-PM Opener/Decks/` rather than `~/Downloads/DXG-PM/`, because macOS keeps Downloads
+  from a launchd job ("Operation not permitted" on read). Every five seconds it hashes the file; a changed hash that
+  stays the same for five more seconds is a save, sent back in 5 MB parts, and the Mac shows a notification with the
+  new version number (or that the deck failed the virus check, or can't go back any more). PowerPoint and LibreOffice
+  save the `.pptx` in place. Keynote imports a `.pptx` and saves a `.key` beside it: the watcher sees that too, asks
+  Keynote (AppleScript) to export it as PowerPoint, and sends the export. Opening the same deck again replaces its
+  watcher; the job removes itself when the window ends or the file is gone.
+- **On the page.** After the opener takes the link, the check-in page says that a save there comes back as a new
+  version for review (until the hour), and looks every six seconds for it arriving — "v12 came back from the desk and
+  was sent for review" — so the desk sees it land without pressing anything. Version lists name the source
+  "the desk (edited in Keynote or PowerPoint)" / "Speaker Ready Room · Edited at the desk".
+- Tested here: `desk-edit-return` 5/5 (two parts assembled in order, from the desk, credited, audited; unchanged 409
+  with nothing stored; `.sh` and a bad digest refused; expired window 404); `open-in-powerpoint` 5/5. End to end on
+  this Mac with the installed opener: "Open in Keynote" → the deck fetched and opened → the file changed on disk
+  (as PowerPoint saving in place) → sixteen seconds later "sent back as v12" in the opener's log, v12 `desk_edit`
+  awaiting review on the check-in page, the approved v2 still loaded in the room. The Keynote export step is written but
+  not proven on this Mac: Keynote here answers every AppleScript command with "doesn't understand" (-1708) for the
+  imported decks, so that path needs a hands-on try on a desk Mac (open → edit → Save as `.key` beside → export).
+- Not built, as Travis said: the room PC during a show. Nothing of ours runs there (D-155), so a change made in the
+  room cannot reach PMP until something does.
+

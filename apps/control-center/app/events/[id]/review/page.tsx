@@ -3,6 +3,7 @@ import { ApprovedPresentations } from "@/components/ApprovedPresentations";
 import { ReviewWorkspace } from "@/components/ReviewWorkspace";
 import { UploadNewVersion } from "@/components/UploadNewVersion";
 import { guard } from "@/lib/guard";
+import { notForClientAccess } from "@/lib/clientAccess";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +18,8 @@ export default async function ReviewPage({
   const { id } = await params;
   const { v } = await searchParams;
   const session = await guard(getSession(), `/events/${id}/review`);
+  // DXG's screen, not Client access's (D-196).
+  await notForClientAccess();
 
   /*
    * DXG Technician staff see the approved presentations and take in new files (D-162, D-165);

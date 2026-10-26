@@ -197,8 +197,10 @@ export function Sidebar({
     if (kind === "support") return true;
     // Room sync is theirs again (D-188): they load the room PCs.
     if (kind === "technician") return onsiteOrReview || label === "Room sync" || label === "Portfolio";
-    // Client access (D-194): the whole control centre, read-only; creating events is not theirs.
-    if (kind === "client") return label !== "Create event";
+    // Client access (D-194, narrowed by D-196): the portfolio, the event, its agenda and its files,
+    // read-only. Manage presentations, emails, the archive, the Speaker Ready Room, room loading and
+    // creating events are DXG's.
+    if (kind === "client") return label === "Portfolio" || label === "Agenda" || label === "Files";
     return true;
   };
 

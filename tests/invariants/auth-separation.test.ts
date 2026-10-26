@@ -142,8 +142,16 @@ describe("staff and presenter sessions live side by side (D-088)", () => {
 
 describe("a client account reads the control centre and changes nothing (D-194)", () => {
   // Signing in is not authorisation: Client access holds a real session and sees the
-  // whole control centre of its events — read-only. Every write is refused by kind.
-  const reads = ["/events", `/events/${EVENT}/review-queue`, `/events/${EVENT}/summary`, `/events/${EVENT}/speakers`];
+  // control centre of its events — read-only, and without the team's own screens (D-196).
+  // Every write is refused by kind.
+  const reads = [
+    "/events",
+    `/events/${EVENT}/summary`,
+    `/events/${EVENT}/speakers`,
+    `/events/${EVENT}/agenda`,
+    `/events/${EVENT}/files`,
+    `/events/${EVENT}/sync/fleet`,
+  ];
 
   for (const path of reads) {
     test(`client access reads ${path}`, async (t: TestContext) => {
@@ -152,6 +160,56 @@ describe("a client account reads the control centre and changes nothing (D-194)"
       assert.equal(response.status, 200, `${path} returned ${response.status} to client access`);
     });
   }
+
+  // DXG's working screens (D-196): emails, the Speaker Ready Room, Manage presentations, inspection
+  // findings, agenda imports, speaker housekeeping and the archive are not the client's.
+  const notOffered = [
+    `/events/${EVENT}/comms`,
+    `/events/${EVENT}/srr`,
+    `/events/${EVENT}/srr/report.csv`,
+    `/events/${EVENT}/review-queue`,
+    `/events/${EVENT}/approved`,
+    `/events/${EVENT}/archive/scope`,
+    `/events/${EVENT}/speaker-duplicates`,
+    `/events/${EVENT}/agenda-template`,
+    `/events/${EVENT}/sync/approved.zip`,
+    "/import-fields",
+    "/admin/users",
+  ];
+
+  for (const path of notOffered) {
+    test(`client access is refused ${path}`, async (t: TestContext) => {
+      if (!up || !clientCookie) return t.skip("API not running");
+      const response = await fetch(`${API}${path}`, { headers: { cookie: clientCookie } });
+      assert.equal(response.status, 403, `${path} returned ${response.status} to client access`);
+      assert.equal(((await response.json()) as { code: string }).code, "auth.kind_forbidden");
+    });
+  }
+
+  test("client access reads a file's comments in the client lane only, and no findings", async (t: TestContext) => {
+    if (!up || !clientCookie) return t.skip("API not running");
+    const files = (await fetch(`${API}/events/${EVENT}/files?limit=50`, { headers: { cookie: clientCookie } }).then(
+      (response) => response.json(),
+    )) as { items: { version_id: string }[] };
+    assert.ok(files.items.length > 0, "the seeded event has files");
+    // Staff see every lane; the same request from the client holds client-lane notes alone.
+    let checked = 0;
+    for (const file of files.items) {
+      const [mine, theirs] = await Promise.all([
+        fetch(`${API}/file-versions/${file.version_id}/comments`, { headers: { cookie: clientCookie } }),
+        fetch(`${API}/file-versions/${file.version_id}/comments`, { headers: { cookie: staffCookie } }),
+      ]);
+      assert.equal(mine.status, 200);
+      const client = ((await mine.json()) as { items: { lane: string }[] }).items;
+      const staff = ((await theirs.json()) as { items: { lane: string }[] }).items;
+      assert.ok(client.every((comment) => comment.lane === "client_visible"), "a non-client lane reached client access");
+      assert.equal(client.length, staff.filter((comment) => comment.lane === "client_visible").length);
+      if (staff.some((comment) => comment.lane !== "client_visible")) checked += 1;
+      const findings = await fetch(`${API}/file-versions/${file.version_id}/findings`, { headers: { cookie: clientCookie } });
+      assert.equal(findings.status, 403);
+    }
+    assert.ok(checked > 0, "the seed has at least one internal or speaker note to hold back");
+  });
 
   test("client access cannot write, whatever the route", async (t: TestContext) => {
     if (!up || !clientCookie) return t.skip("API not running");

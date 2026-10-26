@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ApiError, getCheckin, getSession, getSummary } from "@/lib/api";
 import { CheckinView } from "@/components/CheckinView";
 import { guard } from "@/lib/guard";
+import { notForClientAccess } from "@/lib/clientAccess";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +12,8 @@ export default async function CheckinPage({
   params: Promise<{ id: string; checkinId: string }>;
 }) {
   const { id, checkinId } = await params;
+  // DXG's screen, not Client access's (D-196).
+  await notForClientAccess();
   const [detail, summary, session] = await guard(
     Promise.all([
       // A check-in that no longer exists says so; it used to crash the page ("Application error").

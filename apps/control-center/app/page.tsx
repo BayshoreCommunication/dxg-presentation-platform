@@ -53,6 +53,7 @@ export default async function PortfolioPage({
   const summaries = await guard(Promise.all([...items, ...practice].map((event) => getSummary(event.id))), "/");
   const card = (event: EventRow, summary: Summary) => (
     <EventCard
+      client={principal?.staff_kind === "client"}
       key={event.id}
       event={event}
       summary={summary}
@@ -136,15 +137,19 @@ function EventCard({
   summary,
   canArchive,
   owner,
+  client = false,
 }: {
   event: EventRow;
   summary: Summary;
   canArchive: boolean;
   /** Whose practice event this is, when it is someone else's (an administrator's view). */
   owner: string | null;
+  /** Client access (D-196): no file warnings to review, and "Event over" without the team's next step. */
+  client?: boolean;
 }) {
   const collected = summary.total === 0 ? 0 : Math.round((summary.collected / summary.total) * 100);
-  const chip = eventStatusChip(event.status, event);
+  const status = eventStatusChip(event.status, event);
+  const chip = client && status.label.startsWith("Event over") ? { ...status, label: "Event over" } : status;
   return (
     <div className="card" style={event.status === "active" ? { boxShadow: "inset 0 0 0 .8px var(--ring)" } : undefined}>
       <div className="cbd">
@@ -173,8 +178,10 @@ function EventCard({
             : `${summary.collected} of ${plural(summary.total, "presentation")} received (${collected}%)`}
         </div>
         <div className="event-card-footer">
-          {/* S11 (D-113): open warnings lead to where they are resolved. */}
-          {summary.warnings_open > 0 && event.status !== "draft" ? (
+          {/* S11 (D-113): open warnings lead to where they are resolved — the team's, not the client's (D-196). */}
+          {client ? (
+            <span />
+          ) : summary.warnings_open > 0 && event.status !== "draft" ? (
             <Link href={`/events/${event.id}/review`} className="chip c-warn">
               {plural(summary.warnings_open, "file warning")} to review →
             </Link>

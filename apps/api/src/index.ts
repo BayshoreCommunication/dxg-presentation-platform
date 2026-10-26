@@ -768,6 +768,10 @@ app.use((req, res, next) => {
     if (actor.roles.length === 0) {
       return res.status(403).json({ code: "auth.not_staff", message: "You aren't on any event yet. Ask a DXG Admin to add you in Event assignments." });
     }
+    // DXG's own working screens are not the client's to read either (D-196).
+    if (CLIENT_NOT_OFFERED.some((pattern) => pattern.test(req.path))) {
+      return res.status(403).json({ code: "auth.kind_forbidden", message: CLIENT_NOT_OFFERED_REFUSAL });
+    }
     return next();
   }
   if (!actor.roles.some((role) => STAFF_ROLES.includes(role))) {
@@ -831,6 +835,34 @@ const TECHNICIAN_ALSO_WRITES: RegExp[] = [
 ];
 /** POSTs that only read (D-194): a slide preview, and a bulk download (a POST because it carries a list). */
 const CLIENT_READS_BY_POST: RegExp[] = [/^\/api\/v1\/file-versions\/[^/]+\/preview$/, /^\/api\/v1\/events\/[^/]+\/files:bulk-download$/];
+/**
+ * What Client access does not read (D-196): DXG's own working screens. The client's people see
+ * the event, its agenda and speakers, the files and the comments written for them. Manage
+ * presentations (the queue and the approved list), emails and their log, the Speaker Ready Room,
+ * room loading, the archive, agenda imports, inspection findings, speaker housekeeping and the
+ * audit check are the team's — and the fleet stays readable, since the overview's Room readiness
+ * is drawn from it. The delivered package's download stays open: it is how the archive reaches
+ * the client.
+ */
+const CLIENT_NOT_OFFERED: RegExp[] = [
+  /^\/api\/v1\/events\/[^/]+\/(comms|email-images|email-settings)(\/|$)/,
+  /^\/api\/v1\/events\/[^/]+\/srr(\/|-open|$)/,
+  /^\/api\/v1\/srr\//,
+  /^\/api\/v1\/events\/[^/]+\/sync\/approved\.zip$/,
+  /^\/api\/v1\/events\/[^/]+\/archive\/(scope|pdfs)$/,
+  /^\/api\/v1\/events\/[^/]+\/approved$/,
+  /^\/api\/v1\/events\/[^/]+\/(imports|agenda-template)(\/|$)/,
+  /^\/api\/v1\/imports\//,
+  /^\/api\/v1\/import-fields$/,
+  /^\/api\/v1\/events\/[^/]+\/review-queue$/,
+  /^\/api\/v1\/events\/[^/]+\/speaker-duplicates$/,
+  /^\/api\/v1\/file-versions\/[^/]+\/findings$/,
+  /^\/api\/v1\/findings\//,
+  /^\/api\/v1\/events\/[^/]+\/audit:verify$/,
+  /^\/api\/v1\/admin\//,
+];
+const CLIENT_NOT_OFFERED_REFUSAL =
+  "That screen is DXG's. Client access sees the event, its agenda, its speakers and its files.";
 
 /**
  * What support staff open of a presentation: its detail, findings and comments (the Files
@@ -2267,11 +2299,14 @@ app.post("/api/v1/file-versions/:versionId/preview", async (req, res) => {
 app.get("/api/v1/file-versions/:versionId/comments", async (req, res) => {
   const actor = actorFrom(req);
   if (!actor) return res.status(401).json({ code: "auth.no_session", message: "Sign in to continue." });
-  // Lane visibility: staff see every lane here; speaker and client surfaces are
-  // filtered at their own endpoints (FR-REV-003).
+  // Lane visibility: DXG staff see every lane here; speaker and client surfaces are
+  // filtered at their own endpoints (FR-REV-003). Client access reads this one too
+  // (D-194), and gets the client lane alone (D-196): "Internal · DXG staff only" means it.
   //
   // Every version of the same talk, not just this one (D-070): a reviewer opening v3
   // needs the note that sent v2 back, or they review blind.
+  const principal = (req as express.Request & { principal?: Principal }).principal;
+  const clientLaneOnly = principal?.kind === "staff" && principal.staff_kind === "client";
   const items = await withScope(scopeFor(req), async (tx) => {
     const { rows } = await tx.query(
       `SELECT c.id, c.lane, c.body, c.created_at, fv.version_number,
@@ -2282,8 +2317,9 @@ app.get("/api/v1/file-versions/:versionId/comments", async (req, res) => {
          LEFT JOIN pmp.users u ON u.id = c.author_user_id
          LEFT JOIN pmp.speakers sp ON sp.id = c.author_speaker_id
         WHERE fv.file_id = (SELECT file_id FROM pmp.file_versions WHERE id = $1)
+          AND ($2::boolean = false OR c.lane = 'client_visible')
         ORDER BY c.created_at`,
-      [String(req.params.versionId)],
+      [String(req.params.versionId), clientLaneOnly],
     );
     return rows;
   });

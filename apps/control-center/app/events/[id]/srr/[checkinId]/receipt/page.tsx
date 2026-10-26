@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getCheckin, getSummary } from "@/lib/api";
 import { timeZoneLabel } from "@pmp/format";
 import { guard } from "@/lib/guard";
+import { notForClientAccess } from "@/lib/clientAccess";
 import { PrintButton } from "@/components/PrintButton";
 
 export const dynamic = "force-dynamic";
@@ -26,6 +27,8 @@ const when = (iso: string, timeZone: string) =>
  */
 export default async function ReceiptPage({ params }: { params: Promise<{ id: string; checkinId: string }> }) {
   const { id, checkinId } = await params;
+  // DXG's screen, not Client access's (D-196).
+  await notForClientAccess();
   const [detail, summary] = await guard(
     Promise.all([getCheckin(checkinId), getSummary(id)]),
     `/events/${id}/srr/${checkinId}/receipt`,

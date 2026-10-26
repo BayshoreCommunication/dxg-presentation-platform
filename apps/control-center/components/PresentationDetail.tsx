@@ -63,6 +63,7 @@ export function PresentationDetailView({
   comments,
   readOnly = false,
   canUpload = false,
+  client = false,
 }: {
   eventId: string;
   initial: PresentationDetail;
@@ -71,6 +72,8 @@ export function PresentationDetailView({
   readOnly?: boolean;
   /** Taking a new file in is the DXG Technician's (D-162), so only they get "Replace file". */
   canUpload?: boolean;
+  /** Client access (D-196): which of DXG's people approved or signed off is the team's business. */
+  client?: boolean;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -290,13 +293,13 @@ export function PresentationDetailView({
               hasSpeaker: initial.speaker !== null,
               latestVersion: latest?.version_number ?? null,
               approved: approved
-                ? { version: approved.version_number, by: approved.approved_by, at: approved.approved_at }
+                ? { version: approved.version_number, by: client ? null : approved.approved_by, at: approved.approved_at }
                 : null,
               roomStates: approved?.room_states,
               signOff: initial.srr?.sign_off
                 ? {
                     version: initial.srr.sign_off.version_number,
-                    by: initial.srr.sign_off.technician,
+                    by: client ? null : initial.srr.sign_off.technician,
                     at: initial.srr.sign_off.signed_at,
                   }
                 : null,
