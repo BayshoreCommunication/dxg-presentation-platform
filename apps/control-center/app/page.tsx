@@ -24,7 +24,9 @@ export default async function PortfolioPage({
   // A client account is refused on every staff route, so the portfolio is not its
   // front door. Send it where it belongs before it is bounced off this one.
   const { principal } = await getSession().catch(() => ({ principal: null }));
-  if (principal && principal.client_events.length > 0) {
+  // Client access (D-194) stays here: the control centre, read-only. The old portal redirect
+  // is kept only for an account with client roles and no kind — none exist since migration 036.
+  if (principal && principal.staff_kind !== "client" && principal.client_events.length > 0) {
     redirect(principal.client_events.length === 1 ? `/client/${principal.client_events[0]!.id}` : "/client");
   }
 
@@ -78,7 +80,7 @@ export default async function PortfolioPage({
             )
           )}
           {/* A technician neither creates events nor practises (D-151): the API would refuse both. */}
-          {principal?.staff_kind !== "technician" && (
+          {principal?.staff_kind !== "technician" && principal?.staff_kind !== "client" && (
             <Link href="/events/new" className="btn pri">
               <Icon name="add" />
               Create event
@@ -100,7 +102,7 @@ export default async function PortfolioPage({
         it's listed here, without the button (D-182). It used to vanish: the section was hidden from
         technicians outright.
       */}
-      {!showArchived && (principal?.staff_kind !== "technician" || practice.length > 0) && (
+      {!showArchived && principal?.staff_kind !== "client" && (principal?.staff_kind !== "technician" || practice.length > 0) && (
         <>
           <div className="practice-section-head">
             <div>

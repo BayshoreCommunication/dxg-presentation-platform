@@ -3835,3 +3835,9 @@ Agenda's Add speaker path, existing-speaker email correction and schedule-import
 send-time and batch guards remain for older data. Local browser verification used the seeded DXG Admin email and
 confirmed the dialog retained the entered values, showed the specific error, and left the speaker count unchanged.
 API invariants cover the write paths and the legacy-data guard; targeted lint and workspace type-check pass.
+
+## 2026-10-26 — Client access is the control centre, read-only (D-194)
+Travis: the client's person should see the main UI (sidebar, top bar, every screen) with everything read-only, not
+the old Client portal page. Built locally: API gate passes a client kind's reads to the event scope and refuses every
+write; the frame hides controls (`ReadOnlyGuard` + `.read-only` styles); landing/portfolio/sidebar adjusted. Walked
+all screens as j.ellis@example.invalid; auth-separation + admin 42/42. **Not pushed — Travis reviews locally first.**
