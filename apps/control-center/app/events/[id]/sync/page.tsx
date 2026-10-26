@@ -2,6 +2,7 @@ import { getFleet, getSession, getSummary } from "@/lib/api";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { LoadingChecklist } from "@/components/LoadingChecklist";
 import { guard } from "@/lib/guard";
+import { notForClientAccess } from "@/lib/clientAccess";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +20,8 @@ const LOADERS = ["room_technician", "srr_technician", "presentation_manager", "p
  */
 export default async function RoomSyncPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  // DXG's screen, not Client access's (D-196).
+  await notForClientAccess();
   const [{ items }, summary, session] = await guard(
     Promise.all([getFleet(id), getSummary(id), getSession()]),
     `/events/${id}/sync`,

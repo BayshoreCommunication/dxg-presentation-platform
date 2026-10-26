@@ -1,6 +1,7 @@
 import { getEventFiles, getSummary } from "@/lib/api";
 import { FilesView } from "@/components/FilesView";
 import { guard } from "@/lib/guard";
+import { isClientAccess } from "@/lib/clientAccess";
 
 export const dynamic = "force-dynamic";
 
@@ -8,11 +9,12 @@ export const dynamic = "force-dynamic";
 export default async function FilesPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const returnTo = `/events/${id}/files`;
-  const [summary, files] = await Promise.all([
+  const [summary, files, client] = await Promise.all([
     guard(getSummary(id), returnTo),
     guard(getEventFiles(id, { sort: "uploaded", dir: "desc", page: 1, limit: 10 }), returnTo),
+    isClientAccess(),
   ]);
   return (
-    <FilesView eventId={id} eventName={summary.event.name} timeZone={summary.event.timezone} initial={files} />
+    <FilesView eventId={id} eventName={summary.event.name} timeZone={summary.event.timezone} initial={files} client={client} />
   );
 }

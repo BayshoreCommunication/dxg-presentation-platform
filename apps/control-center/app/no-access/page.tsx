@@ -24,7 +24,8 @@ export default async function NoAccessPage({ searchParams }: { searchParams: Pro
           </h1>
           <p className="note" style={{ marginTop: 14, lineHeight: 1.6 }}>
             DXG Support staff run the event. DXG Technician staff work the Speaker Ready Room, Manage
-            presentations and Room sync only. A DXG Admin can change an
+            presentations and Room sync only. Client access sees the event, its agenda and speakers, the
+            approved presentations, the files and the archive. A DXG Admin can change an
             account&rsquo;s access level on Staff accounts.
           </p>
           <div style={{ display: "flex", gap: 10, marginTop: 18 }}>

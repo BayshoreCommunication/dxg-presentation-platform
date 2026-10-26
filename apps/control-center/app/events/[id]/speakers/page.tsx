@@ -1,6 +1,7 @@
 import { getSpeakers, getDuplicates, getAgenda, getSummary } from "@/lib/api";
 import { SpeakersView } from "@/components/SpeakersView";
 import { guard } from "@/lib/guard";
+import { notForClientAccess } from "@/lib/clientAccess";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +19,8 @@ const dayOf = (day: string) =>
 
 export default async function SpeakersPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  // DXG's screen, not Client access's (D-196).
+  await notForClientAccess();
   const [speakers, duplicates, agenda, summary] = await guard(
     Promise.all([getSpeakers(id), getDuplicates(id), getAgenda(id), getSummary(id)]),
     `/events/${id}/speakers`,

@@ -24,11 +24,14 @@ export function FilesView({
   eventName,
   timeZone,
   initial,
+  client = false,
 }: {
   eventId: string;
   eventName: string;
   timeZone: string;
   initial: EventFiles;
+  /** Client access (D-196): no reviewer's name against a file, no inspection warnings. */
+  client?: boolean;
 }) {
   const [data, setData] = useState<EventFiles>(initial);
   const [query, setQuery] = useState<FileQuery>({ status: "all", sort: "uploaded", dir: "desc", page: 1, limit: 10 });
@@ -279,7 +282,7 @@ export function FilesView({
                   <SortHead label="Speaker" sort="speaker" query={query} onSort={sortBy} />
                   <SortHead label="Location" sort="location" query={query} onSort={sortBy} />
                   <th>Status</th>
-                  <SortHead label="Approved by" sort="approved" query={query} onSort={sortBy} />
+                  {!client && <SortHead label="Approved by" sort="approved" query={query} onSort={sortBy} />}
                   <SortHead label="Size" sort="size" query={query} onSort={sortBy} />
                   <th style={{ width: 44 }} aria-label="Actions" />
                 </tr>
@@ -323,11 +326,13 @@ export function FilesView({
                       </Link>
                     </td>
                     <td>
-                      <StatusChip row={row} />
+                      <StatusChip row={row} client={client} />
                     </td>
-                    <td>
-                      <ApprovedBy version={row} timeZone={timeZone} />
-                    </td>
+                    {!client && (
+                      <td>
+                        <ApprovedBy version={row} timeZone={timeZone} />
+                      </td>
+                    )}
                     <td className="muted num">{formatBytes(row.size_bytes)}</td>
                     <td>
                       <RowMenu row={row} eventId={eventId} onDetails={() => setOpen(row)} />
@@ -391,7 +396,7 @@ export function FilesView({
         </div>
       </div>
 
-      {open && <FileDrawer row={open} eventId={eventId} timeZone={timeZone} onClose={() => setOpen(null)} />}
+      {open && <FileDrawer row={open} eventId={eventId} timeZone={timeZone} onClose={() => setOpen(null)} client={client} />}
     </>
   );
 }
@@ -433,13 +438,13 @@ const CHIP: Record<FileStatus, string> = {
   other: "chip c-mut",
 };
 
-function StatusChip({ row }: { row: FileRow }) {
+function StatusChip({ row, client = false }: { row: FileRow; client?: boolean }) {
   return (
     <span className="status-cell">
       <span className={CHIP[row.status]} title={wordsFor(VERSION_STATE, versionCode(row)).meaning}>
         {wordsFor(VERSION_STATE, versionCode(row)).label}
       </span>
-      {row.open_findings > 0 && (
+      {!client && row.open_findings > 0 && (
         <span className="findings" title="Inspection findings nobody has fixed or waived">
           {row.open_findings} {row.open_findings === 1 ? "warning" : "warnings"}
         </span>
@@ -654,11 +659,14 @@ function FileDrawer({
   eventId,
   timeZone,
   onClose,
+  client = false,
 }: {
   row: Row;
   eventId: string;
   timeZone: string;
   onClose: () => void;
+  /** Client access (D-196): who approved a version is the team's business. */
+  client?: boolean;
 }) {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -674,7 +682,7 @@ function FileDrawer({
     ["Room", row.room ?? "No room yet"],
     ["Session", sessionTime(row.starts_at, timeZone)],
     ["Uploaded", `${fullDate(row.uploaded_at, timeZone)} · ${row.uploaded_by ?? SOURCE_LABEL[row.source] ?? row.source}`],
-    ["Approved", row.approved_by ? `${fullDate(row.approved_at!, timeZone)} · ${row.approved_by}` : "Not approved yet"],
+    ["Approved", row.approved_by ? `${fullDate(row.approved_at!, timeZone)}${client ? "" : ` · ${row.approved_by}`}` : "Not approved yet"],
     // "room PC", the one name staff are given for it (D-112).
     ["Loaded on room PCs", row.rooms_synced > 0 ? `${row.rooms_synced} room${row.rooms_synced === 1 ? "" : "s"}` : "Not loaded on a room PC yet"],
   ];
@@ -750,7 +758,7 @@ function FileDrawer({
                   <small>{version.uploaded_by ?? SOURCE_LABEL[version.source] ?? version.source}</small>
                   {version.approved_by && (
                     <small>
-                      Approved by {version.approved_by} · {fullDate(version.approved_at!, timeZone)}
+                      {client ? "Approved" : `Approved by ${version.approved_by}`} · {fullDate(version.approved_at!, timeZone)}
                     </small>
                   )}
                   <span className={state.className} title={wordsFor(VERSION_STATE, versionCode(version)).meaning}>

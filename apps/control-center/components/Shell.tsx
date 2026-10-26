@@ -69,7 +69,7 @@ export function Shell({
     );
   }
 
-  const crumbs = breadcrumb(pathname, events);
+  const crumbs = breadcrumb(pathname, events, principal?.staff_kind === "client");
 
   return (
     <StaffFrame crumbs={crumbs} principal={principal} events={events}>
@@ -214,8 +214,8 @@ function StaffFrame({
           <div className="right">
             {/* No notifications bell: nothing in the product raises notifications yet, so it would
                 open onto an empty panel. Kravio's bell glyph is kept in Icon.tsx for when they exist. */}
-            {/* Help for the screen you're on (D-115). */}
-            <HelpLink />
+            {/* Help for the screen you're on (D-115) — written for the team, so not offered to a client (D-196). */}
+            {!readOnly && <HelpLink />}
             <HeaderMenu label="Settings" className="gear" icon={<Cog6ToothIcon aria-hidden="true" />} title="Account">
               <Link href="/account/password" className="item" role="menuitem">
                 <KeyIcon aria-hidden="true" />
@@ -349,13 +349,15 @@ const SCREENS: [RegExp, string][] = [
   [/^\/help$/, "Help"],
 ];
 
-function breadcrumb(pathname: string, events: EventRow[]): { label: string; href?: string }[] {
+function breadcrumb(pathname: string, events: EventRow[], client = false): { label: string; href?: string }[] {
   const crumbs: { label: string; href?: string }[] = [{ label: "Portfolio", href: "/" }];
   if (pathname === "/") return crumbs;
   const eventId = /^\/events\/([^/]+)/.exec(pathname)?.[1];
   const event = eventId && eventId !== "new" ? events.find((row) => row.id === eventId) : undefined;
   if (event) crumbs.push({ label: event.name, href: `/events/${event.id}` });
-  const screen = SCREENS.find(([pattern]) => pattern.test(pathname))?.[1];
+  const named = SCREENS.find(([pattern]) => pattern.test(pathname))?.[1];
+  // The client's archive page has no builder on it (D-196); the sidebar says "Archive" too.
+  const screen = client && named === "Archive builder" ? "Archive" : named;
   // The command centre *is* the event, so its crumb is the event name, not a second one.
   if (screen && !(event && screen === "Command center")) crumbs.push({ label: screen });
   return crumbs;

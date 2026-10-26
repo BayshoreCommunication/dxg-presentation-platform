@@ -3841,3 +3841,20 @@ Travis: the client's person should see the main UI (sidebar, top bar, every scre
 the old Client portal page. Built locally: API gate passes a client kind's reads to the event scope and refuses every
 write; the frame hides controls (`ReadOnlyGuard` + `.read-only` styles); landing/portfolio/sidebar adjusted. Walked
 all screens as j.ellis@example.invalid; auth-separation + admin 42/42. **Not pushed — Travis reviews locally first.**
+
+## 2026-10-26 — Client access trimmed to the client's view (D-196)
+Travis reviewed D-194 as the client and had the team's screens taken out: Communications, Speaker Ready Room, Room sync,
+Schedule import, inspection, Manage speakers, the review queue, event setup, Help, the archive's build — and the internal
+review notes the comments endpoint was handing a client. API gate refuses those reads by kind; comments are client-lane
+only for a client; pages redirect, sidebar and shared screens hide the rest. Invariants extended (auth-separation).
+
+## 2026-10-26 — The deck edited at the desk comes back on its own (D-197)
+Travis: can a change made in Keynote/PowerPoint after "Open in Keynote" reach PMP? Built the desk side locally: the
+open link also takes the file back for eight hours (`/open/{token}/return`, parts + digest, no sign-in); the opener's
+new `watch.sh` runs as a launchd job, hashes the deck every five seconds and sends a settled save back as a
+`desk_edit` version for review; the check-in page says so and watches for it landing. Migration 048; opener 1.1
+rebuilt (decks now in `~/Library/Application Support/DXG-PM Opener/Decks/`). Proven end to end on this Mac with the
+installed opener (v12 came back from a simulated PowerPoint save); Keynote's export step unproven here (its AppleScript
+answered -1708). `desk-edit-return` 5/5, `open-in-powerpoint` 5/5, lint and type-check clean. **Not pushed — Travis
+reviews locally and shows the client first.** The room PC during a show stays out of reach (D-155).
+

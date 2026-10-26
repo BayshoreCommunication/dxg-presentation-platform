@@ -1,6 +1,7 @@
 import { getPresentation, getFindings, getSession } from "@/lib/api";
 import { InspectionView } from "@/components/InspectionView";
 import { guard } from "@/lib/guard";
+import { notForClientAccess } from "@/lib/clientAccess";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +13,8 @@ export default async function InspectionPage({
   searchParams: Promise<{ v?: string }>;
 }) {
   const { id, slotId } = await params;
+  // DXG's screen, not Client access's (D-196).
+  await notForClientAccess();
   const { v } = await searchParams;
   // Support staff ask the speaker; admins ask and waive; technicians read (D-165).
   const kind = await getSession()

@@ -2,6 +2,7 @@ import { getComms, getDraft, getSummary, listEvents } from "@/lib/api";
 import type { BrandAsset } from "@/lib/api";
 import { CommsView } from "@/components/CommsView";
 import { guard } from "@/lib/guard";
+import { notForClientAccess } from "@/lib/clientAccess";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +14,8 @@ export default async function CommsPage({
   searchParams: Promise<{ remind?: string; reminder?: string }>;
 }) {
   const { id } = await params;
+  // DXG's screen, not Client access's (D-196).
+  await notForClientAccess();
   // `?remind=<speaker id>` (D-177): open the reminder for that speaker alone.
   // `&reminder=new_version` (D-178): the "new version needed" reminder instead.
   const { remind, reminder } = await searchParams;

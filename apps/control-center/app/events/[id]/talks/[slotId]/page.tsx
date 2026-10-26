@@ -15,7 +15,7 @@ export default async function PresentationPage({
   const staffKind = await getSession()
     .then((session) => session.principal.staff_kind)
     .catch(() => null);
-  const readOnly = staffKind === "support" || staffKind === "technician";
+  const readOnly = staffKind === "support" || staffKind === "technician" || staffKind === "client";
   const detail = await guard(getPresentation(slotId), `/events/${id}/talks/${slotId}`);
   const latest = detail.versions[0];
   const comments = latest
@@ -28,6 +28,7 @@ export default async function PresentationPage({
       comments={comments}
       readOnly={readOnly}
       canUpload={staffKind === "technician"}
+      client={staffKind === "client"}
     />
   );
 }

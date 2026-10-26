@@ -75,6 +75,7 @@ export function EventTabs({
   agenda,
   speakers,
   initialTab,
+  client = false,
 }: {
   eventId: string;
   timezone: string;
@@ -84,6 +85,8 @@ export function EventTabs({
   agenda: AgendaSession[];
   speakers: SpeakerRow[];
   initialTab: string | undefined;
+  /** Client access (D-196): no way to Manage speakers, and none of the event's setup (deadlines, reminders, branding). */
+  client?: boolean;
 }) {
   /*
    * The tab is read from the address, not held in state (D-134): the sidebar's "Agenda"
@@ -131,7 +134,7 @@ export function EventTabs({
       </div>
 
       <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}>
-        {tab === "overview" && <EventDetails setup={setup} talks={talks} canEdit={canEdit} embedded />}
+        {tab === "overview" && <EventDetails setup={setup} talks={talks} canEdit={canEdit} embedded hideSetup={client} />}
         {tab === "agenda" && (
           <div className="card">
             <div className="cbd">
@@ -149,7 +152,7 @@ export function EventTabs({
         {tab === "speakers" && (
           <div className="card">
             <div className="cbd">
-              <SpeakersPanel eventId={eventId} agenda={agenda} speakers={speakers} />
+              <SpeakersPanel eventId={eventId} agenda={agenda} speakers={speakers} client={client} />
             </div>
           </div>
         )}
@@ -556,10 +559,13 @@ function SpeakersPanel({
   eventId,
   agenda,
   speakers,
+  client,
 }: {
   eventId: string;
   agenda: AgendaSession[];
   speakers: SpeakerRow[];
+  /** Client access (D-196): Manage speakers is DXG's screen. */
+  client: boolean;
 }) {
   const [query, setQuery] = useState("");
 
@@ -611,9 +617,11 @@ function SpeakersPanel({
         <span className="note">
           {speakers.length} speakers · {withFiles} have uploaded
         </span>
-        <Link href={`/events/${eventId}/speakers`} className="btn">
-          Manage speakers →
-        </Link>
+        {!client && (
+          <Link href={`/events/${eventId}/speakers`} className="btn">
+            Manage speakers →
+          </Link>
+        )}
       </div>
 
       {visible.length === 0 ? (

@@ -35,6 +35,16 @@ export default async function ReviewPage({
       </>
     );
   }
+  // Client access (D-196) sees the approved presentations; the review queue is DXG's.
+  if (session.principal.staff_kind === "client") {
+    const [summary, approved] = await guard(Promise.all([getSummary(id), getApproved(id)]), `/events/${id}/review`);
+    return (
+      <>
+        <h1 className="htitle">Manage presentations</h1>
+        <ApprovedPresentations eventId={id} items={approved.items} timezone={summary.event.timezone} />
+      </>
+    );
+  }
 
   const [{ items }, summary, approved] = await guard(
     Promise.all([getReviewQueue(id), getSummary(id), getApproved(id)]),

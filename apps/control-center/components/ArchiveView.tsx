@@ -35,7 +35,12 @@ const EXCLUSION_FIX: Record<string, { path: string; label: string }> = {
 };
 
 /** Screen 10 — scope, options, and the package itself. */
-export function ArchiveView({ eventId, initial }: { eventId: string; initial: ArchiveScope }) {
+/**
+ * Client access (D-196) opens this page as "Post-event archive": the package and, once delivered,
+ * its downloads. The scope, the exclusions and why, the PDF conversion, build and deliver, and
+ * the download log are DXG's.
+ */
+export function ArchiveView({ eventId, initial, client = false }: { eventId: string; initial: ArchiveScope; client?: boolean }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -94,9 +99,10 @@ export function ArchiveView({ eventId, initial }: { eventId: string; initial: Ar
 
   return (
     <>
-      <h1 className="htitle">Post-event archive builder</h1>
+      <h1 className="htitle">{client ? "Post-event archive" : "Post-event archive builder"}</h1>
       {error && <div className="err">{error}</div>}
 
+      {!client && (
       <div className="card">
         <div className="chd">
           <h3>Scope</h3>
@@ -150,7 +156,9 @@ export function ArchiveView({ eventId, initial }: { eventId: string; initial: Ar
         </div>
       </div>
 
-      {initial.excluded.length > 0 && (
+      )}
+
+      {!client && initial.excluded.length > 0 && (
         <div className="card">
           <div className="chd">
             <h3>Excluded · {initial.excluded.length}</h3>
@@ -192,7 +200,7 @@ export function ArchiveView({ eventId, initial }: { eventId: string; initial: Ar
           {/* What the state means and what to do next; the Deliver reason below covers the rest. */}
           {(!pkg || !deliverBlocked) && (
             <p className="note" style={{ margin: "0 0 10px" }}>
-              {state.meaning} {state.next ? `Next: ${state.next}` : ""}
+              {state.meaning} {state.next && !client ? `Next: ${state.next}` : ""}
             </p>
           )}
           {/*
@@ -205,17 +213,19 @@ export function ArchiveView({ eventId, initial }: { eventId: string; initial: Ar
             <li>{expiry} Every download is logged.</li>
           </ul>
 
-          <PdfStatus eventId={eventId} pdf={pdf} busy={busy} run={run} />
+          {!client && <PdfStatus eventId={eventId} pdf={pdf} busy={busy} run={run} />}
 
           {pkg && (
             <div className="note" style={{ marginBottom: 10 }}>
               PowerPoint package: {plural(pkg.manifest?.file_count ?? 0, "file")}
               {pkg.has_pdf ? ` · PDF package: ${plural(pkg.manifest?.pdf?.file_count ?? 0, "file")}` : " · no PDF package (built before PDFs — rebuild)"} ·{" "}
-              {plural(Number(pkg.downloads), "download")} logged
+              {client ? "" : `${plural(Number(pkg.downloads), "download")} logged`}
             </div>
           )}
 
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {!client && (
+              <>
             <button
               className="btn pri"
               disabled={busy || initial.included.length === 0}
@@ -246,6 +256,8 @@ export function ArchiveView({ eventId, initial }: { eventId: string; initial: Ar
               <Icon name="send" />
               Deliver to client portal
             </button>
+              </>
+            )}
             {pkg?.archive_state === "delivered" && (
               <>
                 <a className="btn" href={archiveDownloadUrl(pkg.id, "pptx")}>
@@ -262,23 +274,25 @@ export function ArchiveView({ eventId, initial }: { eventId: string; initial: Ar
             )}
           </div>
           {/* One line under the row (D-111): Build's reason first — it blocks Deliver too. */}
-          <WhyNot reason={buildBlocked ?? (pkg ? deliverBlocked : null)} />
+          {!client && <WhyNot reason={buildBlocked ?? (pkg ? deliverBlocked : null)} />}
           {/* S42 (D-113): a rebuild does not replace what the client already has. */}
-          {pkg && (pkg.archive_state === "delivered" || pkg.archive_state === "expired") && !buildBlocked && (
+          {!client && pkg && (pkg.archive_state === "delivered" || pkg.archive_state === "expired") && !buildBlocked && (
             <div className="note" style={{ marginTop: 6 }}>
               Rebuilding creates a new package; deliver it again to update the client&rsquo;s download.
             </div>
           )}
 
           {/* The checksum check, in plain words (S41, D-112). */}
+          {!client && (
           <div className="note" style={{ marginTop: 10 }}>
             Every file is checked as it is packaged. If a file in storage has changed or is damaged, the
             build stops and nothing is sent to the client — contact DXG support.
           </div>
+          )}
         </div>
       </div>
 
-      <DownloadLog downloads={initial.downloads} />
+      {!client && <DownloadLog downloads={initial.downloads} />}
 
       <Toast message={toast} onClose={closeToast} />
     </>
