@@ -192,6 +192,14 @@ describe("a client account reads the control centre and changes nothing (D-194)"
       (response) => response.json(),
     )) as { items: { version_id: string }[] };
     assert.ok(files.items.length > 0, "the seeded event has files");
+    // A fresh seed carries no notes, so the team writes one for itself first: the note this test
+    // exists to hold back. Support staff may comment (D-163); the lane is theirs to choose.
+    const written = await fetch(`${API}/file-versions/${files.items[0]!.version_id}/comments`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: staffCookie },
+      body: JSON.stringify({ lane: "internal", body: "Internal note — for the DXG team only (D-196 probe)." }),
+    });
+    assert.equal(written.status, 201, `writing an internal note returned ${written.status}`);
     // Staff see every lane; the same request from the client holds client-lane notes alone.
     let checked = 0;
     for (const file of files.items) {
