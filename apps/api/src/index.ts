@@ -752,6 +752,24 @@ app.use((req, res, next) => {
       message: "Set up your sign-in app before using the platform.",
     });
   }
+  /*
+   * Client access (D-194): the client's own people see the whole control centre of the
+   * events they are placed on, and change nothing. Reads pass to the event scope below
+   * (their roles are client roles, so `scopeFor` and RLS narrow them to their client);
+   * every write is refused here, whatever a screen shows.
+   */
+  if (principal?.kind === "staff" && principal.staff_kind === "client") {
+    if (!READ_METHODS.has(req.method) && !CLIENT_READS_BY_POST.some((pattern) => pattern.test(req.path))) {
+      return res.status(403).json({
+        code: "auth.kind_forbidden",
+        message: "Client access is read-only: you can look at everything on your events, but not change it.",
+      });
+    }
+    if (actor.roles.length === 0) {
+      return res.status(403).json({ code: "auth.not_staff", message: "You aren't on any event yet. Ask a DXG Admin to add you in Event assignments." });
+    }
+    return next();
+  }
   if (!actor.roles.some((role) => STAFF_ROLES.includes(role))) {
     return res.status(403).json({
       code: "auth.not_staff",
@@ -811,6 +829,8 @@ const TECHNICIAN_ALSO_WRITES: RegExp[] = [
   // Opening a deck in the desk's PowerPoint (D-158, D-167).
   /^\/api\/v1\/file-versions\/[^/]+\/open-link$/,
 ];
+/** POSTs that only read (D-194): a slide preview, and a bulk download (a POST because it carries a list). */
+const CLIENT_READS_BY_POST: RegExp[] = [/^\/api\/v1\/file-versions\/[^/]+\/preview$/, /^\/api\/v1\/events\/[^/]+\/files:bulk-download$/];
 
 /**
  * What support staff open of a presentation: its detail, findings and comments (the Files

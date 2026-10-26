@@ -7,6 +7,7 @@ import { guideForPath } from "@/components/HelpView";
 import { usePathname } from "next/navigation";
 import { Sidebar } from "@/components/Sidebar";
 import { SignOutButton } from "@/components/SignOutButton";
+import { ReadOnlyGuard } from "@/components/ReadOnlyGuard";
 import { Glyph, Icon } from "@/components/Icon";
 import { applyTheme, readThemeChoice, saveThemeChoice } from "@/lib/theme";
 import type { ThemeChoice } from "@/lib/theme";
@@ -99,6 +100,9 @@ function StaffFrame({
   children: React.ReactNode;
 }) {
   const [collapsed, setCollapsed] = useState(false);
+  // Client access (D-194): the same screens, with nothing to press. The API refuses every
+  // write for this kind; the frame hides the controls so nothing is offered that will refuse.
+  const readOnly = principal?.staff_kind === "client";
 
   useEffect(() => {
     try {
@@ -151,7 +155,11 @@ function StaffFrame({
   };
 
   return (
-    <div className={`shell${collapsed && !narrow ? " sidebar-collapsed" : ""}${menuOpen ? " menu-open" : ""}`}>
+    <div
+      className={`shell${collapsed && !narrow ? " sidebar-collapsed" : ""}${menuOpen ? " menu-open" : ""}${readOnly ? " read-only" : ""}`}
+      data-readonly={readOnly ? "true" : undefined}
+    >
+      {readOnly && <ReadOnlyGuard />}
       <Sidebar
         principal={principal}
         events={events}

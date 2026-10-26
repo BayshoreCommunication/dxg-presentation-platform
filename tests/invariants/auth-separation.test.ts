@@ -140,23 +140,32 @@ describe("staff and presenter sessions live side by side (D-088)", () => {
   });
 });
 
-describe("a client account is not a staff account", () => {
-  // Signing in is not authorisation: a client event admin holds a real session
-  // and must still be refused the staff surface.
-  const staffOnly = [
-    "/events",
-    `/events/${EVENT}/review-queue`,
-    `/events/${EVENT}/summary`,
-    `/events/${EVENT}/speakers`,
-  ];
+describe("a client account reads the control centre and changes nothing (D-194)", () => {
+  // Signing in is not authorisation: Client access holds a real session and sees the
+  // whole control centre of its events — read-only. Every write is refused by kind.
+  const reads = ["/events", `/events/${EVENT}/review-queue`, `/events/${EVENT}/summary`, `/events/${EVENT}/speakers`];
 
-  for (const path of staffOnly) {
-    test(`client admin is refused ${path}`, async (t: TestContext) => {
+  for (const path of reads) {
+    test(`client access reads ${path}`, async (t: TestContext) => {
       if (!up || !clientCookie) return t.skip("API not running");
       const response = await fetch(`${API}${path}`, { headers: { cookie: clientCookie } });
-      assert.equal(response.status, 403, `${path} returned ${response.status} to a client admin`);
+      assert.equal(response.status, 200, `${path} returned ${response.status} to client access`);
     });
   }
+
+  test("client access cannot write, whatever the route", async (t: TestContext) => {
+    if (!up || !clientCookie) return t.skip("API not running");
+    const headers = { "content-type": "application/json", cookie: clientCookie };
+    for (const [method, path, body] of [
+      ["POST", `/events/${EVENT}/speakers`, { name: "Probe", email: "", organization: "", slot_id: "" }],
+      ["PATCH", `/events/${EVENT}`, { name: "Renamed" }],
+      ["POST", `/events/${EVENT}/comms/send`, { template_id: "x" }],
+    ] as const) {
+      const response = await fetch(`${API}${path}`, { method, headers, body: JSON.stringify(body) });
+      assert.equal(response.status, 403, `${method} ${path} returned ${response.status}`);
+      assert.equal(((await response.json()) as { code: string }).code, "auth.kind_forbidden");
+    }
+  });
 
   test("the client admin still reaches their own portal", async (t: TestContext) => {
     if (!up || !clientCookie) return t.skip("API not running");

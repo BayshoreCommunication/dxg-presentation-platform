@@ -3465,3 +3465,19 @@ Ace, 2026-10-15: "For the Speaker Ready Room open — let's keep that to an admi
 - Practice events (D-116) still start open, so a support staff owner needs no switch to try things.
 - Tests: `srr-open` — technician and support staff both refused in either direction and the room unchanged; the
   support-staff suite has the admin open the room, then runs it as before.
+
+## D-194 (2026-10-26): Client access is the control centre, read-only — Status: ACCEPTED (Travis: "all dekhbe — locally banao")
+The Client portal (screen 17) was what a Client access account landed on; Travis never asked for that page in this
+round and wants the client's people to see the product the way staff do. Now a Client access account signs in to the
+**control centre itself** — same sidebar and top bar, every screen of the events it is placed on (Portfolio, Agenda,
+Manage presentations, Files, Communications, Archive builder, Speaker Ready Room, Room sync) — and **changes nothing**.
+- **API**: in the staff gate, a `client` kind passes every read (`GET`/`HEAD`, plus the two POSTs that only read: a
+  slide preview and a bulk download) on to the event scope, which its client roles and RLS narrow to its own client;
+  every other method is 403 `auth.kind_forbidden` ("Client access is read-only"). Nothing else in the API changed.
+- **Screens**: the frame carries `.read-only` for a client; the stylesheet hides primary/danger/amber buttons, inputs,
+  selects, file pickers, forms, confirmations and upload areas, and `ReadOnlyGuard` hides the plain buttons that act
+  (Remove, Rename, Check in, Mark loaded…) by their words, never links. Landing is the portfolio (no portal redirect);
+  Create event and practice events are not offered; ADMIN stays hidden by role.
+- The Client portal route (`/client/*`) and its API stay reachable but nothing links to them.
+- Tests: auth-separation (client reads the four staff routes, every write 403, portal still 200), admin (ten screens'
+  reads 200, four writes 403). Walked every staff page as the seeded client account: all 200, no server error.

@@ -197,6 +197,8 @@ export function Sidebar({
     if (kind === "support") return true;
     // Room sync is theirs again (D-188): they load the room PCs.
     if (kind === "technician") return onsiteOrReview || label === "Room sync" || label === "Portfolio";
+    // Client access (D-194): the whole control centre, read-only; creating events is not theirs.
+    if (kind === "client") return label !== "Create event";
     return true;
   };
 
@@ -207,7 +209,10 @@ export function Sidebar({
               ...(principal?.roles ?? []),
               ...(principal?.event_roles ?? []).filter((entry) => entry.event_id === eventId).map((entry) => entry.role),
             ];
-            const allowed = (needed?: string[]) => !needed || needed.some((role) => held.includes(role));
+            // Client access (D-194) holds client roles only, yet sees every staff group; ADMIN
+            // (root admins only) stays out of reach for it.
+            const allowed = (needed?: string[]) =>
+              !needed || (kind === "client" && !needed.every((role) => ADMIN_ROLES.includes(role))) || needed.some((role) => held.includes(role));
             // A whole group can be out of reach, and an item within a reachable one.
             const visible = allowed(roles) ? items.filter((item) => allowed(item.roles) && offeredToKind(item.label)) : [];
             // A group whose every entry is hidden would otherwise leave a stray heading.

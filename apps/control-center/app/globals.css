@@ -1553,3 +1553,19 @@ select:not([multiple]):open{
 .srr-switch:focus-visible{outline:2px solid #9ca3af;outline-offset:3px;border-radius:6px}
 [data-theme="dark"] .srr-switch .track{background:#3f3f46}
 [data-theme="dark"] .srr-switch.on .track{background:var(--success, #16a34a)}
+
+/* ── Client access (D-194): the control centre with nothing to press ── */
+.shell.read-only main .content button.btn.pri,
+.shell.read-only main .content button.btn.danger,
+.shell.read-only main .content button.btn.warnb,
+.shell.read-only main .content button.btn.good,
+.shell.read-only main .content input:not([type="search"]):not([type="checkbox"]),
+.shell.read-only main .content textarea,
+.shell.read-only main .content select,
+.shell.read-only main .content form button[type="submit"],
+.shell.read-only main .content .confirm-inline,
+.shell.read-only main .content .upload-area,
+.shell.read-only main .content .replace-line{display:none!important}
+.shell.read-only main .content input[type="checkbox"]{pointer-events:none;opacity:.6}
+.shell.read-only main .topbar .right .hmenu .menu a[href="/account/mfa"]{display:none}
+

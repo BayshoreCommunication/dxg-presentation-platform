@@ -24,6 +24,8 @@ export function landingFor(principal: Principal, nextPath?: string): string {
   if (principal.must_change_password) return "/account/password?first=1";
   const requested = safePath(nextPath);
 
+  // Client access (D-194) uses the control centre itself, read-only: the portfolio is its door.
+  if (principal.staff_kind === "client") return requested && requested !== "/" ? requested : "/";
   const events = principal.client_events;
   if (events.length === 0) return requested && requested !== "/" ? requested : "/";
 
