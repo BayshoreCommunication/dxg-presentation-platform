@@ -3843,10 +3843,12 @@ write; the frame hides controls (`ReadOnlyGuard` + `.read-only` styles); landing
 all screens as j.ellis@example.invalid; auth-separation + admin 42/42. **Not pushed — Travis reviews locally first.**
 
 ## 2026-10-26 — Client access trimmed to the client's view (D-196)
-Travis reviewed D-194 as the client and had the team's screens taken out: Communications, Speaker Ready Room, Room sync,
-Schedule import, inspection, Manage speakers, the review queue, event setup, Help, the archive's build — and the internal
-review notes the comments endpoint was handing a client. API gate refuses those reads by kind; comments are client-lane
+Travis reviewed D-194 as the client and had the team's screens taken out: Manage presentations, Communications, the
+archive, Speaker Ready Room, Room sync, Schedule import, inspection, Manage speakers, event setup, Help — and the internal
+review notes the comments endpoint was handing a client. A client keeps Portfolio, the event overview, Agenda, Speakers
+and Files. API gate refuses those reads by kind; comments are client-lane
 only for a client; pages redirect, sidebar and shared screens hide the rest. Invariants extended (auth-separation).
+Pushed to main and production.
 
 ## 2026-10-26 — The deck edited at the desk comes back on its own (D-197)
 Travis: can a change made in Keynote/PowerPoint after "Open in Keynote" reach PMP? Built the desk side locally: the

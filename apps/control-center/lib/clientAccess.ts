@@ -3,9 +3,9 @@ import { getSession } from "./api";
 
 /**
  * Client access (D-194) uses the control centre read-only, but not all of it (D-196): DXG's own
- * working screens — Communications, the Speaker Ready Room, Room sync, the archive's build,
- * Schedule import, the inspection report and Manage speakers — are the team's. A client who opens
- * one lands on the same page as any other kind refused a screen.
+ * working screens — Manage presentations, Communications, the archive, the Speaker Ready Room,
+ * Room sync, Schedule import, the inspection report and Manage speakers — are the team's. A client
+ * who opens one lands on the same page as any other kind refused a screen.
  *
  * The API refuses these screens' data on its own (`CLIENT_NOT_OFFERED` in the staff gate); this
  * is the page's way of saying so before a half-rendered screen does, and the only guard for the

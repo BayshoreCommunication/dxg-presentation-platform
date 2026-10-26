@@ -149,10 +149,8 @@ describe("a client account reads the control centre and changes nothing (D-194)"
     `/events/${EVENT}/summary`,
     `/events/${EVENT}/speakers`,
     `/events/${EVENT}/agenda`,
-    `/events/${EVENT}/approved`,
     `/events/${EVENT}/files`,
     `/events/${EVENT}/sync/fleet`,
-    `/events/${EVENT}/archive/scope`,
   ];
 
   for (const path of reads) {
@@ -163,13 +161,15 @@ describe("a client account reads the control centre and changes nothing (D-194)"
     });
   }
 
-  // DXG's working screens (D-196): emails, the Speaker Ready Room, the review queue, inspection
-  // findings, agenda imports, speaker housekeeping and the archive's build are not the client's.
+  // DXG's working screens (D-196): emails, the Speaker Ready Room, Manage presentations, inspection
+  // findings, agenda imports, speaker housekeeping and the archive are not the client's.
   const notOffered = [
     `/events/${EVENT}/comms`,
     `/events/${EVENT}/srr`,
     `/events/${EVENT}/srr/report.csv`,
     `/events/${EVENT}/review-queue`,
+    `/events/${EVENT}/approved`,
+    `/events/${EVENT}/archive/scope`,
     `/events/${EVENT}/speaker-duplicates`,
     `/events/${EVENT}/agenda-template`,
     `/events/${EVENT}/sync/approved.zip`,

@@ -69,7 +69,7 @@ export function Shell({
     );
   }
 
-  const crumbs = breadcrumb(pathname, events, principal?.staff_kind === "client");
+  const crumbs = breadcrumb(pathname, events);
 
   return (
     <StaffFrame crumbs={crumbs} principal={principal} events={events}>
@@ -349,15 +349,13 @@ const SCREENS: [RegExp, string][] = [
   [/^\/help$/, "Help"],
 ];
 
-function breadcrumb(pathname: string, events: EventRow[], client = false): { label: string; href?: string }[] {
+function breadcrumb(pathname: string, events: EventRow[]): { label: string; href?: string }[] {
   const crumbs: { label: string; href?: string }[] = [{ label: "Portfolio", href: "/" }];
   if (pathname === "/") return crumbs;
   const eventId = /^\/events\/([^/]+)/.exec(pathname)?.[1];
   const event = eventId && eventId !== "new" ? events.find((row) => row.id === eventId) : undefined;
   if (event) crumbs.push({ label: event.name, href: `/events/${event.id}` });
-  const named = SCREENS.find(([pattern]) => pattern.test(pathname))?.[1];
-  // The client's archive page has no builder on it (D-196); the sidebar says "Archive" too.
-  const screen = client && named === "Archive builder" ? "Archive" : named;
+  const screen = SCREENS.find(([pattern]) => pattern.test(pathname))?.[1];
   // The command centre *is* the event, so its crumb is the event name, not a second one.
   if (screen && !(event && screen === "Command center")) crumbs.push({ label: screen });
   return crumbs;

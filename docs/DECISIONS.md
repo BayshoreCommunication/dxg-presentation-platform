@@ -3488,20 +3488,20 @@ own work and words — internal review notes marked "DXG staff only", the email 
 speaker's address, sign-in and reminder state per speaker, the Speaker Ready Room, room loading, the archive's build and
 exclusions, inspection findings, and "remind the speaker" instructions the client cannot act on. Travis: take them out.
 - **Kept**: Portfolio, the event's Overview (details, Action needed as a status list, Room readiness), Agenda, Speakers
-  tab (name, organisation, email, sessions, files, archive permission), Manage presentations (approved presentations
-  only), a talk's page with its client-lane comments, Files (no reviewer's name, no inspection warnings), and the
-  archive as "Post-event archive" (the package and its downloads once delivered).
-- **Gone for a client**: Communications, Speaker Ready Room (and check-ins, receipts), Room sync, Schedule import, the
-  inspection report, Manage speakers (sign-in state, last email, duplicates), the review queue, event setup (deadlines,
-  reminders, branding), Help, the archive's scope/exclusions/build/deliver/download log, and every link to those.
+  tab (name, organisation, email, sessions, files, archive permission), a talk's page with its client-lane comments
+  (no reviewer's or technician's name), and Files (no reviewer's name, no inspection warnings).
+- **Gone for a client** (Travis's second pass took Manage presentations and the archive out too): Manage presentations,
+  Communications, the archive builder, Speaker Ready Room (and check-ins, receipts), Room sync, Schedule import, the
+  inspection report, Manage speakers (sign-in state, last email, duplicates), event setup (deadlines, reminders,
+  branding), Help, and every link to those. The delivered archive still reaches the client by its emailed link.
 - **API**: in the staff gate a client kind is refused (`403 auth.kind_forbidden`) on `CLIENT_NOT_OFFERED` — comms,
-  email settings/images, srr, `sync/approved.zip`, `archive/pdfs`, imports and the agenda template, the review queue,
-  speaker duplicates, findings, `audit:verify`, admin. The comments read returns the `client_visible` lane alone to a
-  client kind; the fleet stays readable because the overview's Room readiness is drawn from it. Archive download keeps
-  working: it is how the delivered package reaches the client.
+  email settings/images, srr, `sync/approved.zip`, `archive/scope` and `archive/pdfs`, the approved list, imports and
+  the agenda template, the review queue, speaker duplicates, findings, `audit:verify`, admin. The comments read
+  returns the `client_visible` lane alone to a client kind; the fleet stays readable because the overview's Room
+  readiness is drawn from it. The package download stays open: it is how the delivered archive reaches the client.
 - **Screens**: `lib/clientAccess.ts` sends a client off the barred pages to `/no-access?for=kind` (whose text now names
-  Client access); the sidebar lists Portfolio, Agenda, Manage presentations, Files and "Archive"; the components take a
-  `client` flag for the pieces that stay on a shared screen.
+  Client access); the sidebar lists Portfolio, Agenda and Files; the components take a `client` flag for the pieces
+  that stay on a shared screen.
 - Not changed, Travis's call pending: a client can still download a speaker's file from Files or the talk page whatever
   that speaker's archive permission says; the permission governs the archive only.
 

@@ -837,18 +837,20 @@ const TECHNICIAN_ALSO_WRITES: RegExp[] = [
 const CLIENT_READS_BY_POST: RegExp[] = [/^\/api\/v1\/file-versions\/[^/]+\/preview$/, /^\/api\/v1\/events\/[^/]+\/files:bulk-download$/];
 /**
  * What Client access does not read (D-196): DXG's own working screens. The client's people see
- * the event, its agenda and speakers, the approved presentations, the files, their archive and the
- * comments written for them. Emails and their log, the Speaker Ready Room, room loading, the
- * archive's build, agenda imports, inspection findings, the review queue, speaker housekeeping
- * and the audit check are the team's — and the fleet stays readable, since the overview's Room
- * readiness is drawn from it.
+ * the event, its agenda and speakers, the files and the comments written for them. Manage
+ * presentations (the queue and the approved list), emails and their log, the Speaker Ready Room,
+ * room loading, the archive, agenda imports, inspection findings, speaker housekeeping and the
+ * audit check are the team's — and the fleet stays readable, since the overview's Room readiness
+ * is drawn from it. The delivered package's download stays open: it is how the archive reaches
+ * the client.
  */
 const CLIENT_NOT_OFFERED: RegExp[] = [
   /^\/api\/v1\/events\/[^/]+\/(comms|email-images|email-settings)(\/|$)/,
   /^\/api\/v1\/events\/[^/]+\/srr(\/|-open|$)/,
   /^\/api\/v1\/srr\//,
   /^\/api\/v1\/events\/[^/]+\/sync\/approved\.zip$/,
-  /^\/api\/v1\/events\/[^/]+\/archive\/pdfs$/,
+  /^\/api\/v1\/events\/[^/]+\/archive\/(scope|pdfs)$/,
+  /^\/api\/v1\/events\/[^/]+\/approved$/,
   /^\/api\/v1\/events\/[^/]+\/(imports|agenda-template)(\/|$)/,
   /^\/api\/v1\/imports\//,
   /^\/api\/v1\/import-fields$/,
@@ -860,7 +862,7 @@ const CLIENT_NOT_OFFERED: RegExp[] = [
   /^\/api\/v1\/admin\//,
 ];
 const CLIENT_NOT_OFFERED_REFUSAL =
-  "That screen is DXG's. Client access sees the event, its agenda and speakers, the approved presentations, the files and the archive.";
+  "That screen is DXG's. Client access sees the event, its agenda, its speakers and its files.";
 
 /**
  * What support staff open of a presentation: its detail, findings and comments (the Files

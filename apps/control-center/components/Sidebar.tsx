@@ -197,17 +197,13 @@ export function Sidebar({
     if (kind === "support") return true;
     // Room sync is theirs again (D-188): they load the room PCs.
     if (kind === "technician") return onsiteOrReview || label === "Room sync" || label === "Portfolio";
-    // Client access (D-194, narrowed by D-196): the event, its agenda, the presentations, the files
-    // and the archive, read-only. Emails, the Speaker Ready Room, room loading and creating events
-    // are DXG's.
-    if (kind === "client") {
-      return !["Create event", "Communications", "Speaker Ready Room", "Room sync"].includes(label);
-    }
+    // Client access (D-194, narrowed by D-196): the portfolio, the event, its agenda and its files,
+    // read-only. Manage presentations, emails, the archive, the Speaker Ready Room, room loading and
+    // creating events are DXG's.
+    if (kind === "client") return label === "Portfolio" || label === "Agenda" || label === "Files";
     return true;
   };
 
-  // The client's archive page has no builder on it (D-196), so its link says what it opens.
-  const shown = (label: string): string => (kind === "client" && label === "Archive builder" ? "Archive" : label);
   const renderGroup = ({ group, roles, items }: (typeof GROUPS)[number]) => {
             // Roles held anywhere, plus those on this event — a practice event's roles
             // count only inside it (D-116).
@@ -235,7 +231,7 @@ export function Sidebar({
                     return (
                       <a key={item.label} aria-disabled="true" title="Choose an event first">
                         <span className="ico"><Icon name={item.icon} /></span>
-                        {shown(item.label)}
+                        {item.label}
                       </a>
                     );
                   }
@@ -245,19 +241,19 @@ export function Sidebar({
                     const plain = (
                       <Link href={href}>
                         <span className="ico"><Icon name={item.icon} /></span>
-                        {shown(item.label)}
+                        {item.label}
                       </Link>
                     );
                     return (
                       <Suspense key={item.label} fallback={plain}>
-                        <TabLink href={href} pathname={pathname} icon={item.icon} label={shown(item.label)} />
+                        <TabLink href={href} pathname={pathname} icon={item.icon} label={item.label} />
                       </Suspense>
                     );
                   }
                   return (
                     <Link key={item.label} href={href} className={pathname === href ? "on" : ""}>
                       <span className="ico"><Icon name={item.icon} /></span>
-                      {shown(item.label)}
+                      {item.label}
                     </Link>
                   );
                 })}

@@ -3,6 +3,7 @@ import { ApprovedPresentations } from "@/components/ApprovedPresentations";
 import { ReviewWorkspace } from "@/components/ReviewWorkspace";
 import { UploadNewVersion } from "@/components/UploadNewVersion";
 import { guard } from "@/lib/guard";
+import { notForClientAccess } from "@/lib/clientAccess";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +18,8 @@ export default async function ReviewPage({
   const { id } = await params;
   const { v } = await searchParams;
   const session = await guard(getSession(), `/events/${id}/review`);
+  // DXG's screen, not Client access's (D-196).
+  await notForClientAccess();
 
   /*
    * DXG Technician staff see the approved presentations and take in new files (D-162, D-165);
@@ -31,16 +34,6 @@ export default async function ReviewPage({
       <>
         <h1 className="htitle">Manage presentations</h1>
         <UploadNewVersion eventId={id} talks={talks.items} timezone={summary.event.timezone} />
-        <ApprovedPresentations eventId={id} items={approved.items} timezone={summary.event.timezone} />
-      </>
-    );
-  }
-  // Client access (D-196) sees the approved presentations; the review queue is DXG's.
-  if (session.principal.staff_kind === "client") {
-    const [summary, approved] = await guard(Promise.all([getSummary(id), getApproved(id)]), `/events/${id}/review`);
-    return (
-      <>
-        <h1 className="htitle">Manage presentations</h1>
         <ApprovedPresentations eventId={id} items={approved.items} timezone={summary.event.timezone} />
       </>
     );
