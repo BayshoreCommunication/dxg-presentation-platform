@@ -10,9 +10,15 @@ dump() {
   stamp=$(date -u +%Y-%m-%dT%H%M%SZ)
   file="/tmp/pmp-$stamp.dump"
   echo "[backup] dumping $PGDATABASE at $stamp"
-  pg_dump --format=custom --no-owner --file="$file"
-  aws s3 cp "$file" "s3://$S3_BUCKET/backups/pmp-$stamp.dump" --sse AES256 --only-show-errors
-  rm -f "$file"
+  # The dump is removed whatever happens (a subshell's EXIT trap), so a failed upload can't
+  # leave a copy of the database in /tmp every night. The steps are chained with && and the
+  # result returned explicitly: the loop below calls `dump || …`, and in that position
+  # `set -e` is switched off, so a failure would otherwise be reported as an upload.
+  (
+    trap 'rm -f "$file"' EXIT
+    pg_dump --format=custom --no-owner --file="$file" &&
+      aws s3 cp "$file" "s3://$S3_BUCKET/backups/pmp-$stamp.dump" --sse AES256 --only-show-errors
+  ) || return 1
   echo "[backup] uploaded backups/pmp-$stamp.dump"
 }
 
