@@ -42,8 +42,17 @@ x-app-env: &app-env
   SES_CONFIGURATION_SET: ${SES_CONFIGURATION_SET}
   SNS_TOPIC_ARNS: ${SNS_TOPIC_ARNS:-}
 
+# Every container's log is capped (3 × 50 MB). Docker's default keeps a log forever, and a
+# crash-looping Postgres once wrote a 62 GB log that filled the disk and took the site down.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "3"
+
 services:
   caddy:
+    logging: *logging
     image: caddy:2.8-alpine
     restart: unless-stopped
     ports: ["80:80", "443:443", "443:443/udp"]
@@ -58,6 +67,7 @@ services:
     depends_on: [api, staff, portal]
 
   api:
+    logging: *logging
     build: { context: ../.., dockerfile: deploy/server/Dockerfile, target: api }
     image: ${PMP_IMAGE_PREFIX:-}pmp-api:${PMP_TAG:-latest}
     restart: unless-stopped
@@ -72,6 +82,7 @@ services:
   # Background jobs (D-103): PDF previews (LibreOffice, which the api image carries) and
   # automatic reminders. Same image as the API, its own process; answers no requests.
   worker:
+    logging: *logging
     image: ${PMP_IMAGE_PREFIX:-}pmp-api:${PMP_TAG:-latest}
     restart: unless-stopped
     command: ["node", "apps/api/src/worker.ts"]
@@ -92,6 +103,7 @@ services:
       api: { condition: service_started }
 
   dispatcher:
+    logging: *logging
     build: { context: ../.., dockerfile: deploy/server/Dockerfile, target: dispatcher }
     image: ${PMP_IMAGE_PREFIX:-}pmp-dispatcher:${PMP_TAG:-latest}
     restart: unless-stopped
@@ -100,6 +112,7 @@ services:
       postgres: { condition: service_healthy }
 
   staff:
+    logging: *logging
     build: { context: ../.., dockerfile: deploy/server/Dockerfile, target: staff }
     image: ${PMP_IMAGE_PREFIX:-}pmp-staff:${PMP_TAG:-latest}
     restart: unless-stopped
@@ -108,6 +121,7 @@ services:
     depends_on: [api]
 
   portal:
+    logging: *logging
     build: { context: ../.., dockerfile: deploy/server/Dockerfile, target: portal }
     image: ${PMP_IMAGE_PREFIX:-}pmp-portal:${PMP_TAG:-latest}
     restart: unless-stopped
@@ -116,6 +130,7 @@ services:
     depends_on: [api]
 
   postgres:
+    logging: *logging
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
@@ -131,6 +146,7 @@ services:
       retries: 10
 
   clamav:
+    logging: *logging
     image: clamav/clamav:stable
     restart: unless-stopped
     volumes:
@@ -145,6 +161,7 @@ services:
 
   # One-shot: applies migrations as the schema owner and (re)sets the app role's password.
   migrate:
+    logging: *logging
     image: ${PMP_IMAGE_PREFIX:-}pmp-api:${PMP_TAG:-latest}
     profiles: ["ops"]
     environment:
@@ -157,6 +174,7 @@ services:
 
   # Nightly database dump to S3 (kept per the bucket's lifecycle rule).
   backup:
+    logging: *logging
     build: { context: ./backup }
     image: pmp-backup
     restart: unless-stopped
