@@ -235,6 +235,16 @@ anything, and a stale `.tsx` once broke a build), then build **one image at a ti
 - **Disk**: alert at 80 %. Docker **build cache** is what fills it — 55 GB of the 61 GB used on 2026-10-04, against
   70 MB of database — and `docker image prune` does not touch it; `docker builder prune -f --filter until=24h` does
   (§6 step 8). `docker system df` shows the split.
+  **Container logs** are the other filler, and `docker system df` does not show them: on 2026-10-31 a
+  single container's `*-json.log` reached 62 GB, the disk hit 100 %, Postgres crash-looped on
+  `No space left on device`, and the API died with it (login answered 502 until 2026-11-05). Since then
+  every service in `docker-compose.yml` caps its log at 3 × 50 MB — the cap applies to a container only
+  once it is recreated (`docker compose up -d --force-recreate`), and the API now survives a database
+  restart instead of exiting. To find and free it:
+  `sudo sh -c 'du -sh /var/lib/docker/containers/*/*-json.log' | sort -h | tail -3`, then
+  `sudo truncate -s 0 <that file>` (not `rm` — Docker holds it open, so no space comes back). Then
+  `docker compose restart postgres`, wait for "ready to accept connections", and restart
+  `api worker dispatcher clamav`. Never `docker volume prune` — `pmp_pgdata` is the database.
 - **SES**: bounce and complaint rates in the SES console (keep bounce < 2 %, complaints < 0.1 %).
 
 ## 9. Rehearsal (before every significant change)

@@ -4,8 +4,22 @@ import { dbConfig, ownerConfig } from "./config.ts";
 let pool: pg.Pool | undefined;
 let ownerPool: pg.Pool | undefined;
 
+/**
+ * An idle client whose connection drops (Postgres restarted, ran out of disk, the network
+ * blinked) makes the pool emit `error`. Unheard, Node treats that as an uncaught exception
+ * and the whole process dies — which is how a Postgres restart once took the API down
+ * until someone restarted it by hand. Heard, the pool discards that client and opens a new
+ * one on the next `connect()`, so the process recovers as soon as the database does.
+ */
+export function survivePoolErrors(target: pg.Pool, name: string): pg.Pool {
+  target.on("error", (error) => {
+    console.error(`[db] ${name} pool: idle connection lost, it will be replaced:`, error.message);
+  });
+  return target;
+}
+
 export function getPool(): pg.Pool {
-  pool ??= new pg.Pool({ ...dbConfig, max: 10 });
+  pool ??= survivePoolErrors(new pg.Pool({ ...dbConfig, max: 10 }), "app");
   return pool;
 }
 
@@ -15,7 +29,7 @@ export function getPool(): pg.Pool {
  * role row security applies to.
  */
 export function getOwnerPool(): pg.Pool {
-  ownerPool ??= new pg.Pool({ ...ownerConfig, max: 4 });
+  ownerPool ??= survivePoolErrors(new pg.Pool({ ...ownerConfig, max: 4 }), "owner");
   return ownerPool;
 }
 
@@ -65,6 +79,7 @@ export async function withScope<T>(
   fn: (tx: pg.PoolClient) => Promise<T>,
 ): Promise<T> {
   const client = await getPool().connect();
+  let broken: Error | undefined;
   try {
     await client.query("BEGIN");
     await applyScope(client, scope);
@@ -72,10 +87,14 @@ export async function withScope<T>(
     await client.query("COMMIT");
     return result;
   } catch (error) {
-    await client.query("ROLLBACK");
+    // On a dead connection ROLLBACK fails too; report the original error, not that one,
+    // and keep the client out of the pool so the next request gets a working connection.
+    await client.query("ROLLBACK").catch((rollbackError: unknown) => {
+      broken = rollbackError instanceof Error ? rollbackError : new Error(String(rollbackError));
+    });
     throw error;
   } finally {
-    client.release();
+    client.release(broken);
   }
 }
 
